@@ -1,0 +1,9 @@
+node_modules
+dist
+data/agencies/**
+!data/agencies/.gitkeep
+*.tsbuildinfo
+.DS_Store
+.env
+playwright-report
+test-results
