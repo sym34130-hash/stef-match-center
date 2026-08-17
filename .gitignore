@@ -1,0 +1,8 @@
+node_modules
+dist
+.deploy
+*.tsbuildinfo
+data/agencies/**
+!data/agencies/.gitkeep
+test-results
+.DS_Store
