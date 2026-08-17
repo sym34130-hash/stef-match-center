@@ -365,7 +365,7 @@ function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string
             <Lock size={18} />
             {loading ? "Contrôle..." : "Accéder au match"}
           </button>
-          <p className="helper-text">V1 locale : remplacer ce code avant usage réel multi-agences.</p>
+          <p className="helper-text">Mode pilote : accès réservé aux équipes autorisées.</p>
         </form>
       </section>
     </div>
