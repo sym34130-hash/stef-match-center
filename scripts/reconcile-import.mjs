@@ -45,14 +45,25 @@ assert.equal(roles.Attaquant.count, 10, "Composition attaque");
 assert.equal(roles.Milieu.count, 5, "Composition milieu");
 assert.equal(roles.Défenseur.count, 5, "Composition défense");
 
-assert.equal(snapshot.highlights.manOfTheMatch.name, "YOUNES EL KICH");
-assert.equal(snapshot.highlights.manOfTheMatch.value, 623);
 assert.equal(snapshot.highlights.bestScorer.name, "JEAN LUC LASSORT");
 assert.equal(snapshot.highlights.bestScorer.value, 261);
+assert.equal(snapshot.highlights.bestScorer.label, "Joueur Attaque");
 assert.equal(snapshot.highlights.bestPasser.name, "THIERRY BOUGNAGUE");
 assert.equal(snapshot.highlights.bestPasser.value, 200);
+assert.equal(snapshot.highlights.bestPasser.label, "Joueur Milieu");
 assert.equal(snapshot.highlights.defensiveWall.name, "YOUNES EL KICH");
 assert.equal(snapshot.highlights.defensiveWall.value, 623);
+assert.equal(snapshot.highlights.defensiveWall.label, "Joueur Défense");
+const categoryHighlightNames = [
+  snapshot.highlights.bestScorer?.name,
+  snapshot.highlights.bestPasser?.name,
+  snapshot.highlights.defensiveWall?.name,
+].filter(Boolean);
+assert.equal(
+  new Set(categoryHighlightNames).size,
+  categoryHighlightNames.length,
+  "Les trois distinctions par ligne doivent rester attribuées à des joueurs distincts quand les données le permettent."
+);
 
 console.log(`Réconciliation OK - ${path.basename(workbookPath)}`);
 console.log(`Score ${snapshot.summary.duelWon}/${snapshot.summary.duelTotal} = ${snapshot.summary.duelRate}%`);
