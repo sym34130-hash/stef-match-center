@@ -71,7 +71,7 @@ const screens: Array<{ id: Exclude<Screen, "player">; label: string; icon: Lucid
 
 type CompositionRole = "Attaquant" | "Milieu" | "Défenseur";
 type MatchCeremonyTone = "victory" | "controlled" | "finalize" | "rework";
-type MatchAwardKind = "mvp" | "scorer" | "passer" | "defense";
+type MatchAwardKind = "attack" | "midfield" | "defense";
 
 type MatchAward = {
   kind: MatchAwardKind;
@@ -200,7 +200,7 @@ export default function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand-block">
-          <div className="brand-mark">SMC</div>
+          <div className="brand-mark">FC STEF</div>
           <div>
             <p>STEF</p>
             <h1>Match Center</h1>
@@ -340,7 +340,7 @@ function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string
         <div className="login-visual">
           <div className="stadium-light" />
           <div className="brand-block large">
-            <div className="brand-mark">SMC</div>
+            <div className="brand-mark">FC STEF</div>
             <div>
               <p>STEF</p>
               <h1>Match Center</h1>
@@ -619,8 +619,6 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
   const action = matchAction(snapshot);
   const outcome = matchCeremonyOutcome(snapshot);
   const awards = buildAwardItems(snapshot);
-  const mvpAward = awards.find((award) => award.kind === "mvp") ?? awards[0] ?? null;
-  const specialistAwards = awards.filter((award) => award.kind !== "mvp");
   const playersByName = new Map(snapshot.players.map((player) => [player.name, player]));
   const jerseyNumbers = buildJerseyNumbers(snapshot.players);
 
@@ -728,69 +726,53 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
         <div className="awards-heading">
           <div>
             <p className="eyebrow">Cérémonie des performances</p>
-            <h2>Joueurs du match</h2>
-            <span>Les performances qui ont marqué la rencontre, dans une lecture collective.</span>
+            <h2>Joueurs clés par ligne</h2>
+            <span>Une référence par catégorie métier : Attaque CHG, Milieu ZONAGE, Défense DECHG.</span>
           </div>
           <StatusBadge status={snapshot.match.status} />
         </div>
 
-        <div className="awards-stage">
-          {mvpAward && (
-            <button
-              className="mvp-award-card"
-              type="button"
-              onClick={() => {
-                const player = playersByName.get(mvpAward.highlight.name);
-                if (player) onPlayer(player);
-              }}
-              title={awardHoverTitle(playersByName.get(mvpAward.highlight.name), mvpAward.highlight)}
-            >
-              <span className="award-kicker">{mvpAward.label}</span>
-              <div className="mvp-trophy" aria-hidden="true">
-                <span className="trophy-cup small">
-                  <i />
-                </span>
-              </div>
-              <strong>{mvpAward.highlight.name}</strong>
-              <small>{mvpAward.detail}</small>
-              <b>{formatHighlightValue(mvpAward.highlight)} - {mvpAward.highlight.role}</b>
-              <em>Voir sa fiche</em>
-            </button>
+        <div className="awards-stage category-awards-stage">
+          {awards.length > 0 ? (
+            <div className="special-awards category-awards">
+              {awards.map((award, index) => {
+                const player = playersByName.get(award.highlight.name);
+                const jersey = formatJerseyNumber(jerseyNumbers.get(award.highlight.name) ?? index + 1);
+                const role = player?.role ?? award.highlight.role;
+                const className = `award-card ${award.kind} ${roleClass(role)}`;
+                const disabled = !player;
+                return (
+                  <button
+                    className={className}
+                    disabled={disabled}
+                    key={`${award.kind}-${award.highlight.name}`}
+                    type="button"
+                    title={awardHoverTitle(player, award.highlight)}
+                    onClick={() => player && onPlayer(player)}
+                  >
+                    <span className="award-symbol">{award.symbol}</span>
+                    <span className={`award-shirt ${roleClass(role)}`} aria-hidden="true">
+                      <b>{jersey}</b>
+                      <em>{initials(award.highlight.name)}</em>
+                    </span>
+                    <span className="award-copy">
+                      <i>{award.label}</i>
+                      <strong>{award.highlight.name}</strong>
+                      <small>{award.detail}</small>
+                      <b>{formatHighlightValue(award.highlight)}</b>
+                    </span>
+                    <span className="podium-step" aria-hidden="true">{award.podiumLabel}</span>
+                    <em>Voir sa fiche</em>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="award-empty-state">
+              <strong>Aucune distinction disponible</strong>
+              <p>Le fichier importé ne contient pas assez de données CHG, ZONAGE ou DECHG pour désigner les trois joueurs clés.</p>
+            </div>
           )}
-
-          <div className="special-awards">
-            {specialistAwards.map((award, index) => {
-              const player = playersByName.get(award.highlight.name);
-              const jersey = formatJerseyNumber(jerseyNumbers.get(award.highlight.name) ?? index + 1);
-              const role = player?.role ?? award.highlight.role;
-              const className = `award-card ${award.kind} ${roleClass(role)}`;
-              const disabled = !player;
-              return (
-                <button
-                  className={className}
-                  disabled={disabled}
-                  key={`${award.kind}-${award.highlight.name}`}
-                  type="button"
-                  title={awardHoverTitle(player, award.highlight)}
-                  onClick={() => player && onPlayer(player)}
-                >
-                  <span className="award-symbol">{award.symbol}</span>
-                  <span className={`award-shirt ${roleClass(role)}`} aria-hidden="true">
-                    <b>{jersey}</b>
-                    <em>{initials(award.highlight.name)}</em>
-                  </span>
-                  <span className="award-copy">
-                    <i>{award.label}</i>
-                    <strong>{award.highlight.name}</strong>
-                    <small>{award.detail}</small>
-                    <b>{formatHighlightValue(award.highlight)}</b>
-                  </span>
-                  <span className="podium-step" aria-hidden="true">{award.podiumLabel}</span>
-                  <em>Voir sa fiche</em>
-                </button>
-              );
-            })}
-          </div>
         </div>
       </section>
 
@@ -843,7 +825,13 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
   const [fieldMode, setFieldMode] = useState(false);
   const groups = buildCompositionGroups(snapshot.players);
   const selectedPlayer = selectedName ? snapshot.players.find((player) => player.name === selectedName) ?? null : null;
-  const manOfTheMatch = snapshot.highlights.manOfTheMatch?.name ?? null;
+  const categoryWinnerNames = new Set(
+    [
+      snapshot.highlights.bestScorer?.name,
+      snapshot.highlights.bestPasser?.name,
+      snapshot.highlights.defensiveWall?.name,
+    ].filter((name): name is string => Boolean(name)),
+  );
   const jerseyNumbers = buildJerseyNumbers(snapshot.players);
   const roleVolumes = new Map(snapshot.summary.roleDistribution.map((item) => [item.role, item]));
   const compositionSummary = `${snapshot.players.length} joueurs - ${groups.Attaquant.length} Attaque / ${groups.Milieu.length} Milieu / ${groups.Défenseur.length} Défense`;
@@ -926,7 +914,7 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
                           {row.map((player, playerIndex) => {
                             const isSelected = selectedPlayer?.name === player.name;
                             const isDimmed = Boolean(selectedPlayer && !isSelected);
-                            const isFeatured = manOfTheMatch === player.name;
+                            const isFeatured = categoryWinnerNames.has(player.name);
                             const className = [
                               "formation-player",
                               roleClass(player.role),
@@ -946,7 +934,7 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
                                 style={style}
                                 onClick={() => setSelectedName(player.name)}
                               >
-                                {isFeatured && <span className="formation-star" aria-label="Joueur du match">★</span>}
+                                {isFeatured && <span className="formation-star" aria-label="Joueur clé par catégorie">★</span>}
                                 <span className="formation-shirt" aria-hidden="true">
                                   <b>{formatJerseyNumber(jerseyNumbers.get(player.name) ?? 0)}</b>
                                   <em>{initials(player.name)}</em>
@@ -1647,56 +1635,58 @@ function Causerie({ snapshot, session }: { snapshot: Snapshot; session: Session 
           <div className="stadium-led left">STEF MATCH CENTER</div>
           <div className="stadium-led right">CAUSERIE DU JOUR</div>
 
-          <div className="stadium-screen">
-            <span>Scoreboard</span>
-            <strong>{plan.updatedAt ? "Plan de jeu prêt" : "Causerie à préparer"}</strong>
-            <small>{plan.coach.priority || snapshot.match.objective}</small>
-          </div>
+          <div className="stadium-main">
+            <div className="stadium-screen">
+              <span>Scoreboard</span>
+              <strong>{plan.updatedAt ? "Plan de jeu prêt" : "Causerie à préparer"}</strong>
+              <small>{plan.coach.priority || snapshot.match.objective}</small>
+            </div>
 
-          <div className="stadium-field" aria-label="Terrain de causerie">
-            <div className="goal goal-top" aria-hidden="true" />
-            <div className="goal goal-bottom" aria-hidden="true" />
-            <div className="penalty-box top" aria-hidden="true" />
-            <div className="penalty-box bottom" aria-hidden="true" />
-            <div className="center-circle" aria-hidden="true" />
-            <div className="half-line" aria-hidden="true" />
+            <div className="stadium-field" aria-label="Terrain de causerie">
+              <div className="goal goal-top" aria-hidden="true" />
+              <div className="goal goal-bottom" aria-hidden="true" />
+              <div className="penalty-box top" aria-hidden="true" />
+              <div className="penalty-box bottom" aria-hidden="true" />
+              <div className="center-circle" aria-hidden="true" />
+              <div className="half-line" aria-hidden="true" />
 
-            <CauserieFieldZone
-              id="attack"
-              code="CHG"
-              Icon={Target}
-              title="Attaque"
-              subtitle="Ce que nous devons faire avancer aujourd'hui"
-              lines={plan.attack}
-              active={activeZone === "attack"}
-              editing={mode === "edit"}
-              onActivate={setActiveZone}
-              onChange={updateZoneLine}
-            />
-            <CauserieFieldZone
-              id="midfield"
-              code="ZONAGE"
-              Icon={RefreshCw}
-              title="Milieu"
-              subtitle="Ce qui doit rester fluide et coordonné"
-              lines={plan.midfield}
-              active={activeZone === "midfield"}
-              editing={mode === "edit"}
-              onActivate={setActiveZone}
-              onChange={updateZoneLine}
-            />
-            <CauserieFieldZone
-              id="defense"
-              code="DECHG"
-              Icon={Shield}
-              title="Défense"
-              subtitle="Ce que nous devons sécuriser"
-              lines={plan.defense}
-              active={activeZone === "defense"}
-              editing={mode === "edit"}
-              onActivate={setActiveZone}
-              onChange={updateZoneLine}
-            />
+              <CauserieFieldZone
+                id="attack"
+                code="CHG"
+                Icon={Target}
+                title="Attaque"
+                subtitle="Ce que nous devons faire avancer aujourd'hui"
+                lines={plan.attack}
+                active={activeZone === "attack"}
+                editing={mode === "edit"}
+                onActivate={setActiveZone}
+                onChange={updateZoneLine}
+              />
+              <CauserieFieldZone
+                id="midfield"
+                code="ZONAGE"
+                Icon={RefreshCw}
+                title="Milieu"
+                subtitle="Ce qui doit rester fluide et coordonné"
+                lines={plan.midfield}
+                active={activeZone === "midfield"}
+                editing={mode === "edit"}
+                onActivate={setActiveZone}
+                onChange={updateZoneLine}
+              />
+              <CauserieFieldZone
+                id="defense"
+                code="DECHG"
+                Icon={Shield}
+                title="Défense"
+                subtitle="Ce que nous devons sécuriser"
+                lines={plan.defense}
+                active={activeZone === "defense"}
+                editing={mode === "edit"}
+                onActivate={setActiveZone}
+                onChange={updateZoneLine}
+              />
+            </div>
           </div>
 
           <aside
@@ -1861,7 +1851,11 @@ function CauserieToastView({ toast }: { toast: NonNullable<CauserieToast> }) {
 
 function TvMode({ snapshot, onMatch }: { snapshot: Snapshot; onMatch: () => void }) {
   const action = matchAction(snapshot);
-  const hero = snapshot.highlights.manOfTheMatch;
+  const categoryHighlights = [
+    { label: "Attaque", value: snapshot.highlights.bestScorer?.name ?? "Non disponible" },
+    { label: "Milieu", value: snapshot.highlights.bestPasser?.name ?? "Non disponible" },
+    { label: "Défense", value: snapshot.highlights.defensiveWall?.name ?? "Non disponible" },
+  ];
 
   return (
     <section className="tv-mode">
@@ -1880,7 +1874,9 @@ function TvMode({ snapshot, onMatch }: { snapshot: Snapshot; onMatch: () => void
       <div className="tv-grid">
         <Fact label="Opérations" value={formatNumber(snapshot.summary.operations)} />
         <Fact label="À reprendre" value={`${delayedPositions(snapshot)} duel(s)`} emphasis={delayedPositions(snapshot) > 0} />
-        <Fact label="Joueur du match" value={hero?.name ?? "Non disponible"} />
+        {categoryHighlights.map((highlight) => (
+          <Fact key={highlight.label} label={highlight.label} value={highlight.value} />
+        ))}
       </div>
       <div className="tv-action">
         <span>Plan de jeu</span>
@@ -2179,33 +2175,25 @@ function matchCeremonyOutcome(snapshot: Snapshot): {
 function buildAwardItems(snapshot: Snapshot): MatchAward[] {
   return [
     {
-      kind: "mvp",
-      label: "Joueur du match",
-      detail: "Performance globale",
-      symbol: "MVP",
-      podiumLabel: "Distinction centrale",
-      highlight: snapshot.highlights.manOfTheMatch,
-    },
-    {
-      kind: "scorer",
-      label: "Meilleur buteur",
-      detail: "Meilleure contribution CHG",
-      symbol: "CHG",
+      kind: "attack",
+      label: "Joueur Attaque",
+      detail: "Meilleure valeur CHG",
+      symbol: "ATQ",
       podiumLabel: "Attaque",
       highlight: snapshot.highlights.bestScorer,
     },
     {
-      kind: "passer",
-      label: "Meilleur passeur",
-      detail: "Meilleure contribution ZONAGE",
-      symbol: "ZON",
+      kind: "midfield",
+      label: "Joueur Milieu",
+      detail: "Meilleure valeur ZONAGE",
+      symbol: "MIL",
       podiumLabel: "Milieu",
       highlight: snapshot.highlights.bestPasser,
     },
     {
       kind: "defense",
-      label: "Mur défensif",
-      detail: "Meilleure contribution DECHG",
+      label: "Joueur Défense",
+      detail: "Meilleure valeur DECHG",
       symbol: "DEF",
       podiumLabel: "Défense",
       highlight: snapshot.highlights.defensiveWall,
@@ -2235,7 +2223,7 @@ function buildCompositionGroups(players: Player[]): Record<CompositionRole, Play
 
 function splitFormationRows(players: Player[]) {
   if (players.length === 0) return [];
-  const rowCount = players.length <= 4 ? 1 : players.length <= 8 ? 2 : 3;
+  const rowCount = players.length <= 5 ? 1 : players.length <= 12 ? 2 : 3;
   const rows = Array.from({ length: rowCount }, () => [] as Player[]);
   players.forEach((player, index) => rows[index % rowCount].push(player));
   return rows.filter((row) => row.length > 0);
@@ -2403,6 +2391,7 @@ function playerLockerMetric(player: Player, snapshot: Snapshot) {
 function coachStrengths(snapshot: Snapshot): TacticalItem[] {
   const items: TacticalItem[] = [];
   const late = delayedPositions(snapshot);
+  const categoryLeaders = buildAwardItems(snapshot);
 
   if (snapshot.summary.duelWon > late) {
     items.push({
@@ -2411,10 +2400,12 @@ function coachStrengths(snapshot: Snapshot): TacticalItem[] {
     });
   }
 
-  if (snapshot.highlights.manOfTheMatch) {
+  if (categoryLeaders.length > 0) {
     items.push({
-      title: `Appui volume : ${snapshot.highlights.manOfTheMatch.name}`,
-      detail: `${formatHighlightValue(snapshot.highlights.manOfTheMatch)} sur le match filtré.`,
+      title: "Référents par ligne",
+      detail: categoryLeaders
+        .map((award) => `${award.podiumLabel} : ${award.highlight.name} (${formatHighlightValue(award.highlight)})`)
+        .join(" · "),
     });
   }
 
