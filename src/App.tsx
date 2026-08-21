@@ -327,7 +327,7 @@ async function saveCauseriePlan(session: Session, snapshot: Snapshot, plan: Caus
 
 function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string, accessCode: string) => void; loading: boolean; message: string }) {
   const [agencyCode, setAgencyCode] = useState("058");
-  const [accessCode, setAccessCode] = useState("match-058");
+  const [accessCode, setAccessCode] = useState("STEF-058");
 
   function submit(event: FormEvent) {
     event.preventDefault();
