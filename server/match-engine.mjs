@@ -264,6 +264,18 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   return { ok: true, snapshot };
 }
 
+export function normalizeSnapshotContract(snapshot) {
+  if (!snapshot || !Array.isArray(snapshot.players)) return snapshot;
+  const categoryLeaders = selectDistinctCategoryLeaders(snapshot.players);
+  return {
+    ...snapshot,
+    highlights: {
+      ...(snapshot.highlights ?? {}),
+      ...buildCategoryHighlights(categoryLeaders),
+    },
+  };
+}
+
 function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats }) {
   const importedAt = new Date();
   const firstOperation = minDate(matchRows.map((row) => row.startedAt));
@@ -272,9 +284,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
   const positions = buildPositions(matchRows);
   const players = buildPlayers(matchRows);
   const topPlayers = sortDesc(players, "operations");
-  const scorer = topBy(players, (player) => player.byType.CHG ?? 0);
-  const passer = topBy(players, (player) => player.byType.ZONAGE ?? 0);
-  const defender = topBy(players, (player) => player.byType.DECHG ?? 0);
+  const categoryLeaders = selectDistinctCategoryLeaders(players);
   const duelWon = scoringRows.filter((row) => row.duelWonFlag === 1).length;
   const duelTotal = scoringRows.filter((row) => row.duelWonFlag === 0 || row.duelWonFlag === 1).length;
   const duelRate = percent(duelWon, duelTotal);
@@ -357,12 +367,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
       excludedByOperator: filterStats.excludedByOperator,
       excludedFromScore: filterStats.excludedFromScore,
     },
-    highlights: {
-      manOfTheMatch: playerCard(topPlayers[0], "Homme du match", "Plus gros volume d'opérations", topPlayers[0]?.operations, "opérations"),
-      bestScorer: playerCard(scorer, "Meilleur buteur", "Plus gros volume CHG", scorer?.byType.CHG, "opérations CHG"),
-      bestPasser: playerCard(passer, "Meilleur passeur", "Plus gros volume ZONAGE", passer?.byType.ZONAGE, "opérations ZONAGE"),
-      defensiveWall: playerCard(defender, "Mur défensif", "Plus gros volume DECHG", defender?.byType.DECHG, "opérations DECHG"),
-    },
+    highlights: buildCategoryHighlights(categoryLeaders),
     players,
     positions,
     coach: {
@@ -436,6 +441,40 @@ function buildPlayers(rows) {
   }
 
   return players.sort((a, b) => b.operations - a.operations || a.name.localeCompare(b.name));
+}
+
+function buildCategoryHighlights(categoryLeaders) {
+  return {
+    manOfTheMatch: null,
+    bestScorer: playerCard(categoryLeaders.attack, "Joueur Attaque", "Meilleure valeur CHG", categoryLeaders.attack?.byType.CHG, "opérations CHG"),
+    bestPasser: playerCard(categoryLeaders.midfield, "Joueur Milieu", "Meilleure valeur ZONAGE", categoryLeaders.midfield?.byType.ZONAGE, "opérations ZONAGE"),
+    defensiveWall: playerCard(categoryLeaders.defense, "Joueur Défense", "Meilleure valeur DECHG", categoryLeaders.defense?.byType.DECHG, "opérations DECHG"),
+  };
+}
+
+function selectDistinctCategoryLeaders(players) {
+  const selectedNames = new Set();
+  const attack = topCategoryPlayer(players, "CHG", selectedNames);
+  if (attack) selectedNames.add(attack.name);
+  const midfield = topCategoryPlayer(players, "ZONAGE", selectedNames);
+  if (midfield) selectedNames.add(midfield.name);
+  const defense = topCategoryPlayer(players, "DECHG", selectedNames);
+
+  return { attack, midfield, defense };
+}
+
+function topCategoryPlayer(players, operationType, excludedNames) {
+  const eligible = players.filter((player) => (player.byType[operationType] ?? 0) > 0);
+  const available = eligible.filter((player) => !excludedNames.has(player.name));
+  const pool = available.length > 0 ? available : eligible;
+  if (pool.length === 0 || (available.length === 0 && excludedNames.size > 0)) return null;
+  return [...pool].sort((a, b) => {
+    const categoryDelta = (b.byType[operationType] ?? 0) - (a.byType[operationType] ?? 0);
+    if (categoryDelta !== 0) return categoryDelta;
+    const volumeDelta = b.operations - a.operations;
+    if (volumeDelta !== 0) return volumeDelta;
+    return a.name.localeCompare(b.name, "fr");
+  })[0] ?? null;
 }
 
 function buildPositions(rows) {
@@ -700,10 +739,6 @@ function topEntry(record) {
   return Object.entries(record)
     .map(([key, value]) => ({ key, value }))
     .sort((a, b) => b.value - a.value)[0];
-}
-
-function topBy(items, getter) {
-  return [...items].sort((a, b) => getter(b) - getter(a))[0] ?? null;
 }
 
 function sortDesc(items, key) {

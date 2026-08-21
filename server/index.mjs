@@ -4,7 +4,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildSnapshotFromWorkbook } from "./match-engine.mjs";
+import { buildSnapshotFromWorkbook, normalizeSnapshotContract } from "./match-engine.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -235,7 +235,7 @@ async function saveImport(agencyCode, originalName, buffer, snapshot) {
 async function readLatestSnapshot(agencyCode) {
   const latestPath = path.join(dataDir, sanitizeSegment(agencyCode), "latest.json");
   try {
-    return JSON.parse(await fs.readFile(latestPath, "utf8"));
+    return normalizeSnapshotContract(JSON.parse(await fs.readFile(latestPath, "utf8")));
   } catch {
     return null;
   }
