@@ -36,9 +36,9 @@ Il lit l'onglet `Donnees` complet et reprend les colonnes Excel calculees :
 | Score match | `Duels gagnes / lignes score officiel` | Lignes score officiel | Score /100 |
 | Indice volume | Operations joueur / meilleur volume joueur | Plus gros volume joueur du match filtre | Fiche joueur |
 | Contribution equipe | Operations joueur / operations du match filtre | Operations du match filtre | Detail fiche joueur |
-| Meilleur buteur | Max `CHG` joueur dans le match filtre | Joueurs du match filtre | Valeur CHG gagnante |
-| Meilleur passeur | Max `ZONAGE` joueur dans le match filtre | Joueurs du match filtre | Valeur ZONAGE gagnante |
-| Mur defensif | Max `DECHG` joueur dans le match filtre | Joueurs du match filtre | Valeur DECHG gagnante |
+| Joueur Attaque | Max `CHG` joueur dans le match filtre | Joueurs du match filtre | Valeur CHG gagnante |
+| Joueur Milieu | Max `ZONAGE` joueur dans le match filtre | Joueurs du match filtre | Valeur ZONAGE gagnante |
+| Joueur Defense | Max `DECHG` joueur dans le match filtre | Joueurs du match filtre | Valeur DECHG gagnante |
 | Repartition terrain | Joueurs distincts par `Poste` Excel | Joueurs du match filtre | Equilibre composition |
 
 ## Controle de reconciliation actuel
@@ -52,6 +52,7 @@ Pour le fichier importe `HM 58 J V10 MAJ.xlsx`, les valeurs attendues sont :
 - Score : 70,4 %, affiche 70 / 100.
 - Joueurs : 20.
 - Composition : 10 Attaquants, 5 Milieux, 5 Defenseurs.
+- Distinctions : Attaque = JEAN LUC LASSORT, Milieu = THIERRY BOUGNAGUE, Defense = YOUNES EL KICH.
 
 Commande :
 
