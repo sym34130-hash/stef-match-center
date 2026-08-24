@@ -350,7 +350,7 @@ function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string
           <p>Dépose l'Excel actualisé, puis transforme le match du quai en lecture simple et actionnable.</p>
           <div className="login-signature" aria-label="Signature de réalisation">
             <span>Réalisé par</span>
-            <strong>Arnaud Szymanial</strong>
+            <strong>Arnaud Szymaniak</strong>
           </div>
         </div>
         <form className="login-form" onSubmit={submit}>
