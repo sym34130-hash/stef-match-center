@@ -349,7 +349,7 @@ button:disabled {
   background: radial-gradient(circle at 80% 8%, rgba(255, 255, 255, 0.42), transparent 24%);
 }
 
-.login-visual > *:not(.stadium-light) {
+.login-visual > *:not(.stadium-light):not(.login-signature) {
   position: relative;
 }
 
