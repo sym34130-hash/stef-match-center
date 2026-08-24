@@ -348,6 +348,10 @@ function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string
           </div>
           <h2>Le vestiaire privé de ton agence.</h2>
           <p>Dépose l'Excel actualisé, puis transforme le match du quai en lecture simple et actionnable.</p>
+          <div className="login-signature" aria-label="Signature de réalisation">
+            <span>Réalisé par</span>
+            <strong>Arnaud Szymanial</strong>
+          </div>
         </div>
         <form className="login-form" onSubmit={submit}>
           <span className="eyebrow">Accès agence</span>
