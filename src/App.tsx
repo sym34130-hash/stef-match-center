@@ -1856,9 +1856,9 @@ function CauserieToastView({ toast }: { toast: NonNullable<CauserieToast> }) {
 function TvMode({ snapshot, onMatch }: { snapshot: Snapshot; onMatch: () => void }) {
   const action = matchAction(snapshot);
   const categoryHighlights = [
-    { label: "Attaque", value: snapshot.highlights.bestScorer?.name ?? "Non disponible" },
-    { label: "Milieu", value: snapshot.highlights.bestPasser?.name ?? "Non disponible" },
-    { label: "Défense", value: snapshot.highlights.defensiveWall?.name ?? "Non disponible" },
+    { label: "Attaque", highlight: snapshot.highlights.bestScorer },
+    { label: "Milieu", highlight: snapshot.highlights.bestPasser },
+    { label: "Défense", highlight: snapshot.highlights.defensiveWall },
   ];
 
   return (
@@ -1877,10 +1877,29 @@ function TvMode({ snapshot, onMatch }: { snapshot: Snapshot; onMatch: () => void
       </div>
       <div className="tv-grid">
         <Fact label="Opérations" value={formatNumber(snapshot.summary.operations)} />
+        <Fact label="Positions" value={formatNumber(snapshot.summary.positions)} />
+        <Fact label="Joueurs actifs" value={String(snapshot.summary.players)} />
         <Fact label="À reprendre" value={`${delayedPositions(snapshot)} duel(s)`} emphasis={delayedPositions(snapshot) > 0} />
-        {categoryHighlights.map((highlight) => (
-          <Fact key={highlight.label} label={highlight.label} value={highlight.value} />
-        ))}
+      </div>
+      <div className="tv-key-players" aria-label="Joueurs clés par ligne">
+        {categoryHighlights.map(({ label, highlight }) => {
+          const player = highlight ? snapshot.players.find((item) => item.name === highlight.name) : null;
+          return (
+            <article className={`tv-key-player ${roleClass(player?.role ?? (label === "Attaque" ? "Attaquant" : label))}`} key={label}>
+              <span className="tv-key-player-kicker">Joueur clé · {label}</span>
+              <strong>{highlight?.name ?? "Non disponible"}</strong>
+              <div className="tv-key-player-meta">
+                <span>{player?.role ?? label}</span>
+                <b>{player ? formatNumber(player.operations) : "-"}</b>
+                <small>opérations</small>
+              </div>
+              <div className="tv-key-player-bar" aria-hidden="true">
+                <span style={{ width: `${Math.min(100, player?.volumeIndex ?? 0)}%` }} />
+              </div>
+              <small>{player ? `${formatNumber(player.positions)} positions · ${roleCode(player.role)}` : "Donnée indisponible"}</small>
+            </article>
+          );
+        })}
       </div>
       <div className="tv-action">
         <span>Plan de jeu</span>
@@ -2129,6 +2148,18 @@ function matchCeremonyOutcome(snapshot: Snapshot): {
   collectiveDetail: string;
   celebration: boolean;
 } {
+  if (snapshot.match.score > 75) {
+    return {
+      tone: "victory",
+      title: "Coup de sifflet final",
+      verdict: "Célébration activée",
+      message: "Le collectif dépasse 75/100 : le résultat mérite d'être célébré.",
+      collectiveTitle: "Performance d'équipe validée",
+      collectiveDetail: "Le score collectif permet de célébrer le résultat tout en gardant les statistiques visibles.",
+      celebration: true,
+    };
+  }
+
   if (snapshot.match.status === "MAÎTRISÉ") {
     return {
       tone: "victory",

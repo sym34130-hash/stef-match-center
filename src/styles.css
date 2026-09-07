@@ -911,7 +911,8 @@ button:disabled {
 
 .kickoff-pitch {
   position: relative;
-  min-height: clamp(470px, 58vh, 680px);
+  aspect-ratio: 16 / 10;
+  min-height: 0;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -1006,15 +1007,15 @@ button:disabled {
 .kickoff-goal-box,
 .kickoff-penalty-spot {
   position: absolute;
-  left: 50%;
   z-index: 1;
   pointer-events: none;
-  transform: translateX(-50%);
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .kickoff-goal {
-  width: clamp(108px, 14vw, 176px);
-  height: 30px;
+  width: 30px;
+  height: clamp(108px, 14vw, 176px);
   border: 4px solid rgba(255, 255, 255, 0.88);
   background:
     repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.24) 0 1px, transparent 1px 12px),
@@ -1026,51 +1027,51 @@ button:disabled {
 }
 
 .kickoff-goal.top {
-  top: -4px;
-  border-bottom: 0;
-  border-radius: 0 0 10px 10px;
+  left: -4px;
+  border-right: 0;
+  border-radius: 0 10px 10px 0;
 }
 
 .kickoff-goal.bottom {
-  bottom: -4px;
-  border-top: 0;
-  border-radius: 10px 10px 0 0;
+  right: -4px;
+  border-left: 0;
+  border-radius: 10px 0 0 10px;
 }
 
 .kickoff-penalty-box {
-  width: min(62%, 520px);
-  height: 126px;
+  width: 126px;
+  height: min(62%, 520px);
   border: 2px solid rgba(255, 255, 255, 0.54);
 }
 
 .kickoff-penalty-box.top {
-  top: 0;
-  border-top: 0;
-  border-radius: 0 0 18px 18px;
+  left: 0;
+  border-left: 0;
+  border-radius: 0 18px 18px 0;
 }
 
 .kickoff-penalty-box.bottom {
-  bottom: 0;
-  border-bottom: 0;
-  border-radius: 18px 18px 0 0;
+  right: 0;
+  border-right: 0;
+  border-radius: 18px 0 0 18px;
 }
 
 .kickoff-goal-box {
-  width: min(34%, 270px);
-  height: 62px;
+  width: 62px;
+  height: min(34%, 270px);
   border: 2px solid rgba(255, 255, 255, 0.48);
 }
 
 .kickoff-goal-box.top {
-  top: 0;
-  border-top: 0;
-  border-radius: 0 0 12px 12px;
+  left: 0;
+  border-left: 0;
+  border-radius: 0 12px 12px 0;
 }
 
 .kickoff-goal-box.bottom {
-  bottom: 0;
-  border-bottom: 0;
-  border-radius: 12px 12px 0 0;
+  right: 0;
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
 }
 
 .kickoff-penalty-spot {
@@ -1082,11 +1083,11 @@ button:disabled {
 }
 
 .kickoff-penalty-spot.top {
-  top: 96px;
+  left: 96px;
 }
 
 .kickoff-penalty-spot.bottom {
-  bottom: 96px;
+  right: 96px;
 }
 
 .kickoff-players {
@@ -3557,6 +3558,54 @@ body.composition-field-active .main-area {
 
   .match-ceremony {
     animation: match-ceremony-in 360ms ease-out both;
+  }
+
+  .tv-mode {
+    animation: tv-mode-in 420ms ease-out both;
+  }
+
+  .tv-mode::before {
+    animation: tv-background-sweep 5600ms ease-in-out infinite;
+  }
+
+  .tv-score strong {
+    animation: tv-score-pulse 2400ms ease-in-out infinite;
+  }
+
+  .tv-grid .fact-card {
+    animation: tv-card-rise 420ms ease-out both;
+  }
+
+  .tv-grid .fact-card:nth-child(2) {
+    animation-delay: 70ms;
+  }
+
+  .tv-grid .fact-card:nth-child(3) {
+    animation-delay: 140ms;
+  }
+
+  .tv-grid .fact-card:nth-child(4) {
+    animation-delay: 210ms;
+  }
+
+  .tv-key-player {
+    animation: tv-card-rise 460ms ease-out both;
+  }
+
+  .tv-key-player:nth-child(2) {
+    animation-delay: 100ms;
+  }
+
+  .tv-key-player:nth-child(3) {
+    animation-delay: 200ms;
+  }
+
+  .tv-key-player::before {
+    animation: tv-player-sheen 4200ms ease-in-out infinite;
+  }
+
+  .tv-key-player-bar span {
+    animation: tv-bar-grow 900ms cubic-bezier(0.18, 0.8, 0.26, 1) both;
   }
 
   .match-result-stage::before {
@@ -6361,6 +6410,17 @@ body.causerie-brief-active .main-area {
     repeating-linear-gradient(90deg, #126248 0 100px, #16835e 100px 200px);
 }
 
+.tv-mode::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(137, 198, 255, 0.2), transparent 24%),
+    linear-gradient(115deg, transparent 18%, rgba(255, 255, 255, 0.08) 50%, transparent 66%);
+  opacity: 0.8;
+}
+
 .tv-header {
   display: flex;
   justify-content: space-between;
@@ -6430,6 +6490,104 @@ body.causerie-brief-active .main-area {
 
 .tv-action strong {
   font-size: clamp(26px, 3vw, 44px);
+}
+
+.tv-key-players {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.tv-key-player {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+  padding: 20px;
+  color: var(--white);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(6, 22, 45, 0.94), rgba(18, 98, 72, 0.72));
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.18);
+}
+
+.tv-key-player::before {
+  content: "";
+  position: absolute;
+  inset: -40% -20%;
+  pointer-events: none;
+  background: linear-gradient(112deg, transparent 38%, rgba(255, 255, 255, 0.16) 50%, transparent 62%);
+  transform: translateX(-48%) rotate(8deg);
+}
+
+.tv-key-player.midfield {
+  background: linear-gradient(145deg, rgba(6, 22, 45, 0.94), rgba(29, 78, 137, 0.76));
+}
+
+.tv-key-player.defense {
+  background: linear-gradient(145deg, rgba(6, 22, 45, 0.94), rgba(76, 95, 123, 0.78));
+}
+
+.tv-key-player > * {
+  position: relative;
+  z-index: 1;
+}
+
+.tv-key-player-kicker {
+  color: #b9ddff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tv-key-player strong {
+  min-height: 44px;
+  font-size: clamp(20px, 2vw, 30px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.tv-key-player-meta {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.tv-key-player-meta span,
+.tv-key-player-meta small,
+.tv-key-player > small {
+  color: #d9e9ff;
+}
+
+.tv-key-player-meta b {
+  margin-left: auto;
+  color: #ffffff;
+  font-size: 24px;
+}
+
+.tv-key-player-bar {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.tv-key-player-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #48c78e;
+}
+
+.tv-key-player.midfield .tv-key-player-bar span {
+  background: #89c6ff;
+}
+
+.tv-key-player.defense .tv-key-player-bar span {
+  background: #d9e9ff;
 }
 
 body.tv-screen-active .app-shell {
@@ -6857,7 +7015,8 @@ body.tv-screen-active .tv-mode {
   }
 
   .kickoff-pitch {
-    min-height: 520px;
+    aspect-ratio: 16 / 10;
+    min-height: 0;
     padding: 32px;
   }
 
@@ -6889,13 +7048,13 @@ body.tv-screen-active .tv-mode {
   }
 
   .kickoff-penalty-box {
-    width: 70%;
-    height: 112px;
+    width: 112px;
+    height: 70%;
   }
 
   .kickoff-goal-box {
-    width: 40%;
-    height: 54px;
+    width: 54px;
+    height: 40%;
   }
 
   .kickoff-facts,
@@ -6907,6 +7066,10 @@ body.tv-screen-active .tv-mode {
   .coach-grid,
   .coach-actions,
   .tv-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tv-key-players {
     grid-template-columns: 1fr;
   }
 
@@ -7185,8 +7348,9 @@ body.tv-screen-active .tv-mode {
   }
 
   .kickoff-pitch {
-    min-height: 440px;
-    padding: 20px 12px 92px;
+    aspect-ratio: 4 / 3;
+    min-height: 0;
+    padding: 20px 12px 76px;
     border-radius: 22px;
   }
 
@@ -7204,8 +7368,24 @@ body.tv-screen-active .tv-mode {
   }
 
   .kickoff-goal {
-    width: 104px;
-    height: 24px;
+    width: 24px;
+    height: 104px;
+  }
+
+  .kickoff-penalty-box {
+    width: 88px;
+  }
+
+  .kickoff-goal-box {
+    width: 48px;
+  }
+
+  .kickoff-penalty-spot.top {
+    left: 68px;
+  }
+
+  .kickoff-penalty-spot.bottom {
+    right: 68px;
   }
 
   .kickoff-penalty-box {
@@ -10429,5 +10609,90 @@ body.coach-room-active .coach-room.is-coach-mode .tunnel-return {
 
   50% {
     transform: translateX(4px);
+  }
+}
+
+@keyframes tv-mode-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tv-background-sweep {
+  0%,
+  36% {
+    opacity: 0.2;
+    transform: translateX(-40%) skewX(-12deg);
+  }
+
+  58% {
+    opacity: 0.9;
+  }
+
+  78%,
+  100% {
+    opacity: 0.2;
+    transform: translateX(40%) skewX(-12deg);
+  }
+}
+
+@keyframes tv-score-pulse {
+  0%,
+  100% {
+    text-shadow: 0 0 0 rgba(72, 199, 142, 0);
+    transform: translateY(0) scale(1);
+  }
+
+  45% {
+    text-shadow: 0 0 28px rgba(72, 199, 142, 0.5), 0 0 48px rgba(137, 198, 255, 0.26);
+    transform: translateY(-3px) scale(1.025);
+  }
+}
+
+@keyframes tv-card-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tv-player-sheen {
+  0%,
+  26% {
+    opacity: 0;
+    transform: translateX(-55%) rotate(8deg);
+  }
+
+  45% {
+    opacity: 1;
+  }
+
+  64%,
+  100% {
+    opacity: 0;
+    transform: translateX(55%) rotate(8deg);
+  }
+}
+
+@keyframes tv-bar-grow {
+  from {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+
+  to {
+    transform: scaleX(1);
+    transform-origin: left;
   }
 }
