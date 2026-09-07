@@ -101,20 +101,26 @@ const kickoffScenePlayers: Array<{
   y: number;
   dx: number;
   dy: number;
+  keeper?: boolean;
   starter?: boolean;
 }> = [
-  { id: "stef-9", team: "stef", x: 58, y: 50, dx: 3.2, dy: -2.4, starter: true },
-  { id: "stef-10", team: "stef", x: 66, y: 36, dx: 2.4, dy: -1.8 },
-  { id: "stef-7", team: "stef", x: 66, y: 64, dx: 2.2, dy: -1.4 },
-  { id: "stef-11", team: "stef", x: 75, y: 30, dx: 1.8, dy: -1.2 },
-  { id: "stef-6", team: "stef", x: 75, y: 70, dx: 1.6, dy: -1.5 },
-  { id: "stef-4", team: "stef", x: 84, y: 42, dx: 1.2, dy: -0.9 },
-  { id: "stef-5", team: "stef", x: 84, y: 58, dx: 1.2, dy: -0.9 },
-  { id: "opp-9", team: "opponent", x: 42, y: 50, dx: -2.2, dy: 1.2 },
-  { id: "opp-8", team: "opponent", x: 34, y: 36, dx: -1.8, dy: 1.1 },
-  { id: "opp-10", team: "opponent", x: 34, y: 64, dx: -1.8, dy: 1.1 },
-  { id: "opp-6", team: "opponent", x: 25, y: 42, dx: -1.1, dy: 0.8 },
-  { id: "opp-4", team: "opponent", x: 25, y: 58, dx: -1.1, dy: 0.8 },
+  { id: "stef-gk", team: "stef", x: 9, y: 50, dx: 1.2, dy: 0, keeper: true },
+  { id: "stef-4", team: "stef", x: 23, y: 38, dx: 1.1, dy: -0.8 },
+  { id: "stef-5", team: "stef", x: 23, y: 62, dx: 1.1, dy: 0.8 },
+  { id: "stef-6", team: "stef", x: 39, y: 36, dx: 1.8, dy: -1.2 },
+  { id: "stef-7", team: "stef", x: 39, y: 64, dx: 1.8, dy: 1.2 },
+  { id: "stef-10", team: "stef", x: 53, y: 50, dx: 2.4, dy: -1.8 },
+  { id: "stef-11", team: "stef", x: 66, y: 35, dx: 2.2, dy: -1.4 },
+  { id: "stef-9", team: "stef", x: 66, y: 50, dx: 3.2, dy: -2.4, starter: true },
+  { id: "stef-8", team: "stef", x: 66, y: 65, dx: 2.2, dy: 1.4 },
+  { id: "opp-gk", team: "opponent", x: 91, y: 50, dx: -1.2, dy: 0, keeper: true },
+  { id: "opp-4", team: "opponent", x: 77, y: 38, dx: -1.1, dy: -0.8 },
+  { id: "opp-6", team: "opponent", x: 77, y: 62, dx: -1.1, dy: 0.8 },
+  { id: "opp-8", team: "opponent", x: 61, y: 35, dx: -1.8, dy: -1.2 },
+  { id: "opp-10", team: "opponent", x: 61, y: 65, dx: -1.8, dy: 1.2 },
+  { id: "opp-7", team: "opponent", x: 47, y: 50, dx: -2.4, dy: 1.8 },
+  { id: "opp-9", team: "opponent", x: 34, y: 35, dx: -2.2, dy: 1.4 },
+  { id: "opp-11", team: "opponent", x: 34, y: 65, dx: -2.2, dy: -1.4 },
 ];
 
 export default function App() {
@@ -552,7 +558,7 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
             <div className="kickoff-players" aria-hidden="true">
               {kickoffScenePlayers.map((player) => (
                 <span
-                  className={`kickoff-player-token ${player.team} ${player.starter ? "starter" : ""}`}
+                  className={`kickoff-player-token ${player.team} ${player.keeper ? "keeper" : ""} ${player.starter ? "starter" : ""}`}
                   key={player.id}
                   style={{
                     "--x": `${player.x}%`,
