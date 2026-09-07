@@ -842,6 +842,8 @@ button:disabled {
   position: relative;
   z-index: 1;
   min-width: 0;
+  width: 100%;
+  overflow: hidden;
   display: grid;
   align-items: stretch;
   padding: 16px 18px 18px;
@@ -915,6 +917,9 @@ button:disabled {
   position: relative;
   z-index: 1;
   isolation: isolate;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   aspect-ratio: 16 / 10;
   min-height: 0;
   display: grid;
