@@ -1402,14 +1402,26 @@ function Coach({
 
         <section className="central-bench" aria-label="Banc central">
           <div>
-            <span>Banc central</span>
-            <strong>Équipe</strong>
+            <span>Lecture coach</span>
+            <strong>Banc central</strong>
             <p>{coachMessage(snapshot)}</p>
           </div>
           <div className="bench-facts">
-            <Fact label="Force collective" value={strengths[0]?.title ?? "Non disponible"} />
-            <Fact label="Point de vigilance" value={progress[0]?.title ?? "Aucun point critique"} emphasis={late > 0} />
-            <Fact label="Objectif suivant" value={actions[0]?.title ?? "Maintenir le rythme"} />
+            <article className="bench-fact is-safe">
+              <span>Point fort</span>
+              <strong>{strengths[0]?.title ?? "Lecture indisponible"}</strong>
+              <small>{strengths[0]?.detail ?? "Aucun indicateur positif disponible."}</small>
+            </article>
+            <article className={`bench-fact ${late > 0 ? "is-warning" : "is-safe"}`}>
+              <span>À surveiller</span>
+              <strong>{progress[0]?.title ?? "Aucun écart critique"}</strong>
+              <small>{progress[0]?.detail ?? "Le dernier import ne signale pas de priorité."}</small>
+            </article>
+            <article className="bench-fact is-action">
+              <span>Prochaine action</span>
+              <strong>{actions[0]?.title ?? "Maintenir le rythme"}</strong>
+              <small>{actions[0]?.next ?? "Conserver le délai cible au prochain contrôle."}</small>
+            </article>
           </div>
         </section>
 

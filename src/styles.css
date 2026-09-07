@@ -5523,17 +5523,63 @@ body.composition-field-active .main-area {
   gap: 10px;
 }
 
-.central-bench .fact-card {
+.bench-fact {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 8px;
   min-width: 0;
+  min-height: 132px;
+  padding: 15px;
   color: var(--navy-950);
-  border: 0;
+  border: 1px solid rgba(6, 22, 45, 0.08);
+  border-top: 4px solid var(--blue-stef);
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 22px rgba(6, 22, 45, 0.12);
 }
 
-.central-bench .fact-card strong {
+.bench-fact.is-safe {
+  border-top-color: var(--green-field);
+}
+
+.bench-fact.is-warning {
+  border-top-color: var(--orange-watch);
+}
+
+.bench-fact.is-action {
+  border-top-color: var(--red-action);
+}
+
+.bench-fact span {
+  color: var(--blue-stef);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.bench-fact.is-safe span {
+  color: var(--green-field);
+}
+
+.bench-fact.is-warning span {
+  color: var(--orange-watch);
+}
+
+.bench-fact.is-action span {
+  color: var(--red-action);
+}
+
+.bench-fact strong {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
   line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.bench-fact small {
+  color: #526177;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .tunnel-return {
