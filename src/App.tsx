@@ -119,6 +119,7 @@ const kickoffScenePlayers: Array<{
   { id: "opp-8", team: "opponent", x: 61, y: 35, dx: -1.8, dy: -1.2 },
   { id: "opp-10", team: "opponent", x: 61, y: 65, dx: -1.8, dy: 1.2 },
   { id: "opp-7", team: "opponent", x: 47, y: 50, dx: -2.4, dy: 1.8 },
+  { id: "opp-2", team: "opponent", x: 34, y: 50, dx: -2.4, dy: 0 },
   { id: "opp-9", team: "opponent", x: 34, y: 35, dx: -2.2, dy: 1.4 },
   { id: "opp-11", team: "opponent", x: 34, y: 65, dx: -2.2, dy: -1.4 },
 ];
