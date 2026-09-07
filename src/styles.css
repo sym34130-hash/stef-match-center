@@ -703,6 +703,7 @@ button:disabled {
   position: absolute;
   left: 22px;
   right: 22px;
+  z-index: 0;
   display: grid;
   grid-template-columns: repeat(44, 1fr);
   gap: 4px;
@@ -839,6 +840,7 @@ button:disabled {
 
 .kickoff-field-shell {
   position: relative;
+  z-index: 1;
   min-width: 0;
   display: grid;
   align-items: stretch;
@@ -911,6 +913,8 @@ button:disabled {
 
 .kickoff-pitch {
   position: relative;
+  z-index: 1;
+  isolation: isolate;
   aspect-ratio: 16 / 10;
   min-height: 0;
   display: grid;
