@@ -30,6 +30,7 @@ assert.equal(snapshot.validation.filterStats.scoringRows, 2925, "Lignes éligibl
 assert.equal(snapshot.validation.filterStats.excludedByPeriod, 115, "Lignes exclues par période Excel");
 assert.equal(snapshot.validation.filterStats.excludedByOperator, 1051, "Lignes exclues par filtre opérateur Excel");
 assert.equal(snapshot.validation.filterStats.excludedFromScore, 1670, "Lignes exclues du score par Poz non zonées");
+assert.equal(snapshot.validation.issueRows, 12914, "Lignes distinctes avec anomalie d'import");
 
 assert.equal(snapshot.summary.operations, 4595, "Opérations filtrées");
 assert.equal(snapshot.summary.positions, 1430, "Positions filtrées");
@@ -74,7 +75,7 @@ async function findLatestWorkbook(code) {
   const entries = await fs.readdir(uploadDir, { withFileTypes: true });
   const files = await Promise.all(
     entries
-      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".xlsx"))
+      .filter((entry) => entry.isFile() && isWorkbookFile(entry.name))
       .map(async (entry) => {
         const filePath = path.join(uploadDir, entry.name);
         const stat = await fs.stat(filePath);
@@ -92,4 +93,9 @@ function sanitizeSegment(value) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function isWorkbookFile(name) {
+  const normalized = String(name ?? "").toLowerCase();
+  return normalized.endsWith(".xlsx") && !normalized.startsWith("~$");
 }

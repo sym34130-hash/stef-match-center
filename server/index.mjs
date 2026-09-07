@@ -4,7 +4,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildSnapshotFromWorkbook, normalizeSnapshotContract } from "./match-engine.mjs";
+import { buildSnapshotFromWorkbook, normalizeSnapshotContract, normalizeTimeRange } from "./match-engine.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -72,6 +72,61 @@ app.get("/api/agencies/:agencyCode/causerie", requireAgency, async (req, res) =>
   }
   const plan = await readCauseriePlan(req.agency.code, matchDate);
   res.json({ plan });
+});
+
+app.post("/api/agencies/:agencyCode/time-range", requireAgency, async (req, res) => {
+  if (!req.agency.canImport) {
+    res.status(403).json({
+      title: "PLAGE NON MODIFIÉE",
+      message: "Ce code d'accès permet uniquement de consulter les résultats.",
+    });
+    return;
+  }
+
+  let period;
+  try {
+    period = normalizeTimeRange(req.body?.start, req.body?.end);
+  } catch (error) {
+    res.status(400).json({
+      title: "PLAGE HORAIRE INVALIDE",
+      message: error instanceof Error ? error.message : "Saisis deux heures au format 00:00 ou 00:30.",
+      action: "Le début et la fin doivent être distincts et espacés par pas de 30 minutes.",
+    });
+    return;
+  }
+
+  const agencyDir = path.join(dataDir, sanitizeSegment(req.agency.code));
+  try {
+    const [buffer, currentSnapshot] = await Promise.all([
+      readLatestWorkbook(agencyDir),
+      readLatestSnapshot(req.agency.code),
+    ]);
+    const result = buildSnapshotFromWorkbook(
+      buffer,
+      currentSnapshot?.sourceName ?? "match.xlsx",
+      req.agency.code,
+      period,
+    );
+    if (!result.ok) {
+      res.status(400).json(result.error);
+      return;
+    }
+    if (result.snapshot.summary.operations === 0) {
+      res.status(422).json({
+        title: "AUCUNE DONNÉE SUR CETTE PLAGE",
+        message: `Aucune opération exploitable entre ${period.start} et ${period.end}.`,
+        action: "Choisis une autre plage horaire ou réimporte un fichier couvrant cette période.",
+      });
+      return;
+    }
+    await fs.writeFile(path.join(agencyDir, "latest.json"), JSON.stringify(result.snapshot, null, 2), "utf8");
+    res.json({ message: "PLAGE HORAIRE ACTUALISÉE", snapshot: result.snapshot });
+  } catch {
+    res.status(404).json({
+      title: "SOURCE EXCEL INDISPONIBLE",
+      message: "Réimporte le dernier fichier Excel avant de modifier la plage horaire.",
+    });
+  }
 });
 
 app.post("/api/agencies/:agencyCode/causerie", requireAgency, async (req, res) => {
@@ -229,6 +284,7 @@ async function saveImport(agencyCode, originalName, buffer, snapshot) {
   const safeName = sanitizeSegment(originalName.replace(/\.xlsx$/i, "")) || "match";
   const uploadPath = path.join(uploadsDir, `${stamp}-${safeName}.xlsx`);
   await fs.writeFile(uploadPath, buffer);
+  await fs.writeFile(path.join(agencyDir, "latest.xlsx"), buffer);
   await fs.writeFile(path.join(agencyDir, "latest.json"), JSON.stringify(snapshot, null, 2), "utf8");
 }
 
@@ -238,6 +294,27 @@ async function readLatestSnapshot(agencyCode) {
     return normalizeSnapshotContract(JSON.parse(await fs.readFile(latestPath, "utf8")));
   } catch {
     return null;
+  }
+}
+
+async function readLatestWorkbook(agencyDir) {
+  try {
+    return await fs.readFile(path.join(agencyDir, "latest.xlsx"));
+  } catch {
+    const uploadsDir = path.join(agencyDir, "uploads");
+    const entries = await fs.readdir(uploadsDir, { withFileTypes: true });
+    const candidates = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile() && isWorkbookFile(entry.name))
+        .map(async (entry) => {
+          const filePath = path.join(uploadsDir, entry.name);
+          const stat = await fs.stat(filePath);
+          return { filePath, mtimeMs: stat.mtimeMs };
+        })
+    );
+    candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    if (!candidates[0]) throw new Error("Aucun Excel disponible.");
+    return fs.readFile(candidates[0].filePath);
   }
 }
 
@@ -301,4 +378,9 @@ function sanitizeSegment(value) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function isWorkbookFile(name) {
+  const normalized = String(name ?? "").toLowerCase();
+  return normalized.endsWith(".xlsx") && !normalized.startsWith("~$");
 }

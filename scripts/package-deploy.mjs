@@ -53,7 +53,7 @@ const manifest = {
   },
   requiredEnvironment: {
     PORT: "assigned by host, default 4174",
-    STEF_DATA_DIR: "persistent storage path, required for imports and causeries",
+    STEF_DATA_DIR: "storage path for imports and causeries; Render Free storage is ephemeral",
     STEF_UPLOAD_LIMIT_MB: "20",
     STEF_AGENCIES_JSON:
       '[{"code":"058","name":"Agence 058","accessCode":"CHANGE_ME_BEFORE_SHARING","canImport":true}]',

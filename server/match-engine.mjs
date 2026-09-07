@@ -24,9 +24,23 @@ const OPERATION_ROLE = {
 
 const ROLE_LABELS = ["Attaquant", "Milieu", "Défenseur"];
 const DZ_TARGET_MINUTES = 30;
-const MATCH_PERIOD_LABEL = "13:00-22:00";
-const MATCH_FILTER_DESCRIPTION = "Filtre opérateur Excel + période 13:00-22:00";
-const SCORING_FILTER_DESCRIPTION = "Filtre opérateur + période 13:00-22:00 + exclusion Poz non zonées";
+const DEFAULT_PERIOD_START = "13:00";
+const DEFAULT_PERIOD_END = "22:30";
+
+export function normalizeTimeRange(start = DEFAULT_PERIOD_START, end = DEFAULT_PERIOD_END) {
+  const startMinutes = parseTimeInput(start);
+  const endMinutes = parseTimeInput(end);
+  if (startMinutes === null || endMinutes === null || startMinutes >= endMinutes) {
+    throw new Error("La plage horaire doit être comprise entre deux heures valides, par pas de 30 minutes.");
+  }
+  return {
+    start: formatTimeInput(startMinutes),
+    end: formatTimeInput(endMinutes),
+    startMinutes,
+    endMinutes,
+    label: `${formatTimeInput(startMinutes)}-${formatTimeInput(endMinutes)}`,
+  };
+}
 
 export const KPI_DICTIONARY = [
   {
@@ -87,7 +101,9 @@ export const KPI_DICTIONARY = [
   },
 ];
 
-export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode) {
+export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode, periodInput = {}) {
+  const period = normalizeTimeRange(periodInput.start ?? DEFAULT_PERIOD_START, periodInput.end ?? DEFAULT_PERIOD_END);
+  period.useExcelPeriod = Object.keys(periodInput).length === 0;
   const workbook = XLSX.read(buffer, {
     type: "buffer",
     cellDates: true,
@@ -140,12 +156,14 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     invalidDateRows: 0,
     unknownOperationRows: 0,
     duplicateRows: 0,
+    issueRows: 0,
     warnings: [],
   };
 
   const rows = [];
   const duplicateKeys = new Set();
   const duplicatedKeys = new Set();
+  const issueRowIndexes = new Set();
 
   for (let index = 1; index < matrix.length; index += 1) {
     const row = matrix[index];
@@ -169,13 +187,18 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     const duelWonFlag = parseDuelFlag(raw.duelWonFlag);
     const startedAt = parseExcelDate(raw.startedAt);
 
-    if (!operator || !operationType || !position || !raw.startedAt) {
+    const hasCriticalIssue = !operator || !operationType || !position || !raw.startedAt;
+    const hasInvalidDate = !startedAt;
+
+    if (hasCriticalIssue) {
       validation.criticalMissingRows += 1;
     }
 
-    if (!startedAt) {
+    if (hasInvalidDate) {
       validation.invalidDateRows += 1;
     }
+
+    if (hasCriticalIssue || hasInvalidDate) issueRowIndexes.add(index);
 
     if (operationType && !OPERATION_ROLE[operationType]) {
       validation.unknownOperationRows += 1;
@@ -205,6 +228,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   }
 
   validation.duplicateRows = duplicatedKeys.size;
+  validation.issueRows = issueRowIndexes.size;
 
   if (validation.rowCount === 0 || rows.length === 0) {
     return {
@@ -226,22 +250,22 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     validation.warnings.push(`${validation.duplicateRows} doublon(s) potentiel(s) détecté(s).`);
   }
 
-  const filterStats = buildFilterStats(rows);
+  const filterStats = buildFilterStats(rows, period);
   validation.filterStats = filterStats;
   validation.kpiRules = {
-    matchFilter: MATCH_FILTER_DESCRIPTION,
-    scoringFilter: SCORING_FILTER_DESCRIPTION,
-    period: MATCH_PERIOD_LABEL,
+    matchFilter: `Filtre opérateur + plage ${period.label} (fin incluse)`,
+    scoringFilter: `Filtre opérateur + plage ${period.label} (fin incluse) + exclusion Poz non zonées`,
+    period: period.label,
   };
   if (filterStats.matchRows === 0) {
-    validation.warnings.push("Aucune ligne ne passe le filtre opérateur + période Excel.");
+    validation.warnings.push(`Aucune ligne ne passe le filtre opérateur + plage ${period.label}.`);
   }
   if (filterStats.scoringRows === 0) {
     validation.warnings.push("Aucune ligne éligible au score après exclusion des positions non zonées.");
   }
 
-  const matchRows = rows.filter(isMatchRow);
-  const scoringRows = matchRows.filter(isScoringRow);
+  const matchRows = rows.filter((row) => isMatchRow(row, period));
+  const scoringRows = matchRows.filter((row) => isScoringRow(row, period));
   const agencyCounts = countBy(matchRows.length > 0 ? matchRows : rows, (row) => row.agencySegment || "Non renseignée");
   const detectedAgency = topEntry(agencyCounts)?.key ?? expectedAgencyCode;
   if (expectedAgencyCode && detectedAgency && detectedAgency !== expectedAgencyCode) {
@@ -259,6 +283,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     detectedAgency,
     validation,
     filterStats,
+    period,
   });
 
   return { ok: true, snapshot };
@@ -267,8 +292,21 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
 export function normalizeSnapshotContract(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.players)) return snapshot;
   const categoryLeaders = selectDistinctCategoryLeaders(snapshot.players);
+  const validation = snapshot.validation
+    ? {
+        ...snapshot.validation,
+        issueRows:
+          snapshot.validation.issueRows ??
+          Math.max(
+            snapshot.validation.criticalMissingRows ?? 0,
+            snapshot.validation.invalidDateRows ?? 0,
+            snapshot.validation.unknownOperationRows ?? 0,
+          ),
+      }
+    : snapshot.validation;
   return {
     ...snapshot,
+    validation,
     highlights: {
       ...(snapshot.highlights ?? {}),
       ...buildCategoryHighlights(categoryLeaders),
@@ -276,12 +314,12 @@ export function normalizeSnapshotContract(snapshot) {
   };
 }
 
-function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats }) {
+function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period }) {
   const importedAt = new Date();
   const firstOperation = minDate(matchRows.map((row) => row.startedAt));
   const lastOperation = maxDate(matchRows.map((row) => row.startedAt));
   const operationCounts = countBy(matchRows, (row) => row.operationType);
-  const positions = buildPositions(matchRows);
+  const positions = buildPositions(matchRows, period);
   const players = buildPlayers(matchRows);
   const topPlayers = sortDesc(players, "operations");
   const categoryLeaders = selectDistinctCategoryLeaders(players);
@@ -342,14 +380,18 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
       date: firstOperation ? firstOperation.toISOString().slice(0, 10) : importedAt.toISOString().slice(0, 10),
       firstOperation: firstOperation?.toISOString() ?? null,
       lastOperation: lastOperation?.toISOString() ?? null,
-      timeRangeLabel: formatRange(firstOperation, lastOperation),
+      // This label describes the operator-selected window. The actual first
+      // and last operation remain available separately for data provenance.
+      timeRangeLabel: `${period.start} - ${period.end}`,
       score,
       status,
       objective: "Tenir le délai cible de zonage à 30 minutes.",
       dzTargetMinutes: DZ_TARGET_MINUTES,
-      periodLabel: MATCH_PERIOD_LABEL,
-      filterDescription: MATCH_FILTER_DESCRIPTION,
-      scoringFilterDescription: SCORING_FILTER_DESCRIPTION,
+      periodStart: period.start,
+      periodEnd: period.end,
+      periodLabel: period.label,
+      filterDescription: `Filtre opérateur + plage ${period.label}`,
+      scoringFilterDescription: `Filtre opérateur + plage ${period.label} + exclusion Poz non zonées`,
     },
     summary: {
       operations: totalOperations,
@@ -477,7 +519,7 @@ function topCategoryPlayer(players, operationType, excludedNames) {
   })[0] ?? null;
 }
 
-function buildPositions(rows) {
+function buildPositions(rows, period) {
   const map = new Map();
   for (const row of rows) {
     if (!map.has(row.position)) {
@@ -499,7 +541,7 @@ function buildPositions(rows) {
     position.operators.add(row.operator);
     const current = position.byTypeDates[row.operationType];
     position.byTypeDates[row.operationType] = current ? minDate([current, row.startedAt]) : row.startedAt;
-    if (isScoringRow(row) && (row.duelWonFlag === 0 || row.duelWonFlag === 1)) {
+    if (isScoringRow(row, period) && (row.duelWonFlag === 0 || row.duelWonFlag === 1)) {
       position.duelRows += 1;
       if (row.duelWonFlag === 1) position.duelWonRows += 1;
     }
@@ -628,11 +670,11 @@ function mapColumns(headerRow) {
   return map;
 }
 
-function buildFilterStats(rows) {
-  const periodRows = rows.filter((row) => isExcelBlank(row.hourFilter));
+function buildFilterStats(rows, period) {
+  const periodRows = rows.filter((row) => period.useExcelPeriod ? isExcelBlank(row.hourFilter) : isInTimeRange(row.startedAt, period));
   const operatorRows = rows.filter((row) => isExcelBlank(row.operatorFilter));
-  const matchRows = rows.filter(isMatchRow);
-  const scoringRows = matchRows.filter(isScoringRow);
+  const matchRows = rows.filter((row) => isMatchRow(row, period));
+  const scoringRows = matchRows.filter((row) => isScoringRow(row, period));
 
   return {
     sourceRows: rows.length,
@@ -646,12 +688,43 @@ function buildFilterStats(rows) {
   };
 }
 
-function isMatchRow(row) {
-  return isExcelBlank(row.operatorFilter) && isExcelBlank(row.hourFilter);
+function isMatchRow(row, period) {
+  const periodMatches = period?.useExcelPeriod ? isExcelBlank(row.hourFilter) : isInTimeRange(row.startedAt, period);
+  return isExcelBlank(row.operatorFilter) && periodMatches;
 }
 
-function isScoringRow(row) {
-  return isMatchRow(row) && isExcelBlank(row.unzonedFilter);
+function isScoringRow(row, period) {
+  return isMatchRow(row, period) && isExcelBlank(row.unzonedFilter);
+}
+
+function isInTimeRange(date, period) {
+  if (period?.useExcelPeriod) return true;
+  if (!date || !period) return false;
+  const parts = new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return false;
+  const minutes = (hour === 24 ? 0 : hour) * 60 + minute;
+  return minutes >= period.startMinutes && minutes <= period.endMinutes;
+}
+
+function parseTimeInput(value) {
+  const text = String(value ?? "").trim();
+  const match = text.match(/^(\d{1,2}):(00|30)$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour < 0 || hour > 23) return null;
+  return hour * 60 + minute;
+}
+
+function formatTimeInput(minutes) {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
 function isExcelBlank(value) {
@@ -773,7 +846,7 @@ function formatRange(start, end) {
 }
 
 function formatTime(date) {
-  return date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  return date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
 }
 
 function userError(title, message) {

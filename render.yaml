@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: stef-match-center
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: STEF_DATA_DIR
+        value: /data/agencies
+      - key: STEF_UPLOAD_LIMIT_MB
+        value: "20"
+      - key: STEF_AGENCIES_JSON
+        sync: false

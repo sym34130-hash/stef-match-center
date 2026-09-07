@@ -85,6 +85,30 @@ try {
   assert.equal(latestResponse.status, 200, JSON.stringify(latestPayload));
   assert.equal(latestPayload.snapshot.match.score, 70, "Snapshot relu depuis STEF_DATA_DIR");
 
+  const timeRangeResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/time-range`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-access-code": accessCode,
+    },
+    body: JSON.stringify({ start: "13:00", end: "22:30" }),
+  });
+  const timeRangePayload = await timeRangeResponse.json();
+  assert.equal(timeRangeResponse.status, 200, JSON.stringify(timeRangePayload));
+  assert.equal(timeRangePayload.snapshot.summary.operations, 4595, "Opérations après changement de plage");
+  assert.equal(timeRangePayload.snapshot.match.periodLabel, "13:00-22:30", "Plage active après changement");
+  assert.equal(timeRangePayload.snapshot.match.timeRangeLabel, "13:00 - 22:30", "Libellé de plage affiché après changement");
+
+  const invalidTimeRangeResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/time-range`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-access-code": accessCode,
+    },
+    body: JSON.stringify({ start: "08:15", end: "09:00" }),
+  });
+  assert.equal(invalidTimeRangeResponse.status, 400, "Une plage qui n'est pas sur 00/30 doit être refusée");
+
   const causerieResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/causerie`, {
     method: "POST",
     headers: {
@@ -164,7 +188,7 @@ async function findLatestWorkbook(code) {
   const entries = await fs.readdir(uploadDir, { withFileTypes: true });
   const files = await Promise.all(
     entries
-      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".xlsx"))
+      .filter((entry) => entry.isFile() && isWorkbookFile(entry.name))
       .map(async (entry) => {
         const filePath = path.join(uploadDir, entry.name);
         const stat = await fs.stat(filePath);
@@ -199,4 +223,9 @@ function sanitizeSegment(value) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function isWorkbookFile(name) {
+  const normalized = String(name ?? "").toLowerCase();
+  return normalized.endsWith(".xlsx") && !normalized.startsWith("~$");
 }

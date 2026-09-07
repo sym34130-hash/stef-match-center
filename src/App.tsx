@@ -1,8 +1,9 @@
-import { FormEvent, useEffect, useRef, useState, type CSSProperties } from "react";
+import { FormEvent, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
+  BookOpen,
   CheckCircle2,
   ChevronLeft,
   CirclePlay,
@@ -12,9 +13,12 @@ import {
   Edit3,
   Eye,
   FileSpreadsheet,
+  FileCheck2,
+  CircleHelp,
   LayoutDashboard,
   Lock,
   Maximize2,
+  MousePointerClick,
   Minimize2,
   RefreshCw,
   Save,
@@ -57,7 +61,7 @@ type CauserieToast = {
   tone: "success" | "warning" | "error" | "loading";
 } | null;
 
-type Screen = "kickoff" | "match" | "composition" | "player" | "coach" | "causerie" | "tv" | "import";
+type Screen = "kickoff" | "match" | "composition" | "player" | "coach" | "causerie" | "tv" | "import" | "guide";
 
 const screens: Array<{ id: Exclude<Screen, "player">; label: string; icon: LucideIcon; step: string }> = [
   { id: "kickoff", label: "Coup d'envoi", icon: CirclePlay, step: "01" },
@@ -67,6 +71,7 @@ const screens: Array<{ id: Exclude<Screen, "player">; label: string; icon: Lucid
   { id: "causerie", label: "Causerie", icon: ClipboardList, step: "05" },
   { id: "tv", label: "Écran quai", icon: Eye, step: "TV" },
   { id: "import", label: "Import", icon: Upload, step: "MAJ" },
+  { id: "guide", label: "Guide", icon: BookOpen, step: "?" },
 ];
 
 type CompositionRole = "Attaquant" | "Milieu" | "Défenseur";
@@ -133,6 +138,7 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [screen, setScreen] = useState<Screen>("kickoff");
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [playerReturnScreen, setPlayerReturnScreen] = useState<Screen>("composition");
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
@@ -197,6 +203,7 @@ export default function App() {
   }
 
   function openPlayer(player: Player) {
+    setPlayerReturnScreen(screen);
     setSelectedPlayer(player);
     setScreen("player");
   }
@@ -229,6 +236,7 @@ export default function App() {
                 key={item.id}
                 type="button"
                 className={screen === item.id ? "nav-item active" : "nav-item"}
+                aria-label={`${item.step} ${item.label}`}
                 onClick={() => setScreen(item.id)}
               >
                 <span className="nav-step">{item.step}</span>
@@ -245,13 +253,19 @@ export default function App() {
       </aside>
 
       <main className="main-area">
-        <TopBar snapshot={snapshot} agency={session.agency} onRefresh={refreshSnapshot} loading={snapshotLoading} />
+        <TopBar
+          snapshot={snapshot}
+          agency={session.agency}
+          onRefresh={refreshSnapshot}
+          onTimeRangeChange={(start, end) => updateTimeRange(session, start, end).then(setSnapshot)}
+          loading={snapshotLoading}
+        />
         {snapshotLoading && !snapshot ? (
           <LoadingView />
         ) : !snapshot && screen !== "import" && screen !== "kickoff" ? (
           <NoDataView onImport={() => setScreen("import")} />
         ) : (
-          <>
+          <div className="screen-transition" key={`${screen}-${snapshot?.importedAt ?? "empty"}`}>
             {screen === "kickoff" && (
               <Kickoff
                 snapshot={snapshot}
@@ -272,15 +286,16 @@ export default function App() {
               <PlayerSheet
                 snapshot={snapshot}
                 player={selectedPlayer}
-                onBack={() => setScreen("composition")}
+                onBack={() => setScreen(playerReturnScreen === "player" ? "composition" : playerReturnScreen)}
                 onSelect={setSelectedPlayer}
               />
             )}
             {screen === "coach" && snapshot && (
-              <Coach snapshot={snapshot} session={session} onPlayer={openPlayer} onMatch={() => setScreen("match")} />
+              <Coach snapshot={snapshot} session={session} onPlayer={openPlayer} onComposition={() => setScreen("composition")} />
             )}
             {screen === "causerie" && snapshot && <Causerie snapshot={snapshot} session={session} />}
-            {screen === "tv" && snapshot && <TvMode snapshot={snapshot} onMatch={() => setScreen("match")} />}
+            {screen === "tv" && snapshot && <TvMode snapshot={snapshot} session={session} onMatch={() => setScreen("match")} />}
+            {screen === "guide" && <GuideView snapshot={snapshot} onNavigate={setScreen} />}
             {screen === "import" && (
               <ImportView
                 session={session}
@@ -291,7 +306,7 @@ export default function App() {
                 onOpenMatch={() => setScreen("match")}
               />
             )}
-          </>
+          </div>
         )}
       </main>
     </div>
@@ -304,6 +319,20 @@ async function fetchSnapshot(session: Session): Promise<Snapshot> {
   });
   if (!response.ok) throw new Error("Aucun match importé.");
   const payload = await response.json();
+  return payload.snapshot;
+}
+
+async function updateTimeRange(session: Session, start: string, end: string): Promise<Snapshot> {
+  const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/time-range`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-access-code": session.accessCode,
+    },
+    body: JSON.stringify({ start, end }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message ?? "La plage horaire n'a pas pu être actualisée.");
   return payload.snapshot;
 }
 
@@ -387,7 +416,35 @@ function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string
   );
 }
 
-function TopBar({ snapshot, agency, onRefresh, loading }: { snapshot: Snapshot | null; agency: Agency; onRefresh: () => void; loading: boolean }) {
+function TopBar({ snapshot, agency, onRefresh, onTimeRangeChange, loading }: { snapshot: Snapshot | null; agency: Agency; onRefresh: () => void; onTimeRangeChange: (start: string, end: string) => Promise<void>; loading: boolean }) {
+  const [start, setStart] = useState(snapshot?.match.periodStart ?? "13:00");
+  const [end, setEnd] = useState(snapshot?.match.periodEnd ?? "22:30");
+  const [savingRange, setSavingRange] = useState(false);
+  const [rangeError, setRangeError] = useState("");
+
+  useEffect(() => {
+    setStart(snapshot?.match.periodStart ?? "13:00");
+    setEnd(snapshot?.match.periodEnd ?? "22:30");
+    setRangeError("");
+  }, [snapshot?.match.periodStart, snapshot?.match.periodEnd]);
+
+  async function submitTimeRange(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!start || !end || start >= end) {
+      setRangeError("Choisis un début et une fin valides, par pas de 30 minutes.");
+      return;
+    }
+    setSavingRange(true);
+    setRangeError("");
+    try {
+      await onTimeRangeChange(start, end);
+    } catch (error) {
+      setRangeError(error instanceof Error ? error.message : "La plage horaire n'a pas pu être actualisée.");
+    } finally {
+      setSavingRange(false);
+    }
+  }
+
   return (
     <header className="top-bar">
       <div>
@@ -395,6 +452,25 @@ function TopBar({ snapshot, agency, onRefresh, loading }: { snapshot: Snapshot |
         <h2>{agency.name}</h2>
       </div>
       <div className="top-actions">
+        {snapshot && (
+          <form className="time-range-control" onSubmit={submitTimeRange}>
+            <span><Clock3 size={15} /> Plage active</span>
+            <small className="time-range-hint">pas de 30 min · fin incluse</small>
+            <label>
+              <span className="sr-only">Début</span>
+              <input type="time" min="00:00" max="23:30" step={1800} value={start} onChange={(event) => setStart(event.target.value)} />
+            </label>
+            <b>à</b>
+            <label>
+              <span className="sr-only">Fin</span>
+              <input type="time" min="00:30" max="23:30" step={1800} value={end} onChange={(event) => setEnd(event.target.value)} />
+            </label>
+            <button className="secondary-button compact" type="submit" disabled={savingRange || loading}>
+              {savingRange ? "Mise à jour..." : "Appliquer"}
+            </button>
+            {rangeError && <small className="time-range-error">{rangeError}</small>}
+          </form>
+        )}
         <span>{snapshot ? `Dernière actualisation : ${formatDateTime(snapshot.importedAt)}` : "Aucun match importé"}</span>
         <button className="secondary-button" type="button" onClick={onRefresh} disabled={loading}>
           <RefreshCw size={16} />
@@ -413,6 +489,35 @@ function LoadingView() {
       <p>Le Match Center récupère la dernière feuille importée.</p>
     </section>
   );
+}
+
+function ActivePeriodBadge({ snapshot, className = "" }: { snapshot: Snapshot; className?: string }) {
+  return (
+    <span className={`active-period-badge ${className}`.trim()}>
+      <Clock3 size={14} />
+      Plage {snapshot.match.timeRangeLabel}
+    </span>
+  );
+}
+
+function AnimatedNumber({ value, suffix = "" }: { value: number; suffix?: string }) {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    const start = performance.now();
+    const duration = 720;
+    let frame = 0;
+    const animate = (now: number) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayValue(value * eased);
+      if (progress < 1) frame = window.requestAnimationFrame(animate);
+    };
+    frame = window.requestAnimationFrame(animate);
+    return () => window.cancelAnimationFrame(frame);
+  }, [value]);
+
+  return <>{formatNumber(Math.round(displayValue))}{suffix}</>;
 }
 
 function NoDataView({ onImport }: { onImport: () => void }) {
@@ -636,11 +741,19 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
   const awards = buildAwardItems(snapshot);
   const playersByName = new Map(snapshot.players.map((player) => [player.name, player]));
   const jerseyNumbers = buildJerseyNumbers(snapshot.players);
+  const importIssueRows = snapshot.validation.issueRows ?? 0;
+  const importChecks = [
+    { label: "Données critiques manquantes", value: snapshot.validation.criticalMissingRows, unit: "lignes" },
+    { label: "Dates non lisibles", value: snapshot.validation.invalidDateRows, unit: "lignes" },
+    { label: "Types d'opération non reconnus", value: snapshot.validation.unknownOperationRows, unit: "lignes" },
+    { label: "Doublons potentiels", value: snapshot.validation.duplicateRows, unit: "lignes" },
+  ].filter((check) => check.value > 0);
 
   useEffect(() => {
     document.body.classList.toggle("match-celebration-active", celebrationMode);
     return () => document.body.classList.remove("match-celebration-active");
   }, [celebrationMode]);
+
 
   return (
     <div className={celebrationMode ? `match-page is-celebration-mode ${outcome.tone}` : `match-page ${outcome.tone}`}>
@@ -662,6 +775,7 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
             <p className="eyebrow">02 - Feuille de match</p>
             <h2>{outcome.title}</h2>
             <span>Agence {snapshot.agency.code} - Match du {formatDate(snapshot.match.date)} - {snapshot.match.timeRangeLabel}</span>
+            <ActivePeriodBadge snapshot={snapshot} />
           </div>
           <div className="match-header-actions">
             <button className="secondary-on-dark" type="button" onClick={() => setCelebrationMode((current) => !current)}>
@@ -690,7 +804,7 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
             <span>STEF MATCH CENTER</span>
             <strong>{outcome.verdict}</strong>
             <div>
-              <b>{snapshot.match.score}</b>
+              <b><AnimatedNumber value={snapshot.match.score} /></b>
               <small>/ 100</small>
             </div>
             <p>{outcome.message}</p>
@@ -824,10 +938,26 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
             </button>
           </div>
 
-          <div className="match-control-card">
+          <div className={importChecks.length > 0 ? "match-control-card has-alerts" : "match-control-card is-clear"}>
             <span>Contrôle import</span>
-            <strong>{snapshot.validation.warnings.length === 0 ? "Fichier lisible" : `${snapshot.validation.warnings.length} point(s) à contrôler`}</strong>
-            <p>{snapshot.validation.warnings[0] ?? "Aucune alerte bloquante sur le dernier import."}</p>
+            <strong>{importChecks.length === 0 ? "Import contrôlé" : `${importChecks.length} contrôle(s) à revoir`}</strong>
+            <p>
+              {importChecks.length === 0
+                ? "Aucune anomalie détectée dans les données importées."
+                : `Les contrôles ci-dessous indiquent les lignes à vérifier, sans bloquer la lecture du match.${importIssueRows > 0 ? ` ${formatNumber(importIssueRows)} ligne(s) concernée(s) au total.` : ""}`}
+            </p>
+            {importChecks.length > 0 && <small className="import-check-note">Une même ligne peut apparaître dans plusieurs contrôles.</small>}
+            {importChecks.length > 0 && (
+              <ul className="import-check-list">
+                {importChecks.map((check) => (
+                  <li key={check.label}>
+                    <b>{formatNumber(check.value)}</b>
+                    <span>{check.unit}</span>
+                    <small>{check.label}</small>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </section>
@@ -863,6 +993,7 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
           <p className="eyebrow">03 - Composition</p>
           <h2>Composition du jour</h2>
           <span>Agence {snapshot.agency.code} - Match du {formatDate(snapshot.match.date)} - {snapshot.match.timeRangeLabel}</span>
+          <ActivePeriodBadge snapshot={snapshot} />
         </div>
         <div className="composition-header-actions">
           <StatusBadge status={snapshot.match.status} />
@@ -903,10 +1034,10 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
             </div>
 
             <div className="formation-pitch" aria-label="Terrain de composition">
-              <div className="formation-goal top" aria-hidden="true" />
-              <div className="formation-goal bottom" aria-hidden="true" />
-              <div className="formation-box top" aria-hidden="true" />
-              <div className="formation-box bottom" aria-hidden="true" />
+              <div className="formation-goal left" aria-hidden="true" />
+              <div className="formation-goal right" aria-hidden="true" />
+              <div className="formation-box left" aria-hidden="true" />
+              <div className="formation-box right" aria-hidden="true" />
               <div className="formation-half" aria-hidden="true" />
               <div className="formation-circle" aria-hidden="true" />
 
@@ -1036,12 +1167,12 @@ function Coach({
   snapshot,
   session,
   onPlayer,
-  onMatch,
+  onComposition,
 }: {
   snapshot: Snapshot;
   session: Session;
   onPlayer: (player: Player) => void;
-  onMatch: () => void;
+  onComposition: () => void;
 }) {
   const [coachMode, setCoachMode] = useState(false);
   const [coachBoardMode, setCoachBoardMode] = useState<"view" | "edit">("view");
@@ -1170,6 +1301,7 @@ function Coach({
           <p className="eyebrow">04 - Coach</p>
           <h2>Vestiaire & analyse du match</h2>
           <span>Agence {snapshot.agency.code} - Match du {formatDate(snapshot.match.date)} - {snapshot.match.timeRangeLabel}</span>
+          <ActivePeriodBadge snapshot={snapshot} />
         </div>
         <div className="coach-room-header-actions">
           <StatusBadge status={snapshot.match.status} />
@@ -1209,7 +1341,7 @@ function Coach({
                   onFocus={() => setSelectedName(player.name)}
                   onMouseEnter={() => setSelectedName(player.name)}
                   onClick={() => onPlayer(player)}
-                  title={`${player.name} - ${player.role} - ${metric.label} ${metric.value}`}
+                  title={`${player.name} - ${player.role} - ${metric.label} : ${metric.value} ${metric.detail}`}
                 >
                   <span className="locker-number">{jersey}</span>
                   <span className="locker-hanger" aria-hidden="true" />
@@ -1219,7 +1351,12 @@ function Coach({
                   </span>
                   <strong>{player.name}</strong>
                   <small>{player.role} - {roleCode(player.role)}</small>
-                  <i>{metric.label} {metric.value}</i>
+                  <span className="locker-metric">
+                    <small>Indicateur clé</small>
+                    <strong>{metric.label}</strong>
+                    <b>{metric.value}</b>
+                    <em>{metric.detail}</em>
+                  </span>
                 </button>
               );
             })}
@@ -1254,10 +1391,15 @@ function Coach({
             <div className="screen-role-bars" aria-label="Répartition terrain">
               {snapshot.summary.roleDistribution.map((role) => (
                 <span key={role.role} style={{ "--bar-size": `${Math.max(6, role.percent)}%` } as CSSProperties}>
-                  <i className={roleClass(role.role)} />
-                  <b>{roleCode(role.role)}</b>
+                  <i className={roleClass(role.role)} aria-hidden="true" />
+                  <b>{roleCode(role.role)} <small>{Math.round(role.percent)}%</small></b>
                 </span>
               ))}
+            </div>
+            <div className="screen-insight-strip">
+              <span>Lecture express</span>
+              <strong>{snapshot.match.score >= 70 ? "Score sous contrôle" : "Reprise prioritaire"}</strong>
+              <p>{coachMessage(snapshot)}</p>
             </div>
           </button>
 
@@ -1425,10 +1567,10 @@ function Coach({
           </div>
         </section>
 
-        <button className="tunnel-return" type="button" onClick={onMatch}>
+        <button className="tunnel-return" type="button" onClick={onComposition}>
           <span>Tunnel</span>
           <strong>Retour sur le terrain</strong>
-          <small>{mainRisk ? `À contrôler : voyage ${mainRisk.travelCode}` : "Revenir à la feuille de match"}</small>
+          <small>{mainRisk ? `À contrôler : ${travelRiskTitle(mainRisk.travelCode)}` : "Revenir à la feuille de match"}</small>
           <ArrowRight size={18} />
         </button>
       </div>
@@ -1624,6 +1766,7 @@ function Causerie({ snapshot, session }: { snapshot: Snapshot; session: Session 
           <span>
             Match du {formatDate(snapshot.match.date)} · Équipe {plan.team || "à renseigner"} · Mise à jour {plan.updatedAt ? formatDateTime(plan.updatedAt) : "à préparer"}
           </span>
+          <ActivePeriodBadge snapshot={snapshot} />
         </div>
         <div className="causerie-header-actions">
           <StatusBadge status={snapshot.match.status} />
@@ -1670,10 +1813,10 @@ function Causerie({ snapshot, session }: { snapshot: Snapshot; session: Session 
             </div>
 
             <div className="stadium-field" aria-label="Terrain de causerie">
-              <div className="goal goal-top" aria-hidden="true" />
-              <div className="goal goal-bottom" aria-hidden="true" />
-              <div className="penalty-box top" aria-hidden="true" />
-              <div className="penalty-box bottom" aria-hidden="true" />
+              <div className="goal goal-left" aria-hidden="true" />
+              <div className="goal goal-right" aria-hidden="true" />
+              <div className="penalty-box left" aria-hidden="true" />
+              <div className="penalty-box right" aria-hidden="true" />
               <div className="center-circle" aria-hidden="true" />
               <div className="half-line" aria-hidden="true" />
 
@@ -1766,19 +1909,19 @@ function Causerie({ snapshot, session }: { snapshot: Snapshot; session: Session 
                 <div className="coach-lines">
                   <p>{plan.coach.tactic || "Tactique à renseigner."}</p>
                   <dl>
-                    <div>
+                    <div className="coach-line-item manager-line">
                       <dt>Manager</dt>
                       <dd>{plan.manager || "À renseigner"}</dd>
                     </div>
-                    <div>
+                    <div className="coach-line-item priority-line">
                       <dt>Priorité</dt>
                       <dd>{plan.coach.priority || "À préparer"}</dd>
                     </div>
-                    <div>
+                    <div className="coach-line-item arbitration-line">
                       <dt>Arbitrage</dt>
                       <dd>{plan.coach.arbitration || "À préparer"}</dd>
                     </div>
-                    <div>
+                    <div className="coach-line-item review-line">
                       <dt>Revue</dt>
                       <dd>{plan.coach.review || "À planifier"}</dd>
                     </div>
@@ -1876,7 +2019,13 @@ function CauserieToastView({ toast }: { toast: NonNullable<CauserieToast> }) {
   );
 }
 
-function TvMode({ snapshot, onMatch }: { snapshot: Snapshot; onMatch: () => void }) {
+function TvMode({ snapshot, session, onMatch }: { snapshot: Snapshot; session: Session; onMatch: () => void }) {
+  const [focusMode, setFocusMode] = useState(false);
+  const [planMode, setPlanMode] = useState<"view" | "edit">("view");
+  const [plan, setPlan] = useState<CauseriePlan>(() => buildDefaultCauseriePlan(snapshot));
+  const [planDraft, setPlanDraft] = useState<CauseriePlan>(() => buildDefaultCauseriePlan(snapshot));
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [feedback, setFeedback] = useState<CauserieToast>(null);
   const action = matchAction(snapshot);
   const categoryHighlights = [
     { label: "Attaque", highlight: snapshot.highlights.bestScorer },
@@ -1884,17 +2033,114 @@ function TvMode({ snapshot, onMatch }: { snapshot: Snapshot; onMatch: () => void
     { label: "Défense", highlight: snapshot.highlights.defensiveWall },
   ];
 
+  useEffect(() => {
+    document.body.classList.toggle("tv-focus-active", focusMode);
+    return () => document.body.classList.remove("tv-focus-active");
+  }, [focusMode]);
+
+  useEffect(() => {
+    function syncFullscreenState() {
+      if (document.fullscreenElement) setFocusMode(true);
+      else if (document.fullscreenEnabled) setFocusMode(false);
+    }
+    document.addEventListener("fullscreenchange", syncFullscreenState);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreenState);
+  }, []);
+
+  async function toggleFocusMode() {
+    if (focusMode) {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen().catch(() => undefined);
+      }
+      setFocusMode(false);
+      return;
+    }
+    setFocusMode(true);
+    if (!document.fullscreenEnabled) return;
+    const request = document.documentElement.requestFullscreen?.();
+    if (request) await request.catch(() => undefined);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    const defaultPlan = buildDefaultCauseriePlan(snapshot);
+    setPlan(defaultPlan);
+    setPlanDraft(defaultPlan);
+    setPlanMode("view");
+    fetchCauseriePlan(session, snapshot)
+      .then((remotePlan) => {
+        if (cancelled) return;
+        const nextPlan = normalizeCauseriePlan(remotePlan ?? defaultPlan, snapshot);
+        setPlan(nextPlan);
+        setPlanDraft(nextPlan);
+      })
+      .catch(() => {
+        if (!cancelled) setFeedback({ title: "Plan local", detail: "Le plan par défaut reste disponible à l'écran.", tone: "warning" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session.accessCode, session.agency.code, snapshot.agency.code, snapshot.match.date, snapshot.importedAt]);
+
+  function startPlanEdit() {
+    setPlanDraft(plan);
+    setPlanMode("edit");
+    setFeedback(null);
+  }
+
+  function updatePlanLine(zone: Exclude<CauserieZoneId, "coach">, index: number, value: string) {
+    setPlanDraft((current) => ({
+      ...current,
+      [zone]: current[zone].map((line, lineIndex) => lineIndex === index ? value.slice(0, 120) : line),
+    }));
+  }
+
+  async function saveTvPlan() {
+    const nextPlan = {
+      ...planDraft,
+      attack: padPlanLines(planDraft.attack),
+      midfield: padPlanLines(planDraft.midfield),
+      defense: padPlanLines(planDraft.defense),
+      updatedAt: new Date().toISOString(),
+    };
+    setSavingPlan(true);
+    try {
+      const savedPlan = await saveCauseriePlan(session, snapshot, nextPlan);
+      const normalizedPlan = normalizeCauseriePlan(savedPlan, snapshot);
+      setPlan(normalizedPlan);
+      setPlanDraft(normalizedPlan);
+      setPlanMode("view");
+      setFeedback({ title: "Plan de jeu enregistré", detail: "Les consignes sont à jour pour Coach et Causerie.", tone: "success" });
+    } catch {
+      setPlan(nextPlan);
+      setPlanDraft(nextPlan);
+      setPlanMode("view");
+      localStorage.setItem(causerieStorageKey(snapshot), JSON.stringify(nextPlan));
+      setFeedback({ title: "Sauvegarde locale uniquement", detail: "Le plan est conservé sur ce poste.", tone: "warning" });
+    } finally {
+      setSavingPlan(false);
+      window.setTimeout(() => setFeedback(null), 3400);
+    }
+  }
+
   return (
-    <section className="tv-mode">
+    <section className={focusMode ? "tv-mode is-focus" : "tv-mode"}>
       <div className="tv-header">
         <div>
           <p>STEF MATCH CENTER</p>
           <h2>Agence {snapshot.agency.code}</h2>
+          <ActivePeriodBadge snapshot={snapshot} className="tv-period-badge" />
         </div>
-        <StatusBadge status={snapshot.match.status} />
+        <div className="tv-header-actions">
+          <StatusBadge status={snapshot.match.status} />
+          <button className="secondary-on-dark" type="button" onClick={toggleFocusMode} aria-pressed={focusMode}>
+            {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            {focusMode ? "Quitter le plein écran" : "Mode plein écran"}
+          </button>
+        </div>
       </div>
       <div className="tv-score">
-        <strong>{snapshot.match.score}%</strong>
+        <strong><AnimatedNumber value={snapshot.match.score} suffix="%" /></strong>
         <span>DUELS GAGNÉS</span>
         <small>{snapshot.summary.duelWon}/{snapshot.summary.duelTotal} duels Excel filtrés dans le délai cible</small>
       </div>
@@ -1924,10 +2170,48 @@ function TvMode({ snapshot, onMatch }: { snapshot: Snapshot; onMatch: () => void
           );
         })}
       </div>
-      <div className="tv-action">
-        <span>Plan de jeu</span>
-        <strong>{action.title}</strong>
-        <p>{action.detail}</p>
+      <div className={`tv-action ${planMode === "edit" ? "is-editing" : ""}`}>
+        <div className="tv-action-heading">
+          <div>
+            <span>Plan de jeu</span>
+            <strong>{action.title}</strong>
+          </div>
+          {planMode === "view" ? (
+            <button className="tv-edit-button" type="button" onClick={startPlanEdit}>
+              <Edit3 size={16} /> Écrire
+            </button>
+          ) : (
+            <div className="tv-edit-actions">
+              <button className="tv-edit-button" type="button" onClick={() => { setPlanDraft(plan); setPlanMode("view"); }} disabled={savingPlan}>Annuler</button>
+              <button className="primary-button compact" type="button" onClick={saveTvPlan} disabled={savingPlan}>
+                <Save size={15} /> {savingPlan ? "Enregistrement..." : "Enregistrer"}
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="tv-plan-grid">
+          {([
+            ["attack", "SAV"],
+            ["midfield", "Expédition"],
+            ["defense", "Ramasse & emballage"],
+          ] as const).map(([zone, label]) => (
+            <div className={`tv-plan-column ${zone}`} key={zone}>
+              <b>{label}</b>
+              {planMode === "edit" ? planDraft[zone].map((line, index) => (
+                <textarea
+                  key={`${zone}-${index}`}
+                  value={line}
+                  maxLength={120}
+                  aria-label={`${label}, ligne ${index + 1}`}
+                  placeholder={`Consigne ${index + 1}`}
+                  rows={2}
+                  onChange={(event) => updatePlanLine(zone, index, event.target.value)}
+                />
+              )) : plan[zone].map((line, index) => line ? <span key={`${zone}-${index}`}>{line}</span> : null)}
+            </div>
+          ))}
+        </div>
+        {feedback && <p className={`tv-plan-feedback ${feedback.tone}`}>{feedback.title} · {feedback.detail}</p>}
       </div>
       <button className="secondary-on-dark" type="button" onClick={onMatch}>
         Voir la feuille de match
@@ -1935,6 +2219,243 @@ function TvMode({ snapshot, onMatch }: { snapshot: Snapshot; onMatch: () => void
       </button>
     </section>
   );
+}
+
+type GuideSection = "start" | "excel" | "import" | "read" | "edit" | "help";
+
+function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavigate: (screen: Screen) => void }) {
+  const [section, setSection] = useState<GuideSection>("start");
+
+  const sections: Array<{ id: GuideSection; number: string; label: string }> = [
+    { id: "start", number: "01", label: "Démarrer" },
+    { id: "excel", number: "02", label: "Préparer Excel" },
+    { id: "import", number: "03", label: "Importer & actualiser" },
+    { id: "read", number: "04", label: "Lire les écrans" },
+    { id: "edit", number: "05", label: "Modifier le plan" },
+    { id: "help", number: "06", label: "Points d’attention" },
+  ];
+  const activeIndex = sections.findIndex((item) => item.id === section);
+  const previousSection = sections[Math.max(0, activeIndex - 1)]?.id ?? "start";
+  const nextSection = sections[Math.min(sections.length - 1, activeIndex + 1)]?.id ?? "help";
+
+  return (
+    <section className="guide-page">
+      <header className="guide-hero">
+        <div>
+          <p className="eyebrow">Guide intégré</p>
+          <h2>Utiliser STEF Match Center de A à Z</h2>
+          <p>Un parcours simple pour partir de votre fichier Excel, actualiser le match et utiliser chaque écran sans connaissance technique.</p>
+        </div>
+        <div className="guide-hero-status">
+          <BookOpen size={26} />
+          <strong>{snapshot ? "Match disponible" : "Excel à importer"}</strong>
+          <span>{snapshot ? `Dernière base : ${formatDateTime(snapshot.importedAt)}` : "Commencez par préparer le fichier source."}</span>
+        </div>
+      </header>
+
+      <div className="guide-layout">
+        <nav className="guide-nav" aria-label="Sommaire du guide">
+          <span className="guide-nav-title">Sommaire</span>
+          {sections.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={section === item.id ? "guide-nav-item active" : "guide-nav-item"}
+              onClick={() => setSection(item.id)}
+            >
+              <b>{item.number}</b>
+              <span>{item.label}</span>
+              <ArrowRight size={15} />
+            </button>
+          ))}
+          <div className="guide-nav-tip">
+            <CircleHelp size={18} />
+            <span>Vous pouvez revenir ici à tout moment sans perdre le match importé.</span>
+          </div>
+        </nav>
+
+        <div className="guide-content">
+          <div className="guide-progress" aria-label={`Progression du guide : étape ${activeIndex + 1} sur ${sections.length}`}>
+            <div className="guide-progress-copy"><span>Progression</span><strong>Étape {activeIndex + 1} sur {sections.length} · {sections[activeIndex]?.label}</strong></div>
+            <div className="guide-progress-track"><span style={{ width: `${((activeIndex + 1) / sections.length) * 100}%` }} /></div>
+          </div>
+          {section === "start" && (
+            <GuidePanel eyebrow="01 · Démarrer" title="Le fonctionnement en une minute" icon={MousePointerClick}>
+              <p>Le site transforme un fichier Excel actualisé en une lecture opérationnelle du match. Le fichier reste la source de données ; le site sert à contrôler, comprendre et agir.</p>
+              <div className="guide-flow">
+                <GuideFlowStep number="1" title="Préparer" detail="Remplacer l’onglet Données par la dernière base Excel." tone="blue" />
+                <GuideFlowStep number="2" title="Importer" detail="Déposer le fichier .xlsx puis cliquer sur Contrôler et importer." tone="green" />
+                <GuideFlowStep number="3" title="Contrôler" detail="Lire le score, les alertes et les éventuels points à revoir." tone="orange" />
+                <GuideFlowStep number="4" title="Agir" detail="Utiliser Coach, Causerie et Écran quai avec la plage horaire choisie." tone="red" />
+              </div>
+              <div className="guide-callout success"><CheckCircle2 size={20} /><span><strong>Règle simple :</strong> chaque fois que la base Excel change, il faut refaire un import. Le bouton Actualiser sert ensuite à relire le dernier import enregistré.</span></div>
+              <div className="guide-actions">
+                <button className="primary-button" type="button" onClick={() => onNavigate("import")}><Upload size={17} /> Ouvrir l’import</button>
+                <button className="secondary-button" type="button" onClick={() => setSection("excel")}><ArrowRight size={17} /> Préparer Excel</button>
+              </div>
+            </GuidePanel>
+          )}
+
+          {section === "excel" && (
+            <GuidePanel eyebrow="02 · Préparer Excel" title="La bonne méthode, même sans connaître Excel" icon={FileSpreadsheet}>
+              <p>Avant de toucher au fichier, faites une copie. Le classeur original reste votre référence et ne doit pas être écrasé par une manipulation.</p>
+              <ol className="guide-steps">
+                <li><b>Ouvrez la dernière version fiable du classeur.</b><span>Utilisez la base qui contient les données opérationnelles les plus récentes.</span></li>
+                <li><b>Faites une copie du fichier.</b><span>Dans Excel : Fichier → Enregistrer sous, puis donnez un nom clair à la copie, par exemple <code>HM_58_match_2026-09-07.xlsx</code>.</span></li>
+                <li><b>Remplacez l’onglet source.</b><span>Dans la copie utilisée pour l’import, remplacez l’ancien onglet <strong>Données</strong> par l’onglet actualisé. Le nom doit rester exactement <strong>Données</strong>.</span></li>
+                <li><b>Conservez la structure complète.</b><span>Ne réduisez pas le fichier aux seules premières colonnes : le site utilise les champs de données, de filtres, de poste, de voyage et de duel listés ci-dessous.</span></li>
+                <li><b>Enregistrez au format .xlsx.</b><span>Le site accepte le classeur Excel <strong>.xlsx</strong>. Évitez une capture d’écran, un PDF ou un fichier CSV pour cet import.</span></li>
+              </ol>
+              <div className="guide-excel-howto">
+                <div><span className="guide-subtitle">Méthode simple pour remplacer les données</span><strong>Copier la base actualisée dans l’onglet Données</strong></div>
+                <ol className="guide-steps compact">
+                  <li><b>Dans l’onglet source actualisé, cliquez dans le tableau.</b><span>Appuyez sur <kbd>Ctrl</kbd> + <kbd>A</kbd> pour sélectionner la zone de données, puis une deuxième fois si Excel ne sélectionne pas toute la feuille.</span></li>
+                  <li><b>Copiez les données.</b><span>Appuyez sur <kbd>Ctrl</kbd> + <kbd>C</kbd>.</span></li>
+                  <li><b>Allez dans l’onglet Données de la copie de travail.</b><span>Cliquez sur la cellule A1, en haut à gauche du tableau.</span></li>
+                  <li><b>Videz les anciennes lignes avant de coller.</b><span>Dans l’onglet Données, sélectionnez l’ancienne zone de données de A2 à G jusqu’à la dernière ancienne ligne, puis appuyez sur <kbd>Suppr</kbd>. Ne supprimez pas les colonnes : vous effacez leur contenu uniquement.</span></li>
+                  <li><b>Collez la nouvelle plage.</b><span>Revenez sur A1 et appuyez sur <kbd>Ctrl</kbd> + <kbd>V</kbd>. Cette étape évite que des lignes de l’ancien import restent sous le nouvel import.</span></li>
+                  <li><b>Enregistrez et contrôlez.</b><span>Appuyez sur <kbd>Ctrl</kbd> + <kbd>S</kbd>. En cas d’erreur, <kbd>Ctrl</kbd> + <kbd>Z</kbd> annule la dernière action.</span></li>
+                </ol>
+              </div>
+              <div className="guide-clear-warning"><AlertTriangle size={21} /><div><strong>Étape indispensable avant chaque collage</strong><span>Un nouvel extrait peut contenir moins de lignes que l’ancien. Si vous ne videz pas l’ancienne zone A:G, les anciennes lignes restantes peuvent encore être lues par le site et fausser les indicateurs. Dans ce classeur, ne videz pas H:T : ces colonnes contiennent des formules et des colonnes d’aide qui doivent rester en place.</span></div></div>
+              <div className="guide-formula-note"><FileCheck2 size={20} /><div><strong>À retenir sur les colonnes H à T</strong><span>H correspond à <strong>Filtre opérateur</strong> et contient une formule. Les colonnes suivantes calculent notamment les filtres, le poste, le DZ et les duels gagnés. On remplace les données source en A:G ; on laisse les formules H:T se recalculer.</span></div></div>
+              <div className="guide-field-block"><span className="guide-subtitle">Champs attendus dans l’onglet Données</span><div className="guide-field-list">{["Opérateur", "Date/Heure de début d’opération", "Type d’opération", "N° Position", "Code Voyage", "Agence Segment", "Type Segment", "Filtre opérateur", "Filtre heure", "Poste", "Poz non zonées", "DZ", "Duels gagnés"].map((field) => <span key={field}>{field}</span>)}</div><small>Les intitulés doivent rester reconnaissables. Ne supprimez pas la ligne d’en-têtes.</small></div>
+              <figure className="guide-excel-figure">
+                <img src="/excel-donnees-original.png" alt="Capture réelle de l’onglet Données dans le classeur Excel importé" />
+                <figcaption>Capture réelle de l’onglet <strong>Données</strong> : la ligne 1 contient les en-têtes et les lignes suivantes contiennent les opérations.</figcaption>
+              </figure>
+              <div className="guide-shortcut-grid">
+                <GuideShortcut keys={["Ctrl", "F"]} title="Rechercher" text="Trouver rapidement Données, Code Voyage ou un nom." />
+                <GuideShortcut keys={["Ctrl", "S"]} title="Enregistrer" text="Sauvegarder la copie avant l’import." />
+                <GuideShortcut keys={["Ctrl", "Z"]} title="Annuler" text="Revenir en arrière après une mauvaise manipulation." />
+              </div>
+              <div className="guide-warning"><AlertTriangle size={20} /><div><strong>À ne pas faire</strong><span>Ne modifiez pas les onglets de calcul ou de contrôle si vous ne savez pas à quoi ils servent. Pour le site, l’onglet clé est l’onglet <strong>Données</strong>.</span></div></div>
+              <div className="guide-mini-grid">
+                <GuideMiniCard icon={FileCheck2} title="À vérifier" text="Le fichier se termine par .xlsx" />
+                <GuideMiniCard icon={CheckCircle2} title="Nom exact" text="L’onglet s’appelle Données" />
+                <GuideMiniCard icon={CircleHelp} title="En cas de doute" text="Conservez l’original et importez une copie" />
+              </div>
+            </GuidePanel>
+          )}
+
+          {section === "import" && (
+            <GuidePanel eyebrow="03 · Importer & actualiser" title="Ce que fait chaque bouton" icon={RefreshCw}>
+              <div className="guide-action-list">
+                <GuideAction icon={Upload} title="Contrôler et importer" tone="green" detail="À utiliser quand vous avez un nouveau fichier Excel. Le site vérifie le fichier, calcule le match et crée une nouvelle base pour l’agence connectée." />
+                <GuideAction icon={RefreshCw} title="Actualiser" tone="blue" detail="À utiliser pour relire le dernier import déjà enregistré. Ce bouton ne va pas chercher un fichier sur votre ordinateur et ne remplace pas un nouvel import." />
+                <GuideAction icon={Clock3} title="Appliquer la plage" tone="orange" detail="À utiliser après avoir choisi le début et la fin du créneau. Les heures sont limitées aux pas de 30 minutes, par exemple 08:00 ou 08:30." />
+              </div>
+              <h3>Procédure complète</h3>
+              <ol className="guide-steps compact">
+                <li><b>Allez dans Import.</b><span>Le bouton se trouve dans le menu à gauche.</span></li>
+                <li><b>Sélectionnez ou déposez votre fichier .xlsx.</b><span>Vérifiez le nom affiché avant de continuer.</span></li>
+                <li><b>Cliquez sur Contrôler et importer.</b><span>Attendez le message <strong>MATCH ACTUALISÉ</strong>.</span></li>
+                <li><b>Lisez les contrôles.</b><span>Un point à contrôler n’empêche pas forcément la lecture, mais doit être compris avant une décision.</span></li>
+                <li><b>Choisissez la plage horaire.</b><span>Renseignez le début et la fin, puis cliquez sur <strong>Appliquer</strong>. Toutes les vues se recalculent avec cette plage.</span></li>
+              </ol>
+              <div className="guide-callout info"><RefreshCw size={20} /><span><strong>Après un redémarrage du service en ligne :</strong> la version gratuite de Render ne garantit pas la conservation du fichier importé. Si aucune base n’est retrouvée, réimportez le dernier Excel.</span></div>
+              <div className="guide-actions"><button className="primary-button" type="button" onClick={() => onNavigate("import")}><Upload size={17} /> Aller à Import</button></div>
+            </GuidePanel>
+          )}
+
+          {section === "read" && (
+            <GuidePanel eyebrow="04 · Lire les écrans" title="Quel écran utiliser, et pour quoi faire ?" icon={LayoutDashboard}>
+              <div className="guide-screen-grid">
+                <GuideScreenCard step="01" title="Coup d’envoi" detail="Vue d’ouverture du match. Elle confirme que les données sont prêtes et donne accès à l’Écran quai." />
+                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score, duels, opérations, positions, joueurs clés par catégorie et contrôles d’import." />
+                <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages." />
+                <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, tableau des points forts, sujets à travailler et prochaines actions." />
+                <GuideScreenCard step="05" title="Causerie" detail="Vue de préparation collective. Elle organise les consignes par zones du terrain et permet de préparer le brief." />
+                <GuideScreenCard step="TV" title="Écran quai" detail="Vue lisible à distance : score, indicateurs, joueurs clés par ligne et plan SAV / Expédition / Ramasse & emballage." />
+              </div>
+              <div className="guide-legend"><span className="legend-dot green" /> Vert = acquis ou action positive <span className="legend-dot orange" /> Orange = à surveiller <span className="legend-dot red" /> Rouge = action prioritaire</div>
+            </GuidePanel>
+          )}
+
+          {section === "edit" && (
+            <GuidePanel eyebrow="05 · Modifier le plan" title="Écrire des consignes sans casser les données" icon={Edit3}>
+              <p>Les données Excel alimentent les indicateurs. Les textes du plan de jeu sont des consignes opérationnelles que vous pouvez adapter à la situation du jour.</p>
+              <div className="guide-edit-grid">
+                <GuideEditCard title="Dans Coach" detail="Cliquez sur Écrire dans le tableau du coach, complétez Tactique, Priorité, Arbitrage et Revue, puis Enregistrer." />
+                <GuideEditCard title="Dans Causerie" detail="Cliquez sur Modifier le plan de jeu, choisissez une zone et écrivez jusqu’à trois consignes par ligne, puis Enregistrer la causerie." />
+                <GuideEditCard title="Dans Écran quai" detail="Cliquez sur Écrire dans Plan de jeu et renseignez les colonnes SAV, Expédition et Ramasse & emballage." />
+              </div>
+              <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Important :</strong> si un message indique une sauvegarde locale uniquement, le texte est conservé sur ce poste mais peut ne pas être partagé avec les autres utilisateurs.</span></div>
+              <div className="guide-actions"><button className="secondary-button" type="button" onClick={() => onNavigate("coach")}><Dumbbell size={17} /> Ouvrir Coach</button><button className="primary-button" type="button" onClick={() => onNavigate("causerie")}><ClipboardList size={17} /> Ouvrir Causerie</button></div>
+            </GuidePanel>
+          )}
+
+          {section === "help" && (
+            <GuidePanel eyebrow="06 · Points d’attention" title="Les vérifications à faire avant de partager le résultat" icon={CircleHelp}>
+              <div className="guide-checklist">
+                <GuideCheck title="Le bon fichier a été importé" detail="Vérifiez le nom du fichier et la date de dernière donnée affichée après l’import." />
+                <GuideCheck title="La plage horaire est la bonne" detail="Le badge Plage active doit correspondre au créneau que vous voulez analyser." />
+                <GuideCheck title="Les contrôles sont compris" detail="Les lignes critiques, dates non lisibles et doublons potentiels sont des signaux de qualité à vérifier dans Excel." />
+                <GuideCheck title="Les valeurs sont cohérentes" detail="Comparez opérations, positions, joueurs et duels avec la base Excel source avant une diffusion officielle." />
+                <GuideCheck title="Le résultat est validé humainement" detail="Le site aide à décider ; il ne remplace pas la vérification terrain ni la validation du responsable." />
+              </div>
+              <h3>Si quelque chose ne fonctionne pas</h3>
+              <div className="guide-trouble-grid">
+                <GuideTrouble title="FICHIER NON IMPORTÉ" detail="Vérifiez que le fichier est bien .xlsx, que l’onglet s’appelle Données et que la ligne d’en-têtes n’a pas été supprimée." />
+                <GuideTrouble title="MATCH ACTUALISÉ avec alertes" detail="L’import a fonctionné. Ouvrez Excel, utilisez Ctrl + F ou les filtres pour retrouver les lignes signalées, puis décidez si elles doivent être corrigées." />
+                <GuideTrouble title="Aucun match après Actualiser" detail="Actualiser ne lit pas votre ordinateur. Retournez dans Import et réimportez le dernier fichier Excel complet." />
+              </div>
+              <div className="guide-limit-card"><strong>Limite actuelle à retenir</strong><p>La version en ligne est hébergée sur une offre gratuite sans disque persistant garanti. En cas de redémarrage ou redéploiement, le dernier Excel peut devoir être réimporté.</p></div>
+              <div className="guide-callout info"><CircleHelp size={20} /><span>En cas de blocage, revenez à la règle de base : conserver l’original Excel, préparer une copie avec l’onglet <strong>Données</strong> actualisé, puis refaire un import complet.</span></div>
+            </GuidePanel>
+          )}
+          <div className="guide-step-footer">
+            <button className="secondary-button compact" type="button" onClick={() => setSection("start")} disabled={activeIndex === 0}><ArrowRight size={16} className="guide-back-icon" /> Retour au début</button>
+            <div>
+              <button className="secondary-button compact" type="button" onClick={() => setSection(previousSection)} disabled={activeIndex === 0}>Étape précédente</button>
+              <button className="primary-button compact" type="button" onClick={() => setSection(nextSection)} disabled={activeIndex === sections.length - 1}>Étape suivante <ArrowRight size={16} /></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function GuidePanel({ eyebrow, title, icon: Icon, children }: { eyebrow: string; title: string; icon: LucideIcon; children: ReactNode }) {
+  return (
+    <article className="guide-panel">
+      <div className="guide-panel-heading"><div><p className="eyebrow">{eyebrow}</p><h3>{title}</h3></div><span className="guide-panel-icon"><Icon size={24} /></span></div>
+      <div className="guide-panel-body">{children}</div>
+    </article>
+  );
+}
+
+function GuideFlowStep({ number, title, detail, tone }: { number: string; title: string; detail: string; tone: "blue" | "green" | "orange" | "red" }) {
+  return <article className={`guide-flow-step ${tone}`}><b>{number}</b><strong>{title}</strong><span>{detail}</span></article>;
+}
+
+function GuideMiniCard({ icon: Icon, title, text }: { icon: LucideIcon; title: string; text: string }) {
+  return <article className="guide-mini-card"><Icon size={18} /><strong>{title}</strong><span>{text}</span></article>;
+}
+
+function GuideShortcut({ keys, title, text }: { keys: string[]; title: string; text: string }) {
+  return <article className="guide-shortcut"><div>{keys.map((key) => <kbd key={key}>{key}</kbd>)}</div><strong>{title}</strong><span>{text}</span></article>;
+}
+
+function GuideAction({ icon: Icon, title, tone, detail }: { icon: LucideIcon; title: string; tone: "blue" | "green" | "orange"; detail: string }) {
+  return <article className={`guide-action ${tone}`}><Icon size={21} /><div><strong>{title}</strong><p>{detail}</p></div></article>;
+}
+
+function GuideScreenCard({ step, title, detail }: { step: string; title: string; detail: string }) {
+  return <article className="guide-screen-card"><b>{step}</b><strong>{title}</strong><p>{detail}</p></article>;
+}
+
+function GuideEditCard({ title, detail }: { title: string; detail: string }) {
+  return <article className="guide-edit-card"><Edit3 size={19} /><strong>{title}</strong><p>{detail}</p></article>;
+}
+
+function GuideCheck({ title, detail }: { title: string; detail: string }) {
+  return <article className="guide-check"><CheckCircle2 size={20} /><div><strong>{title}</strong><p>{detail}</p></div></article>;
+}
+
+function GuideTrouble({ title, detail }: { title: string; detail: string }) {
+  return <article className="guide-trouble"><strong>{title}</strong><p>{detail}</p></article>;
 }
 
 function ImportView({ session, onImported, onOpenMatch }: { session: Session; onImported: (snapshot: Snapshot) => void; onOpenMatch: () => void }) {
@@ -1983,7 +2504,7 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
         <div>
           <p className="eyebrow">Import</p>
           <h2>Déposer le fichier, actualiser le match</h2>
-          <p>Fichier attendu : Excel .xlsx avec l'onglet Données et les colonnes A à G actualisées.</p>
+          <p>Fichier attendu : Excel .xlsx avec l'onglet Données et la structure complète du classeur actualisée.</p>
         </div>
       </div>
       <div
@@ -2085,7 +2606,7 @@ function StatusBadge({ status }: { status: MatchStatus }) {
 
 function RoleLine({ role, percent, count }: { role: string; percent: number; count: number }) {
   return (
-    <div className="role-line">
+    <div className={`role-line ${roleClass(role)}`}>
       <div>
         <span>{role}</span>
         <small>{roleCode(role)} · {formatNumber(count)} joueur(s)</small>
@@ -2412,7 +2933,7 @@ function matchAction(snapshot: Snapshot) {
     return {
       title: "Reprendre les duels ouverts",
       detail: risk
-        ? `${late} duel(s) hors délai dans le score Excel. Premier voyage à contrôler : ${risk.travelCode}.`
+        ? `${late} duel(s) hors délai dans le score Excel. Zone prioritaire : ${travelRiskTitle(risk.travelCode)} (${formatNumber(risk.delayedPositions)} duel(s)).`
         : `${late} duel(s) hors délai dans le score Excel.`,
     };
   }
@@ -2432,18 +2953,18 @@ function uniquePlayers(players: Player[]) {
 
 function playerLockerMetric(player: Player, snapshot: Snapshot) {
   if (snapshot.highlights.bestScorer?.name === player.name) {
-    return { label: "CHG", value: formatNumber(player.byType.CHG) };
+    return { label: "Attaque · CHG", value: formatNumber(player.byType.CHG), detail: "opérations" };
   }
   if (snapshot.highlights.bestPasser?.name === player.name) {
-    return { label: "ZONAGE", value: formatNumber(player.byType.ZONAGE) };
+    return { label: "Milieu · ZONAGE", value: formatNumber(player.byType.ZONAGE), detail: "opérations" };
   }
   if (snapshot.highlights.defensiveWall?.name === player.name) {
-    return { label: "DECHG", value: formatNumber(player.byType.DECHG) };
+    return { label: "Défense · DECHG", value: formatNumber(player.byType.DECHG), detail: "opérations" };
   }
   if (snapshot.coach.polyvalents.some((item) => item.name === player.name)) {
-    return { label: "Polyvalence", value: `${player.polyvalence}` };
+    return { label: "Polyvalence", value: `${player.polyvalence}%`, detail: `${player.operationTypes} types d'activité` };
   }
-  return { label: "Volume", value: formatNumber(player.operations) };
+  return { label: "Activité totale", value: formatNumber(player.operations), detail: "opérations" };
 }
 
 function coachStrengths(snapshot: Snapshot): TacticalItem[] {
@@ -2462,8 +2983,8 @@ function coachStrengths(snapshot: Snapshot): TacticalItem[] {
     items.push({
       title: "Référents par ligne",
       detail: categoryLeaders
-        .map((award) => `${award.podiumLabel} : ${award.highlight.name} (${formatHighlightValue(award.highlight)})`)
-        .join(" · "),
+        .map((award) => `${award.podiumLabel} : ${award.highlight.name}`)
+        .join("\n"),
     });
   }
 
@@ -2499,8 +3020,8 @@ function coachProgressPoints(snapshot: Snapshot): TacticalItem[] {
 
   if (risk) {
     items.push({
-      title: `Voyage ${risk.travelCode}`,
-      detail: `${risk.delayedPositions} duel(s) à revoir sur ce code voyage.`,
+      title: travelRiskTitle(risk.travelCode),
+      detail: travelRiskDetail(risk.travelCode, risk.delayedPositions),
     });
   }
 
@@ -2553,9 +3074,9 @@ function coachActions(snapshot: Snapshot) {
     },
     {
       kicker: "Zone à surveiller",
-      title: risk ? `Voyage ${risk.travelCode}` : "Aucun voyage critique",
-      detail: risk ? `${risk.delayedPositions} duel(s) à reprendre sur ce code voyage.` : "Pas de concentration de retard détectée.",
-      next: risk ? "Action : prioriser ce voyage dans la revue terrain." : "Action : conserver le suivi standard.",
+      title: risk ? travelRiskTitle(risk.travelCode) : "Aucun voyage critique",
+      detail: risk ? travelRiskDetail(risk.travelCode, risk.delayedPositions) : "Pas de concentration de retard détectée.",
+      next: risk ? travelRiskAction(risk.travelCode) : "Action : conserver le suivi standard.",
       level: risk ? "watch" : "safe",
     },
     {
@@ -2566,6 +3087,23 @@ function coachActions(snapshot: Snapshot) {
       level: "watch",
     },
   ];
+}
+
+function travelRiskTitle(travelCode: string) {
+  return travelCode === "Non renseigné" ? "Code voyage manquant" : `Voyage ${travelCode}`;
+}
+
+function travelRiskDetail(travelCode: string, delayedPositions: number) {
+  if (travelCode === "Non renseigné") {
+    return `${formatNumber(delayedPositions)} duel(s) sans code voyage identifiable dans l'import.`;
+  }
+  return `${formatNumber(delayedPositions)} duel(s) à revoir sur le voyage ${travelCode}.`;
+}
+
+function travelRiskAction(travelCode: string) {
+  return travelCode === "Non renseigné"
+    ? "Action : compléter le code voyage dans le fichier source avant la prochaine revue."
+    : `Action : prioriser le voyage ${travelCode} dans la revue terrain.`;
 }
 
 function playerProfile(player: Player) {
@@ -2597,15 +3135,15 @@ function formatNumber(value: number) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value));
+  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Europe/Paris" }).format(new Date(value));
 }
 
 function formatTime(value: string) {
-  return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  return new Intl.DateTimeFormat("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" }).format(new Date(value));
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+  return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" }).format(new Date(value));
 }
 
 function formatDuration(milliseconds: number) {

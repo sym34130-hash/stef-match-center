@@ -15,6 +15,11 @@ Elle a besoin d'un serveur Node/Express pour :
 RECOMMENDATION: héberger la V1 comme une application web Node avec stockage
 persistant.
 
+Le fichier `render.yaml` prépare ce déploiement avec un service Docker Free et
+`STEF_DATA_DIR=/data/agencies`. Le plan Free ne fournit pas de disque
+persistant : il reste adapté au pilote, mais les imports et les Causeries
+peuvent disparaître après un redémarrage.
+
 ## Architecture V1 recommandée
 
 ```text
@@ -100,6 +105,16 @@ pnpm test
 ```bash
 pnpm test:deploy
 ```
+
+- Lancer le contrôle UI multi-résolutions :
+
+```bash
+pnpm test:ui
+```
+
+Ce contrôle ouvre les cinq vues principales et l'écran quai en 1536x1024,
+1024x768 et 390x844. Il vérifie la navigation, l'absence de débordement
+horizontal, le contrôle import, la plage horaire et le mode plein écran interne.
 
 Ce test démarre le serveur en mode production avec un `STEF_DATA_DIR`
 temporaire, importe réellement le dernier classeur `.xlsx` via l'API, vérifie

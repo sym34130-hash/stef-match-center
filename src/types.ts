@@ -71,6 +71,8 @@ export type Snapshot = {
     status: MatchStatus;
     objective: string;
     dzTargetMinutes: number;
+    periodStart?: string;
+    periodEnd?: string;
     periodLabel?: string;
     filterDescription?: string;
     scoringFilterDescription?: string;
@@ -124,6 +126,7 @@ export type Snapshot = {
     invalidDateRows: number;
     unknownOperationRows: number;
     duplicateRows: number;
+    issueRows?: number;
     warnings: string[];
     filterStats?: {
       sourceRows: number;
