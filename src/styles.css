@@ -9908,6 +9908,25 @@ body.coach-room-active .coach-room.is-coach-mode .tunnel-return {
     linear-gradient(135deg, #06162d, #073622);
 }
 
+/* Keep the stadium atmosphere behind every readable coach panel. */
+.coach-room .locker-room-scene::before,
+.coach-room .locker-room-scene::after,
+body.coach-room-active .coach-room.is-coach-mode .locker-room-scene::before,
+body.coach-room-active .coach-room.is-coach-mode .locker-room-scene::after {
+  z-index: 0;
+}
+
+.coach-room .locker-room-scene > *:not(.locker-room-wall),
+body.coach-room-active .coach-room.is-coach-mode .locker-room-scene > *:not(.locker-room-wall) {
+  position: relative;
+  z-index: 2;
+}
+
+.coach-room .locker-room-scene .locker-room-wall,
+body.coach-room-active .coach-room.is-coach-mode .locker-room-scene .locker-room-wall {
+  z-index: 0;
+}
+
 @media (min-width: 1181px) {
   body.coach-room-active .coach-room.is-coach-mode .locker-room-scene {
     grid-template-columns: minmax(0, 1fr);
