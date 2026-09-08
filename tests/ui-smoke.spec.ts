@@ -41,7 +41,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
   await expect(page.getByRole("heading", { name: "Utiliser STEF Match Center de A à Z", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "02 Préparer Excel", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "04 Lire les écrans", exact: true }).click();
-  await expect(page.getByText(/DECH est présentée comme Réception/)).toBeVisible();
+  await expect(page.getByText(/activité Réception correspond au scan de la palette/)).toBeVisible();
   await page.getByRole("button", { name: "05 Modifier le plan", exact: true }).click();
   await expect(page.getByText("Ajouter une capture d’écran :", { exact: true })).toBeVisible();
   await assertNoHorizontalOverflow(page);

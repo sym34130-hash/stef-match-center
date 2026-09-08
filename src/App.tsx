@@ -968,7 +968,7 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
           ) : (
             <div className="award-empty-state">
               <strong>Aucune distinction disponible</strong>
-              <p>Le fichier importé ne contient pas assez de données CHG, ZONAGE ou DECHG pour désigner les trois joueurs clés.</p>
+              <p>Le fichier importé ne contient pas assez de données Chargement, Zonage ou Réception pour désigner les trois joueurs clés.</p>
             </div>
           )}
         </div>
@@ -2556,7 +2556,7 @@ function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavi
               <div className="guide-screen-grid">
                 <GuideScreenCard step="01" title="Coup d’envoi" detail="Vue d’ouverture du match. Elle confirme que les données sont prêtes et donne accès à l’Écran quai." />
                 <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score, duels, opérations, positions, joueurs clés par catégorie et contrôles d’import." />
-                <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. L’activité DECH est présentée comme Réception : la palette est déposée en travée, sans tracé de position." />
+              <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. L’activité Réception correspond au scan de la palette ; elle est déposée en travée, sans tracé de position." />
                 <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, tableau des points forts, sujets à travailler et prochaines actions." />
                 <GuideScreenCard step="05" title="Causerie" detail="Vue de préparation collective. Elle organise les consignes par zones du terrain et permet de préparer le brief." />
                 <GuideScreenCard step="TV" title="Écran quai" detail="Vue lisible à distance : score, indicateurs, joueurs clés par ligne et trois grandes zones visibles, empilées verticalement : SAV, Expédition, Ramasse & emballage. Chaque zone accepte du texte et une capture d’écran." />
@@ -2982,8 +2982,12 @@ function awardHoverTitle(player: Player | undefined, highlight: NonNullable<High
 
 function formatHighlightValue(highlight: NonNullable<Highlight>) {
   const value = highlight.value ?? highlight.operations;
-  const label = highlight.valueLabel ?? "opérations";
+  const label = humanizeOperationLabel(highlight.valueLabel ?? "opérations");
   return `${formatNumber(value)} ${label}`;
+}
+
+function humanizeOperationLabel(label: string) {
+  return label.replace(/\bDECHG?\b/g, "Réception");
 }
 
 function buildCompositionGroups(players: Player[]): Record<CompositionRole, Player[]> {

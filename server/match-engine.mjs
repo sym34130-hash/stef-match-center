@@ -490,7 +490,7 @@ function buildCategoryHighlights(categoryLeaders) {
     manOfTheMatch: null,
     bestScorer: playerCard(categoryLeaders.attack, "Joueur Attaque", "Meilleure valeur CHG", categoryLeaders.attack?.byType.CHG, "opérations CHG"),
     bestPasser: playerCard(categoryLeaders.midfield, "Joueur Milieu", "Meilleure valeur ZONAGE", categoryLeaders.midfield?.byType.ZONAGE, "opérations ZONAGE"),
-    defensiveWall: playerCard(categoryLeaders.defense, "Joueur Défense", "Meilleure valeur DECHG", categoryLeaders.defense?.byType.DECHG, "opérations DECHG"),
+    defensiveWall: playerCard(categoryLeaders.defense, "Joueur Défense", "Meilleure valeur Réception", categoryLeaders.defense?.byType.DECHG, "opérations de réception"),
   };
 }
 
