@@ -36,6 +36,12 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+app.get("/api/agencies", (_req, res) => {
+  res.json({
+    agencies: agencies.map((agency) => ({ code: agency.code, name: agency.name })),
+  });
+});
+
 app.post("/api/session", (req, res) => {
   const { agencyCode, accessCode } = req.body ?? {};
   const agency = findAgency(agencyCode, accessCode);

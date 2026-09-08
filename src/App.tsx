@@ -262,7 +262,7 @@ export default function App() {
         />
         {snapshotLoading && !snapshot ? (
           <LoadingView />
-        ) : !snapshot && screen !== "import" && screen !== "kickoff" ? (
+        ) : !snapshot && screen !== "import" && screen !== "kickoff" && screen !== "guide" && screen !== "tv" ? (
           <NoDataView onImport={() => setScreen("import")} />
         ) : (
           <div className="screen-transition" key={`${screen}-${snapshot?.importedAt ?? "empty"}`}>
@@ -294,7 +294,7 @@ export default function App() {
               <Coach snapshot={snapshot} session={session} onPlayer={openPlayer} onComposition={() => setScreen("composition")} />
             )}
             {screen === "causerie" && snapshot && <Causerie snapshot={snapshot} session={session} />}
-            {screen === "tv" && snapshot && <TvMode snapshot={snapshot} session={session} onMatch={() => setScreen("match")} />}
+            {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} onMatch={() => setScreen("match")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
             {screen === "guide" && <GuideView snapshot={snapshot} onNavigate={setScreen} />}
             {screen === "import" && (
               <ImportView
@@ -367,7 +367,24 @@ async function saveCauseriePlan(session: Session, snapshot: Snapshot, plan: Caus
 
 function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string, accessCode: string) => void; loading: boolean; message: string }) {
   const [agencyCode, setAgencyCode] = useState("058");
-  const [accessCode, setAccessCode] = useState("STEF-058");
+  const [accessCode, setAccessCode] = useState("");
+  const [agencies, setAgencies] = useState<Array<Pick<Agency, "code" | "name">>>([
+    { code: "058", name: "Agence 058" },
+    { code: "01K", name: "Montpellier" },
+    { code: "05R", name: "Toulouse" },
+    { code: "04P", name: "Bordeaux" },
+  ]);
+
+  useEffect(() => {
+    fetch("/api/agencies")
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error("Agences indisponibles"))))
+      .then((payload: { agencies?: Array<Pick<Agency, "code" | "name">> }) => {
+        if (payload.agencies?.length) setAgencies(payload.agencies);
+      })
+      .catch(() => {
+        // Keep the local list available if the public catalogue is temporarily unavailable.
+      });
+  }, []);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -391,14 +408,17 @@ function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string
           <div className="login-signature" aria-label="Signature de réalisation">
             <span>Réalisé par</span>
             <strong>Arnaud Szymaniak</strong>
+            <a href="mailto:arnaud.szymanial@stef.com">Contact : arnaud.szymanial@stef.com</a>
           </div>
         </div>
         <form className="login-form" onSubmit={submit}>
           <span className="eyebrow">Accès agence</span>
           <h2>Entrer dans le Match Center</h2>
           <label>
-            Code agence
-            <input value={agencyCode} onChange={(event) => setAgencyCode(event.target.value)} autoComplete="off" />
+            Agence
+            <select aria-label="Code agence" value={agencyCode} onChange={(event) => setAgencyCode(event.target.value)}>
+              {agencies.map((agency) => <option key={agency.code} value={agency.code}>{agency.name} - {agency.code}</option>)}
+            </select>
           </label>
           <label>
             Code d'accès
@@ -520,7 +540,7 @@ function AnimatedNumber({ value, suffix = "" }: { value: number; suffix?: string
   return <>{formatNumber(Math.round(displayValue))}{suffix}</>;
 }
 
-function NoDataView({ onImport }: { onImport: () => void }) {
+function NoDataView({ onImport, onBack }: { onImport: () => void; onBack?: () => void }) {
   return (
     <section className="empty-state">
       <FileSpreadsheet size={42} />
@@ -530,6 +550,12 @@ function NoDataView({ onImport }: { onImport: () => void }) {
         <Upload size={18} />
         Importer le match
       </button>
+      {onBack && (
+        <button className="secondary-button" type="button" onClick={onBack}>
+          <ChevronLeft size={18} />
+          Retour au coup d'envoi
+        </button>
+      )}
     </section>
   );
 }

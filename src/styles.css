@@ -517,6 +517,19 @@ button:disabled {
   line-height: 1.1;
 }
 
+.login-signature a {
+  color: #d9e9ff;
+  font-size: 13px;
+  line-height: 1.25;
+  text-decoration: none;
+}
+
+.login-signature a:hover,
+.login-signature a:focus-visible {
+  color: var(--white);
+  text-decoration: underline;
+}
+
 .login-form {
   display: flex;
   flex-direction: column;
@@ -538,6 +551,7 @@ button:disabled {
 }
 
 .login-form input,
+.login-form select,
 .player-select select {
   width: 100%;
   min-height: 48px;

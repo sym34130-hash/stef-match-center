@@ -2,7 +2,25 @@
   {
     "code": "058",
     "name": "Agence 058",
-    "accessCode": "match-058",
+    "accessCode": "STEF-058",
+    "canImport": true
+  },
+  {
+    "code": "01K",
+    "name": "Montpellier",
+    "accessCode": "STEF-01K",
+    "canImport": true
+  },
+  {
+    "code": "05R",
+    "name": "Toulouse",
+    "accessCode": "STEF-05R",
+    "canImport": true
+  },
+  {
+    "code": "04P",
+    "name": "Bordeaux",
+    "accessCode": "STEF-04P",
     "canImport": true
   }
 ]

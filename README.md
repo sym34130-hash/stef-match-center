@@ -12,13 +12,21 @@ Application web locale de pilotage opérationnel inspirée du football.
 
 ## Accès V1
 
-La V1 contient un accès de démonstration :
+La configuration locale de test contient quatre espaces agence :
 
 - Code agence : `058`
-- Code d'accès : `match-058`
+- Nom : `Agence 058`
+- Code d'accès : `STEF-058`
+- Code agence : `01K` - `Montpellier` - code d'accès : `STEF-01K`
+- Code agence : `05R` - `Toulouse` - code d'accès : `STEF-05R`
+- Code agence : `04P` - `Bordeaux` - code d'accès : `STEF-04P`
 
 Avant tout usage réel, remplacer cette configuration dans `server/agencies.json`
 ou via la variable d'environnement `STEF_AGENCIES_JSON`.
+
+Chaque agence dispose de son propre import, snapshot et dossier de causeries.
+Les chemins sont séparés par code agence sous `data/agencies/<code>`. En
+production, renseigner les quatre entrées dans `STEF_AGENCIES_JSON` sur Render.
 
 ## Version web partageable
 

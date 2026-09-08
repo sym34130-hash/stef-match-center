@@ -13,8 +13,8 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
     Object.defineProperty(document, "fullscreenEnabled", { configurable: true, value: false });
   });
   await page.goto("/");
-  await page.getByLabel("Code agence").fill("058");
-  await page.getByLabel("Code d'accès").fill("match-058");
+  await page.getByLabel("Code agence").selectOption("058");
+  await page.getByLabel("Code d'accès").fill("STEF-058");
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await expect(page.getByRole("heading", { name: "Agence 058", exact: true })).toBeVisible();
 
@@ -49,13 +49,29 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
 
 test("la plage horaire est visible et le contrôle import reste explicite", async ({ page }) => {
   await page.goto("/");
-  await page.getByLabel("Code agence").fill("058");
-  await page.getByLabel("Code d'accès").fill("match-058");
+  await page.getByLabel("Code agence").selectOption("058");
+  await page.getByLabel("Code d'accès").fill("STEF-058");
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await expect(page.getByText("pas de 30 min · fin incluse")).toBeVisible();
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
   await expect(page.getByText(/ligne\(s\) concernée\(s\) au total/)).toBeVisible();
   await expect(page.getByText("Une même ligne peut apparaître dans plusieurs contrôles.")).toBeVisible();
+});
+
+test("le guide et le retour de l'écran quai restent accessibles avant le premier import", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Code agence").selectOption("01K");
+  await page.getByLabel("Code d'accès").fill("STEF-01K");
+  await page.getByRole("button", { name: "Accéder au match" }).click();
+  await expect(page.getByRole("heading", { name: "Le stade est prêt", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "? Guide", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Utiliser STEF Match Center de A à Z", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "TV Écran quai", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Aucun match importé", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Retour au coup d'envoi", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Le stade est prêt", exact: true })).toBeVisible();
 });
 
 async function assertNoHorizontalOverflow(page: Page) {
