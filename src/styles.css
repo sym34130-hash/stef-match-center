@@ -4078,6 +4078,113 @@ body.composition-field-active .main-area {
   .formation-player {
     animation: formation-player-in 420ms ease-out both;
   }
+
+  .match-page.is-threshold-reached .match-result-stage {
+    animation: threshold-stage-breathe 2800ms ease-in-out infinite;
+  }
+
+  .match-page.is-threshold-reached .match-result-stage::before {
+    animation: threshold-stage-sweep 3600ms ease-in-out infinite;
+  }
+
+  .match-page.is-threshold-reached .team-performance-panel {
+    animation: threshold-panel-lift 3200ms ease-in-out infinite;
+  }
+
+  .tv-mode.is-threshold-reached::after {
+    animation: threshold-frame-glow 2800ms ease-in-out infinite;
+  }
+
+  .tv-mode.is-threshold-reached .tv-score {
+    animation: threshold-score-pulse 2400ms ease-in-out infinite;
+  }
+
+  .tv-mode.is-threshold-reached .tv-key-player,
+  .tv-mode.is-threshold-reached .tv-plan-column {
+    animation-name: threshold-card-glow;
+    animation-duration: 3200ms;
+    animation-iteration-count: infinite;
+  }
+
+  .match-page.is-threshold-pulse .match-scoreboard b {
+    animation: threshold-score-arrival 900ms cubic-bezier(0.18, 0.8, 0.26, 1.15) both;
+  }
+
+  .match-page.is-threshold-pulse .award-card {
+    animation: threshold-award-arrival 720ms cubic-bezier(0.18, 0.8, 0.26, 1.15) both;
+  }
+
+  .match-page.is-threshold-pulse .award-card:nth-child(2) { animation-delay: 120ms; }
+  .match-page.is-threshold-pulse .award-card:nth-child(3) { animation-delay: 240ms; }
+
+  .tv-mode.is-threshold-pulse .tv-score strong {
+    animation: threshold-score-arrival 900ms cubic-bezier(0.18, 0.8, 0.26, 1.15) both;
+  }
+
+  .tv-mode.is-threshold-pulse .tv-grid .fact-card {
+    animation: threshold-fact-arrival 700ms ease-out both;
+  }
+
+  .tv-mode.is-threshold-pulse .tv-grid .fact-card:nth-child(2) { animation-delay: 100ms; }
+  .tv-mode.is-threshold-pulse .tv-grid .fact-card:nth-child(3) { animation-delay: 200ms; }
+  .tv-mode.is-threshold-pulse .tv-grid .fact-card:nth-child(4) { animation-delay: 300ms; }
+
+  .tv-mode.is-threshold-pulse .tv-key-player-bar span {
+    animation: threshold-bar-arrival 1000ms cubic-bezier(0.18, 0.8, 0.26, 1) both;
+  }
+}
+
+@keyframes threshold-stage-breathe {
+  0%, 100% { box-shadow: inset 0 0 0 1px rgba(72, 199, 142, 0.08), 0 0 0 rgba(72, 199, 142, 0); }
+  50% { box-shadow: inset 0 0 0 1px rgba(72, 199, 142, 0.42), 0 0 28px rgba(72, 199, 142, 0.16); }
+}
+
+@keyframes threshold-stage-sweep {
+  0%, 18% { opacity: 0; transform: translateX(-112%) skewX(-12deg); }
+  42%, 68% { opacity: 0.72; transform: translateX(112%) skewX(-12deg); }
+  100% { opacity: 0; transform: translateX(112%) skewX(-12deg); }
+}
+
+@keyframes threshold-panel-lift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes threshold-frame-glow {
+  0%, 100% { border-color: rgba(255, 255, 255, 0.18); box-shadow: 0 0 0 rgba(72, 199, 142, 0); }
+  50% { border-color: rgba(72, 199, 142, 0.72); box-shadow: 0 0 26px rgba(72, 199, 142, 0.2); }
+}
+
+@keyframes threshold-score-pulse {
+  0%, 100% { transform: translateY(0); filter: saturate(1); }
+  50% { transform: translateY(-3px); filter: saturate(1.16); }
+}
+
+@keyframes threshold-card-glow {
+  0%, 100% { box-shadow: var(--shadow-soft); }
+  50% { box-shadow: 0 18px 36px rgba(72, 199, 142, 0.16); }
+}
+
+@keyframes threshold-score-arrival {
+  0% { opacity: 0.35; transform: scale(0.86); filter: brightness(1); }
+  60% { opacity: 1; transform: scale(1.08); filter: brightness(1.32); }
+  100% { opacity: 1; transform: scale(1); filter: brightness(1); }
+}
+
+@keyframes threshold-award-arrival {
+  0% { opacity: 0; transform: translateY(18px) scale(0.97); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes threshold-fact-arrival {
+  0% { opacity: 0.5; transform: translateY(14px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes threshold-bar-arrival {
+  0% { transform: scaleX(0.72); filter: brightness(1); }
+  65% { transform: scaleX(1.04); filter: brightness(1.3); }
+  100% { transform: scaleX(1); filter: brightness(1); }
 }
 
 @keyframes kickoff-page-in {
@@ -13185,7 +13292,7 @@ kbd {
 }
 
 .tv-plan-column {
-  min-height: clamp(360px, 42vh, 620px);
+  min-height: clamp(460px, 58vh, 820px);
   padding: clamp(16px, 1.6vw, 24px);
   align-content: start;
   grid-template-rows: auto 1fr;
@@ -13253,17 +13360,167 @@ kbd {
 .tv-plan-image-preview {
   display: block;
   width: 100%;
-  max-height: 460px;
-  margin-top: 14px;
+  height: clamp(360px, 48vh, 680px);
+  max-height: none;
+  margin-top: 0;
   object-fit: contain;
-  object-position: left top;
-  border: 1px solid rgba(29, 78, 137, 0.2);
-  border-radius: 7px;
-  background: #ffffff;
+  object-position: center;
+  border: 0;
+  border-radius: 0;
+  background: #f7fbff;
 }
 
 .tv-plan-image-preview {
-  max-height: 420px;
+  height: clamp(340px, 44vh, 600px);
+}
+
+.tv-plan-image-button {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin-top: 16px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(29, 78, 137, 0.22);
+  border-radius: 10px;
+  background: #f7fbff;
+  cursor: zoom-in;
+  text-align: left;
+  box-shadow: 0 10px 24px rgba(9, 35, 70, 0.08);
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.tv-plan-image-gallery {
+  display: grid;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.tv-plan-image-item {
+  position: relative;
+}
+
+.tv-plan-image-item .tv-plan-image-button {
+  margin-top: 0;
+}
+
+.tv-plan-image-remove {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  padding: 6px 9px;
+  border: 1px solid rgba(201, 43, 58, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #a92334;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.tv-plan-image-remove:hover {
+  background: #fff1f3;
+  border-color: #c92b3a;
+}
+
+.tv-plan-image-button:hover {
+  border-color: rgba(29, 78, 137, 0.65);
+  box-shadow: 0 16px 34px rgba(9, 35, 70, 0.16);
+  transform: translateY(-2px);
+}
+
+.tv-plan-image-button:focus-visible {
+  outline: 3px solid rgba(72, 199, 142, 0.85);
+  outline-offset: 3px;
+}
+
+.tv-plan-image-hint {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(6, 22, 45, 0.86);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 900;
+  pointer-events: none;
+}
+
+.tv-lightbox-open {
+  overflow: hidden;
+}
+
+.tv-image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: clamp(18px, 4vw, 56px);
+  background: rgba(3, 12, 26, 0.82);
+  backdrop-filter: blur(8px);
+  animation: tv-lightbox-in 180ms ease-out both;
+}
+
+.tv-image-lightbox-panel {
+  position: relative;
+  display: flex;
+  width: min(96vw, 1500px);
+  max-height: 94vh;
+  flex-direction: column;
+  gap: 10px;
+  padding: clamp(14px, 2vw, 24px);
+  border: 1px solid rgba(138, 198, 255, 0.5);
+  border-radius: 12px;
+  background: #f7fbff;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+}
+
+.tv-image-lightbox-panel p {
+  margin: 0;
+  padding-right: 48px;
+  color: var(--navy-900);
+  font-size: clamp(14px, 1.2vw, 18px);
+  font-weight: 900;
+}
+
+.tv-image-lightbox-panel img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: calc(94vh - 100px);
+  margin: auto;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.tv-image-lightbox-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(29, 78, 137, 0.2);
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--navy-900);
+  cursor: pointer;
+}
+
+.tv-image-lightbox-close:hover {
+  border-color: var(--blue-stef);
+  color: var(--blue-stef);
+  transform: scale(1.04);
+}
+
+@keyframes tv-lightbox-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @media (max-width: 900px) {
@@ -13272,7 +13529,7 @@ kbd {
   }
 
   .tv-plan-column {
-    min-height: 300px;
+    min-height: 380px;
   }
 
   .tv-plan-column textarea {
@@ -13281,6 +13538,26 @@ kbd {
 
   .tv-plan-image,
   .tv-plan-image-preview {
-    max-height: 320px;
+    height: 360px;
+  }
+
+  .tv-plan-image-gallery {
+    gap: 12px;
+  }
+
+  .tv-image-lightbox {
+    padding: 12px;
+  }
+
+  .tv-image-lightbox-panel img {
+    max-height: calc(94vh - 90px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tv-image-lightbox,
+  .tv-plan-image-button {
+    animation: none;
+    transition: none;
   }
 }

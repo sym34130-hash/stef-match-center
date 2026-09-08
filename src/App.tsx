@@ -40,7 +40,7 @@ type Session = {
 
 type CauserieZoneId = "attack" | "midfield" | "defense" | "coach";
 type CauserieContentZone = Exclude<CauserieZoneId, "coach">;
-type CauserieAttachments = Record<CauserieContentZone, string>;
+type CauserieAttachments = Record<CauserieContentZone, string[]>;
 
 type CauseriePlan = {
   team: string;
@@ -795,7 +795,9 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
 
 function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: Snapshot; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void }) {
   const [celebrationMode, setCelebrationMode] = useState(false);
+  const [thresholdPulse, setThresholdPulse] = useState(false);
   const latePositions = delayedPositions(snapshot);
+  const thresholdReached = snapshot.match.score >= 70;
   const action = matchAction(snapshot);
   const outcome = matchCeremonyOutcome(snapshot);
   const awards = buildAwardItems(snapshot);
@@ -814,9 +816,16 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
     return () => document.body.classList.remove("match-celebration-active");
   }, [celebrationMode]);
 
+  useEffect(() => {
+    if (!thresholdReached) return;
+    setThresholdPulse(true);
+    const timer = window.setTimeout(() => setThresholdPulse(false), 3200);
+    return () => window.clearTimeout(timer);
+  }, [snapshot.match.score, thresholdReached]);
+
 
   return (
-    <div className={celebrationMode ? `match-page is-celebration-mode ${outcome.tone}` : `match-page ${outcome.tone}`}>
+    <div className={`${celebrationMode ? "match-page is-celebration-mode" : "match-page"} ${outcome.tone} ${thresholdReached ? "is-threshold-reached" : ""} ${thresholdPulse ? "is-threshold-pulse" : ""}`}>
       <section className={`match-ceremony ${outcome.tone}`}>
         <div className="match-stands top" aria-hidden="true">
           {Array.from({ length: 46 }).map((_, index) => <span key={`match-top-${index}`} />)}
@@ -2086,6 +2095,9 @@ function TvMode({ snapshot, session, onMatch }: { snapshot: Snapshot; session: S
   const [planDraft, setPlanDraft] = useState<CauseriePlan>(() => buildDefaultCauseriePlan(snapshot));
   const [savingPlan, setSavingPlan] = useState(false);
   const [feedback, setFeedback] = useState<CauserieToast>(null);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; label: string } | null>(null);
+  const [thresholdPulse, setThresholdPulse] = useState(false);
+  const thresholdReached = snapshot.match.score >= 70;
   const action = matchAction(snapshot);
   const categoryHighlights = [
     { label: "Attaque", highlight: snapshot.highlights.bestScorer },
@@ -2097,6 +2109,26 @@ function TvMode({ snapshot, session, onMatch }: { snapshot: Snapshot; session: S
     document.body.classList.toggle("tv-focus-active", focusMode);
     return () => document.body.classList.remove("tv-focus-active");
   }, [focusMode]);
+
+  useEffect(() => {
+    if (!lightboxImage) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setLightboxImage(null);
+    };
+    document.body.classList.add("tv-lightbox-open");
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.classList.remove("tv-lightbox-open");
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [lightboxImage]);
+
+  useEffect(() => {
+    if (!thresholdReached) return;
+    setThresholdPulse(true);
+    const timer = window.setTimeout(() => setThresholdPulse(false), 3200);
+    return () => window.clearTimeout(timer);
+  }, [snapshot.match.score, thresholdReached]);
 
   useEffect(() => {
     function syncFullscreenState() {
@@ -2177,7 +2209,7 @@ function TvMode({ snapshot, session, onMatch }: { snapshot: Snapshot; session: S
   }
 
   return (
-    <section className={focusMode ? "tv-mode is-focus" : "tv-mode"}>
+    <section className={`${focusMode ? "tv-mode is-focus" : "tv-mode"} ${thresholdReached ? "is-threshold-reached" : ""} ${thresholdPulse ? "is-threshold-pulse" : ""}`}>
       <div className="tv-header">
         <div>
           <p>STEF MATCH CENTER</p>
@@ -2266,21 +2298,29 @@ function TvMode({ snapshot, session, onMatch }: { snapshot: Snapshot; session: S
                   />
                   <label className="tv-plan-image-upload">
                     <Upload size={16} />
-                    <span>{planDraft.attachments[zone] ? "Remplacer la capture" : "Ajouter une capture d'écran"}</span>
+                    <span>{planDraft.attachments[zone].length ? "Ajouter des captures" : "Ajouter des captures d'écran"}</span>
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
+                      multiple
                       aria-label={`${label}, capture d'écran`}
                       onChange={async (event) => {
-                        const file = event.target.files?.[0];
-                        if (!file) return;
+                        const files = Array.from(event.target.files ?? []);
+                        if (!files.length) return;
+                        const currentAttachments = planDraft.attachments[zone];
+                        const remaining = Math.max(0, 12 - currentAttachments.length);
+                        if (!remaining) {
+                          setFeedback({ title: "Limite de captures atteinte", detail: `La zone ${label} peut contenir jusqu'à 12 captures.`, tone: "warning" });
+                          event.target.value = "";
+                          return;
+                        }
                         try {
-                          const attachment = await prepareCauserieImage(file);
+                          const attachments = await Promise.all(files.slice(0, remaining).map((file) => prepareCauserieImage(file)));
                           setPlanDraft((current) => ({
                             ...current,
-                            attachments: { ...current.attachments, [zone]: attachment },
+                            attachments: { ...current.attachments, [zone]: [...current.attachments[zone], ...attachments] },
                           }));
-                          setFeedback({ title: "Capture ajoutée", detail: `Elle sera enregistrée dans la zone ${label}.`, tone: "success" });
+                          setFeedback({ title: `${attachments.length} capture(s) ajoutée(s)`, detail: `Elles seront enregistrées dans la zone ${label}.`, tone: "success" });
                         } catch (error) {
                           setFeedback({ title: "Capture non ajoutée", detail: error instanceof Error ? error.message : "Le fichier n'a pas pu être ajouté.", tone: "error" });
                         } finally {
@@ -2289,12 +2329,54 @@ function TvMode({ snapshot, session, onMatch }: { snapshot: Snapshot; session: S
                       }}
                     />
                   </label>
-                  {planDraft.attachments[zone] && <img className="tv-plan-image-preview" src={planDraft.attachments[zone]} alt={`Capture du brief ${label}`} />}
+                  {planDraft.attachments[zone].length > 0 && (
+                    <div className="tv-plan-image-gallery" aria-label={`Captures du brief ${label}`}>
+                      {planDraft.attachments[zone].map((src, index) => (
+                        <div className="tv-plan-image-item" key={`${src.slice(-24)}-${index}`}>
+                          <button
+                            className="tv-plan-image-button"
+                            type="button"
+                            onClick={() => setLightboxImage({ src, label: `${label} · capture ${index + 1}` })}
+                            aria-label={`Agrandir la capture ${label} ${index + 1}`}
+                          >
+                            <img className="tv-plan-image-preview" src={src} alt={`Capture du brief ${label} ${index + 1}`} />
+                            <span className="tv-plan-image-hint">Cliquer pour agrandir</span>
+                          </button>
+                          <button
+                            className="tv-plan-image-remove"
+                            type="button"
+                            onClick={() => setPlanDraft((current) => ({
+                              ...current,
+                              attachments: { ...current.attachments, [zone]: current.attachments[zone].filter((_, itemIndex) => itemIndex !== index) },
+                            }))}
+                            aria-label={`Supprimer la capture ${label} ${index + 1}`}
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
                   <span className="tv-plan-content">{plan[zone].filter(Boolean).join("\n") || "À renseigner"}</span>
-                  {plan.attachments[zone] && <img className="tv-plan-image" src={plan.attachments[zone]} alt={`Capture du brief ${label}`} />}
+                  {plan.attachments[zone].length > 0 && (
+                    <div className="tv-plan-image-gallery" aria-label={`Captures du brief ${label}`}>
+                      {plan.attachments[zone].map((src, index) => (
+                        <button
+                          className="tv-plan-image-button"
+                          type="button"
+                          key={`${src.slice(-24)}-${index}`}
+                          onClick={() => setLightboxImage({ src, label: `${label} · capture ${index + 1}` })}
+                          aria-label={`Agrandir la capture ${label} ${index + 1}`}
+                        >
+                          <img className="tv-plan-image" src={src} alt={`Capture du brief ${label} ${index + 1}`} />
+                          <span className="tv-plan-image-hint">Cliquer pour agrandir</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -2306,6 +2388,28 @@ function TvMode({ snapshot, session, onMatch }: { snapshot: Snapshot; session: S
         Voir la feuille de match
         <ArrowRight size={18} />
       </button>
+      {lightboxImage && (
+        <div
+          className="tv-image-lightbox"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Capture agrandie ${lightboxImage.label}`}
+          onClick={() => setLightboxImage(null)}
+        >
+          <div className="tv-image-lightbox-panel" onClick={(event) => event.stopPropagation()}>
+            <button
+              className="tv-image-lightbox-close"
+              type="button"
+              onClick={() => setLightboxImage(null)}
+              aria-label="Fermer la capture agrandie"
+            >
+              <XCircle size={22} />
+            </button>
+            <p>{lightboxImage.label}</p>
+            <img src={lightboxImage.src} alt={`Capture agrandie du brief ${lightboxImage.label}`} />
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -2783,12 +2887,12 @@ function matchCeremonyOutcome(snapshot: Snapshot): {
   collectiveDetail: string;
   celebration: boolean;
 } {
-  if (snapshot.match.score > 75) {
+  if (snapshot.match.score >= 70) {
     return {
       tone: "victory",
       title: "Coup de sifflet final",
       verdict: "Célébration activée",
-      message: "Le collectif dépasse 75/100 : le résultat mérite d'être célébré.",
+      message: "Le collectif atteint 70/100 : le résultat mérite d'être célébré.",
       collectiveTitle: "Performance d'équipe validée",
       collectiveDetail: "Le score collectif permet de célébrer le résultat tout en gardant les statistiques visibles.",
       celebration: true,
@@ -2964,9 +3068,9 @@ function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
       snapshot.summary.operationCounts.DECHG ? `${formatNumber(snapshot.summary.operationCounts.DECHG)} opérations de réception.` : "",
     ]),
     attachments: {
-      attack: "",
-      midfield: "",
-      defense: "",
+      attack: [],
+      midfield: [],
+      defense: [],
     },
     coach: {
       tactic: action.title,
@@ -2987,9 +3091,9 @@ function normalizeCauseriePlan(plan: CauseriePlan, snapshot: Snapshot): Causerie
     midfield: padPlanLines(plan.midfield ?? fallback.midfield),
     defense: padPlanLines(plan.defense ?? fallback.defense),
     attachments: {
-      attack: plan.attachments?.attack ?? fallback.attachments.attack,
-      midfield: plan.attachments?.midfield ?? fallback.attachments.midfield,
-      defense: plan.attachments?.defense ?? fallback.attachments.defense,
+      attack: normalizeCauserieAttachments(plan.attachments?.attack, fallback.attachments.attack),
+      midfield: normalizeCauserieAttachments(plan.attachments?.midfield, fallback.attachments.midfield),
+      defense: normalizeCauserieAttachments(plan.attachments?.defense, fallback.attachments.defense),
     },
     coach: {
       tactic: plan.coach?.tactic ?? fallback.coach.tactic,
@@ -2998,6 +3102,11 @@ function normalizeCauseriePlan(plan: CauseriePlan, snapshot: Snapshot): Causerie
       review: plan.coach?.review ?? fallback.coach.review,
     },
   };
+}
+
+function normalizeCauserieAttachments(value: string[] | string | null | undefined, fallback: string[]) {
+  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string").slice(0, 12);
+  return typeof value === "string" && value ? [value] : fallback;
 }
 
 function findCauserieValue(snapshot: Snapshot, label: string) {
