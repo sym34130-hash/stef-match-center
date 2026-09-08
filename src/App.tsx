@@ -438,7 +438,7 @@ function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string
           <div className="login-signature" aria-label="Signature de réalisation">
             <span>Réalisé par</span>
             <strong>Arnaud Szymaniak</strong>
-            <a href="mailto:arnaud.szymanial@stef.com">Contact : arnaud.szymanial@stef.com</a>
+            <a href="mailto:arnaud.szymaniak@stef.com">Contact : arnaud.szymaniak@stef.com</a>
           </div>
         </div>
         <form className="login-form" onSubmit={submit}>
