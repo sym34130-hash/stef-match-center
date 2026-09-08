@@ -125,6 +125,7 @@ app.post("/api/agencies/:agencyCode/time-range", requireAgency, async (req, res)
       });
       return;
     }
+    result.snapshot.agency.name = req.agency.name;
     await fs.writeFile(path.join(agencyDir, "latest.json"), JSON.stringify(result.snapshot, null, 2), "utf8");
     res.json({ message: "PLAGE HORAIRE ACTUALISÉE", snapshot: result.snapshot });
   } catch {
@@ -194,6 +195,7 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
     return;
   }
 
+  result.snapshot.agency.name = req.agency.name;
   await saveImport(req.agency.code, req.file.originalname, req.file.buffer, result.snapshot);
   res.json({
     message: "MATCH ACTUALISÉ",
@@ -297,7 +299,13 @@ async function saveImport(agencyCode, originalName, buffer, snapshot) {
 async function readLatestSnapshot(agencyCode) {
   const latestPath = path.join(dataDir, sanitizeSegment(agencyCode), "latest.json");
   try {
-    return normalizeSnapshotContract(JSON.parse(await fs.readFile(latestPath, "utf8")));
+    const snapshot = normalizeSnapshotContract(JSON.parse(await fs.readFile(latestPath, "utf8")));
+    const agency = agencies.find((item) => String(item.code).toUpperCase() === String(agencyCode).toUpperCase());
+    if (agency) {
+      snapshot.agency.code = agency.code;
+      snapshot.agency.name = agency.name;
+    }
+    return snapshot;
   } catch {
     return null;
   }
@@ -352,6 +360,11 @@ function normalizeCauseriePlan(plan) {
     attack: normalizeLines(input.attack),
     midfield: normalizeLines(input.midfield),
     defense: normalizeLines(input.defense),
+    attachments: {
+      attack: normalizeAttachment(input.attachments?.attack),
+      midfield: normalizeAttachment(input.attachments?.midfield),
+      defense: normalizeAttachment(input.attachments?.defense),
+    },
     coach: {
       tactic: limitText(input.coach?.tactic, 120),
       priority: limitText(input.coach?.priority, 120),
@@ -363,10 +376,19 @@ function normalizeCauseriePlan(plan) {
 
 function normalizeLines(lines) {
   const clean = Array.isArray(lines)
-    ? lines.map((line) => limitText(line, 96)).filter(Boolean).slice(0, 3)
+    ? lines.map((line) => limitMultilineText(line, 500)).filter(Boolean).slice(0, 3)
     : [];
   while (clean.length < 3) clean.push("");
   return clean;
+}
+
+function normalizeAttachment(value) {
+  const image = String(value ?? "").trim();
+  return /^data:image\/(jpeg|png|webp);base64,/.test(image) && image.length <= 260_000 ? image : "";
+}
+
+function limitMultilineText(value, maxLength) {
+  return String(value ?? "").trim().replace(/[^\S\r\n]+/g, " ").slice(0, maxLength);
 }
 
 function limitText(value, maxLength) {

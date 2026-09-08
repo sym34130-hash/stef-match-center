@@ -39,6 +39,8 @@ type Session = {
 };
 
 type CauserieZoneId = "attack" | "midfield" | "defense" | "coach";
+type CauserieContentZone = Exclude<CauserieZoneId, "coach">;
+type CauserieAttachments = Record<CauserieContentZone, string>;
 
 type CauseriePlan = {
   team: string;
@@ -47,6 +49,7 @@ type CauseriePlan = {
   attack: string[];
   midfield: string[];
   defense: string[];
+  attachments: CauserieAttachments;
   coach: {
     tactic: string;
     priority: string;
@@ -96,7 +99,7 @@ const compositionLines: Array<{
 }> = [
   { role: "Attaquant", zone: "attack", title: "ATTAQUE", code: "CHG", helper: "Ce que nous devons faire avancer" },
   { role: "Milieu", zone: "midfield", title: "MILIEU", code: "ZONAGE", helper: "Ce qui doit rester fluide et coordonné" },
-  { role: "Défenseur", zone: "defense", title: "DÉFENSE", code: "DECHG", helper: "Ce que nous devons sécuriser" },
+  { role: "Défenseur", zone: "defense", title: "DÉFENSE", code: "DECHG", helper: "Réception des palettes, sans tracé de position" },
 ];
 
 const kickoffScenePlayers: Array<{
@@ -365,6 +368,33 @@ async function saveCauseriePlan(session: Session, snapshot: Snapshot, plan: Caus
   return payload.plan;
 }
 
+async function prepareCauserieImage(file: File): Promise<string> {
+  if (!file.type.startsWith("image/")) throw new Error("Sélectionne une image PNG, JPG ou WebP.");
+  const source = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    image.src = source;
+    await image.decode();
+    const maxWidth = 1400;
+    const maxHeight = 900;
+    const scale = Math.min(1, maxWidth / image.naturalWidth, maxHeight / image.naturalHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
+    let quality = 0.78;
+    let dataUrl = canvas.toDataURL("image/jpeg", quality);
+    while (dataUrl.length > 240_000 && quality > 0.46) {
+      quality -= 0.08;
+      dataUrl = canvas.toDataURL("image/jpeg", quality);
+    }
+    if (dataUrl.length > 260_000) throw new Error("Cette capture est trop lourde. Réduis sa taille puis réessaie.");
+    return dataUrl;
+  } finally {
+    URL.revokeObjectURL(source);
+  }
+}
+
 function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string, accessCode: string) => void; loading: boolean; message: string }) {
   const [agencyCode, setAgencyCode] = useState("058");
   const [accessCode, setAccessCode] = useState("");
@@ -417,7 +447,11 @@ function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string
           <label>
             Agence
             <select aria-label="Code agence" value={agencyCode} onChange={(event) => setAgencyCode(event.target.value)}>
-              {agencies.map((agency) => <option key={agency.code} value={agency.code}>{agency.name} - {agency.code}</option>)}
+              {agencies.map((agency) => (
+                <option key={agency.code} value={agency.code}>
+                  {agency.name}{agency.name.includes(agency.code) ? "" : ` - ${agency.code}`}
+                </option>
+              ))}
             </select>
           </label>
           <label>
@@ -670,7 +704,7 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
       <div className="kickoff-scoreboard">
         <span>STEF MATCH CENTER</span>
         <strong>{scoreboardState}</strong>
-        <small>Agence {snapshot.agency.code} - {formatDate(snapshot.match.date)} - {snapshot.match.timeRangeLabel}</small>
+        <small>{snapshot.agency.name} - {formatDate(snapshot.match.date)} - {snapshot.match.timeRangeLabel}</small>
       </div>
 
       <div className="kickoff-layout">
@@ -733,7 +767,7 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
           <div className="kickoff-context-grid">
             <div>
               <span>Site</span>
-              <strong>Agence {snapshot.agency.code}</strong>
+              <strong>{snapshot.agency.name}</strong>
             </div>
             <div>
               <span>Équipe alignée</span>
@@ -800,7 +834,7 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
           <div>
             <p className="eyebrow">02 - Feuille de match</p>
             <h2>{outcome.title}</h2>
-            <span>Agence {snapshot.agency.code} - Match du {formatDate(snapshot.match.date)} - {snapshot.match.timeRangeLabel}</span>
+            <span>{snapshot.agency.name} - Match du {formatDate(snapshot.match.date)} - {snapshot.match.timeRangeLabel}</span>
             <ActivePeriodBadge snapshot={snapshot} />
           </div>
           <div className="match-header-actions">
@@ -882,7 +916,7 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
           <div>
             <p className="eyebrow">Cérémonie des performances</p>
             <h2>Joueurs clés par ligne</h2>
-            <span>Une référence par catégorie métier : Attaque CHG, Milieu ZONAGE, Défense DECHG.</span>
+            <span>Une référence par catégorie métier : Attaque CHG, Milieu ZONAGE, Défense · Réception.</span>
           </div>
           <StatusBadge status={snapshot.match.status} />
         </div>
@@ -1018,7 +1052,7 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
         <div>
           <p className="eyebrow">03 - Composition</p>
           <h2>Composition du jour</h2>
-          <span>Agence {snapshot.agency.code} - Match du {formatDate(snapshot.match.date)} - {snapshot.match.timeRangeLabel}</span>
+          <span>{snapshot.agency.name} - Match du {formatDate(snapshot.match.date)} - {snapshot.match.timeRangeLabel}</span>
           <ActivePeriodBadge snapshot={snapshot} />
         </div>
         <div className="composition-header-actions">
@@ -1073,7 +1107,7 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
                 return (
                   <section className={`formation-zone ${line.zone}`} key={line.role} aria-label={`${line.title} - ${line.code}`}>
                     <div className="formation-zone-label">
-                      <span>{line.code}</span>
+                      <span>{operationLabel(line.code)}</span>
                       <strong>{line.title}</strong>
                       <small>{line.helper}</small>
                       <b>{players.length} joueur(s)</b>
@@ -1102,7 +1136,7 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
                                 className={className}
                                 key={player.name}
                                 type="button"
-                                title={`${player.name} - ${player.role} - CHG ${player.byType.CHG} / ZONAGE ${player.byType.ZONAGE} / DECHG ${player.byType.DECHG}`}
+                                title={`${player.name} - ${displayRole(player.role)} - CHG ${player.byType.CHG} / ZONAGE ${player.byType.ZONAGE} / Réception ${player.byType.DECHG}`}
                                 style={style}
                                 onClick={() => setSelectedName(player.name)}
                               >
@@ -1113,7 +1147,7 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
                                 </span>
                                 <span className="formation-player-copy">
                                   <strong>{player.name}</strong>
-                                  <small>{roleCode(player.role)} - {formatNumber(player.operations)} ops</small>
+                                  <small>{operationLabel(roleCode(player.role))} - {formatNumber(player.operations)} ops</small>
                                   <i>{player.dominantShare}% sur ce poste</i>
                                 </span>
                               </button>
@@ -1136,7 +1170,7 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
                 </button>
                 <span>Joueur sélectionné</span>
                 <h3>{selectedPlayer.name}</h3>
-                <p>{selectedPlayer.role} - {roleCode(selectedPlayer.role)}</p>
+                <p>{displayRole(selectedPlayer.role)} - {operationLabel(roleCode(selectedPlayer.role))}</p>
                 <div className="composition-player-stats">
                   <div>
                     <strong>{formatNumber(selectedPlayer.operations)}</strong>
@@ -1154,7 +1188,7 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
                 <div className="composition-mini-bars">
                   <StatLine label="Attaque - CHG" value={selectedPlayer.attackPercent} raw={selectedPlayer.byType.CHG} />
                   <StatLine label="Milieu - ZONAGE" value={selectedPlayer.midfieldPercent} raw={selectedPlayer.byType.ZONAGE} />
-                  <StatLine label="Défense - DECHG" value={selectedPlayer.defensePercent} raw={selectedPlayer.byType.DECHG} />
+                  <StatLine label="Défense - Réception" value={selectedPlayer.defensePercent} raw={selectedPlayer.byType.DECHG} />
                 </div>
                 <button className="primary-button compact" type="button" onClick={() => onPlayer(selectedPlayer)}>
                   Voir la fiche joueur
@@ -1165,7 +1199,7 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
               <div className="composition-player-panel empty">
                 <span>Lecture coach</span>
                 <h3>Cliquer sur un maillot</h3>
-                <p>Le terrain montre la répartition opérationnelle : CHG en attaque, ZONAGE au milieu, DECHG en défense.</p>
+                <p>Le terrain montre la répartition par catégorie : CHG en attaque, ZONAGE au milieu, Défense · Réception. La palette est déposée en travée, sans tracé de position.</p>
               </div>
             )}
 
@@ -1326,7 +1360,7 @@ function Coach({
         <div>
           <p className="eyebrow">04 - Coach</p>
           <h2>Vestiaire & analyse du match</h2>
-          <span>Agence {snapshot.agency.code} - Match du {formatDate(snapshot.match.date)} - {snapshot.match.timeRangeLabel}</span>
+          <span>{snapshot.agency.name} - Match du {formatDate(snapshot.match.date)} - {snapshot.match.timeRangeLabel}</span>
           <ActivePeriodBadge snapshot={snapshot} />
         </div>
         <div className="coach-room-header-actions">
@@ -1367,7 +1401,7 @@ function Coach({
                   onFocus={() => setSelectedName(player.name)}
                   onMouseEnter={() => setSelectedName(player.name)}
                   onClick={() => onPlayer(player)}
-                  title={`${player.name} - ${player.role} - ${metric.label} : ${metric.value} ${metric.detail}`}
+                  title={`${player.name} - ${displayRole(player.role)} - ${metric.label} : ${metric.value} ${metric.detail}`}
                 >
                   <span className="locker-number">{jersey}</span>
                   <span className="locker-hanger" aria-hidden="true" />
@@ -1376,7 +1410,7 @@ function Coach({
                     <em>STEF</em>
                   </span>
                   <strong>{player.name}</strong>
-                  <small>{player.role} - {roleCode(player.role)}</small>
+                  <small>{displayRole(player.role)} - {operationLabel(roleCode(player.role))}</small>
                   <span className="locker-metric">
                     <small>Indicateur clé</small>
                     <strong>{metric.label}</strong>
@@ -1418,7 +1452,7 @@ function Coach({
               {snapshot.summary.roleDistribution.map((role) => (
                 <span key={role.role} style={{ "--bar-size": `${Math.max(6, role.percent)}%` } as CSSProperties}>
                   <i className={roleClass(role.role)} aria-hidden="true" />
-                  <b>{roleCode(role.role)} <small>{Math.round(role.percent)}%</small></b>
+                  <b>{operationLabel(roleCode(role.role))} <small>{Math.round(role.percent)}%</small></b>
                 </span>
               ))}
             </div>
@@ -1496,7 +1530,7 @@ function Coach({
                     <textarea
                       value={activeCoachPlan.coach.arbitration}
                       onChange={(event) => updateCoachDraft("arbitration", event.target.value)}
-                      placeholder="Ex. Renfort temporaire sur DECHG si le retard augmente."
+                      placeholder="Ex. Renfort temporaire sur la réception si le retard augmente."
                       rows={2}
                     />
                   </label>
@@ -1538,7 +1572,7 @@ function Coach({
             <>
               <span>Fiche rapide</span>
               <strong>{selectedPlayer.name}</strong>
-              <p>{selectedPlayer.role} - {roleCode(selectedPlayer.role)}</p>
+              <p>{displayRole(selectedPlayer.role)} - {operationLabel(roleCode(selectedPlayer.role))}</p>
               <div className="quick-player-metrics">
                 <div>
                   <b>{selectedPlayer.volumeIndex}</b>
@@ -1554,7 +1588,7 @@ function Coach({
                 </div>
                 <div>
                   <b>{selectedPlayer.byType.DECHG}</b>
-                  <small>DECHG</small>
+                  <small>Réception</small>
                 </div>
               </div>
               <p className="quick-player-note">{playerProfile(selectedPlayer).detail}</p>
@@ -1619,7 +1653,7 @@ function PlayerSheet({ snapshot, player, onBack, onSelect }: { snapshot: Snapsho
           <div>
             <p className="eyebrow">Fiche joueur</p>
             <h2>{player.name}</h2>
-            <span>{player.role} · {roleCode(player.role)}</span>
+          <span>{displayRole(player.role)} · {operationLabel(roleCode(player.role))}</span>
           </div>
         </div>
         <label className="player-select">
@@ -1640,18 +1674,18 @@ function PlayerSheet({ snapshot, player, onBack, onSelect }: { snapshot: Snapsho
 
       <section className="metric-row essential">
         <Metric icon={Target} label="Indice volume" value={`${player.volumeIndex}`} detail={`Contribution équipe ${player.contributionPercent}%`} tone="primary" />
-        <Metric icon={Shirt} label="Poste dominant" value={player.role} detail={`${player.dominantShare}% activité dominante`} />
+        <Metric icon={Shirt} label="Poste dominant" value={displayRole(player.role)} detail={`${player.dominantShare}% activité dominante`} />
         <Metric icon={Sparkles} label="Polyvalence" value={`${player.polyvalence}`} detail={`${player.operationTypes} activité(s)`} />
         <Metric icon={Clock3} label="Activité" value={playerTimeRange(player)} detail="Première - dernière opération" />
       </section>
 
       <section className="section-card split-section">
         <div>
-          <SectionTitle title="Répartition individuelle" subtitle="CHG, DECHG et ZONAGE sur le match importé." />
+          <SectionTitle title="Répartition individuelle" subtitle="CHG, Réception et ZONAGE sur le match importé." />
           <div className="stat-bars">
             <StatLine label="Attaque · CHG" value={player.attackPercent} raw={player.byType.CHG} />
             <StatLine label="Milieu · ZONAGE" value={player.midfieldPercent} raw={player.byType.ZONAGE} />
-            <StatLine label="Défense · DECHG" value={player.defensePercent} raw={player.byType.DECHG} />
+            <StatLine label="Défense · Réception" value={player.defensePercent} raw={player.byType.DECHG} />
           </div>
         </div>
         <div className="player-reading">
@@ -1872,10 +1906,10 @@ function Causerie({ snapshot, session }: { snapshot: Snapshot; session: Session 
               />
               <CauserieFieldZone
                 id="defense"
-                code="DECHG"
+                code="Réception"
                 Icon={Shield}
                 title="Défense"
-                subtitle="Ce que nous devons sécuriser"
+                subtitle="Réception des palettes, sans tracé de position"
                 lines={plan.defense}
                 active={activeZone === "defense"}
                 editing={mode === "edit"}
@@ -2114,13 +2148,6 @@ function TvMode({ snapshot, session, onMatch }: { snapshot: Snapshot; session: S
     setFeedback(null);
   }
 
-  function updatePlanLine(zone: Exclude<CauserieZoneId, "coach">, index: number, value: string) {
-    setPlanDraft((current) => ({
-      ...current,
-      [zone]: current[zone].map((line, lineIndex) => lineIndex === index ? value.slice(0, 120) : line),
-    }));
-  }
-
   async function saveTvPlan() {
     const nextPlan = {
       ...planDraft,
@@ -2154,7 +2181,7 @@ function TvMode({ snapshot, session, onMatch }: { snapshot: Snapshot; session: S
       <div className="tv-header">
         <div>
           <p>STEF MATCH CENTER</p>
-          <h2>Agence {snapshot.agency.code}</h2>
+          <h2>{snapshot.agency.name}</h2>
           <ActivePeriodBadge snapshot={snapshot} className="tv-period-badge" />
         </div>
         <div className="tv-header-actions">
@@ -2191,7 +2218,11 @@ function TvMode({ snapshot, session, onMatch }: { snapshot: Snapshot; session: S
               <div className="tv-key-player-bar" aria-hidden="true">
                 <span style={{ width: `${Math.min(100, player?.volumeIndex ?? 0)}%` }} />
               </div>
-              <small>{player ? `${formatNumber(player.positions)} positions · ${roleCode(player.role)}` : "Donnée indisponible"}</small>
+              <small>{player
+                ? player.role === "Défenseur"
+                  ? `${formatNumber(player.byType.DECHG)} opérations de réception · sans tracé`
+                  : `${formatNumber(player.positions)} positions · ${operationLabel(roleCode(player.role))}`
+                : "Donnée indisponible"}</small>
             </article>
           );
         })}
@@ -2223,17 +2254,49 @@ function TvMode({ snapshot, session, onMatch }: { snapshot: Snapshot; session: S
           ] as const).map(([zone, label]) => (
             <div className={`tv-plan-column ${zone}`} key={zone}>
               <b>{label}</b>
-              {planMode === "edit" ? planDraft[zone].map((line, index) => (
-                <textarea
-                  key={`${zone}-${index}`}
-                  value={line}
-                  maxLength={120}
-                  aria-label={`${label}, ligne ${index + 1}`}
-                  placeholder={`Consigne ${index + 1}`}
-                  rows={2}
-                  onChange={(event) => updatePlanLine(zone, index, event.target.value)}
-                />
-              )) : plan[zone].map((line, index) => line ? <span key={`${zone}-${index}`}>{line}</span> : null)}
+              {planMode === "edit" ? (
+                <>
+                  <textarea
+                    value={planDraft[zone].filter(Boolean).join("\n")}
+                    maxLength={500}
+                    aria-label={`${label}, contenu du brief`}
+                    placeholder="Écris ici les consignes, points de vigilance ou éléments à afficher."
+                    rows={10}
+                    onChange={(event) => setPlanDraft((current) => ({ ...current, [zone]: [event.target.value] }))}
+                  />
+                  <label className="tv-plan-image-upload">
+                    <Upload size={16} />
+                    <span>{planDraft.attachments[zone] ? "Remplacer la capture" : "Ajouter une capture d'écran"}</span>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      aria-label={`${label}, capture d'écran`}
+                      onChange={async (event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const attachment = await prepareCauserieImage(file);
+                          setPlanDraft((current) => ({
+                            ...current,
+                            attachments: { ...current.attachments, [zone]: attachment },
+                          }));
+                          setFeedback({ title: "Capture ajoutée", detail: `Elle sera enregistrée dans la zone ${label}.`, tone: "success" });
+                        } catch (error) {
+                          setFeedback({ title: "Capture non ajoutée", detail: error instanceof Error ? error.message : "Le fichier n'a pas pu être ajouté.", tone: "error" });
+                        } finally {
+                          event.target.value = "";
+                        }
+                      }}
+                    />
+                  </label>
+                  {planDraft.attachments[zone] && <img className="tv-plan-image-preview" src={planDraft.attachments[zone]} alt={`Capture du brief ${label}`} />}
+                </>
+              ) : (
+                <>
+                  <span className="tv-plan-content">{plan[zone].filter(Boolean).join("\n") || "À renseigner"}</span>
+                  {plan.attachments[zone] && <img className="tv-plan-image" src={plan.attachments[zone]} alt={`Capture du brief ${label}`} />}
+                </>
+              )}
             </div>
           ))}
         </div>
@@ -2389,12 +2452,13 @@ function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavi
               <div className="guide-screen-grid">
                 <GuideScreenCard step="01" title="Coup d’envoi" detail="Vue d’ouverture du match. Elle confirme que les données sont prêtes et donne accès à l’Écran quai." />
                 <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score, duels, opérations, positions, joueurs clés par catégorie et contrôles d’import." />
-                <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages." />
+                <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. L’activité DECH est présentée comme Réception : la palette est déposée en travée, sans tracé de position." />
                 <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, tableau des points forts, sujets à travailler et prochaines actions." />
                 <GuideScreenCard step="05" title="Causerie" detail="Vue de préparation collective. Elle organise les consignes par zones du terrain et permet de préparer le brief." />
-                <GuideScreenCard step="TV" title="Écran quai" detail="Vue lisible à distance : score, indicateurs, joueurs clés par ligne et plan SAV / Expédition / Ramasse & emballage." />
+                <GuideScreenCard step="TV" title="Écran quai" detail="Vue lisible à distance : score, indicateurs, joueurs clés par ligne et trois grandes zones visibles, empilées verticalement : SAV, Expédition, Ramasse & emballage. Chaque zone accepte du texte et une capture d’écran." />
               </div>
               <div className="guide-legend"><span className="legend-dot green" /> Vert = acquis ou action positive <span className="legend-dot orange" /> Orange = à surveiller <span className="legend-dot red" /> Rouge = action prioritaire</div>
+              <div className="guide-callout info"><Shield size={20} /><span><strong>Réception dans l’application :</strong> le code Excel interne <code>DECHG</code> reste inchangé pour les calculs, mais l’interface affiche <strong>Réception</strong>. Il s’agit du scan de la palette à la réception ; au déchargement, la palette est déposée en travée et aucune position n’est tracée.</span></div>
             </GuidePanel>
           )}
 
@@ -2403,9 +2467,10 @@ function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavi
               <p>Les données Excel alimentent les indicateurs. Les textes du plan de jeu sont des consignes opérationnelles que vous pouvez adapter à la situation du jour.</p>
               <div className="guide-edit-grid">
                 <GuideEditCard title="Dans Coach" detail="Cliquez sur Écrire dans le tableau du coach, complétez Tactique, Priorité, Arbitrage et Revue, puis Enregistrer." />
-                <GuideEditCard title="Dans Causerie" detail="Cliquez sur Modifier le plan de jeu, choisissez une zone et écrivez jusqu’à trois consignes par ligne, puis Enregistrer la causerie." />
-                <GuideEditCard title="Dans Écran quai" detail="Cliquez sur Écrire dans Plan de jeu et renseignez les colonnes SAV, Expédition et Ramasse & emballage." />
+                <GuideEditCard title="Dans Causerie" detail="Cliquez sur Modifier le plan de jeu, sélectionnez une zone du terrain, complétez les consignes visibles, puis cliquez sur Enregistrer la causerie." />
+                <GuideEditCard title="Dans Écran quai" detail="Cliquez sur Écrire dans Plan de jeu. Les trois zones sont empilées et entièrement visibles : saisissez le brief dans la grande zone de texte de SAV, Expédition ou Ramasse & emballage, puis enregistrez le plan." />
               </div>
+              <div className="guide-callout info"><Upload size={20} /><span><strong>Ajouter une capture d’écran :</strong> dans chaque zone de l’Écran quai, cliquez sur <strong>Ajouter une capture d’écran</strong>, puis choisissez une image PNG, JPG ou WebP. L’image est redimensionnée automatiquement, affichée dans la zone correspondante et sauvegardée avec le texte. Chaque catégorie conserve sa propre capture ; il n’y a pas de menu déroulant.</span></div>
               <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Important :</strong> si un message indique une sauvegarde locale uniquement, le texte est conservé sur ce poste mais peut ne pas être partagé avec les autres utilisateurs.</span></div>
               <div className="guide-actions"><button className="secondary-button" type="button" onClick={() => onNavigate("coach")}><Dumbbell size={17} /> Ouvrir Coach</button><button className="primary-button" type="button" onClick={() => onNavigate("causerie")}><ClipboardList size={17} /> Ouvrir Causerie</button></div>
             </GuidePanel>
@@ -2634,8 +2699,8 @@ function RoleLine({ role, percent, count }: { role: string; percent: number; cou
   return (
     <div className={`role-line ${roleClass(role)}`}>
       <div>
-        <span>{role}</span>
-        <small>{roleCode(role)} · {formatNumber(count)} joueur(s)</small>
+        <span>{displayRole(role)}</span>
+        <small>{operationLabel(roleCode(role))} · {formatNumber(count)} joueur(s)</small>
       </div>
       <div className="bar-track">
         <div className={`bar-fill ${roleClass(role)}`} style={{ width: `${Math.min(100, percent)}%` }} />
@@ -2798,7 +2863,7 @@ function buildAwardItems(snapshot: Snapshot): MatchAward[] {
     {
       kind: "defense",
       label: "Joueur Défense",
-      detail: "Meilleure valeur DECHG",
+      detail: "Meilleure valeur Réception",
       symbol: "DEF",
       podiumLabel: "Défense",
       highlight: snapshot.highlights.defensiveWall,
@@ -2808,7 +2873,7 @@ function buildAwardItems(snapshot: Snapshot): MatchAward[] {
 
 function awardHoverTitle(player: Player | undefined, highlight: NonNullable<Highlight>) {
   if (!player) return `${highlight.name} - ${highlight.role} - ${formatHighlightValue(highlight)}`;
-  return `${player.name} - ${player.role} - CHG ${player.byType.CHG} / ZONAGE ${player.byType.ZONAGE} / DECHG ${player.byType.DECHG}`;
+  return `${player.name} - ${displayRole(player.role)} - CHG ${player.byType.CHG} / ZONAGE ${player.byType.ZONAGE} / Réception ${player.byType.DECHG}`;
 }
 
 function formatHighlightValue(highlight: NonNullable<Highlight>) {
@@ -2890,14 +2955,19 @@ function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
     ]),
     midfield: padPlanLines([
       arbitration,
-      weakRole ? `Équilibre terrain : ${weakRole.role} à ${Math.round(weakRole.percent)}% des joueurs.` : "",
+      weakRole ? `Équilibre terrain : ${displayRole(weakRole.role)} à ${Math.round(weakRole.percent)}% des joueurs.` : "",
       snapshot.summary.operationCounts.ZONAGE ? `${formatNumber(snapshot.summary.operationCounts.ZONAGE)} opérations ZONAGE.` : "",
     ]),
     defense: padPlanLines([
       risk,
       late > 0 ? `${late} duel(s) à sécuriser.` : "Risque principal maîtrisé sur le dernier import.",
-      snapshot.summary.operationCounts.DECHG ? `${formatNumber(snapshot.summary.operationCounts.DECHG)} opérations DECHG.` : "",
+      snapshot.summary.operationCounts.DECHG ? `${formatNumber(snapshot.summary.operationCounts.DECHG)} opérations de réception.` : "",
     ]),
+    attachments: {
+      attack: "",
+      midfield: "",
+      defense: "",
+    },
     coach: {
       tactic: action.title,
       priority: priority || action.detail,
@@ -2916,6 +2986,11 @@ function normalizeCauseriePlan(plan: CauseriePlan, snapshot: Snapshot): Causerie
     attack: padPlanLines(plan.attack ?? fallback.attack),
     midfield: padPlanLines(plan.midfield ?? fallback.midfield),
     defense: padPlanLines(plan.defense ?? fallback.defense),
+    attachments: {
+      attack: plan.attachments?.attack ?? fallback.attachments.attack,
+      midfield: plan.attachments?.midfield ?? fallback.attachments.midfield,
+      defense: plan.attachments?.defense ?? fallback.attachments.defense,
+    },
     coach: {
       tactic: plan.coach?.tactic ?? fallback.coach.tactic,
       priority: plan.coach?.priority ?? fallback.coach.priority,
@@ -2985,7 +3060,7 @@ function playerLockerMetric(player: Player, snapshot: Snapshot) {
     return { label: "Milieu · ZONAGE", value: formatNumber(player.byType.ZONAGE), detail: "opérations" };
   }
   if (snapshot.highlights.defensiveWall?.name === player.name) {
-    return { label: "Défense · DECHG", value: formatNumber(player.byType.DECHG), detail: "opérations" };
+    return { label: "Défense · Réception", value: formatNumber(player.byType.DECHG), detail: "opérations" };
   }
   if (snapshot.coach.polyvalents.some((item) => item.name === player.name)) {
     return { label: "Polyvalence", value: `${player.polyvalence}%`, detail: `${player.operationTypes} types d'activité` };
@@ -3053,7 +3128,7 @@ function coachProgressPoints(snapshot: Snapshot): TacticalItem[] {
 
   if (weakRole) {
     items.push({
-      title: `Équilibre ${weakRole.role}`,
+      title: `Équilibre ${displayRole(weakRole.role)}`,
       detail: `${Math.round(weakRole.percent)}% des joueurs retenus sur cette ligne.`,
     });
   }
@@ -3107,7 +3182,7 @@ function coachActions(snapshot: Snapshot) {
     },
     {
       kicker: "Équilibre d'équipe",
-      title: `${weakRole.role} à ${Math.round(weakRole.percent)}%`,
+      title: `${displayRole(weakRole.role)} à ${Math.round(weakRole.percent)}%`,
       detail: "Répartition calculée à partir des postes Excel des joueurs retenus.",
       next: "Action : contrôler si cette répartition correspond au besoin du quai.",
       level: "watch",
@@ -3136,10 +3211,10 @@ function playerProfile(player: Player) {
   const entries = [
     { label: "CHG", value: player.byType.CHG, role: "attaque" },
     { label: "ZONAGE", value: player.byType.ZONAGE, role: "milieu" },
-    { label: "DECHG", value: player.byType.DECHG, role: "défense" },
+    { label: "Réception", value: player.byType.DECHG, role: "réception" },
   ].sort((a, b) => b.value - a.value);
   const leader = entries[0];
-  const title = player.operationTypes >= 2 ? `Profil ${player.role.toLowerCase()} avec appui polyvalent` : `Spécialiste ${leader.label}`;
+  const title = player.operationTypes >= 2 ? `Profil ${displayRole(player.role).toLowerCase()} avec appui polyvalent` : `Spécialiste ${leader.label}`;
   const detail =
     player.operationTypes >= 2
       ? `${player.name} intervient sur ${player.operationTypes} activités. Point fort : ${leader.label} avec ${leader.value} opération(s).`
@@ -3202,14 +3277,22 @@ function roleClass(role: string) {
   return "defense";
 }
 
+function displayRole(role: string) {
+  return role;
+}
+
 function roleCode(role: string) {
   if (role === "Attaquant") return "CHG";
   if (role === "Milieu") return "ZONAGE";
   return "DECHG";
 }
 
+function operationLabel(code: string) {
+  return code === "DECHG" ? "Réception" : code;
+}
+
 function roleHelp(role: string) {
   if (role === "Attaquant") return "Chargement";
   if (role === "Milieu") return "Zonage";
-  return "Déchargement";
+  return "Réception, sans tracé de position";
 }

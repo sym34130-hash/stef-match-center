@@ -10218,6 +10218,73 @@ body.causerie-brief-active .causerie-stadium.is-brief .field-zone::after {
   }
 }
 
+/* Causerie brief: keep the horizontal pitch while giving each zone its own readable column. */
+body.causerie-brief-active .causerie-stadium.is-brief .stadium-field {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: minmax(380px, 1fr);
+  min-height: clamp(380px, 56vh, 560px);
+  align-items: stretch;
+  overflow: hidden;
+}
+
+body.causerie-brief-active .causerie-stadium.is-brief .field-zone {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: start;
+  align-items: start;
+  min-height: 0;
+  padding: 14px;
+  overflow: hidden;
+}
+
+body.causerie-brief-active .causerie-stadium.is-brief .zone-marker {
+  width: min(124px, 100%);
+  min-height: 68px;
+  justify-self: center;
+}
+
+body.causerie-brief-active .causerie-stadium.is-brief .zone-copy {
+  width: 100%;
+  min-width: 0;
+  margin-top: 10px;
+  text-align: center;
+}
+
+body.causerie-brief-active .causerie-stadium.is-brief .zone-copy span {
+  font-size: clamp(24px, 2.2vw, 38px);
+}
+
+body.causerie-brief-active .causerie-stadium.is-brief .zone-copy strong {
+  margin-top: 5px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+body.causerie-brief-active .causerie-stadium.is-brief .field-zone ul {
+  width: 100%;
+  align-self: stretch;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+body.causerie-brief-active .causerie-stadium.is-brief .field-zone li {
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+@media (max-width: 900px) {
+  body.causerie-brief-active .causerie-stadium.is-brief .stadium-field {
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    min-height: 0;
+  }
+
+  body.causerie-brief-active .causerie-stadium.is-brief .field-zone {
+    min-height: 190px;
+  }
+}
+
 /* Coach normal view readability and motion pass */
 .coach-room:not(.is-coach-mode) .coach-room-header {
   background:
@@ -13103,5 +13170,117 @@ kbd {
 @media (max-width: 900px) {
   .causerie-stadium .coach-lines .coach-line-item {
     min-height: 0;
+  }
+}
+
+/* TV plan: leave enough vertical room for longer briefs and future visual inserts. */
+.tv-action {
+  padding: clamp(24px, 2.4vw, 38px);
+}
+
+.tv-plan-grid {
+  align-items: stretch;
+  grid-template-columns: 1fr;
+  gap: clamp(12px, 1.4vw, 22px);
+}
+
+.tv-plan-column {
+  min-height: clamp(360px, 42vh, 620px);
+  padding: clamp(16px, 1.6vw, 24px);
+  align-content: start;
+  grid-template-rows: auto 1fr;
+}
+
+.tv-plan-column .tv-plan-content {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  align-self: stretch;
+  padding: 14px 0 4px;
+  color: var(--navy-900);
+  font-size: clamp(15px, 1.1vw, 20px);
+  font-weight: 800;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tv-plan-column input,
+.tv-plan-column textarea {
+  min-height: 118px;
+  padding: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.tv-plan-column textarea {
+  min-height: 300px;
+  height: 100%;
+}
+
+.tv-plan-image-upload {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  color: var(--navy-900);
+  border: 1px dashed rgba(29, 78, 137, 0.48);
+  border-radius: 7px;
+  background: rgba(137, 198, 255, 0.12);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.tv-plan-image-upload:hover {
+  background: rgba(72, 199, 142, 0.18);
+  border-color: rgba(22, 131, 94, 0.6);
+}
+
+.tv-plan-image-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.tv-plan-image,
+.tv-plan-image-preview {
+  display: block;
+  width: 100%;
+  max-height: 460px;
+  margin-top: 14px;
+  object-fit: contain;
+  object-position: left top;
+  border: 1px solid rgba(29, 78, 137, 0.2);
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.tv-plan-image-preview {
+  max-height: 420px;
+}
+
+@media (max-width: 900px) {
+  .tv-action {
+    padding: 20px;
+  }
+
+  .tv-plan-column {
+    min-height: 300px;
+  }
+
+  .tv-plan-column textarea {
+    min-height: 240px;
+  }
+
+  .tv-plan-image,
+  .tv-plan-image-preview {
+    max-height: 320px;
   }
 }
