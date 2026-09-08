@@ -30,7 +30,9 @@ assert.equal(snapshot.validation.filterStats.scoringRows, 2925, "Lignes éligibl
 assert.equal(snapshot.validation.filterStats.excludedByPeriod, 115, "Lignes exclues par période Excel");
 assert.equal(snapshot.validation.filterStats.excludedByOperator, 1051, "Lignes exclues par filtre opérateur Excel");
 assert.equal(snapshot.validation.filterStats.excludedFromScore, 1670, "Lignes exclues du score par Poz non zonées");
-assert.equal(snapshot.validation.issueRows, 12914, "Lignes distinctes avec anomalie d'import");
+assert.equal(snapshot.validation.criticalMissingRows, 0, "Lignes source avec donnée critique manquante");
+assert.equal(snapshot.validation.invalidDateRows, 0, "Lignes source avec date illisible");
+assert.equal(snapshot.validation.issueRows, 0, "Lignes source distinctes avec anomalie d'import");
 
 assert.equal(snapshot.summary.operations, 4595, "Opérations filtrées");
 assert.equal(snapshot.summary.positions, 1430, "Positions filtrées");

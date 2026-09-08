@@ -168,8 +168,18 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   for (let index = 1; index < matrix.length; index += 1) {
     const row = matrix[index];
     const raw = readRow(row, columnMap);
-    const hasContent = Object.values(raw).some((value) => String(value ?? "").trim() !== "");
-    if (!hasContent) continue;
+    // A:G are the source fields. H:T contain formulas copied below the real
+    // import range and must not be treated as additional source records.
+    const hasSourceContent = [
+      raw.operator,
+      raw.startedAt,
+      raw.operationType,
+      raw.position,
+      raw.travelCode,
+      raw.agencySegment,
+      raw.segmentType,
+    ].some((value) => String(value ?? "").trim() !== "");
+    if (!hasSourceContent) continue;
 
     validation.rowCount += 1;
 
