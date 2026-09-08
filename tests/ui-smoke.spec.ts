@@ -16,7 +16,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
   await page.getByLabel("Code agence").selectOption("058");
   await page.getByLabel("Code d'accès").fill("STEF-058");
   await page.getByRole("button", { name: "Accéder au match" }).click();
-  await expect(page.getByRole("heading", { name: "Agence 058", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agen - 058", exact: true })).toBeVisible();
 
   for (const screen of screens) {
     await page.getByRole("button", { name: screen.button, exact: true }).click();

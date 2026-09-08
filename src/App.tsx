@@ -369,7 +369,7 @@ function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string
   const [agencyCode, setAgencyCode] = useState("058");
   const [accessCode, setAccessCode] = useState("");
   const [agencies, setAgencies] = useState<Array<Pick<Agency, "code" | "name">>>([
-    { code: "058", name: "Agence 058" },
+    { code: "058", name: "Agen - 058" },
     { code: "01K", name: "Montpellier" },
     { code: "05R", name: "Toulouse" },
     { code: "04P", name: "Bordeaux" },

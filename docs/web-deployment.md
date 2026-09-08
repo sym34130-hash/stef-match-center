@@ -39,7 +39,7 @@ Stockage persistant agences
 PORT=4174
 STEF_DATA_DIR=/var/lib/stef-match-center/agencies
 STEF_UPLOAD_LIMIT_MB=20
-STEF_AGENCIES_JSON='[{"code":"058","name":"Agence 058","accessCode":"STEF-058","canImport":true},{"code":"01K","name":"Montpellier","accessCode":"STEF-01K","canImport":true},{"code":"05R","name":"Toulouse","accessCode":"STEF-05R","canImport":true},{"code":"04P","name":"Bordeaux","accessCode":"STEF-04P","canImport":true}]'
+STEF_AGENCIES_JSON='[{"code":"058","name":"Agen - 058","accessCode":"STEF-058","canImport":true},{"code":"01K","name":"Montpellier","accessCode":"STEF-01K","canImport":true},{"code":"05R","name":"Toulouse","accessCode":"STEF-05R","canImport":true},{"code":"04P","name":"Bordeaux","accessCode":"STEF-04P","canImport":true}]'
 ```
 
 `STEF_DATA_DIR` doit pointer vers un disque persistant. Sans disque persistant,
@@ -64,7 +64,7 @@ La V1 peut aussi être déployée avec le `Dockerfile` du projet.
 docker build -t stef-match-center .
 docker run \
   -p 4174:4174 \
-  -e STEF_AGENCIES_JSON='[{"code":"058","name":"Agence 058","accessCode":"CHANGE_ME_BEFORE_SHARING","canImport":true}]' \
+  -e STEF_AGENCIES_JSON='[{"code":"058","name":"Agen - 058","accessCode":"CHANGE_ME_BEFORE_SHARING","canImport":true}]' \
   -v stef-match-center-data:/data \
   stef-match-center
 ```

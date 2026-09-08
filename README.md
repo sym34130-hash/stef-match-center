@@ -15,7 +15,7 @@ Application web locale de pilotage opérationnel inspirée du football.
 La configuration locale de test contient quatre espaces agence :
 
 - Code agence : `058`
-- Nom : `Agence 058`
+- Nom : `Agen - 058`
 - Code d'accès : `STEF-058`
 - Code agence : `01K` - `Montpellier` - code d'accès : `STEF-01K`
 - Code agence : `05R` - `Toulouse` - code d'accès : `STEF-05R`

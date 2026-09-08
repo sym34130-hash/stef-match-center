@@ -62,7 +62,7 @@ persistant de l'agence.
 PORT=4174
 STEF_DATA_DIR=/data/agencies
 STEF_UPLOAD_LIMIT_MB=20
-STEF_AGENCIES_JSON='[{"code":"058","name":"Agence 058","accessCode":"CHANGE_ME_BEFORE_SHARING","canImport":true}]'
+STEF_AGENCIES_JSON='[{"code":"058","name":"Agen - 058","accessCode":"CHANGE_ME_BEFORE_SHARING","canImport":true}]'
 ```
 
 RECOMMENDATION: remplacer `CHANGE_ME_BEFORE_SHARING` par un code fort avant de

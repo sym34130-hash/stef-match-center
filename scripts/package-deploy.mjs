@@ -56,7 +56,7 @@ const manifest = {
     STEF_DATA_DIR: "storage path for imports and causeries; Render Free storage is ephemeral",
     STEF_UPLOAD_LIMIT_MB: "20",
     STEF_AGENCIES_JSON:
-      '[{"code":"058","name":"Agence 058","accessCode":"CHANGE_ME_BEFORE_SHARING","canImport":true}]',
+      '[{"code":"058","name":"Agen - 058","accessCode":"CHANGE_ME_BEFORE_SHARING","canImport":true}]',
   },
   excludedByDesign: [
     "node_modules",
