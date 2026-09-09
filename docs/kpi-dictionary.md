@@ -35,6 +35,7 @@ Il lit l'onglet `Donnees` complet et reprend les colonnes Excel calculees :
 | Duels gagnes | Somme des lignes `Duels gagnes = 1` dans le score officiel | Lignes score officiel | Score collectif |
 | Score match | `Duels gagnes / lignes score officiel` | Lignes score officiel | Score /100 |
 | Indice volume | Operations joueur / meilleur volume joueur | Plus gros volume joueur du match filtre | Fiche joueur |
+| Polyvalence | `0` si une seule activite ; sinon moyenne des volumes CHG, ZONAGE et DECHG rapportes au meilleur volume de chaque activite | Meilleur volume observe dans chaque activite du match filtre | Diversite et volume multi-activite |
 | Contribution equipe | Operations joueur / operations du match filtre | Operations du match filtre | Detail fiche joueur |
 | Joueur Attaque | Max `CHG` joueur dans le match filtre | Joueurs du match filtre | Valeur CHG gagnante |
 | Joueur Milieu | Max `ZONAGE` joueur dans le match filtre | Joueurs du match filtre | Valeur ZONAGE gagnante |

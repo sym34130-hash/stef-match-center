@@ -4,7 +4,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildSnapshotFromWorkbook, normalizeSnapshotContract, normalizeTimeRange } from "./match-engine.mjs";
+import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, KPI_DICTIONARY_VERSION, normalizeSnapshotContract, normalizeTimeRange } from "./match-engine.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,6 +15,7 @@ const dataDir = process.env.STEF_DATA_DIR
 const agenciesPath = path.join(__dirname, "agencies.json");
 const port = Number(process.env.PORT ?? 4174);
 const uploadLimitMb = readEnvNumber("STEF_UPLOAD_LIMIT_MB", 20);
+const compositionRangeCache = new Map();
 
 const app = express();
 const upload = multer({
@@ -127,11 +128,92 @@ app.post("/api/agencies/:agencyCode/time-range", requireAgency, async (req, res)
     }
     result.snapshot.agency.name = req.agency.name;
     await fs.writeFile(path.join(agencyDir, "latest.json"), JSON.stringify(result.snapshot, null, 2), "utf8");
+    compositionRangeCache.clear();
     res.json({ message: "PLAGE HORAIRE ACTUALISÉE", snapshot: result.snapshot });
   } catch {
     res.status(404).json({
       title: "SOURCE EXCEL INDISPONIBLE",
       message: "Réimporte le dernier fichier Excel avant de modifier la plage horaire.",
+    });
+  }
+});
+
+app.post("/api/agencies/:agencyCode/composition-range", requireAgency, async (req, res) => {
+  let period;
+  try {
+    period = normalizeTimeRange(req.body?.start, req.body?.end);
+  } catch (error) {
+    res.status(400).json({
+      title: "PLAGE DE COMPOSITION INVALIDE",
+      message: error instanceof Error ? error.message : "Saisis deux heures au format 00:00 ou 00:30.",
+      action: "La sous-plage doit utiliser des pas de 30 minutes.",
+    });
+    return;
+  }
+
+  const currentSnapshot = await readLatestSnapshot(req.agency.code);
+  if (!currentSnapshot) {
+    res.status(404).json({
+      title: "AUCUN MATCH IMPORTÉ",
+      message: "Importe un fichier Excel avant de choisir une sous-plage de composition.",
+    });
+    return;
+  }
+
+  let activePeriod;
+  try {
+    activePeriod = normalizeTimeRange(currentSnapshot.match.periodStart, currentSnapshot.match.periodEnd);
+  } catch {
+    res.status(409).json({
+      title: "PLAGE ACTIVE INDISPONIBLE",
+      message: "Actualise le match avant de choisir une sous-plage de composition.",
+    });
+    return;
+  }
+  if (period.startMinutes < activePeriod.startMinutes || period.endMinutes > activePeriod.endMinutes) {
+    res.status(400).json({
+      title: "SOUS-PLAGE HORS PÉRIMÈTRE",
+      message: `Choisis une sous-plage comprise entre ${activePeriod.start} et ${activePeriod.end}.`,
+    });
+    return;
+  }
+
+  try {
+    const cacheKey = [req.agency.code, currentSnapshot.sourceName ?? "match.xlsx", period.start, period.end].join("|");
+    let calculation = compositionRangeCache.get(cacheKey);
+    if (!calculation) {
+      calculation = (async () => {
+        const buffer = await readLatestWorkbook(path.join(dataDir, sanitizeSegment(req.agency.code)));
+        return buildCompositionViewFromWorkbook(
+          buffer,
+          currentSnapshot.sourceName ?? "match.xlsx",
+          req.agency.code,
+          period,
+        );
+      })().catch((error) => {
+        compositionRangeCache.delete(cacheKey);
+        throw error;
+      });
+      compositionRangeCache.set(cacheKey, calculation);
+    }
+    const result = await calculation;
+    if (!result.ok || result.players.length === 0) {
+      res.status(422).json({
+        title: "AUCUNE DONNÉE SUR CETTE SOUS-PLAGE",
+        message: `Aucune opération exploitable entre ${period.start} et ${period.end}.`,
+        action: "Choisis une autre sous-plage dans la plage active.",
+      });
+      return;
+    }
+    res.json({
+      message: "VUE DE COMPOSITION ACTUALISÉE",
+      range: { start: period.start, end: period.end, label: `${period.start} - ${period.end}` },
+      players: result.players,
+    });
+  } catch {
+    res.status(404).json({
+      title: "SOURCE EXCEL INDISPONIBLE",
+      message: "Réimporte le dernier fichier Excel avant de choisir une sous-plage.",
     });
   }
 });
@@ -197,6 +279,7 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
 
   result.snapshot.agency.name = req.agency.name;
   await saveImport(req.agency.code, req.file.originalname, req.file.buffer, result.snapshot);
+  compositionRangeCache.clear();
   res.json({
     message: "MATCH ACTUALISÉ",
     snapshot: result.snapshot,
@@ -305,7 +388,12 @@ async function readLatestSnapshot(agencyCode) {
 
     // Older snapshots predate the hourly chart and half-time composition.
     // Rebuild them once from the latest workbook so new views work without a second import.
-    if (!Array.isArray(snapshot.hourlyPerformance) || !snapshot.compositionPeriods || !snapshot.loadingQuality || !snapshot.duelQuality) {
+    const operationalScoreNeedsRefresh =
+      !snapshot.operationalScore ||
+      (snapshot.operationalScore.loading?.status !== "available" ||
+        snapshot.operationalScore.loading?.scored === undefined ||
+        snapshot.operationalScore.loading?.conceded === undefined);
+    if (snapshot.kpiDictionaryVersion !== KPI_DICTIONARY_VERSION || !Array.isArray(snapshot.hourlyPerformance) || !snapshot.compositionPeriods?.quarters || !snapshot.loadingQuality || !snapshot.duelQuality || operationalScoreNeedsRefresh) {
       try {
         const workbook = await readLatestWorkbook(agencyDir);
         const rebuilt = buildSnapshotFromWorkbook(

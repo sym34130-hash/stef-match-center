@@ -78,6 +78,16 @@ export type Snapshot = {
     filterDescription?: string;
     scoringFilterDescription?: string;
   };
+  operationalScore?: {
+    goalsFor: number;
+    goalsAgainst: number;
+    loading: {
+      status: "available" | "unavailable";
+      scored: number | null;
+      conceded: number | null;
+      targetSeconds: number;
+    };
+  };
   summary: {
     operations: number;
     positions: number;
@@ -107,6 +117,7 @@ export type Snapshot = {
     targetedPercent: number;
     offTargetPercent: number;
     targetTimePerPosition?: string;
+    averageTimePerPositionSeconds?: number | null;
     nonTargetedShots: Array<{
       travelCode: string;
       time: string;
@@ -131,6 +142,11 @@ export type Snapshot = {
   compositionPeriods?: {
     first: { label: string; players: Player[] };
     second: { label: string; players: Player[] };
+    quarters?: Array<{
+      id: "q1" | "q2" | "q3" | "q4";
+      label: string;
+      players: Player[];
+    }>;
   };
   highlights: {
     manOfTheMatch: Highlight;

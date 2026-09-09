@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildSnapshotFromWorkbook, KPI_DICTIONARY } from "../server/match-engine.mjs";
+import { buildSnapshotFromWorkbook, KPI_DICTIONARY, KPI_DICTIONARY_VERSION } from "../server/match-engine.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -24,6 +24,7 @@ const snapshot = result.snapshot;
 const roles = Object.fromEntries(snapshot.summary.roleDistribution.map((item) => [item.role, item]));
 
 assert.equal(KPI_DICTIONARY.length >= 7, true, "Le dictionnaire KPI doit rester disponible dans le moteur.");
+assert.equal(snapshot.kpiDictionaryVersion, KPI_DICTIONARY_VERSION, "Le snapshot doit utiliser la version courante des règles KPI.");
 assert.equal(snapshot.validation.filterStats.sourceRows, 5742, "Lignes source A:G");
 assert.equal(snapshot.validation.filterStats.matchRows, 4595, "Lignes filtre opérateur + période");
 assert.equal(snapshot.validation.filterStats.scoringRows, 2925, "Lignes éligibles au score");
@@ -60,6 +61,18 @@ assert.equal(snapshot.highlights.bestPasser.label, "Joueur Milieu");
 assert.equal(snapshot.highlights.defensiveWall.name, "YOUNES EL KICH");
 assert.equal(snapshot.highlights.defensiveWall.value, 623);
 assert.equal(snapshot.highlights.defensiveWall.label, "Joueur Défense");
+assert.ok(
+  snapshot.players.filter((player) => player.operationTypes < 2).every((player) => player.polyvalence === 0),
+  "Un joueur mono-activité ne doit pas recevoir de score de polyvalence."
+);
+assert.ok(
+  snapshot.players.every((player) => player.polyvalence >= 0 && player.polyvalence <= 100),
+  "La polyvalence doit rester comprise entre 0 et 100."
+);
+assert.ok(
+  snapshot.coach.polyvalents.every((player) => player.operationTypes >= 2),
+  "La liste des polyvalents doit contenir au moins deux activités."
+);
 const categoryHighlightNames = [
   snapshot.highlights.bestScorer?.name,
   snapshot.highlights.bestPasser?.name,

@@ -26,6 +26,7 @@ const ROLE_LABELS = ["Attaquant", "Milieu", "Défenseur"];
 const DZ_TARGET_MINUTES = 30;
 const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
+export const KPI_DICTIONARY_VERSION = 2;
 
 export function normalizeTimeRange(start = DEFAULT_PERIOD_START, end = DEFAULT_PERIOD_END) {
   const startMinutes = parseTimeInput(start);
@@ -84,6 +85,14 @@ export const KPI_DICTIONARY = [
     display: "Volume vs référence",
   },
   {
+    id: "player.polyvalence",
+    label: "Polyvalence",
+    source: "Données",
+    formula: "0 si le joueur n'exerce qu'une activité ; sinon moyenne des volumes CHG, ZONAGE et DECHG rapportés au meilleur volume de chaque activité",
+    denominator: "Meilleur volume observé dans chaque activité du match filtré",
+    display: "Diversité et volume multi-activité",
+  },
+  {
     id: "highlights.winningValue",
     label: "Valeur KPI gagnante",
     source: "Données",
@@ -102,6 +111,7 @@ export const KPI_DICTIONARY = [
 ];
 
 export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode, periodInput = {}) {
+  const compositionOnly = periodInput.compositionOnly === true;
   const period = normalizeTimeRange(periodInput.start ?? DEFAULT_PERIOD_START, periodInput.end ?? DEFAULT_PERIOD_END);
   const workbook = XLSX.read(buffer, {
     type: "buffer",
@@ -282,6 +292,14 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   const scoringRows = isDerivedTemplate
     ? buildDerivedScoringRows(matchRows)
     : matchRows.filter((row) => isScoringRow(row, period));
+  if (compositionOnly) {
+    return {
+      ok: true,
+      period,
+      players: buildPlayers(matchRows),
+      compositionPeriods: buildCompositionPeriods(matchRows, period),
+    };
+  }
   const agencyCounts = countBy(matchRows.length > 0 ? matchRows : rows, (row) => row.agencySegment || "Non renseignée");
   const detectedAgency = isDerivedTemplate
     ? expectedAgencyCode
@@ -306,6 +324,13 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   });
 
   return { ok: true, snapshot };
+}
+
+export function buildCompositionViewFromWorkbook(buffer, sourceName, expectedAgencyCode, periodInput = {}) {
+  return buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode, {
+    ...periodInput,
+    compositionOnly: true,
+  });
 }
 
 export function normalizeSnapshotContract(snapshot) {
@@ -385,6 +410,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, workbook, sour
     .slice(0, 5);
 
   const weakRole = roleDistribution.reduce((min, current) => (current.count < min.count ? current : min), roleDistribution[0]);
+  const loadingQuality = buildLoadingQuality(workbook);
 
   return {
     version: 1,
@@ -429,7 +455,8 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, workbook, sour
       excludedFromScore: filterStats.excludedFromScore,
     },
     hourlyPerformance: buildHourlyPerformance(scoringRows),
-    loadingQuality: buildLoadingQuality(workbook),
+    loadingQuality,
+    operationalScore: buildOperationalScore(loadingQuality),
     duelQuality: buildDuelQuality(scoringRows, matchRows, positions, duelWon, duelTotal),
     compositionPeriods: buildCompositionPeriods(matchRows, period),
     highlights: buildCategoryHighlights(categoryLeaders),
@@ -445,7 +472,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, workbook, sour
     },
     causerie: buildCauserie({ score, openDuelRows, weakRole, validation }),
     validation,
-    kpiDictionaryVersion: 1,
+    kpiDictionaryVersion: KPI_DICTIONARY_VERSION,
   };
 }
 
@@ -529,13 +556,16 @@ function buildLoadingQuality(workbook) {
     targetedPercent: 0,
     offTargetPercent: 0,
     targetTimePerPosition: "",
+    averageTimePerPositionSeconds: null,
     nonTargetedShots: [],
   };
   const pivotName = workbook.SheetNames.find((name) => normalizeKey(name) === "tcd ppt");
   const pivot = pivotName ? workbook.Sheets[pivotName] : null;
   if (!pivot) return empty;
   const targetCell = pivot.U6;
-  const targetSeconds = typeof targetCell?.v === "number" ? Math.round(targetCell.v * 86400) : null;
+  const targetSeconds = typeof targetCell?.v === "number"
+    ? Math.round(targetCell.v * 86400)
+    : parseClockSeconds(targetCell?.w);
   const targetTimePerPosition = targetCell?.w
     ? formatImportedClock(targetCell.w)
     : targetSeconds !== null ? formatDuration(targetSeconds) : "";
@@ -597,7 +627,9 @@ function buildLoadingQuality(workbook) {
     }
   }
 
-  if (targeted === null || offTarget === null) return { ...empty, targetTimePerPosition, nonTargetedShots };
+  if (targeted === null || offTarget === null) {
+    return { ...empty, targetTimePerPosition, averageTimePerPositionSeconds: targetSeconds, nonTargetedShots };
+  }
   const total = targeted + offTarget;
   return {
     targeted,
@@ -605,31 +637,73 @@ function buildLoadingQuality(workbook) {
     targetedPercent: percent(targeted, total),
     offTargetPercent: percent(offTarget, total),
     targetTimePerPosition,
+    averageTimePerPositionSeconds: targetSeconds,
     nonTargetedShots,
   };
 }
 
+function buildOperationalScore(loadingQuality) {
+  const targetSeconds = 165;
+  const scored = Number.isFinite(loadingQuality?.targeted) ? Math.round(loadingQuality.targeted) : null;
+  const conceded = Number.isFinite(loadingQuality?.offTarget) ? Math.round(loadingQuality.offTarget) : null;
+  if (scored === null || conceded === null) {
+    return {
+      goalsFor: 0,
+      goalsAgainst: 0,
+      loading: { status: "unavailable", scored: null, conceded: null, targetSeconds },
+    };
+  }
+  return {
+    goalsFor: scored,
+    goalsAgainst: conceded,
+    loading: { status: "available", scored, conceded, targetSeconds },
+  };
+}
+
 function buildCompositionPeriods(rows, period) {
-  const midpoint = Math.floor((period.startMinutes + period.endMinutes) / 2);
-  const firstRows = rows.filter((row) => {
+  const duration = period.endMinutes - period.startMinutes;
+  const midpoint = period.startMinutes + duration / 2;
+  const quarterPoints = [
+    period.startMinutes,
+    period.startMinutes + duration / 4,
+    midpoint,
+    period.startMinutes + (duration * 3) / 4,
+    period.endMinutes,
+  ];
+  const rowsBetween = (start, end, includeEnd = false) => rows.filter((row) => {
     const minutes = parisMinutes(row.startedAt);
-    return minutes !== null && minutes < midpoint;
+    if (minutes === null) return false;
+    return minutes >= start && (includeEnd ? minutes <= end : minutes < end);
   });
-  const secondRows = rows.filter((row) => {
-    const minutes = parisMinutes(row.startedAt);
-    return minutes !== null && minutes >= midpoint;
-  });
+  const firstRows = rowsBetween(period.startMinutes, midpoint);
+  const secondRows = rowsBetween(midpoint, period.endMinutes, true);
+  const quarterIds = ["q1", "q2", "q3", "q4"];
+  const quarters = quarterIds.map((id, index) => ({
+    id,
+    label: `${formatCompositionTime(quarterPoints[index])} - ${formatCompositionTime(quarterPoints[index + 1])}`,
+    players: buildPlayers(rowsBetween(quarterPoints[index], quarterPoints[index + 1], index === quarterIds.length - 1)),
+  }));
 
   return {
     first: {
-      label: `${period.start} - ${formatTimeInput(midpoint)}`,
+      label: `${period.start} - ${formatCompositionTime(midpoint)}`,
       players: buildPlayers(firstRows),
     },
     second: {
-      label: `${formatTimeInput(midpoint)} - ${period.end}`,
+      label: `${formatCompositionTime(midpoint)} - ${period.end}`,
       players: buildPlayers(secondRows),
     },
+    quarters,
   };
+}
+
+function formatCompositionTime(minutes) {
+  const totalSeconds = Math.round(minutes * 60);
+  const hours = Math.floor(totalSeconds / 3600) % 24;
+  const remaining = totalSeconds % 3600;
+  const mins = Math.floor(remaining / 60);
+  const seconds = remaining % 60;
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}${seconds ? `:${String(seconds).padStart(2, "0")}` : ""}`;
 }
 
 function buildPlayers(rows) {
@@ -1066,6 +1140,13 @@ function formatImportedClock(value) {
   return `${String(hour).padStart(2, "0")}:${minute}:${second}`;
 }
 
+function parseClockSeconds(value) {
+  const formatted = formatImportedClock(value);
+  const match = formatted.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return null;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] ?? 0);
+}
+
 function cleanRole(value) {
   const text = cleanText(value);
   return ROLE_LABELS.includes(text) ? text : "";
@@ -1134,12 +1215,15 @@ function duelFriendlyScore(byType) {
 }
 
 function polyvalenceScore(byType, topByType) {
+  const activeTypes = Object.values(byType).filter((count) => count > 0).length;
+  if (activeTypes < 2) return 0;
+
   const normalizedScores = [
     (byType.CHG ?? 0) / topByType.CHG,
     (byType.ZONAGE ?? 0) / topByType.ZONAGE,
     (byType.DECHG ?? 0) / topByType.DECHG,
   ];
-  return Math.round((normalizedScores.reduce((sum, score) => sum + score, 0) / 3) * 100);
+  return Math.round(clamp(normalizedScores.reduce((sum, score) => sum + score, 0) / 3, 0, 1) * 100);
 }
 
 function buildHourlyPerformance(rows) {

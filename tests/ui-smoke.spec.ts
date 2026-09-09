@@ -9,6 +9,23 @@ const screens = [
 ];
 
 test("les vues principales restent lisibles sur desktop, tablette et mobile", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
+  await page.route("**/api/agencies/058/causerie**", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ plan: null }),
+      });
+      return;
+    }
+    const body = route.request().postDataJSON() as { plan?: Record<string, unknown> };
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "PLAN DE JEU TEST", plan: body.plan }),
+    });
+  });
   await page.addInitScript(() => {
     Object.defineProperty(document, "fullscreenEnabled", { configurable: true, value: false });
   });
@@ -30,10 +47,29 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
     if (screen.name === "02-feuille-match") {
       await expect(page.locator(".match-page.is-threshold-reached")).toHaveCount(1);
       await expect(page.getByText("Célébration activée", { exact: true })).toBeVisible();
+      await expect(page.getByText("Score chargement", { exact: true })).toBeVisible();
+      await expect(page.locator(".operational-score-card strong")).toHaveText("34 - 35");
+      await expect(page.locator(".match-result-actions")).toHaveCount(0);
+      await expect(page.locator(".match-kpi-board").getByText("À renseigner", { exact: true })).toBeVisible();
       await expect(page.getByText("623 opérations RECEPTION", { exact: true })).toBeVisible();
       await expect(page.locator(".award-card.polyvalent .award-challenger")).toHaveCount(2);
-      await expect(page.getByText("Tirs (chargements)", { exact: true })).toBeVisible();
-      await expect(page.getByText("Tirs non cadrés", { exact: true })).toBeVisible();
+      await expect(page.getByText("Chargements contrôlés", { exact: true })).toBeVisible();
+      await expect(page.getByText("Détails des chargements non cadrés", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Sortir du mode Célébration", exact: true })).toBeVisible();
+      const celebrationLayout = await page.evaluate(() => {
+        const ceremony = document.querySelector<HTMLElement>(".match-ceremony");
+        const kpis = Array.from(document.querySelectorAll<HTMLElement>(".match-kpi-board > div"));
+        return {
+          ceremonyMinHeight: ceremony ? getComputedStyle(ceremony).minHeight : "",
+          kpiVisible: kpis.every((kpi) => kpi.getBoundingClientRect().height > 0),
+          maxKpiHeight: Math.max(...kpis.map((kpi) => kpi.getBoundingClientRect().height)),
+        };
+      });
+      expect(celebrationLayout.ceremonyMinHeight).toBe("auto");
+      expect(celebrationLayout.kpiVisible).toBe(true);
+      expect(celebrationLayout.maxKpiHeight).toBeLessThanOrEqual(220);
+      await page.getByRole("button", { name: "Sortir du mode Célébration", exact: true }).click();
     }
     if (screen.name === "03-composition") {
       await expect(page.getByRole("button", { name: "Match complet", exact: true })).toBeVisible();
@@ -43,12 +79,47 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await page.getByRole("button", { name: "2ème mi-temps", exact: true }).click();
       await expect(page.locator(".composition-scoreboard small")).toContainText("17:45 - 22:30");
       await expect(page.getByText("Vue affichée : 17:45 - 22:30", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "1er quart", exact: true }).click();
+      await expect(page.getByText("Vue affichée : 13:00 - 15:22:30", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "4e quart", exact: true }).click();
+      await expect(page.getByText("Vue affichée : 20:07:30 - 22:30", { exact: true })).toBeVisible();
+      if (await page.evaluate(() => window.innerWidth <= 900)) {
+        const compactControls = await page.evaluate(() => {
+          const controls = document.querySelector<HTMLElement>(".composition-period-controls");
+          const switches = Array.from(document.querySelectorAll<HTMLElement>(".composition-half-switch"));
+          return {
+            display: controls ? getComputedStyle(controls).display : "",
+            switchesScrollable: switches.length === 2 && switches.every((item) => getComputedStyle(item).overflowX === "auto"),
+            buttonsStayOnRow: switches.length === 2 && switches.every((item) => getComputedStyle(item).flexWrap === "nowrap"),
+          };
+        });
+        expect(compactControls).toEqual({ display: "grid", switchesScrollable: true, buttonsStayOnRow: true });
+      }
+      await page.getByLabel("Début de la vue personnalisée").fill("14:00");
+      await page.getByLabel("Fin de la vue personnalisée").fill("15:00");
+      await page.getByRole("button", { name: "Afficher", exact: true }).click();
+      await expect(page.getByText("Vue affichée : 14:00 - 15:00", { exact: true })).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "Début", exact: true })).toHaveValue("13:00");
+      await expect(page.getByRole("textbox", { name: "Fin", exact: true })).toHaveValue("22:30");
+      await page.getByRole("button", { name: "Mode terrain", exact: true }).click();
+      await expect(page.locator(".composition-page.is-field-mode")).toHaveCount(1);
+      const fieldLayout = await page.evaluate(() => {
+        const header = document.querySelector<HTMLElement>(".composition-page.is-field-mode .composition-header");
+        const actions = document.querySelector<HTMLElement>(".composition-page.is-field-mode .composition-header-actions");
+        return {
+          pageOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+          headerContained: Boolean(header && header.scrollWidth <= header.clientWidth + 1),
+          actionsContained: Boolean(actions && actions.scrollWidth <= actions.clientWidth + 1),
+        };
+      });
+      expect(fieldLayout).toEqual({ pageOverflow: false, headerContained: true, actionsContained: true });
+      await page.getByRole("button", { name: "Sortir du mode Terrain", exact: true }).click();
       await page.getByRole("button", { name: "Match complet", exact: true }).click();
     }
     await assertNoHorizontalOverflow(page);
     await page.screenshot({
       path: testInfo.outputPath(`${screen.name}.png`),
-      fullPage: true,
+      fullPage: false,
       animations: "disabled",
     });
   }
@@ -90,6 +161,13 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Capture agrandie SAV · capture 1", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Annuler", exact: true }).click();
+  await page.getByRole("button", { name: "Écrire", exact: true }).click();
+  for (const label of ["SAV", "Expédition", "Ramasse & emballage"]) {
+    await page.getByLabel(`${label}, contenu du brief`).fill("");
+  }
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await expect(page.locator(".tv-plan-empty-state")).toHaveCount(3);
+  await expect(page.getByText("Brief à renseigner", { exact: true })).toHaveCount(3);
   const planLayout = await page.evaluate(() => {
     const columns = Array.from(document.querySelectorAll<HTMLElement>(".tv-plan-column"));
     const minHeight = window.innerWidth <= 900 ? 180 : 220;
@@ -101,7 +179,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
   });
   expect(planLayout).toEqual({ count: 3, tallEnough: true, contained: true });
   await assertNoHorizontalOverflow(page);
-  await page.screenshot({ path: testInfo.outputPath("tv-ecran-quai.png"), fullPage: true, animations: "disabled" });
+  await page.screenshot({ path: testInfo.outputPath("tv-ecran-quai.png"), fullPage: false, animations: "disabled" });
 
   await expect(page.getByRole("button", { name: "Mode plein écran", exact: true })).toBeVisible();
   await assertNoHorizontalOverflow(page);
@@ -128,11 +206,64 @@ test("le guide et le retour de l'écran quai restent accessibles avant le premie
 
   await page.getByRole("button", { name: "? Guide", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Utiliser STEF Match Center de A à Z", exact: true })).toBeVisible();
+  await page.locator(".guide-nav-item").filter({ hasText: "Administrateur" }).click();
+  await expect(page.getByRole("heading", { name: "Régler les ligues et leurs standards", exact: true })).toBeVisible();
+  await expect(page.locator(".guide-league-card")).toHaveCount(4);
+  expect(await page.locator(".guide-league-card").evaluateAll((cards) => cards.every((card) => card.scrollWidth <= card.clientWidth))).toBe(true);
 
   await page.getByRole("button", { name: "05 Écran quai", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Aucun match importé", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Retour au coup d'envoi", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Le stade est prêt", exact: true })).toBeVisible();
+});
+
+test("l'administrateur conserve ses règles par agence et synchronise ses animations", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Code agence").selectOption("058");
+  await page.getByLabel("Code d'accès").fill("STEF-058");
+  await page.getByRole("button", { name: "Accéder au match" }).click();
+  await page.getByRole("button", { name: "ADM Administrateur", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "Centre de pilotage des ligues", exact: true })).toBeVisible();
+  await expect(page.locator(".administrator-rule-strip")).not.toContainText("Position");
+  await expect(page.getByLabel("Cible zonage Argent")).toHaveValue("30");
+  await expect(page.getByLabel("Modifier chargement Argent")).toHaveValue("00:02:45");
+  await page.getByLabel("Cible zonage Argent").fill("31");
+  await page.getByLabel("Cible zonage Argent").blur();
+  await expect(page.getByLabel("Cible zonage Argent")).toHaveValue("31");
+
+  await page.getByRole("button", { name: "Activer", exact: true }).last().click();
+  await expect(page.locator(".administrator-active-badge strong")).toHaveText("Platine");
+  await expect(page.locator(".app-shell")).toHaveClass(/league-platine/);
+  await expect(page.locator(".top-league-badge")).toContainText("Platine");
+  const animationState = await page.evaluate(() => {
+    const cards = Array.from(document.querySelectorAll<HTMLElement>(".league-card"));
+    const reflections = cards.map((card) => getComputedStyle(card, "::after"));
+    return {
+      reflectionDurations: reflections.map((style) => style.animationDuration),
+      reflectionDelays: reflections.map((style) => style.animationDelay),
+      sceneAnimation: getComputedStyle(document.querySelector<HTMLElement>(".administrator-scene")!, "::after").display,
+      sceneBackground: getComputedStyle(document.querySelector<HTMLElement>(".administrator-scene")!).backgroundImage,
+      cardOverflow: cards.every((card) => getComputedStyle(card).overflow === "hidden"),
+    };
+  });
+  expect(animationState).toEqual({
+    reflectionDurations: ["6.5s", "6.5s", "6.5s", "6.5s"],
+    reflectionDelays: ["0s", "0s", "0s", "0s"],
+    sceneAnimation: "none",
+    sceneBackground: expect.stringContaining("administrator-coach-office.png"),
+    cardOverflow: true,
+  });
+
+  await page.reload();
+  await expect(page.locator(".agency-pill")).toContainText("Agen - 058");
+  await page.getByRole("button", { name: "ADM Administrateur", exact: true }).click();
+  await expect(page.locator(".administrator-page")).toBeVisible();
+  await expect(page.getByLabel("Modifier zonage Argent")).toHaveValue("31");
+  await expect(page.getByLabel("Modifier chargement Argent")).toHaveValue("00:02:45");
+  await expect(page.locator(".administrator-active-badge strong")).toHaveText("Platine");
+  await expect(page.locator(".app-shell")).toHaveClass(/league-platine/);
+  await expect(page.locator(".top-league-badge")).toContainText("Platine");
 });
 
 test("le nom de l'agence connectée reste correct dans tous les onglets", async ({ page }) => {

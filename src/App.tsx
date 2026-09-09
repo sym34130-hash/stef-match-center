@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   AlertTriangle,
+  Award,
   ArrowLeft,
   ArrowRight,
   BarChart3,
@@ -10,6 +11,7 @@ import {
   CirclePlay,
   ClipboardList,
   Clock3,
+  Crown,
   Dumbbell,
   Edit3,
   Eye,
@@ -19,6 +21,7 @@ import {
   LayoutDashboard,
   Lock,
   Maximize2,
+  Medal,
   MousePointerClick,
   Minimize2,
   RefreshCw,
@@ -26,7 +29,9 @@ import {
   Shield,
   Shirt,
   Sparkles,
+  Settings2,
   Target,
+  Trophy,
   Upload,
   Users,
   XCircle,
@@ -71,7 +76,8 @@ type CauserieToast = {
   tone: "success" | "warning" | "error" | "loading";
 } | null;
 
-type Screen = "kickoff" | "match" | "composition" | "player" | "coach" | "tv" | "import" | "guide";
+type Screen = "kickoff" | "match" | "composition" | "player" | "coach" | "tv" | "import" | "guide" | "admin";
+type CompositionViewId = "full" | "first" | "second" | "q1" | "q2" | "q3" | "q4" | "custom";
 
 const screens: Array<{ id: Exclude<Screen, "player">; label: string; icon: LucideIcon; step: string }> = [
   { id: "kickoff", label: "Coup d'envoi", icon: CirclePlay, step: "01" },
@@ -81,7 +87,29 @@ const screens: Array<{ id: Exclude<Screen, "player">; label: string; icon: Lucid
   { id: "tv", label: "Écran quai", icon: Eye, step: "05" },
   { id: "import", label: "Import", icon: Upload, step: "MAJ" },
   { id: "guide", label: "Guide", icon: BookOpen, step: "?" },
+  { id: "admin", label: "Administrateur", icon: Settings2, step: "ADM" },
 ];
+
+type LeagueId = "bronze" | "argent" | "or" | "platine";
+
+const leagueOptions: Array<{
+  id: LeagueId;
+  label: string;
+  tone: "bronze" | "silver" | "gold" | "platinum";
+  description: string;
+  zonageMinutes: number;
+  loadingSeconds: number;
+}> = [
+  { id: "bronze", label: "Bronze", tone: "bronze", description: "Un niveau accessible pour installer les standards.", zonageMinutes: 45, loadingSeconds: 195 },
+  { id: "argent", label: "Argent", tone: "silver", description: "Le niveau de référence actuellement proposé.", zonageMinutes: 30, loadingSeconds: 165 },
+  { id: "or", label: "Or", tone: "gold", description: "Un niveau plus exigeant pour tirer la performance vers le haut.", zonageMinutes: 25, loadingSeconds: 150 },
+  { id: "platine", label: "Platine", tone: "platinum", description: "Le niveau d’excellence, à confirmer sur plusieurs imports.", zonageMinutes: 20, loadingSeconds: 135 },
+];
+
+function readActiveLeague(agencyCode: string): LeagueId {
+  const saved = localStorage.getItem(`stef-match-active-league-${agencyCode}`);
+  return leagueOptions.some((league) => league.id === saved) ? saved as LeagueId : "argent";
+}
 
 type CompositionRole = "Attaquant" | "Milieu" | "Défenseur";
 type MatchCeremonyTone = "victory" | "controlled" | "finalize" | "rework";
@@ -144,6 +172,7 @@ const kickoffScenePlayers: Array<{
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
+  const [activeLeague, setActiveLeague] = useState<LeagueId>("argent");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [screen, setScreen] = useState<Screen>("kickoff");
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
@@ -173,6 +202,10 @@ export default function App() {
     return () => document.body.classList.remove("tv-screen-active");
   }, [screen]);
 
+  useEffect(() => {
+    setActiveLeague(session ? readActiveLeague(session.agency.code) : "argent");
+  }, [session?.agency.code]);
+
   async function handleLogin(agencyCode: string, accessCode: string) {
     setLoading(true);
     setStatusMessage("");
@@ -186,6 +219,7 @@ export default function App() {
       if (!response.ok) throw new Error(payload.message ?? "Accès refusé.");
       const nextSession = { agency: payload.agency, accessCode };
       setSession(nextSession);
+      setActiveLeague(readActiveLeague(agencyCode));
       sessionStorage.setItem("stef-match-session", JSON.stringify(nextSession));
       setSnapshot(await fetchSnapshot(nextSession).catch(() => null));
       setScreen("kickoff");
@@ -199,6 +233,7 @@ export default function App() {
   async function handleLogout() {
     sessionStorage.removeItem("stef-match-session");
     setSession(null);
+    setActiveLeague("argent");
     setSnapshot(null);
     setSelectedPlayer(null);
     setScreen("kickoff");
@@ -222,9 +257,10 @@ export default function App() {
   }
 
   const playerScreen = screen === "player";
+  const activeLeagueConfig = leagueOptions.find((league) => league.id === activeLeague) ?? leagueOptions[1];
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell league-${activeLeagueConfig.id}`}>
       <aside className="sidebar">
         <div className="brand-block">
           <div className="brand-mark">FC STEF</div>
@@ -246,6 +282,7 @@ export default function App() {
                 type="button"
                 className={screen === item.id ? "nav-item active" : "nav-item"}
                 aria-label={`${item.step} ${item.label}`}
+                disabled={snapshotLoading && !snapshot}
                 onClick={() => setScreen(item.id)}
               >
                 <span className="nav-step">{item.step}</span>
@@ -265,13 +302,14 @@ export default function App() {
         <TopBar
           snapshot={snapshot}
           agency={session.agency}
+          activeLeague={activeLeagueConfig}
           onRefresh={refreshSnapshot}
           onTimeRangeChange={(start, end) => updateTimeRange(session, start, end).then(setSnapshot)}
           loading={snapshotLoading}
         />
         {snapshotLoading && !snapshot ? (
           <LoadingView />
-        ) : !snapshot && screen !== "import" && screen !== "kickoff" && screen !== "guide" && screen !== "tv" ? (
+        ) : !snapshot && screen !== "import" && screen !== "kickoff" && screen !== "guide" && screen !== "tv" && screen !== "admin" ? (
           <NoDataView onImport={() => setScreen("import")} />
         ) : (
           <div className="screen-transition" key={`${screen}-${snapshot?.importedAt ?? "empty"}`}>
@@ -285,12 +323,13 @@ export default function App() {
             {screen === "match" && snapshot && (
               <MatchSheet
                 snapshot={snapshot}
+                activeLeague={activeLeague}
                 onPlayer={openPlayer}
                 onCoach={() => setScreen("coach")}
                 onComposition={() => setScreen("composition")}
               />
             )}
-            {screen === "composition" && snapshot && <Composition snapshot={snapshot} onPlayer={openPlayer} />}
+            {screen === "composition" && snapshot && <Composition snapshot={snapshot} session={session} onPlayer={openPlayer} />}
             {playerScreen && snapshot && selectedPlayer && (
               <PlayerSheet
                 snapshot={snapshot}
@@ -304,6 +343,7 @@ export default function App() {
             )}
             {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} onMatch={() => setScreen("match")} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
             {screen === "guide" && <GuideView snapshot={snapshot} onNavigate={setScreen} />}
+            {screen === "admin" && <AdministratorView agencyCode={session.agency.code} activeLeague={activeLeague} onActiveLeagueChange={setActiveLeague} />}
             {screen === "import" && (
               <ImportView
                 session={session}
@@ -342,6 +382,20 @@ async function updateTimeRange(session: Session, start: string, end: string): Pr
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message ?? "La plage horaire n'a pas pu être actualisée.");
   return payload.snapshot;
+}
+
+async function fetchCompositionRange(session: Session, start: string, end: string): Promise<{ label: string; players: Player[] }> {
+  const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/composition-range`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-access-code": session.accessCode,
+    },
+    body: JSON.stringify({ start, end }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message ?? "La sous-plage de composition n'a pas pu être chargée.");
+  return { label: payload.range.label, players: payload.players };
 }
 
 async function fetchCauseriePlan(session: Session, snapshot: Snapshot): Promise<CauseriePlan | null> {
@@ -475,7 +529,7 @@ function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string
   );
 }
 
-function TopBar({ snapshot, agency, onRefresh, onTimeRangeChange, loading }: { snapshot: Snapshot | null; agency: Agency; onRefresh: () => void; onTimeRangeChange: (start: string, end: string) => Promise<void>; loading: boolean }) {
+function TopBar({ snapshot, agency, activeLeague, onRefresh, onTimeRangeChange, loading }: { snapshot: Snapshot | null; agency: Agency; activeLeague: (typeof leagueOptions)[number]; onRefresh: () => void; onTimeRangeChange: (start: string, end: string) => Promise<void>; loading: boolean }) {
   const [start, setStart] = useState(snapshot?.match.periodStart ?? "13:00");
   const [end, setEnd] = useState(snapshot?.match.periodEnd ?? "22:30");
   const [savingRange, setSavingRange] = useState(false);
@@ -511,6 +565,11 @@ function TopBar({ snapshot, agency, onRefresh, onTimeRangeChange, loading }: { s
         <h2>{agency.name}</h2>
       </div>
       <div className="top-actions">
+        <div className={`top-league-badge ${activeLeague.tone}`} aria-label={`Ligue active : ${activeLeague.label}`}>
+          <LeagueIcon leagueId={activeLeague.id} size={17} />
+          <span>Ligue</span>
+          <strong>{activeLeague.label}</strong>
+        </div>
         {snapshot && (
           <form className="time-range-control" onSubmit={submitTimeRange}>
             <span><Clock3 size={15} /> Plage active</span>
@@ -791,7 +850,7 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
   );
 }
 
-function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: Snapshot; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void }) {
+function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }: { snapshot: Snapshot; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void }) {
   const [celebrationMode, setCelebrationMode] = useState(false);
   const [thresholdPulse, setThresholdPulse] = useState(false);
   const [editingKpis, setEditingKpis] = useState(false);
@@ -853,7 +912,8 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
         <div className="match-result-stage">
           <div className={`match-emblem ${outcome.celebration ? "trophy" : "signal"}`} aria-hidden="true">
             {outcome.celebration ? (
-              <span className="trophy-cup">
+              <span className={`trophy-cup league-trophy ${activeLeague}`}>
+                <LeagueIcon leagueId={activeLeague} size={42} className="league-trophy-icon" />
                 <i />
               </span>
             ) : (
@@ -868,16 +928,13 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
               <b><AnimatedNumber value={snapshot.match.score} /></b>
               <small>%</small>
             </div>
+            <div className="operational-score-card" aria-label="Score opérationnel">
+              <span>Score chargement</span>
+              <strong>{snapshot.operationalScore?.goalsFor ?? 0} - {snapshot.operationalScore?.goalsAgainst ?? 0}</strong>
+            </div>
             <p>{outcome.message}</p>
           </div>
 
-          <div className="match-result-actions">
-            <p>{snapshot.match.objective}</p>
-            <button className="primary-button compact" type="button" onClick={onCoach}>
-              Voir les actions
-              <ArrowRight size={16} />
-            </button>
-          </div>
         </div>
 
         <div className="team-performance-panel">
@@ -887,6 +944,23 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
             <p>{outcome.collectiveDetail}</p>
           </div>
           <div className="match-kpi-wrap">
+            <div className="match-kpi-board">
+            <div>
+              <span>Duels gagnés</span>
+              {editingKpis ? <div className="kpi-edit-value"><input className="kpi-value-input" type="number" min="0" max="100" step="0.1" inputMode="decimal" value={kpiCopy.duelValue || String(snapshot.summary.duelRate)} onChange={(event) => setKpiCopy({ ...kpiCopy, duelValue: event.target.value })} aria-label="Pourcentage des duels gagnés" /><b>%</b></div> : <strong>{formatEditableKpiValue(kpiCopy.duelValue, snapshot.summary.duelRate, "%")}</strong>}
+              <small>Dénominateur Excel filtré · {snapshot.match.dzTargetMinutes} min</small>
+            </div>
+            <div>
+              <span>TONNAGE</span>
+              {editingKpis ? <input className="kpi-value-input" type="number" min="0" step="1" inputMode="numeric" value={kpiCopy.tonnageValue} onChange={(event) => setKpiCopy({ ...kpiCopy, tonnageValue: event.target.value })} aria-label="Tonnage manuel" /> : <strong>{formatManualKpiValue(kpiCopy.tonnageValue)}</strong>}
+              <small>Volume filtré Excel</small>
+            </div>
+            <div>
+              <span>Positions</span>
+              {editingKpis ? <input className="kpi-value-input" type="number" min="0" step="1" inputMode="numeric" value={kpiCopy.positionsValue || String(snapshot.summary.positions)} onChange={(event) => setKpiCopy({ ...kpiCopy, positionsValue: event.target.value })} aria-label="Positions" /> : <strong>{formatEditableKpiValue(kpiCopy.positionsValue, snapshot.summary.positions)}</strong>}
+              <small>Retenues dans le match</small>
+            </div>
+            </div>
             <div className="match-kpi-actions">
               {editingKpis ? (
                 <>
@@ -897,23 +971,6 @@ function MatchSheet({ snapshot, onPlayer, onCoach, onComposition }: { snapshot: 
               ) : (
                 <button className="secondary-button compact" type="button" onClick={() => setEditingKpis(true)}><Edit3 size={15} />Modifier les chiffres</button>
               )}
-            </div>
-            <div className="match-kpi-board">
-            <div>
-              <span>Duels gagnés</span>
-              {editingKpis ? <div className="kpi-edit-value"><input className="kpi-value-input" type="number" min="0" max="100" step="0.1" inputMode="decimal" value={kpiCopy.duelValue || String(snapshot.summary.duelRate)} onChange={(event) => setKpiCopy({ ...kpiCopy, duelValue: event.target.value })} aria-label="Pourcentage des duels gagnés" /><b>%</b></div> : <strong>{formatEditableKpiValue(kpiCopy.duelValue, snapshot.summary.duelRate, "%")}</strong>}
-              <small>Dénominateur Excel filtré · {snapshot.match.dzTargetMinutes} min</small>
-            </div>
-            <div>
-              <span>TONNAGE</span>
-              {editingKpis ? <input className="kpi-value-input" type="number" min="0" step="1" inputMode="numeric" value={kpiCopy.tonnageValue} onChange={(event) => setKpiCopy({ ...kpiCopy, tonnageValue: event.target.value })} aria-label="Tonnage manuel" /> : <strong>{formatEditableKpiValue(kpiCopy.tonnageValue, undefined)}</strong>}
-              <small>Volume filtré Excel</small>
-            </div>
-            <div>
-              <span>Positions</span>
-              {editingKpis ? <input className="kpi-value-input" type="number" min="0" step="1" inputMode="numeric" value={kpiCopy.positionsValue || String(snapshot.summary.positions)} onChange={(event) => setKpiCopy({ ...kpiCopy, positionsValue: event.target.value })} aria-label="Positions" /> : <strong>{formatEditableKpiValue(kpiCopy.positionsValue, snapshot.summary.positions)}</strong>}
-              <small>Retenues dans le match</small>
-            </div>
             </div>
           </div>
         </div>
@@ -1019,10 +1076,10 @@ function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
       <div className="loading-quality-heading">
         <div>
           <span>Chargements</span>
-          <strong>Tirs (chargements)</strong>
-          <p className="loading-quality-explanation">Un chargement est « cadré » lorsque son temps moyen par position respecte la cible de 2 min 45 s et les critères de contrôle. « Non cadré » signifie qu’il doit être vérifié dans le détail.</p>
+          <strong>Chargements contrôlés</strong>
+          <p className="loading-quality-explanation">Le score compte des chargements, pas des positions. Les chargements non cadrés dépassent 2 min 45 s par position. Le tableau détaille les voyages séparément : le nombre de positions affiché sur une ligne ne représente pas le total des {formatNumber(quality.offTarget)} chargements non cadrés.</p>
         </div>
-        {hasData && <b>{formatNumber(total)} au total</b>}
+        {hasData && <b>{formatNumber(total)} chargements</b>}
       </div>
       {hasData ? (
         <div className="loading-quality-overview">
@@ -1034,8 +1091,8 @@ function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
             <span>{formatNumber(quality.targetedPercent)}%</span>
           </div>
           <div className="loading-quality-legend">
-            <span><i className="is-targeted" />Cadrés <b>{formatNumber(quality.targeted)} · {formatNumber(quality.targetedPercent)}%</b></span>
-            <span><i className="is-off-target" />Non cadrés <b>{formatNumber(quality.offTarget)} · {formatNumber(quality.offTargetPercent)}%</b></span>
+            <span><i className="is-targeted" />Cadrés <b>{formatNumber(quality.targeted)} chargements · {formatNumber(quality.targetedPercent)}%</b></span>
+            <span><i className="is-off-target" />Non cadrés <b>{formatNumber(quality.offTarget)} chargements · {formatNumber(quality.offTargetPercent)}%</b></span>
           </div>
         </div>
       ) : (
@@ -1043,8 +1100,8 @@ function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
       )}
       {quality.nonTargetedShots.length > 0 && (
         <div className="loading-quality-table-wrap">
-          <div className="loading-quality-table-title">Tirs non cadrés</div>
-          <div className="loading-quality-table" role="table" aria-label="Tirs non cadrés">
+          <div className="loading-quality-table-title">Détails des chargements non cadrés</div>
+          <div className="loading-quality-table" role="table" aria-label="Détails des chargements non cadrés">
             <div className="loading-quality-table-row is-head" role="row">
               <span>Voyage</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Où ?</span>
             </div>
@@ -1170,16 +1227,31 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   );
 }
 
-function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (player: Player) => void }) {
+function Composition({ snapshot, session, onPlayer }: { snapshot: Snapshot; session: Session; onPlayer: (player: Player) => void }) {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [fieldMode, setFieldMode] = useState(false);
-  const [compositionHalf, setCompositionHalf] = useState<"full" | "first" | "second">("full");
-  const periodPlayers = compositionHalf === "full"
+  const [compositionView, setCompositionView] = useState<CompositionViewId>("full");
+  const [customStart, setCustomStart] = useState(snapshot.match.periodStart ?? "13:00");
+  const [customEnd, setCustomEnd] = useState(snapshot.match.periodEnd ?? "22:30");
+  const [customComposition, setCustomComposition] = useState<{ label: string; players: Player[] } | null>(null);
+  const [customLoading, setCustomLoading] = useState(false);
+  const [customError, setCustomError] = useState("");
+  const selectedPeriod = compositionView === "first" || compositionView === "second"
+    ? snapshot.compositionPeriods?.[compositionView]
+    : null;
+  const selectedQuarter = compositionView.startsWith("q")
+    ? snapshot.compositionPeriods?.quarters?.find((quarter) => quarter.id === compositionView)
+    : null;
+  const periodPlayers = compositionView === "full"
     ? snapshot.players
-    : snapshot.compositionPeriods?.[compositionHalf].players ?? snapshot.players;
-  const periodLabel = compositionHalf === "full"
+    : compositionView === "custom"
+      ? customComposition?.players ?? snapshot.players
+      : selectedPeriod?.players ?? selectedQuarter?.players ?? snapshot.players;
+  const periodLabel = compositionView === "full"
     ? snapshot.match.timeRangeLabel
-    : snapshot.compositionPeriods?.[compositionHalf].label ?? snapshot.match.timeRangeLabel;
+    : compositionView === "custom"
+      ? customComposition?.label ?? `${customStart} - ${customEnd}`
+      : selectedPeriod?.label ?? selectedQuarter?.label ?? snapshot.match.timeRangeLabel;
   const groups = buildCompositionGroups(periodPlayers);
   const selectedPlayer = selectedName ? periodPlayers.find((player) => player.name === selectedName) ?? null : null;
   const categoryWinnerNames = new Set(
@@ -1202,8 +1274,37 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
   }, [fieldMode]);
 
   useEffect(() => {
+    setCompositionView("full");
+    setCustomStart(snapshot.match.periodStart ?? "13:00");
+    setCustomEnd(snapshot.match.periodEnd ?? "22:30");
+    setCustomComposition(null);
+    setCustomError("");
+  }, [snapshot.importedAt, snapshot.match.periodStart, snapshot.match.periodEnd]);
+
+  useEffect(() => {
     if (selectedName && !periodPlayers.some((player) => player.name === selectedName)) setSelectedName(null);
-  }, [compositionHalf, selectedName, periodPlayers]);
+  }, [compositionView, customComposition, selectedName, periodPlayers]);
+
+  function selectCompositionView(next: CompositionViewId) {
+    setCompositionView(next);
+    setCustomError("");
+    if (next !== "custom") setCustomComposition(null);
+  }
+
+  async function applyCustomComposition(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCustomLoading(true);
+    setCustomError("");
+    try {
+      const result = await fetchCompositionRange(session, customStart, customEnd);
+      setCustomComposition(result);
+      setCompositionView("custom");
+    } catch (error) {
+      setCustomError(error instanceof Error ? error.message : "La sous-plage n'a pas pu être chargée.");
+    } finally {
+      setCustomLoading(false);
+    }
+  }
 
   return (
     <section className={fieldMode ? "composition-page is-field-mode" : "composition-page"}>
@@ -1216,22 +1317,68 @@ function Composition({ snapshot, onPlayer }: { snapshot: Snapshot; onPlayer: (pl
           <ActivePeriodBadge snapshot={snapshot} />
         </div>
         <div className="composition-header-actions">
-          <div className="composition-half-switch" role="group" aria-label="Période de composition">
+          <div className="composition-period-controls">
+            <div className="composition-control-group">
+              <span>Périodes du match</span>
+              <div className="composition-half-switch" role="group" aria-label="Périodes du match">
             {([
               ["full", "Match complet"],
               ["first", "1ère mi-temps"],
               ["second", "2ème mi-temps"],
             ] as const).map(([value, label]) => (
               <button
-                className={compositionHalf === value ? "is-active" : ""}
+                className={compositionView === value ? "is-active" : ""}
                 key={value}
                 type="button"
-                aria-pressed={compositionHalf === value}
-                onClick={() => setCompositionHalf(value)}
+                aria-pressed={compositionView === value}
+                onClick={() => selectCompositionView(value)}
               >
                 {label}
               </button>
             ))}
+              </div>
+            </div>
+            <div className="composition-control-group">
+              <span>Quarts-temps</span>
+              <div className="composition-half-switch" role="group" aria-label="Quarts-temps">
+                {([
+                  ["q1", "1er quart"],
+                  ["q2", "2e quart"],
+                  ["q3", "3e quart"],
+                  ["q4", "4e quart"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    className={compositionView === value ? "is-active" : ""}
+                    key={value}
+                    type="button"
+                    aria-pressed={compositionView === value}
+                    onClick={() => selectCompositionView(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <form className="composition-custom-range" onSubmit={applyCustomComposition}>
+              <span>Vue personnalisée</span>
+              <div className="composition-custom-fields">
+                <label>
+                  <span>Début</span>
+                  <input aria-label="Début de la vue personnalisée" type="time" min={snapshot.match.periodStart} max={snapshot.match.periodEnd} step={1800} value={customStart} onChange={(event) => setCustomStart(event.target.value)} />
+                </label>
+                <b aria-hidden="true">à</b>
+                <label>
+                  <span>Fin</span>
+                  <input aria-label="Fin de la vue personnalisée" type="time" min={snapshot.match.periodStart} max={snapshot.match.periodEnd} step={1800} value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} />
+                </label>
+                <button className="composition-range-apply" type="submit" disabled={customLoading}>
+                  <RefreshCw size={14} className={customLoading ? "is-spinning" : ""} />
+                  {customLoading ? "Chargement" : "Afficher"}
+                </button>
+              </div>
+              <small>Dans la plage active · pas de 30 min · KPI globaux inchangés</small>
+              {customError && <small className="composition-range-error" role="alert">{customError}</small>}
+            </form>
           </div>
           <button className="secondary-on-dark" type="button" onClick={() => setFieldMode((current) => !current)}>
             {fieldMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
@@ -2528,7 +2675,15 @@ function TvMode({ snapshot, session, onMatch, onExit }: { snapshot: Snapshot; se
                 </>
               ) : (
                 <>
-                  <span className="tv-plan-content">{plan[zone].filter(Boolean).join("\n") || "À renseigner"}</span>
+                  {plan[zone].filter(Boolean).join("\n").trim() ? (
+                    <span className="tv-plan-content">{plan[zone].filter(Boolean).join("\n")}</span>
+                  ) : (
+                    <div className="tv-plan-empty-state" aria-label={`${label}, zone vide`}>
+                      <ClipboardList size={26} aria-hidden="true" />
+                      <strong>Brief à renseigner</strong>
+                      <span>Écris le brief ou dépose les captures ici.</span>
+                    </div>
+                  )}
                   {plan.attachments[zone].length > 0 && (
                     <div className="tv-plan-image-gallery" aria-label={`Captures du brief ${label}`}>
                       {plan.attachments[zone].map((src, index) => (
@@ -2582,7 +2737,138 @@ function TvMode({ snapshot, session, onMatch, onExit }: { snapshot: Snapshot; se
   );
 }
 
-type GuideSection = "start" | "excel" | "import" | "read" | "edit" | "help";
+function AdministratorView({ agencyCode, activeLeague, onActiveLeagueChange }: { agencyCode: string; activeLeague: LeagueId; onActiveLeagueChange: (league: LeagueId) => void }) {
+  const leagueConfigStorageKey = `stef-match-league-configs-${agencyCode}`;
+  const activeLeagueStorageKey = `stef-match-active-league-${agencyCode}`;
+  const [leagueConfigs, setLeagueConfigs] = useState(() => {
+    const saved = localStorage.getItem(leagueConfigStorageKey);
+    if (!saved) return leagueOptions;
+    try {
+      const parsed = JSON.parse(saved) as Array<Partial<(typeof leagueOptions)[number]>>;
+      return leagueOptions.map((defaultLeague) => {
+        const savedLeague = parsed.find((league) => league.id === defaultLeague.id);
+        return {
+          ...defaultLeague,
+          zonageMinutes: Number.isFinite(savedLeague?.zonageMinutes) ? Math.max(1, Number(savedLeague?.zonageMinutes)) : defaultLeague.zonageMinutes,
+          loadingSeconds: Number.isFinite(savedLeague?.loadingSeconds) ? Math.max(1, Number(savedLeague?.loadingSeconds)) : defaultLeague.loadingSeconds,
+        };
+      });
+    } catch {
+      return leagueOptions;
+    }
+  });
+  const [draftValues, setDraftValues] = useState<Record<string, string>>({});
+  const selectedLeague = leagueConfigs.find((league) => league.id === activeLeague) ?? leagueConfigs[1];
+
+  function selectLeague(id: LeagueId) {
+    onActiveLeagueChange(id);
+    localStorage.setItem(activeLeagueStorageKey, id);
+  }
+
+  function leagueDraftKey(id: LeagueId, field: "zonageMinutes" | "loadingSeconds") {
+    return `${id}-${field}`;
+  }
+
+  function setLeagueDraft(id: LeagueId, field: "zonageMinutes" | "loadingSeconds", value: string) {
+    setDraftValues((current) => ({ ...current, [leagueDraftKey(id, field)]: value }));
+  }
+
+  function commitLeague(id: LeagueId, field: "zonageMinutes" | "loadingSeconds", value: string | number) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue) || numericValue < 1) {
+      setDraftValues((current) => {
+        const nextDrafts = { ...current };
+        delete nextDrafts[leagueDraftKey(id, field)];
+        return nextDrafts;
+      });
+      return;
+    }
+    const next = leagueConfigs.map((league) => league.id === id ? { ...league, [field]: Math.round(numericValue) } : league);
+    setLeagueConfigs(next);
+    localStorage.setItem(leagueConfigStorageKey, JSON.stringify(next));
+    setDraftValues((current) => {
+      const nextDrafts = { ...current };
+      delete nextDrafts[leagueDraftKey(id, field)];
+      return nextDrafts;
+    });
+  }
+
+  function leagueInputValue(id: LeagueId, field: "zonageMinutes" | "loadingSeconds", value: number) {
+    return draftValues[leagueDraftKey(id, field)] ?? (field === "loadingSeconds" ? formatTimeInput(value) : String(value));
+  }
+
+  return (
+    <section className="administrator-page">
+      <header className="administrator-header">
+        <div>
+          <p className="eyebrow">ADM · Configuration</p>
+          <h2>Centre de pilotage des ligues</h2>
+          <p>Choisir un niveau de référence pour comparer les objectifs opérationnels du match.</p>
+        </div>
+        <div className={`administrator-active-badge ${selectedLeague.tone}`}>
+          <LeagueIcon leagueId={selectedLeague.id} />
+          <span>Ligue active</span>
+          <strong>{selectedLeague.label}</strong>
+        </div>
+      </header>
+
+      <div className="administrator-scene">
+        <div className="administrator-scene-backdrop" aria-hidden="true">
+          <span className="administrator-scene-tag">BUREAU DU COACH · VUE STADE</span>
+          <span className="administrator-window-label">PILOTAGE EN DIRECT</span>
+        </div>
+
+        <div className="administrator-desk">
+          <div className="administrator-desk-top" aria-hidden="true"><span /><span /><span /></div>
+          <div className="administrator-desk-content">
+            <div className="administrator-console-heading">
+              <div><span>Tableau des standards</span><strong>Paramètres de performance</strong></div>
+              <Settings2 size={22} />
+            </div>
+            <div className="administrator-rule-strip">
+              <label><Target size={18} /><span>Zonage · cible en minutes</span><input aria-label={`Cible zonage ${selectedLeague.label}`} type="number" min="1" step="1" value={leagueInputValue(selectedLeague.id, "zonageMinutes", selectedLeague.zonageMinutes)} onChange={(event) => setLeagueDraft(selectedLeague.id, "zonageMinutes", event.target.value)} onBlur={(event) => commitLeague(selectedLeague.id, "zonageMinutes", event.target.value)} /></label>
+              <label><Clock3 size={18} /><span>Chargement · temps maximum</span><input aria-label={`Temps chargement ${selectedLeague.label}`} type="text" inputMode="numeric" maxLength={8} placeholder="HH:MM:SS" value={leagueInputValue(selectedLeague.id, "loadingSeconds", selectedLeague.loadingSeconds)} onChange={(event) => setLeagueDraft(selectedLeague.id, "loadingSeconds", event.target.value)} onBlur={(event) => commitLeague(selectedLeague.id, "loadingSeconds", parseTimeInput(event.target.value))} /></label>
+            </div>
+            <p className="administrator-note"><Sparkles size={17} /> Les seuils sont modifiables et mémorisés sur ce poste. Leur application aux scores du match interviendra après validation du référentiel.</p>
+          </div>
+        </div>
+      </div>
+
+      <section className="administrator-leagues" aria-labelledby="league-comparison-title">
+        <div className="administrator-section-heading"><div><span className="eyebrow">Référentiel</span><h3 id="league-comparison-title">Comparer les niveaux</h3></div><span className="administrator-validation-state"><AlertTriangle size={16} /> À valider avant déploiement</span></div>
+        <div className="league-grid">
+          {leagueConfigs.map((league) => (
+            <article key={league.id} className={`league-card ${league.tone} ${activeLeague === league.id ? "is-selected" : ""}`}>
+              <span className="league-medal"><LeagueIcon leagueId={league.id} /></span>
+              <div className="league-card-top"><strong>{league.label}</strong><button className="league-select-button" type="button" onClick={() => selectLeague(league.id)} aria-pressed={activeLeague === league.id}>{activeLeague === league.id ? "Sélectionnée" : "Activer"}</button></div>
+              <span className="league-description">{league.description}</span>
+              <div className="league-values"><label><small>Zonage · min</small><input aria-label={`Modifier zonage ${league.label}`} type="number" min="1" step="1" value={leagueInputValue(league.id, "zonageMinutes", league.zonageMinutes)} onChange={(event) => setLeagueDraft(league.id, "zonageMinutes", event.target.value)} onBlur={(event) => commitLeague(league.id, "zonageMinutes", event.target.value)} /></label><label><small>Chargement · HH:MM:SS</small><input aria-label={`Modifier chargement ${league.label}`} type="text" inputMode="numeric" maxLength={8} placeholder="HH:MM:SS" value={leagueInputValue(league.id, "loadingSeconds", league.loadingSeconds)} onChange={(event) => setLeagueDraft(league.id, "loadingSeconds", event.target.value)} onBlur={(event) => commitLeague(league.id, "loadingSeconds", parseTimeInput(event.target.value))} /></label></div>
+            </article>
+          ))}
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function formatTimeInput(totalSeconds: number) {
+  const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, "0");
+  const minutes = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, "0");
+  const seconds = Math.round(totalSeconds % 60).toString().padStart(2, "0");
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+function parseTimeInput(value: string) {
+  const [hours, minutes, seconds] = value.split(":").map(Number);
+  return (hours || 0) * 3600 + (minutes || 0) * 60 + (seconds || 0);
+}
+
+function LeagueIcon({ leagueId, size = 20, className = "administrator-trophy" }: { leagueId: LeagueId; size?: number; className?: string }) {
+  const Icon = leagueId === "bronze" ? Medal : leagueId === "argent" ? Award : leagueId === "or" ? Trophy : Crown;
+  return <Icon className={className} size={size} aria-hidden="true" />;
+}
+
+type GuideSection = "start" | "excel" | "import" | "read" | "edit" | "admin" | "help";
 
 function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavigate: (screen: Screen) => void }) {
   const [section, setSection] = useState<GuideSection>("start");
@@ -2593,7 +2879,8 @@ function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavi
     { id: "import", number: "03", label: "Importer & actualiser" },
     { id: "read", number: "04", label: "Lire les écrans" },
     { id: "edit", number: "05", label: "Modifier le plan" },
-    { id: "help", number: "06", label: "Points d’attention" },
+    { id: "admin", number: "06", label: "Administrateur" },
+    { id: "help", number: "07", label: "Points d’attention" },
   ];
   const activeIndex = sections.findIndex((item) => item.id === section);
   const previousSection = sections[Math.max(0, activeIndex - 1)]?.id ?? "start";
@@ -2650,6 +2937,7 @@ function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavi
                 <GuideFlowStep number="4" title="Agir" detail="Utiliser Coach puis l’Écran quai pour préparer et afficher le brief avec la plage horaire choisie." tone="red" />
               </div>
               <div className="guide-callout success"><CheckCircle2 size={20} /><span><strong>Règle simple :</strong> chaque fois que la base Excel change, il faut refaire un import. Le bouton Actualiser sert ensuite à relire le dernier import enregistré.</span></div>
+              <div className="guide-callout info"><Shield size={20} /><span><strong>Un espace séparé par agence :</strong> Agen - 058 utilise <code>STEF-058</code>, Montpellier <code>STEF-01K</code>, Toulouse <code>STEF-05R</code> et Bordeaux <code>STEF-04P</code>. L’import est rattaché à l’agence connectée et ne se mélange pas avec les trois autres.</span></div>
               <div className="guide-actions">
                 <button className="primary-button" type="button" onClick={() => onNavigate("import")}><Upload size={17} /> Ouvrir l’import</button>
                 <button className="secondary-button" type="button" onClick={() => setSection("excel")}><ArrowRight size={17} /> Préparer Excel</button>
@@ -2723,13 +3011,13 @@ function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavi
             <GuidePanel eyebrow="04 · Lire les écrans" title="Quel écran utiliser, et pour quoi faire ?" icon={LayoutDashboard}>
               <div className="guide-screen-grid">
                 <GuideScreenCard step="01" title="Coup d’envoi" detail="Vue d’ouverture du match. Elle confirme que les données sont prêtes et donne accès à l’Écran quai." />
-                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score, duels, opérations, positions, joueurs clés par catégorie et contrôles d’import." />
-              <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. L’activité Réception correspond au scan de la palette." />
-                <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, tableau des points forts, sujets à travailler et prochaines actions." />
+                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score des duels, Score chargement, opérations, positions, joueurs clés par catégorie, challengers et contrôles d’import. Le Score chargement compare les chargements à 2 min 45 s ou moins avec ceux au-dessus de ce seuil." />
+              <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. Compare le match complet, les deux mi-temps ou les quatre quarts calculés depuis la plage active. Une vue personnalisée permet aussi d’isoler une sous-plage, par exemple 1 heure, sans modifier les indicateurs du match. L’activité Réception correspond au scan de la palette." />
+                <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, titres par catégorie, polyvalence, sujets à travailler et prochaines actions." />
                 <GuideScreenCard step="05" title="Écran quai" detail="Vue prioritaire du brief : score, indicateurs, joueurs clés par ligne et trois grandes zones visibles, empilées verticalement : SAV, Expédition, Ramasse & emballage. Chaque zone accepte du texte et plusieurs captures d’écran, avec affichage plein écran." />
               </div>
               <div className="guide-legend"><span className="legend-dot green" /> Vert = acquis ou action positive <span className="legend-dot orange" /> Orange = à surveiller <span className="legend-dot red" /> Rouge = action prioritaire</div>
-              <div className="guide-callout info"><Shield size={20} /><span><strong>Réception dans l’application :</strong> le code Excel interne <code>DECHG</code> reste inchangé pour les calculs, mais l’interface affiche <strong>Réception</strong>. Il s’agit du scan de la palette à la réception ; au déchargement, la palette est déposée en travée et aucune position n’est tracée.</span></div>
+              <div className="guide-callout info"><Shield size={20} /><span><strong>Réception dans l’application :</strong> le code interne <code>DECHG</code> reste inchangé pour les calculs, mais l’interface affiche <strong>Réception</strong>. Il s’agit du scan de la palette à la réception ; au déchargement, la palette est déposée en travée.</span></div>
             </GuidePanel>
           )}
 
@@ -2737,17 +3025,43 @@ function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavi
             <GuidePanel eyebrow="05 · Modifier le plan" title="Écrire des consignes sans casser les données" icon={Edit3}>
               <p>Les données Excel alimentent les indicateurs. Les textes du plan de jeu sont des consignes opérationnelles que vous pouvez adapter à la situation du jour.</p>
               <div className="guide-edit-grid">
+                <GuideEditCard title="Dans Feuille de match" detail="Cliquez sur Modifier les chiffres pour ajuster uniquement le pourcentage de duels gagnés, le tonnage manuel et les positions. Les titres restent fixes. Le tonnage affiche À renseigner tant qu’aucune valeur n’est saisie et ne s’additionne pas au prochain import." />
                 <GuideEditCard title="Dans Coach" detail="Cliquez sur Écrire dans le tableau du coach, complétez Tactique, Priorité, Arbitrage et Revue, puis Enregistrer." />
                 <GuideEditCard title="Dans l’Écran quai" detail="Cliquez sur Écrire dans Plan de jeu. Les trois zones sont empilées et entièrement visibles : saisissez le brief dans SAV, Expédition ou Ramasse & emballage, ajoutez plusieurs captures si nécessaire, puis enregistrez. Cet écran est désormais le support unique du brief." />
               </div>
+              <div className="guide-callout success"><CheckCircle2 size={20} /><span><strong>À retenir :</strong> les chiffres manuels sont mémorisés pour l’agence et le match affichés sur ce poste. Ils complètent la lecture opérationnelle sans modifier le fichier source importé.</span></div>
               <div className="guide-callout info"><Upload size={20} /><span><strong>Ajouter une capture d’écran :</strong> dans chaque zone de l’Écran quai, cliquez sur <strong>Ajouter une capture d’écran</strong>, puis choisissez une image PNG, JPG ou WebP. L’image est redimensionnée automatiquement, affichée dans la zone correspondante et sauvegardée avec le texte. Chaque catégorie conserve sa propre capture ; il n’y a pas de menu déroulant.</span></div>
               <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Important :</strong> si un message indique une sauvegarde locale uniquement, le texte est conservé sur ce poste mais peut ne pas être partagé avec les autres utilisateurs.</span></div>
               <div className="guide-actions"><button className="secondary-button" type="button" onClick={() => onNavigate("coach")}><Dumbbell size={17} /> Ouvrir Coach</button><button className="primary-button" type="button" onClick={() => onNavigate("tv")}><Eye size={17} /> Ouvrir Écran quai</button></div>
             </GuidePanel>
           )}
 
+          {section === "admin" && (
+            <GuidePanel eyebrow="06 · Administrateur" title="Régler les ligues et leurs standards" icon={Settings2}>
+              <p>L’onglet Administrateur sert à choisir un niveau de référence et à ajuster ses deux conditions de performance : la cible de zonage et le temps maximum de chargement.</p>
+              <div className="guide-action-list">
+                <GuideAction icon={Trophy} title="Choisir une ligue" tone="blue" detail="Activez Bronze, Argent, Or ou Platine. Le niveau sélectionné devient la référence affichée dans le centre de pilotage." />
+                <GuideAction icon={Target} title="Régler le zonage" tone="green" detail="Modifiez la cible en minutes directement dans le panneau de la ligue. Une valeur plus basse correspond à un standard plus exigeant." />
+                <GuideAction icon={Clock3} title="Régler le chargement" tone="orange" detail="Modifiez le temps maximum au format HH:MM:SS. Le seuil Argent proposé est 00:02:45." />
+              </div>
+              <h3>Référentiel proposé</h3>
+              <div className="guide-league-grid" aria-label="Référentiel visuel des ligues">
+                {leagueOptions.map((league) => (
+                  <article key={league.id} className={`guide-league-card ${league.tone}`}>
+                    <span className="guide-league-medal"><LeagueIcon leagueId={league.id} className="" /></span>
+                    <div className="guide-league-card-top"><strong>{league.label}</strong><span>{league.id === "argent" ? "Référence" : "Niveau"}</span></div>
+                    <p>{league.description}</p>
+                    <div className="guide-league-values"><div><small>Zonage</small><strong>{league.zonageMinutes} min</strong></div><div><small>Chargement</small><strong>{formatTimeInput(league.loadingSeconds)}</strong></div></div>
+                  </article>
+                ))}
+              </div>
+              <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Avant validation :</strong> les seuils et la ligue active sont mémorisés séparément pour chaque agence sur ce poste. Leur application automatique aux scores du match reste soumise à la validation du référentiel.</span></div>
+              <div className="guide-callout info"><Settings2 size={20} /><span><strong>Bon réflexe :</strong> vérifiez la ligue active, comparez les conditions avec le niveau attendu, puis contrôlez le résultat sur plusieurs imports avant toute diffusion officielle.</span></div>
+            </GuidePanel>
+          )}
+
           {section === "help" && (
-            <GuidePanel eyebrow="06 · Points d’attention" title="Les vérifications à faire avant de partager le résultat" icon={CircleHelp}>
+            <GuidePanel eyebrow="07 · Points d’attention" title="Les vérifications à faire avant de partager le résultat" icon={CircleHelp}>
               <div className="guide-checklist">
                 <GuideCheck title="Le bon fichier a été importé" detail="Vérifiez le nom du fichier et la date de dernière donnée affichée après l’import." />
                 <GuideCheck title="La plage horaire est la bonne" detail="Le badge Plage active doit correspondre au créneau que vous voulez analyser." />
@@ -3246,9 +3560,9 @@ function loadMatchKpiCopy(snapshot: Snapshot): MatchKpiCopy {
   try {
     const parsed = JSON.parse(saved) as Partial<MatchKpiCopy>;
     return normalizeMatchKpiCopy({
-      duelValue: defaults.duelValue,
+      duelValue: parsed.duelValue ?? defaults.duelValue,
       tonnageValue: parsed.tonnageValue ?? defaults.tonnageValue,
-      positionsValue: defaults.positionsValue,
+      positionsValue: parsed.positionsValue ?? defaults.positionsValue,
     }, snapshot);
   } catch {
     return defaults;
@@ -3282,6 +3596,13 @@ function formatEditableKpiValue(value: string, fallback?: number, suffix = "") {
   const parsed = Number(value);
   const display = Number.isFinite(parsed) ? formatNumber(parsed) : fallback === undefined ? "—" : formatNumber(fallback);
   return `${display}${suffix}`;
+}
+
+function formatManualKpiValue(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "À renseigner";
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? formatNumber(parsed) : "À renseigner";
 }
 
 function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
