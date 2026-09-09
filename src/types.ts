@@ -11,6 +11,7 @@ export type Player = {
   role: string;
   operations: number;
   positions: number;
+  positionsByType?: Partial<Record<"CHG" | "DECHG" | "ZONAGE", number>>;
   travels: number;
   byType: {
     CHG: number;
@@ -92,6 +93,44 @@ export type Snapshot = {
     excludedByPeriod?: number;
     excludedByOperator?: number;
     excludedFromScore?: number;
+  };
+  hourlyPerformance?: Array<{
+    label: string;
+    hour: number;
+    won: number;
+    total: number;
+    rate: number;
+  }>;
+  loadingQuality?: {
+    targeted: number;
+    offTarget: number;
+    targetedPercent: number;
+    offTargetPercent: number;
+    targetTimePerPosition?: string;
+    nonTargetedShots: Array<{
+      travelCode: string;
+      time: string;
+      positions: string;
+      timePerPosition: string;
+      where: string;
+    }>;
+  };
+  duelQuality?: {
+    won: number;
+    lost: number;
+    wonPercent: number;
+    lostPercent: number;
+    lostDuels: Array<{
+      travelCode: string;
+      agency: string;
+      time: string;
+      positions: number;
+      timePerPosition: string;
+    }>;
+  };
+  compositionPeriods?: {
+    first: { label: string; players: Player[] };
+    second: { label: string; players: Player[] };
   };
   highlights: {
     manOfTheMatch: Highlight;

@@ -297,10 +297,31 @@ async function saveImport(agencyCode, originalName, buffer, snapshot) {
 }
 
 async function readLatestSnapshot(agencyCode) {
-  const latestPath = path.join(dataDir, sanitizeSegment(agencyCode), "latest.json");
+  const agencyDir = path.join(dataDir, sanitizeSegment(agencyCode));
+  const latestPath = path.join(agencyDir, "latest.json");
   try {
-    const snapshot = normalizeSnapshotContract(JSON.parse(await fs.readFile(latestPath, "utf8")));
+    let snapshot = normalizeSnapshotContract(JSON.parse(await fs.readFile(latestPath, "utf8")));
     const agency = agencies.find((item) => String(item.code).toUpperCase() === String(agencyCode).toUpperCase());
+
+    // Older snapshots predate the hourly chart and half-time composition.
+    // Rebuild them once from the latest workbook so new views work without a second import.
+    if (!Array.isArray(snapshot.hourlyPerformance) || !snapshot.compositionPeriods || !snapshot.loadingQuality || !snapshot.duelQuality) {
+      try {
+        const workbook = await readLatestWorkbook(agencyDir);
+        const rebuilt = buildSnapshotFromWorkbook(
+          workbook,
+          snapshot.sourceName || "match.xlsx",
+          agency?.code || agencyCode
+        );
+        if (rebuilt.ok) {
+          snapshot = rebuilt.snapshot;
+          await fs.writeFile(latestPath, JSON.stringify(snapshot, null, 2), "utf8");
+        }
+      } catch {
+        // Keep serving the existing snapshot if its source workbook is absent.
+      }
+    }
+
     if (agency) {
       snapshot.agency.code = agency.code;
       snapshot.agency.name = agency.name;

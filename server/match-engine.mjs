@@ -103,7 +103,6 @@ export const KPI_DICTIONARY = [
 
 export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode, periodInput = {}) {
   const period = normalizeTimeRange(periodInput.start ?? DEFAULT_PERIOD_START, periodInput.end ?? DEFAULT_PERIOD_END);
-  period.useExcelPeriod = Object.keys(periodInput).length === 0;
   const workbook = XLSX.read(buffer, {
     type: "buffer",
     cellDates: true,
@@ -136,6 +135,9 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
 
   const headerRow = matrix[0].map((value) => String(value ?? ""));
   const columnMap = mapColumns(headerRow);
+  const isDerivedTemplate = isNewDataTemplate(headerRow) && !hasUsableCalculatedColumns(matrix.slice(1), columnMap);
+  period.useExcelPeriod = !isDerivedTemplate && Object.keys(periodInput).length === 0;
+  period.useDerivedRows = isDerivedTemplate;
   const missingColumns = Object.entries(REQUIRED_COLUMNS)
     .filter(([key]) => columnMap[key] === undefined)
     .map(([, aliases]) => aliases[0]);
@@ -191,10 +193,12 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     const segmentType = cleanText(raw.segmentType);
     const operatorFilter = cleanText(raw.operatorFilter);
     const hourFilter = cleanText(raw.hourFilter);
-    const post = cleanRole(raw.post) || OPERATION_ROLE[operationType] || "Joueur";
-    const unzonedFilter = cleanText(raw.unzonedFilter);
-    const dz = parseNumber(raw.dz);
-    const duelWonFlag = parseDuelFlag(raw.duelWonFlag);
+    const post = isDerivedTemplate
+      ? OPERATION_ROLE[operationType] || "Joueur"
+      : cleanRole(raw.post) || OPERATION_ROLE[operationType] || "Joueur";
+    const unzonedFilter = isDerivedTemplate ? "" : cleanText(raw.unzonedFilter);
+    const dz = isDerivedTemplate ? null : parseNumber(raw.dz);
+    const duelWonFlag = isDerivedTemplate ? null : parseDuelFlag(raw.duelWonFlag);
     const startedAt = parseExcelDate(raw.startedAt);
 
     const hasCriticalIssue = !operator || !operationType || !position || !raw.startedAt;
@@ -275,9 +279,13 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   }
 
   const matchRows = rows.filter((row) => isMatchRow(row, period));
-  const scoringRows = matchRows.filter((row) => isScoringRow(row, period));
+  const scoringRows = isDerivedTemplate
+    ? buildDerivedScoringRows(matchRows)
+    : matchRows.filter((row) => isScoringRow(row, period));
   const agencyCounts = countBy(matchRows.length > 0 ? matchRows : rows, (row) => row.agencySegment || "Non renseignée");
-  const detectedAgency = topEntry(agencyCounts)?.key ?? expectedAgencyCode;
+  const detectedAgency = isDerivedTemplate
+    ? expectedAgencyCode
+    : topEntry(agencyCounts)?.key ?? expectedAgencyCode;
   if (expectedAgencyCode && detectedAgency && detectedAgency !== expectedAgencyCode) {
     validation.warnings.push(
       `Agence majoritaire détectée : ${detectedAgency}. Espace importé : ${expectedAgencyCode}.`
@@ -288,6 +296,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     sourceRows: rows,
     matchRows,
     scoringRows,
+    workbook,
     sourceName,
     expectedAgencyCode,
     detectedAgency,
@@ -324,7 +333,7 @@ export function normalizeSnapshotContract(snapshot) {
   };
 }
 
-function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period }) {
+function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, workbook, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period }) {
   const importedAt = new Date();
   const firstOperation = minDate(matchRows.map((row) => row.startedAt));
   const lastOperation = maxDate(matchRows.map((row) => row.startedAt));
@@ -419,6 +428,10 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
       excludedByOperator: filterStats.excludedByOperator,
       excludedFromScore: filterStats.excludedFromScore,
     },
+    hourlyPerformance: buildHourlyPerformance(scoringRows),
+    loadingQuality: buildLoadingQuality(workbook),
+    duelQuality: buildDuelQuality(scoringRows, matchRows, positions, duelWon, duelTotal),
+    compositionPeriods: buildCompositionPeriods(matchRows, period),
     highlights: buildCategoryHighlights(categoryLeaders),
     players,
     positions,
@@ -436,6 +449,189 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
   };
 }
 
+function buildDuelQuality(scoringRows, matchRows, positions, duelWon, duelTotal) {
+  const lostRows = scoringRows.filter((row) => row.duelWonFlag === 0);
+  const lostPositionIds = new Set(lostRows.map((row) => row.position));
+  const travelGroups = new Map();
+  const allTravelRows = new Map();
+  for (const row of matchRows) {
+    const travelCode = row.travelCode || "Non renseigné";
+    if (!allTravelRows.has(travelCode)) allTravelRows.set(travelCode, []);
+    allTravelRows.get(travelCode).push(row);
+  }
+  for (const position of positions.filter((item) => lostPositionIds.has(item.id))) {
+    const travelCode = position.travelCode || "Non renseigné";
+    if (!travelGroups.has(travelCode)) {
+      travelGroups.set(travelCode, {
+        travelCode,
+        agency: position.agencySegment || "Non renseignée",
+        positions: 0,
+        firstOperation: null,
+        lastOperation: null,
+      });
+    }
+    const group = travelGroups.get(travelCode);
+    group.positions += 1;
+    const first = new Date(position.firstOperation);
+    const last = new Date(position.lastOperation);
+    group.firstOperation = minDate([group.firstOperation, first]);
+    group.lastOperation = maxDate([group.lastOperation, last]);
+  }
+
+  const lostDuels = Array.from(travelGroups.values())
+    .map((group) => {
+      const travelRows = allTravelRows.get(group.travelCode) ?? [];
+      const first = minDate([group.firstOperation, minDate(travelRows.map((row) => row.startedAt))]);
+      const last = maxDate([group.lastOperation, maxDate(travelRows.map((row) => row.startedAt))]);
+      const elapsedSeconds = first && last ? Math.max(0, Math.round((last.getTime() - first.getTime()) / 1000)) : 0;
+      return {
+        travelCode: group.travelCode,
+        agency: group.agency,
+        time: formatDateClock(first),
+        positions: group.positions,
+        timePerPosition: formatDuration(Math.round(elapsedSeconds / Math.max(group.positions, 1))),
+      };
+    })
+    .sort((a, b) => b.positions - a.positions || a.travelCode.localeCompare(b.travelCode, "fr"))
+    .slice(0, 14);
+
+  return {
+    won: duelWon,
+    lost: Math.max(0, duelTotal - duelWon),
+    wonPercent: percent(duelWon, duelTotal),
+    lostPercent: percent(Math.max(0, duelTotal - duelWon), duelTotal),
+    lostDuels,
+  };
+}
+
+function formatDateClock(date) {
+  if (!date) return "Non renseignée";
+  return new Intl.DateTimeFormat("fr-FR", {
+    timeZone: "Europe/Paris",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function formatDuration(totalSeconds) {
+  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function buildLoadingQuality(workbook) {
+  const empty = {
+    targeted: 0,
+    offTarget: 0,
+    targetedPercent: 0,
+    offTargetPercent: 0,
+    targetTimePerPosition: "",
+    nonTargetedShots: [],
+  };
+  const pivotName = workbook.SheetNames.find((name) => normalizeKey(name) === "tcd ppt");
+  const pivot = pivotName ? workbook.Sheets[pivotName] : null;
+  if (!pivot) return empty;
+  const targetCell = pivot.U6;
+  const targetSeconds = typeof targetCell?.v === "number" ? Math.round(targetCell.v * 86400) : null;
+  const targetTimePerPosition = targetCell?.w
+    ? formatImportedClock(targetCell.w)
+    : targetSeconds !== null ? formatDuration(targetSeconds) : "";
+
+  const pivotRows = XLSX.utils.sheet_to_json(pivot, {
+    header: 1,
+    raw: true,
+    defval: "",
+    blankrows: false,
+  });
+  let targeted = null;
+  let offTarget = null;
+  for (let rowIndex = 0; rowIndex < pivotRows.length - 1; rowIndex += 1) {
+    const row = pivotRows[rowIndex];
+    const targetedColumn = row.findIndex((value) => normalizeKey(value) === "cadres");
+    const offTargetColumn = row.findIndex((value) => normalizeKey(value) === "non cadres");
+    if (targetedColumn === -1 || offTargetColumn === -1) continue;
+    const ratioRow = pivotRows[rowIndex + 1] ?? [];
+    const countRow = pivotRows[rowIndex + 2] ?? [];
+    const ratioTargeted = parseNumber(ratioRow[targetedColumn]);
+    const ratioOffTarget = parseNumber(ratioRow[offTargetColumn]);
+    const countTargeted = parseNumber(countRow[targetedColumn]);
+    const countOffTarget = parseNumber(countRow[offTargetColumn]);
+    const targetedValue = countTargeted !== null && countTargeted > 1 ? countTargeted : ratioTargeted;
+    const offTargetValue = countOffTarget !== null && countOffTarget > 1 ? countOffTarget : ratioOffTarget;
+    if (targetedValue !== null && offTargetValue !== null) {
+      targeted = targetedValue;
+      offTarget = offTargetValue;
+      break;
+    }
+  }
+
+  const matchSheetName = workbook.SheetNames.find((name) => normalizeKey(name) === "feuille de match");
+  const matchSheet = matchSheetName ? workbook.Sheets[matchSheetName] : null;
+  const matchRows = matchSheet
+    ? XLSX.utils.sheet_to_json(matchSheet, { header: 1, raw: false, defval: "", blankrows: false })
+    : [];
+  const titleRowIndex = matchRows.findIndex((row) => row.some((value) => normalizeKey(value) === "tirs non cadres"));
+  const nonTargetedShots = [];
+  if (titleRowIndex >= 0) {
+    const headerRow = matchRows[titleRowIndex + 1] ?? [];
+    const columns = {
+      travelCode: headerRow.findIndex((value) => normalizeKey(value) === "voyage"),
+      time: headerRow.findIndex((value) => normalizeKey(value) === "heure"),
+      positions: headerRow.findIndex((value) => normalizeKey(value) === "nb poz"),
+      timePerPosition: headerRow.findIndex((value) => normalizeKey(value) === "temps poz"),
+      where: headerRow.findIndex((value) => normalizeKey(value) === "ou"),
+    };
+    for (const row of matchRows.slice(titleRowIndex + 2)) {
+      const travelCode = cleanText(row[columns.travelCode]);
+      if (!travelCode) break;
+      nonTargetedShots.push({
+        travelCode,
+        time: formatImportedClock(row[columns.time]),
+        positions: cleanText(row[columns.positions]),
+        timePerPosition: formatImportedClock(row[columns.timePerPosition]),
+        where: cleanText(row[columns.where]),
+      });
+    }
+  }
+
+  if (targeted === null || offTarget === null) return { ...empty, targetTimePerPosition, nonTargetedShots };
+  const total = targeted + offTarget;
+  return {
+    targeted,
+    offTarget,
+    targetedPercent: percent(targeted, total),
+    offTargetPercent: percent(offTarget, total),
+    targetTimePerPosition,
+    nonTargetedShots,
+  };
+}
+
+function buildCompositionPeriods(rows, period) {
+  const midpoint = Math.floor((period.startMinutes + period.endMinutes) / 2);
+  const firstRows = rows.filter((row) => {
+    const minutes = parisMinutes(row.startedAt);
+    return minutes !== null && minutes < midpoint;
+  });
+  const secondRows = rows.filter((row) => {
+    const minutes = parisMinutes(row.startedAt);
+    return minutes !== null && minutes >= midpoint;
+  });
+
+  return {
+    first: {
+      label: `${period.start} - ${formatTimeInput(midpoint)}`,
+      players: buildPlayers(firstRows),
+    },
+    second: {
+      label: `${formatTimeInput(midpoint)} - ${period.end}`,
+      players: buildPlayers(secondRows),
+    },
+  };
+}
+
 function buildPlayers(rows) {
   const playerMap = new Map();
   for (const row of rows) {
@@ -444,6 +640,7 @@ function buildPlayers(rows) {
     player.byType[row.operationType] = (player.byType[row.operationType] ?? 0) + 1;
     player.byPost[row.post] = (player.byPost[row.post] ?? 0) + 1;
     player.positions.add(row.position);
+    player.positionsByType[row.operationType]?.add(row.position);
     if (row.travelCode) player.travels.add(row.travelCode);
     player.firstOperation = minDate([player.firstOperation, row.startedAt]);
     player.lastOperation = maxDate([player.lastOperation, row.startedAt]);
@@ -455,14 +652,17 @@ function buildPlayers(rows) {
     const dominantCount = roleEntry?.value ?? 0;
     const dominantShare = percent(dominantCount, player.operations);
     const operationTypes = Object.values(player.byType).filter((count) => count > 0).length;
-    const rawSpread = operationTypes <= 1 ? 0 : operationTypes * 25 + (100 - dominantShare);
-    const polyvalence = clamp(Math.round(rawSpread), 0, 100);
 
     return {
       name: player.name,
       role,
       operations: player.operations,
       positions: player.positions.size,
+      positionsByType: {
+        CHG: player.positionsByType.CHG.size,
+        DECHG: player.positionsByType.DECHG.size,
+        ZONAGE: player.positionsByType.ZONAGE.size,
+      },
       travels: player.travels.size,
       byType: {
         CHG: player.byType.CHG ?? 0,
@@ -474,7 +674,7 @@ function buildPlayers(rows) {
       midfieldPercent: percent(player.byType.ZONAGE ?? 0, player.operations),
       dominantShare,
       operationTypes,
-      polyvalence,
+      polyvalence: 0,
       score: 0,
       volumeIndex: 0,
       contributionPercent: 0,
@@ -485,11 +685,17 @@ function buildPlayers(rows) {
   });
 
   const topOperations = Math.max(...players.map((player) => player.operations), 1);
+  const topByType = {
+    CHG: Math.max(...players.map((player) => player.byType.CHG), 1),
+    ZONAGE: Math.max(...players.map((player) => player.byType.ZONAGE), 1),
+    DECHG: Math.max(...players.map((player) => player.byType.DECHG), 1),
+  };
   const totalOperations = players.reduce((sum, player) => sum + player.operations, 0);
   for (const player of players) {
     player.volumeIndex = Math.round((player.operations / topOperations) * 100);
     player.score = player.volumeIndex;
     player.contributionPercent = percent(player.operations, totalOperations);
+    player.polyvalence = polyvalenceScore(player.byType, topByType);
   }
 
   return players.sort((a, b) => b.operations - a.operations || a.name.localeCompare(b.name));
@@ -500,7 +706,7 @@ function buildCategoryHighlights(categoryLeaders) {
     manOfTheMatch: null,
     bestScorer: playerCard(categoryLeaders.attack, "Joueur Attaque", "Meilleure valeur CHG", categoryLeaders.attack?.byType.CHG, "opérations CHG"),
     bestPasser: playerCard(categoryLeaders.midfield, "Joueur Milieu", "Meilleure valeur ZONAGE", categoryLeaders.midfield?.byType.ZONAGE, "opérations ZONAGE"),
-    defensiveWall: playerCard(categoryLeaders.defense, "Joueur Défense", "Meilleure valeur Réception", categoryLeaders.defense?.byType.DECHG, "opérations de réception"),
+    defensiveWall: playerCard(categoryLeaders.defense, "Joueur Défense", "Meilleure valeur Réception", categoryLeaders.defense?.byType.DECHG, "opérations RECEPTION"),
   };
 }
 
@@ -585,6 +791,11 @@ function ensurePlayer(map, name) {
       byType: {},
       byPost: {},
       positions: new Set(),
+      positionsByType: {
+        CHG: new Set(),
+        DECHG: new Set(),
+        ZONAGE: new Set(),
+      },
       travels: new Set(),
       firstOperation: null,
       lastOperation: null,
@@ -680,11 +891,42 @@ function mapColumns(headerRow) {
   return map;
 }
 
+function isNewDataTemplate(headerRow) {
+  const headers = new Set(headerRow.map(normalizeKey));
+  return headers.has("quart temps");
+}
+
+function hasUsableCalculatedColumns(matrix, columnMap) {
+  const sourceRows = matrix.filter((row) => [
+    columnMap.operator,
+    columnMap.startedAt,
+    columnMap.operationType,
+    columnMap.position,
+    columnMap.travelCode,
+    columnMap.agencySegment,
+    columnMap.segmentType,
+  ].some((index) => String(row[index] ?? "").trim() !== ""));
+  if (sourceRows.length === 0) return false;
+
+  const duelFlags = sourceRows
+    .map((row) => parseDuelFlag(row[columnMap.duelWonFlag]))
+    .filter((value) => value !== null);
+  const dzValues = sourceRows
+    .map((row) => row[columnMap.dz])
+    .filter((value) => value instanceof Date ? !Number.isNaN(value.getTime()) : parseNumber(value) !== null);
+
+  // A new template can still contain Quart temps while its copied formulas
+  // are blank or stale. Use the derived path only in that case.
+  return duelFlags.length >= sourceRows.length * 0.8 && dzValues.length > 0;
+}
+
 function buildFilterStats(rows, period) {
   const periodRows = rows.filter((row) => period.useExcelPeriod ? isExcelBlank(row.hourFilter) : isInTimeRange(row.startedAt, period));
-  const operatorRows = rows.filter((row) => isExcelBlank(row.operatorFilter));
+  const operatorRows = period.useDerivedRows ? rows : rows.filter((row) => isExcelBlank(row.operatorFilter));
   const matchRows = rows.filter((row) => isMatchRow(row, period));
-  const scoringRows = matchRows.filter((row) => isScoringRow(row, period));
+  const scoringRows = period.useDerivedRows
+    ? buildDerivedScoringRows(matchRows)
+    : matchRows.filter((row) => isScoringRow(row, period));
 
   return {
     sourceRows: rows.length,
@@ -700,16 +942,50 @@ function buildFilterStats(rows, period) {
 
 function isMatchRow(row, period) {
   const periodMatches = period?.useExcelPeriod ? isExcelBlank(row.hourFilter) : isInTimeRange(row.startedAt, period);
-  return isExcelBlank(row.operatorFilter) && periodMatches;
+  return (period?.useDerivedRows || isExcelBlank(row.operatorFilter)) && periodMatches;
 }
 
 function isScoringRow(row, period) {
-  return isMatchRow(row, period) && isExcelBlank(row.unzonedFilter);
+  return isMatchRow(row, period) && (period?.useDerivedRows || isExcelBlank(row.unzonedFilter));
+}
+
+function buildDerivedScoringRows(rows) {
+  const byPosition = new Map();
+  for (const row of rows) {
+    if (!byPosition.has(row.position)) byPosition.set(row.position, []);
+    byPosition.get(row.position).push(row);
+  }
+
+  return Array.from(byPosition.entries()).flatMap(([position, positionRows]) => {
+    const start = positionRows
+      .filter((row) => row.operationType === "DECHG")
+      .sort((a, b) => a.startedAt - b.startedAt)[0];
+    if (!start) return [];
+    const zonage = positionRows
+      .filter((row) => row.operationType === "ZONAGE" && row.startedAt >= start.startedAt)
+      .sort((a, b) => a.startedAt - b.startedAt)[0];
+    const delayMinutes = zonage
+      ? Math.max(0, Math.round((zonage.startedAt.getTime() - start.startedAt.getTime()) / 60000))
+      : null;
+    return [{
+      ...start,
+      position,
+      duelWonFlag: delayMinutes !== null && delayMinutes <= DZ_TARGET_MINUTES ? 1 : 0,
+      unzonedFilter: "",
+    }];
+  });
 }
 
 function isInTimeRange(date, period) {
   if (period?.useExcelPeriod) return true;
   if (!date || !period) return false;
+  const minutes = parisMinutes(date);
+  if (minutes === null) return false;
+  return minutes >= period.startMinutes && minutes <= period.endMinutes;
+}
+
+function parisMinutes(date) {
+  if (!date) return null;
   const parts = new Intl.DateTimeFormat("fr-FR", {
     timeZone: "Europe/Paris",
     hour: "2-digit",
@@ -718,9 +994,9 @@ function isInTimeRange(date, period) {
   }).formatToParts(date);
   const hour = Number(parts.find((part) => part.type === "hour")?.value);
   const minute = Number(parts.find((part) => part.type === "minute")?.value);
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return false;
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
   const minutes = (hour === 24 ? 0 : hour) * 60 + minute;
-  return minutes >= period.startMinutes && minutes <= period.endMinutes;
+  return minutes;
 }
 
 function parseTimeInput(value) {
@@ -775,6 +1051,19 @@ function parseExcelDate(value) {
 
 function cleanText(value) {
   return String(value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function formatImportedClock(value) {
+  const text = cleanText(value);
+  const match = text.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)$/i);
+  if (!match) return text;
+  let hour = Number(match[1]);
+  const minute = match[2];
+  const second = match[3] ?? "00";
+  const meridiem = match[4].toUpperCase();
+  if (meridiem === "AM") hour = hour === 12 ? 0 : hour;
+  if (meridiem === "PM") hour = hour === 12 ? 12 : hour + 12;
+  return `${String(hour).padStart(2, "0")}:${minute}:${second}`;
 }
 
 function cleanRole(value) {
@@ -842,6 +1131,41 @@ function duelFriendlyScore(byType) {
   if (!total) return 0;
   const spread = Object.values(byType).filter(Boolean).length;
   return clamp(60 + spread * 10, 0, 100);
+}
+
+function polyvalenceScore(byType, topByType) {
+  const normalizedScores = [
+    (byType.CHG ?? 0) / topByType.CHG,
+    (byType.ZONAGE ?? 0) / topByType.ZONAGE,
+    (byType.DECHG ?? 0) / topByType.DECHG,
+  ];
+  return Math.round((normalizedScores.reduce((sum, score) => sum + score, 0) / 3) * 100);
+}
+
+function buildHourlyPerformance(rows) {
+  const buckets = new Map();
+  for (const row of rows) {
+    const hour = parisHour(row.startedAt);
+    if (hour === null) continue;
+    if (!buckets.has(hour)) buckets.set(hour, { hour, won: 0, total: 0 });
+    const bucket = buckets.get(hour);
+    if (row.duelWonFlag === 0 || row.duelWonFlag === 1) {
+      bucket.total += 1;
+      if (row.duelWonFlag === 1) bucket.won += 1;
+    }
+  }
+  return Array.from(buckets.values())
+    .sort((a, b) => a.hour - b.hour)
+    .map((bucket) => ({ ...bucket, label: `${String(bucket.hour).padStart(2, "0")}h`, rate: percent(bucket.won, bucket.total) }));
+}
+
+function parisHour(date) {
+  if (!date) return null;
+  const value = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", hour12: false })
+    .formatToParts(date)
+    .find((part) => part.type === "hour")?.value;
+  const hour = Number(value);
+  return Number.isFinite(hour) ? (hour === 24 ? 0 : hour) : null;
 }
 
 function statusFromScore(score) {

@@ -5,7 +5,7 @@ const screens = [
   { name: "02-feuille-match", button: "02 Feuille de match", marker: "02 - Feuille de match" },
   { name: "03-composition", button: "03 Composition", marker: "03 - Composition" },
   { name: "04-coach", button: "04 Coach", marker: "04 - Coach" },
-  { name: "05-causerie", button: "05 Causerie", marker: "CAUSERIE", heading: "Causerie" },
+  { name: "05-ecran-quai", button: "05 Écran quai", marker: "DUELS GAGNÉS" },
 ];
 
 test("les vues principales restent lisibles sur desktop, tablette et mobile", async ({ page }, testInfo) => {
@@ -20,7 +20,9 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
 
   for (const screen of screens) {
     await page.getByRole("button", { name: screen.button, exact: true }).click();
-    if ("heading" in screen) {
+    if (screen.name === "05-ecran-quai") {
+      await expect(page.locator(".tv-mode")).toHaveCount(1);
+    } else if ("heading" in screen) {
       await expect(page.getByRole("heading", { name: screen.heading, exact: true })).toBeVisible();
     } else {
       await expect(page.getByText(screen.marker, { exact: true })).toBeVisible();
@@ -28,6 +30,20 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
     if (screen.name === "02-feuille-match") {
       await expect(page.locator(".match-page.is-threshold-reached")).toHaveCount(1);
       await expect(page.getByText("Célébration activée", { exact: true })).toBeVisible();
+      await expect(page.getByText("623 opérations RECEPTION", { exact: true })).toBeVisible();
+      await expect(page.locator(".award-card.polyvalent .award-challenger")).toHaveCount(2);
+      await expect(page.getByText("Tirs (chargements)", { exact: true })).toBeVisible();
+      await expect(page.getByText("Tirs non cadrés", { exact: true })).toBeVisible();
+    }
+    if (screen.name === "03-composition") {
+      await expect(page.getByRole("button", { name: "Match complet", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "1ère mi-temps", exact: true }).click();
+      await expect(page.locator(".composition-scoreboard small")).toContainText("13:00 - 17:45");
+      await expect(page.getByText("Vue affichée : 13:00 - 17:45", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "2ème mi-temps", exact: true }).click();
+      await expect(page.locator(".composition-scoreboard small")).toContainText("17:45 - 22:30");
+      await expect(page.getByText("Vue affichée : 17:45 - 22:30", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Match complet", exact: true }).click();
     }
     await assertNoHorizontalOverflow(page);
     await page.screenshot({
@@ -37,6 +53,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
     });
   }
 
+  await page.getByRole("button", { name: "Quitter l’écran quai", exact: true }).click();
   await page.locator('button[aria-label="? Guide"]').click();
   await expect(page.getByRole("heading", { name: "Utiliser STEF Match Center de A à Z", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "02 Préparer Excel", exact: true })).toBeVisible();
@@ -46,7 +63,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
   await expect(page.getByText("Ajouter une capture d’écran :", { exact: true })).toBeVisible();
   await assertNoHorizontalOverflow(page);
 
-  await page.getByRole("button", { name: "TV Écran quai", exact: true }).click();
+  await page.getByRole("button", { name: "05 Écran quai", exact: true }).click();
   await expect(page.locator(".tv-mode.is-threshold-reached")).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Écrire", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Écrire", exact: true }).click();
@@ -90,28 +107,29 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
   await assertNoHorizontalOverflow(page);
 });
 
-test("la plage horaire est visible et le contrôle import reste explicite", async ({ page }) => {
+test("la plage horaire et le graphique horaire restent explicites", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("058");
   await page.getByLabel("Code d'accès").fill("STEF-058");
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await expect(page.getByText("pas de 30 min · fin incluse")).toBeVisible();
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
-  await expect(page.getByText(/ligne\(s\) concernée\(s\) au total/)).toBeVisible();
-  await expect(page.getByText("Une même ligne peut apparaître dans plusieurs contrôles.")).toBeVisible();
+  await expect(page.locator(".performance-chart-panel")).toBeVisible();
+  await expect(page.getByRole("img", { name: "Évolution horaire du pourcentage de duels gagnés" })).toBeVisible();
+  await expect(page.getByText("Duels gagnés / duels joués, heure par heure")).toBeVisible();
 });
 
 test("le guide et le retour de l'écran quai restent accessibles avant le premier import", async ({ page }) => {
   await page.goto("/");
-  await page.getByLabel("Code agence").selectOption("01K");
-  await page.getByLabel("Code d'accès").fill("STEF-01K");
+  await page.getByLabel("Code agence").selectOption("05R");
+  await page.getByLabel("Code d'accès").fill("STEF-05R");
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await expect(page.getByRole("heading", { name: "Le stade est prêt", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "? Guide", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Utiliser STEF Match Center de A à Z", exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "TV Écran quai", exact: true }).click();
+  await page.getByRole("button", { name: "05 Écran quai", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Aucun match importé", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Retour au coup d'envoi", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Le stade est prêt", exact: true })).toBeVisible();
@@ -133,37 +151,39 @@ test("le nom de l'agence connectée reste correct dans tous les onglets", async 
     await expect(page.getByLabel("Code agence")).toHaveValue(agency.code);
     await page.getByLabel("Code d'accès").fill(agency.accessCode);
     await page.getByRole("button", { name: "Accéder au match" }).click();
-    await expect(page.getByRole("heading", { name: agency.name, exact: true })).toBeVisible();
+    await expect(page.locator(".agency-pill")).toContainText(agency.name);
 
     for (const screen of screens) {
       await page.getByRole("button", { name: screen.button, exact: true }).click();
-      await expect(page.getByRole("heading", { name: agency.name, exact: true })).toBeVisible();
+      if (screen.name === "05-ecran-quai") {
+        if (await page.locator(".tv-mode").count()) {
+          await expect(page.getByRole("button", { name: "Quitter l’écran quai", exact: true })).toBeVisible();
+          await page.getByRole("button", { name: "Quitter l’écran quai", exact: true }).click();
+        } else {
+          await expect(page.getByRole("heading", { name: "Aucun match importé", exact: true })).toBeVisible();
+          await page.getByRole("button", { name: "Retour au coup d'envoi", exact: true }).click();
+        }
+      } else {
+        await expect(page.locator(".agency-pill")).toContainText(agency.name);
+      }
     }
   }
 });
 
-test("le mode brief de la causerie conserve ses zones et ses textes dans le terrain", async ({ page }) => {
+test("l'écran quai porte le brief unique avec ses zones et son mode plein écran", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("058");
   await page.getByLabel("Code d'accès").fill("STEF-058");
   await page.getByRole("button", { name: "Accéder au match" }).click();
-  await page.getByRole("button", { name: "05 Causerie", exact: true }).click();
-  await page.getByRole("button", { name: "Mode brief", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Quitter brief", exact: true })).toBeVisible();
-
-  const briefLayout = await page.evaluate(() => {
-    const field = document.querySelector<HTMLElement>(".stadium-field");
-    const zones = Array.from(document.querySelectorAll<HTMLElement>(".field-zone"));
-    if (!field || zones.length !== 3) return { valid: false };
-    const fieldRect = field.getBoundingClientRect();
-    return {
-      valid: zones.every((zone) => {
-        const rect = zone.getBoundingClientRect();
-        return rect.left >= fieldRect.left && rect.right <= fieldRect.right && zone.scrollWidth <= zone.clientWidth + 1;
-      }),
-    };
-  });
-  expect(briefLayout.valid).toBe(true);
+  await page.getByRole("button", { name: "05 Écran quai", exact: true }).click();
+  await expect(page.locator(".tv-mode")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Mode plein écran", exact: true })).toBeVisible();
+  await expect(page.getByText("Plan de jeu", { exact: true })).toBeVisible();
+  await expect(page.locator(".tv-plan-column")).toHaveCount(3);
+  await expect(page.getByText("SAV", { exact: true })).toBeVisible();
+  await expect(page.getByText("Expédition", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ramasse & emballage", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Quitter l’écran quai", exact: true })).toBeVisible();
   await assertNoHorizontalOverflow(page);
 });
 

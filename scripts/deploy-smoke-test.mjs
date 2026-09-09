@@ -77,6 +77,9 @@ try {
   assert.equal(snapshot.summary.duelTotal, 2925, "Dénominateur score après import API");
   assert.equal(snapshot.summary.duelRate, 70.4, "Taux duels gagnés après import API");
   assert.equal(snapshot.match.score, 70, "Score après import API");
+  assert.equal(snapshot.loadingQuality.targeted, 34, "Chargements cadrés après import API");
+  assert.equal(snapshot.loadingQuality.offTarget, 35, "Chargements non cadrés après import API");
+  assert.equal(snapshot.loadingQuality.nonTargetedShots[0].travelCode, "X47890", "Tir non cadré après import API");
 
   const latestResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot`, {
     headers: { "x-access-code": accessCode },
@@ -98,6 +101,22 @@ try {
   assert.equal(timeRangePayload.snapshot.summary.operations, 4595, "Opérations après changement de plage");
   assert.equal(timeRangePayload.snapshot.match.periodLabel, "13:00-22:30", "Plage active après changement");
   assert.equal(timeRangePayload.snapshot.match.timeRangeLabel, "13:00 - 22:30", "Libellé de plage affiché après changement");
+  assert.equal(timeRangePayload.snapshot.compositionPeriods.first.label, "13:00 - 17:45", "Première mi-temps alignée sur la plage active");
+  assert.equal(timeRangePayload.snapshot.compositionPeriods.second.label, "17:45 - 22:30", "Deuxième mi-temps alignée sur la plage active");
+
+  const wideTimeRangeResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/time-range`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-access-code": accessCode,
+    },
+    body: JSON.stringify({ start: "08:00", end: "22:30" }),
+  });
+  const wideTimeRangePayload = await wideTimeRangeResponse.json();
+  assert.equal(wideTimeRangeResponse.status, 200, JSON.stringify(wideTimeRangePayload));
+  assert.equal(wideTimeRangePayload.snapshot.match.periodLabel, "08:00-22:30", "Nouvelle plage active après élargissement");
+  assert.equal(wideTimeRangePayload.snapshot.compositionPeriods.first.label, "08:00 - 15:15", "Première mi-temps recalculée après élargissement");
+  assert.equal(wideTimeRangePayload.snapshot.compositionPeriods.second.label, "15:15 - 22:30", "Deuxième mi-temps recalculée après élargissement");
 
   const invalidTimeRangeResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/time-range`, {
     method: "POST",

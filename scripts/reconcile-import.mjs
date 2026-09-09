@@ -43,6 +43,9 @@ assert.equal(snapshot.summary.duelWon, 2060, "Duels gagnés Excel");
 assert.equal(snapshot.summary.duelTotal, 2925, "Dénominateur score Excel");
 assert.equal(snapshot.summary.duelRate, 70.4, "Taux duels gagnés Excel");
 assert.equal(snapshot.match.score, 70, "Score arrondi");
+assert.equal(snapshot.loadingQuality.targeted, 34, "Chargements cadrés issus de l'Excel");
+assert.equal(snapshot.loadingQuality.offTarget, 35, "Chargements non cadrés issus de l'Excel");
+assert.equal(snapshot.loadingQuality.nonTargetedShots[0].travelCode, "X47890", "Tir non cadré repris depuis la feuille de match");
 
 assert.equal(roles.Attaquant.count, 10, "Composition attaque");
 assert.equal(roles.Milieu.count, 5, "Composition milieu");
