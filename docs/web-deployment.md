@@ -90,7 +90,7 @@ Causerie ne fonctionneraient pas.
 
 ## Contrôles avant partage
 
-- Remplacer le code d'accès de démonstration `match-058`.
+- Remplacer les codes d'accès de démonstration présents dans `STEF_AGENCIES_JSON` par des codes forts avant partage.
 - Vérifier que l'URL est en HTTPS.
 - Vérifier que `STEF_DATA_DIR` est réellement persistant.
 - Importer le dernier classeur Excel et contrôler le score.

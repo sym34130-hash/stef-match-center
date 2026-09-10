@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as XLSX from "xlsx";
 
 const REQUIRED_COLUMNS = {
@@ -23,10 +24,35 @@ const OPERATION_ROLE = {
 };
 
 const ROLE_LABELS = ["Attaquant", "Milieu", "Défenseur"];
-const DZ_TARGET_MINUTES = 30;
+const DEFAULT_PERFORMANCE_CRITERIA = Object.freeze({
+  zonageMinutes: 30,
+  loadingSeconds: 165,
+  unloadingSeconds: 60,
+  scoreTargetPercent: 50,
+});
 const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
-export const KPI_DICTIONARY_VERSION = 2;
+export const KPI_DICTIONARY_VERSION = 9;
+
+const WORKBOOK_PARSE_CACHE_LIMIT = 6;
+const workbookParseCache = new Map();
+const SNAPSHOT_BUILD_CACHE_LIMIT = 24;
+const snapshotBuildCache = new Map();
+const parisOffsetCache = new Map();
+
+export function normalizePerformanceCriteria(input = {}) {
+  return {
+    zonageMinutes: normalizePositiveInteger(input.zonageMinutes, DEFAULT_PERFORMANCE_CRITERIA.zonageMinutes),
+    loadingSeconds: normalizePositiveInteger(input.loadingSeconds, DEFAULT_PERFORMANCE_CRITERIA.loadingSeconds),
+    unloadingSeconds: normalizePositiveInteger(input.unloadingSeconds, DEFAULT_PERFORMANCE_CRITERIA.unloadingSeconds),
+    scoreTargetPercent: Math.min(100, normalizePositiveInteger(input.scoreTargetPercent, DEFAULT_PERFORMANCE_CRITERIA.scoreTargetPercent)),
+  };
+}
+
+function normalizePositiveInteger(value, fallback) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue > 0 ? Math.round(numericValue) : fallback;
+}
 
 export function normalizeTimeRange(start = DEFAULT_PERIOD_START, end = DEFAULT_PERIOD_END) {
   const startMinutes = parseTimeInput(start);
@@ -41,6 +67,10 @@ export function normalizeTimeRange(start = DEFAULT_PERIOD_START, end = DEFAULT_P
     endMinutes,
     label: `${formatTimeInput(startMinutes)}-${formatTimeInput(endMinutes)}`,
   };
+}
+
+export function primeWorkbookCache(buffer) {
+  if (buffer) parseWorkbookSource(buffer);
 }
 
 export const KPI_DICTIONARY = [
@@ -72,9 +102,33 @@ export const KPI_DICTIONARY = [
     id: "score.duels",
     label: "Duels gagnés",
     source: "Données!S",
-    formula: "SUM(Duels gagnés) / COUNT(Duels gagnés) avec Filtre opérateur vide, Filtre heure vide et Poz non zonées vide",
+    formula: "SUM(Duels gagnés, recalculés avec DZ <= cible zonage active lorsque DZ est renseigné) / COUNT(Duels gagnés) avec Filtre opérateur vide, Filtre heure vide et Poz non zonées vide",
     denominator: "Lignes éligibles au score Excel",
     display: "Score collectif",
+  },
+  {
+    id: "score.operational",
+    label: "Score opérationnel",
+    source: "Données!Duels + CHG + DECHG + ZONAGE",
+    formula: "Nombre des 4 indicateurs dont le pourcentage atteint l'objectif de la ligue - indicateurs atteints / indicateurs sous objectif",
+    denominator: "4 indicateurs disponibles : duels gagnés, chargements cadrés, déchargements dans la cible et possession Zody",
+    display: "Score au format football",
+  },
+  {
+    id: "score.loading",
+    label: "Chargements cadrés",
+    source: "Données!CHG",
+    formula: "COUNT des voyages éligibles dont le temps moyen par position est <= au seuil de chargement actif",
+    denominator: "Voyages CHG avec au moins 15 positions et une durée positive dans la plage active",
+    display: "Part des chargements dans le délai cible",
+  },
+  {
+    id: "score.possession",
+    label: "Possession Zody",
+    source: "X!BJ4",
+    formula: "COUNTA(ZONAGE) / COUNTA(DECHG) dans la table des positions distinctes, avec Filtre heure vide",
+    denominator: "Positions distinctes de réception (DECHG) dans le périmètre actif",
+    display: "Part des positions ZONAGE par rapport aux positions Réception",
   },
   {
     id: "player.volumeIndex",
@@ -112,15 +166,163 @@ export const KPI_DICTIONARY = [
 
 export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode, periodInput = {}) {
   const compositionOnly = periodInput.compositionOnly === true;
+  const criteria = normalizePerformanceCriteria(periodInput.criteria);
   const period = normalizeTimeRange(periodInput.start ?? DEFAULT_PERIOD_START, periodInput.end ?? DEFAULT_PERIOD_END);
+  const parsed = parseWorkbookSource(buffer);
+  if (!parsed.ok) return parsed;
+
+  const { workbook, matrix, columnMap, isDerivedTemplate, rows, sourceValidation, missingColumns, rawWorkbook, rawMatrix } = parsed;
+  const isDefaultPeriod = period.startMinutes === parseTimeInput(DEFAULT_PERIOD_START)
+    && period.endMinutes === parseTimeInput(DEFAULT_PERIOD_END);
+  period.useExcelPeriod = !isDerivedTemplate && isDefaultPeriod;
+  period.useDerivedRows = isDerivedTemplate;
+  const buildCacheKey = [
+    parsed.cacheKey,
+    expectedAgencyCode ?? "",
+    period.label,
+    period.useExcelPeriod ? "excel-period" : "clock-period",
+    `criteria-${criteria.zonageMinutes}-${criteria.loadingSeconds}-${criteria.unloadingSeconds}-${criteria.scoreTargetPercent}`,
+    compositionOnly ? "composition" : "snapshot",
+  ].join("|");
+  const cachedSnapshot = snapshotBuildCache.get(buildCacheKey);
+  if (cachedSnapshot) {
+    snapshotBuildCache.delete(buildCacheKey);
+    snapshotBuildCache.set(buildCacheKey, cachedSnapshot);
+    if (compositionOnly) return cachedSnapshot;
+    return {
+      ok: true,
+      snapshot: {
+        ...cachedSnapshot.snapshot,
+        sourceName,
+        importedAt: new Date().toISOString(),
+      },
+    };
+  }
+
+  if (missingColumns.length > 0) {
+    return {
+      ok: false,
+      error: userError(
+        "FICHIER NON IMPORTÉ",
+        `Colonne obligatoire absente : ${missingColumns.join(", ")}.`
+      ),
+    };
+  }
+  if (sourceValidation.rowCount === 0 || rows.length === 0) {
+    return {
+      ok: false,
+      error: userError("FICHIER NON IMPORTÉ", "Aucune opération exploitable n'a été trouvée."),
+    };
+  }
+
+  const validation = {
+    ...sourceValidation,
+    warnings: [],
+  };
+
+  if (validation.criticalMissingRows > 0) {
+    validation.warnings.push(`${validation.criticalMissingRows} ligne(s) avec une donnée critique manquante.`);
+  }
+  if (validation.invalidDateRows > 0) {
+    validation.warnings.push(`${validation.invalidDateRows} date(s) non lisible(s).`);
+  }
+  if (validation.unknownOperationRows > 0) {
+    validation.warnings.push(`${validation.unknownOperationRows} type(s) d'opération non reconnu(s).`);
+  }
+  if (validation.duplicateRows > 0) {
+    validation.warnings.push(`${validation.duplicateRows} doublon(s) potentiel(s) détecté(s).`);
+  }
+
+  const filterStats = buildFilterStats(rows, period, criteria);
+  validation.filterStats = filterStats;
+  validation.kpiRules = {
+    matchFilter: `Filtre opérateur + plage ${period.label} (fin incluse)`,
+    scoringFilter: `Filtre opérateur + plage ${period.label} (fin incluse) + exclusion Poz non zonées`,
+    zonageTarget: `${criteria.zonageMinutes} minutes`,
+    loadingTarget: formatDuration(criteria.loadingSeconds),
+    unloadingTarget: formatDuration(criteria.unloadingSeconds),
+    scoreTarget: `${criteria.scoreTargetPercent}% par indicateur`,
+    period: period.label,
+  };
+  if (filterStats.matchRows === 0) {
+    validation.warnings.push(`Aucune ligne ne passe le filtre opérateur + plage ${period.label}.`);
+  }
+  if (filterStats.scoringRows === 0) {
+    validation.warnings.push("Aucune ligne éligible au score après exclusion des positions non zonées.");
+  }
+
+  const matchRows = rows.filter((row) => isMatchRow(row, period));
+  const possessionRows = rows.filter((row) => isPossessionRow(row, period));
+  const scoringRows = isDerivedTemplate
+    ? buildDerivedScoringRows(matchRows, criteria.zonageMinutes * 60)
+    : buildScoringRows(matchRows, period, criteria.zonageMinutes * 60);
+  if (compositionOnly) {
+    const compositionResult = {
+      ok: true,
+      period,
+      players: buildPlayers(matchRows),
+      compositionPeriods: buildCompositionPeriods(matchRows, period),
+    };
+    snapshotBuildCache.set(buildCacheKey, compositionResult);
+    while (snapshotBuildCache.size > SNAPSHOT_BUILD_CACHE_LIMIT) {
+      snapshotBuildCache.delete(snapshotBuildCache.keys().next().value);
+    }
+    return compositionResult;
+  }
+  const agencyCounts = countBy(matchRows.length > 0 ? matchRows : rows, (row) => row.agencySegment || "Non renseignée");
+  const detectedAgency = isDerivedTemplate
+    ? expectedAgencyCode
+    : topEntry(agencyCounts)?.key ?? expectedAgencyCode;
+  if (expectedAgencyCode && detectedAgency && detectedAgency !== expectedAgencyCode) {
+    validation.warnings.push(
+      `Agence majoritaire détectée : ${detectedAgency}. Espace importé : ${expectedAgencyCode}.`
+    );
+  }
+
+  const snapshot = buildMatchSnapshot({
+    sourceRows: rows,
+    matchRows,
+    scoringRows,
+    possessionRows,
+    sourceName,
+    expectedAgencyCode,
+    detectedAgency,
+    validation,
+    filterStats,
+    period,
+    criteria,
+    loadingQuality: buildLoadingQuality(rawWorkbook, matchRows, period, criteria.loadingSeconds),
+    unloadingQuality: buildUnloadingQuality(matchRows, criteria.unloadingSeconds),
+  });
+
+  const result = { ok: true, snapshot };
+  snapshotBuildCache.set(buildCacheKey, result);
+  while (snapshotBuildCache.size > SNAPSHOT_BUILD_CACHE_LIMIT) {
+    snapshotBuildCache.delete(snapshotBuildCache.keys().next().value);
+  }
+  return result;
+}
+
+function parseWorkbookSource(buffer) {
+  const cacheKey = createHash("sha1").update(buffer).digest("hex");
+  const cached = workbookParseCache.get(cacheKey);
+  if (cached) {
+    workbookParseCache.delete(cacheKey);
+    workbookParseCache.set(cacheKey, cached);
+    return cached;
+  }
+
   const workbook = XLSX.read(buffer, {
     type: "buffer",
-    cellDates: true,
+    // Parse Excel date serials ourselves so library timezone defaults cannot
+    // shift the operator-selected Paris time window.
+    cellDates: false,
     cellFormula: false,
     cellNF: false,
     cellStyles: false,
   });
-
+  // The raw workbook also provides the displayed values used for durations.
+  const rawWorkbook = workbook;
   const dataSheetName = findDataSheet(workbook.SheetNames);
   if (!dataSheetName) {
     return {
@@ -135,7 +337,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     defval: "",
     blankrows: false,
   });
-
+  const rawMatrix = matrix;
   if (matrix.length < 2) {
     return {
       ok: false,
@@ -145,33 +347,18 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
 
   const headerRow = matrix[0].map((value) => String(value ?? ""));
   const columnMap = mapColumns(headerRow);
-  const isDerivedTemplate = isNewDataTemplate(headerRow) && !hasUsableCalculatedColumns(matrix.slice(1), columnMap);
-  period.useExcelPeriod = !isDerivedTemplate && Object.keys(periodInput).length === 0;
-  period.useDerivedRows = isDerivedTemplate;
   const missingColumns = Object.entries(REQUIRED_COLUMNS)
     .filter(([key]) => columnMap[key] === undefined)
     .map(([, aliases]) => aliases[0]);
-
-  if (missingColumns.length > 0) {
-    return {
-      ok: false,
-      error: userError(
-        "FICHIER NON IMPORTÉ",
-        `Colonne obligatoire absente : ${missingColumns.join(", ")}.`
-      ),
-    };
-  }
-
-  const validation = {
+  const isDerivedTemplate = isNewDataTemplate(headerRow) && !hasUsableCalculatedColumns(rawMatrix.slice(1), columnMap);
+  const sourceValidation = {
     rowCount: 0,
     criticalMissingRows: 0,
     invalidDateRows: 0,
     unknownOperationRows: 0,
     duplicateRows: 0,
     issueRows: 0,
-    warnings: [],
   };
-
   const rows = [];
   const duplicateKeys = new Set();
   const duplicatedKeys = new Set();
@@ -180,6 +367,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   for (let index = 1; index < matrix.length; index += 1) {
     const row = matrix[index];
     const raw = readRow(row, columnMap);
+    const rawValues = readRow(rawMatrix[index] ?? [], columnMap);
     // A:G are the source fields. H:T contain formulas copied below the real
     // import range and must not be treated as additional source records.
     const hasSourceContent = [
@@ -193,7 +381,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     ].some((value) => String(value ?? "").trim() !== "");
     if (!hasSourceContent) continue;
 
-    validation.rowCount += 1;
+    sourceValidation.rowCount += 1;
 
     const operator = cleanText(raw.operator);
     const operationType = cleanText(raw.operationType).toUpperCase();
@@ -207,26 +395,17 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
       ? OPERATION_ROLE[operationType] || "Joueur"
       : cleanRole(raw.post) || OPERATION_ROLE[operationType] || "Joueur";
     const unzonedFilter = isDerivedTemplate ? "" : cleanText(raw.unzonedFilter);
-    const dz = isDerivedTemplate ? null : parseNumber(raw.dz);
+    const dzCell = rawWorkbook.Sheets[dataSheetName]?.[XLSX.utils.encode_cell({ r: index, c: columnMap.dz })];
+    const dz = isDerivedTemplate ? null : parseDurationSeconds(rawValues.dz, dzCell?.w);
     const duelWonFlag = isDerivedTemplate ? null : parseDuelFlag(raw.duelWonFlag);
     const startedAt = parseExcelDate(raw.startedAt);
 
     const hasCriticalIssue = !operator || !operationType || !position || !raw.startedAt;
     const hasInvalidDate = !startedAt;
-
-    if (hasCriticalIssue) {
-      validation.criticalMissingRows += 1;
-    }
-
-    if (hasInvalidDate) {
-      validation.invalidDateRows += 1;
-    }
-
+    if (hasCriticalIssue) sourceValidation.criticalMissingRows += 1;
+    if (hasInvalidDate) sourceValidation.invalidDateRows += 1;
     if (hasCriticalIssue || hasInvalidDate) issueRowIndexes.add(index);
-
-    if (operationType && !OPERATION_ROLE[operationType]) {
-      validation.unknownOperationRows += 1;
-    }
+    if (operationType && !OPERATION_ROLE[operationType]) sourceValidation.unknownOperationRows += 1;
 
     const duplicateKey = [operator, operationType, position, startedAt?.toISOString() ?? raw.startedAt].join("|");
     if (duplicateKeys.has(duplicateKey)) duplicatedKeys.add(duplicateKey);
@@ -251,79 +430,26 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     }
   }
 
-  validation.duplicateRows = duplicatedKeys.size;
-  validation.issueRows = issueRowIndexes.size;
-
-  if (validation.rowCount === 0 || rows.length === 0) {
-    return {
-      ok: false,
-      error: userError("FICHIER NON IMPORTÉ", "Aucune opération exploitable n'a été trouvée."),
-    };
-  }
-
-  if (validation.criticalMissingRows > 0) {
-    validation.warnings.push(`${validation.criticalMissingRows} ligne(s) avec une donnée critique manquante.`);
-  }
-  if (validation.invalidDateRows > 0) {
-    validation.warnings.push(`${validation.invalidDateRows} date(s) non lisible(s).`);
-  }
-  if (validation.unknownOperationRows > 0) {
-    validation.warnings.push(`${validation.unknownOperationRows} type(s) d'opération non reconnu(s).`);
-  }
-  if (validation.duplicateRows > 0) {
-    validation.warnings.push(`${validation.duplicateRows} doublon(s) potentiel(s) détecté(s).`);
-  }
-
-  const filterStats = buildFilterStats(rows, period);
-  validation.filterStats = filterStats;
-  validation.kpiRules = {
-    matchFilter: `Filtre opérateur + plage ${period.label} (fin incluse)`,
-    scoringFilter: `Filtre opérateur + plage ${period.label} (fin incluse) + exclusion Poz non zonées`,
-    period: period.label,
-  };
-  if (filterStats.matchRows === 0) {
-    validation.warnings.push(`Aucune ligne ne passe le filtre opérateur + plage ${period.label}.`);
-  }
-  if (filterStats.scoringRows === 0) {
-    validation.warnings.push("Aucune ligne éligible au score après exclusion des positions non zonées.");
-  }
-
-  const matchRows = rows.filter((row) => isMatchRow(row, period));
-  const scoringRows = isDerivedTemplate
-    ? buildDerivedScoringRows(matchRows)
-    : matchRows.filter((row) => isScoringRow(row, period));
-  if (compositionOnly) {
-    return {
-      ok: true,
-      period,
-      players: buildPlayers(matchRows),
-      compositionPeriods: buildCompositionPeriods(matchRows, period),
-    };
-  }
-  const agencyCounts = countBy(matchRows.length > 0 ? matchRows : rows, (row) => row.agencySegment || "Non renseignée");
-  const detectedAgency = isDerivedTemplate
-    ? expectedAgencyCode
-    : topEntry(agencyCounts)?.key ?? expectedAgencyCode;
-  if (expectedAgencyCode && detectedAgency && detectedAgency !== expectedAgencyCode) {
-    validation.warnings.push(
-      `Agence majoritaire détectée : ${detectedAgency}. Espace importé : ${expectedAgencyCode}.`
-    );
-  }
-
-  const snapshot = buildMatchSnapshot({
-    sourceRows: rows,
-    matchRows,
-    scoringRows,
+  sourceValidation.duplicateRows = duplicatedKeys.size;
+  sourceValidation.issueRows = issueRowIndexes.size;
+  const parsed = {
+    ok: true,
+    cacheKey,
     workbook,
-    sourceName,
-    expectedAgencyCode,
-    detectedAgency,
-    validation,
-    filterStats,
-    period,
-  });
-
-  return { ok: true, snapshot };
+    rawWorkbook,
+    matrix,
+    rawMatrix,
+    columnMap,
+    missingColumns,
+    isDerivedTemplate,
+    rows,
+    sourceValidation,
+  };
+  workbookParseCache.set(cacheKey, parsed);
+  while (workbookParseCache.size > WORKBOOK_PARSE_CACHE_LIMIT) {
+    workbookParseCache.delete(workbookParseCache.keys().next().value);
+  }
+  return parsed;
 }
 
 export function buildCompositionViewFromWorkbook(buffer, sourceName, expectedAgencyCode, periodInput = {}) {
@@ -336,6 +462,14 @@ export function buildCompositionViewFromWorkbook(buffer, sourceName, expectedAge
 export function normalizeSnapshotContract(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.players)) return snapshot;
   const categoryLeaders = selectDistinctCategoryLeaders(snapshot.players);
+  const performanceCriteria = normalizePerformanceCriteria(snapshot.performanceCriteria);
+  const summary = snapshot.summary
+    ? {
+        ...snapshot.summary,
+        possessionPercent: snapshot.summary.possessionPercent ?? null,
+        possessionPositions: snapshot.summary.possessionPositions ?? { zonage: 0, reception: 0 },
+      }
+    : snapshot.summary;
   const validation = snapshot.validation
     ? {
         ...snapshot.validation,
@@ -350,6 +484,8 @@ export function normalizeSnapshotContract(snapshot) {
     : snapshot.validation;
   return {
     ...snapshot,
+    performanceCriteria,
+    summary,
     validation,
     highlights: {
       ...(snapshot.highlights ?? {}),
@@ -358,20 +494,29 @@ export function normalizeSnapshotContract(snapshot) {
   };
 }
 
-function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, workbook, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period }) {
+function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, possessionRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period, criteria, loadingQuality, unloadingQuality }) {
   const importedAt = new Date();
   const firstOperation = minDate(matchRows.map((row) => row.startedAt));
   const lastOperation = maxDate(matchRows.map((row) => row.startedAt));
   const operationCounts = countBy(matchRows, (row) => row.operationType);
-  const positions = buildPositions(matchRows, period);
+  const positions = buildPositions(matchRows, period, scoringRows, criteria);
   const players = buildPlayers(matchRows);
   const topPlayers = sortDesc(players, "operations");
   const categoryLeaders = selectDistinctCategoryLeaders(players);
   const duelWon = scoringRows.filter((row) => row.duelWonFlag === 1).length;
   const duelTotal = scoringRows.filter((row) => row.duelWonFlag === 0 || row.duelWonFlag === 1).length;
-  const duelRate = percent(duelWon, duelTotal);
-  const score = Math.round(duelRate);
-  const status = statusFromScore(score);
+  const duelRate = duelTotal > 0 ? percent(duelWon, duelTotal) : null;
+  const possession = buildPossessionScore(possessionRows);
+  const score = duelRate === null ? null : Math.round(duelRate);
+  const operationalScore = buildOperationalScore(
+    loadingQuality,
+    unloadingQuality,
+    duelRate,
+    possession.percent,
+    criteria.loadingSeconds,
+    criteria.scoreTargetPercent,
+  );
+  const status = statusFromOperationalScore(operationalScore);
   const totalOperations = matchRows.length;
   const averageOperations = totalOperations / Math.max(players.length, 1);
   const roleCounts = countBy(players, (player) => player.role);
@@ -410,8 +555,6 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, workbook, sour
     .slice(0, 5);
 
   const weakRole = roleDistribution.reduce((min, current) => (current.count < min.count ? current : min), roleDistribution[0]);
-  const loadingQuality = buildLoadingQuality(workbook);
-
   return {
     version: 1,
     sourceName,
@@ -430,13 +573,13 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, workbook, sour
       timeRangeLabel: `${period.start} - ${period.end}`,
       score,
       status,
-      objective: "Tenir le délai cible de zonage à 30 minutes.",
-      dzTargetMinutes: DZ_TARGET_MINUTES,
+      objective: `Tenir le délai cible de zonage à ${criteria.zonageMinutes} minutes.`,
+      dzTargetMinutes: criteria.zonageMinutes,
       periodStart: period.start,
       periodEnd: period.end,
       periodLabel: period.label,
       filterDescription: `Filtre opérateur + plage ${period.label}`,
-      scoringFilterDescription: `Filtre opérateur + plage ${period.label} + exclusion Poz non zonées`,
+      scoringFilterDescription: `Filtre opérateur + plage ${period.label} + exclusion Poz non zonées + DZ <= ${criteria.zonageMinutes} min lorsque renseigné`,
     },
     summary: {
       operations: totalOperations,
@@ -446,6 +589,11 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, workbook, sour
       duelWon,
       duelTotal,
       duelRate,
+      possessionPercent: possession.percent,
+      possessionPositions: {
+        zonage: possession.zonagePositions,
+        reception: possession.receptionPositions,
+      },
       operationCounts,
       roleDistribution,
       sourceRows: sourceRows.length,
@@ -454,9 +602,10 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, workbook, sour
       excludedByOperator: filterStats.excludedByOperator,
       excludedFromScore: filterStats.excludedFromScore,
     },
-    hourlyPerformance: buildHourlyPerformance(scoringRows),
+    hourlyPerformance: buildHourlyPerformance(scoringRows, period),
     loadingQuality,
-    operationalScore: buildOperationalScore(loadingQuality),
+    unloadingQuality,
+    operationalScore,
     duelQuality: buildDuelQuality(scoringRows, matchRows, positions, duelWon, duelTotal),
     compositionPeriods: buildCompositionPeriods(matchRows, period),
     highlights: buildCategoryHighlights(categoryLeaders),
@@ -470,7 +619,18 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, workbook, sour
       alerts: buildAlerts({ validation, openDuelRows, duelTotal, weakRole }),
       travelRisks,
     },
-    causerie: buildCauserie({ score, openDuelRows, weakRole, validation }),
+    causerie: buildCauserie({
+      duelRate,
+      loadingPercent: loadingQuality.targetedPercent,
+      unloadingPercent: unloadingQuality.targetedPercent,
+      possessionPercent: possession.percent,
+      scoreTargetPercent: criteria.scoreTargetPercent,
+      openDuelRows,
+      weakRole,
+      validation,
+      zonageMinutes: criteria.zonageMinutes,
+    }),
+    performanceCriteria: criteria,
     validation,
     kpiDictionaryVersion: KPI_DICTIONARY_VERSION,
   };
@@ -525,8 +685,8 @@ function buildDuelQuality(scoringRows, matchRows, positions, duelWon, duelTotal)
   return {
     won: duelWon,
     lost: Math.max(0, duelTotal - duelWon),
-    wonPercent: percent(duelWon, duelTotal),
-    lostPercent: percent(Math.max(0, duelTotal - duelWon), duelTotal),
+    wonPercent: duelTotal > 0 ? percent(duelWon, duelTotal) : null,
+    lostPercent: duelTotal > 0 ? percent(Math.max(0, duelTotal - duelWon), duelTotal) : null,
     lostDuels,
   };
 }
@@ -543,120 +703,200 @@ function formatDateClock(date) {
 }
 
 function formatDuration(totalSeconds) {
-  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+  const safeSeconds = Math.max(0, Math.round(Number(totalSeconds) || 0));
   const minutes = Math.floor(safeSeconds / 60);
   const seconds = safeSeconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function buildLoadingQuality(workbook) {
+function buildLoadingQuality(workbook, matchRows, period, configuredTargetSeconds) {
+  const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.loadingSeconds);
   const empty = {
     targeted: 0,
     offTarget: 0,
-    targetedPercent: 0,
-    offTargetPercent: 0,
-    targetTimePerPosition: "",
+    targetedPercent: null,
+    offTargetPercent: null,
+    targetTimePerPosition: formatDuration(targetSeconds),
     averageTimePerPositionSeconds: null,
     nonTargetedShots: [],
   };
-  const pivotName = workbook.SheetNames.find((name) => normalizeKey(name) === "tcd ppt");
-  const pivot = pivotName ? workbook.Sheets[pivotName] : null;
-  if (!pivot) return empty;
-  const targetCell = pivot.U6;
-  const targetSeconds = typeof targetCell?.v === "number"
-    ? Math.round(targetCell.v * 86400)
-    : parseClockSeconds(targetCell?.w);
-  const targetTimePerPosition = targetCell?.w
-    ? formatImportedClock(targetCell.w)
-    : targetSeconds !== null ? formatDuration(targetSeconds) : "";
-
-  const pivotRows = XLSX.utils.sheet_to_json(pivot, {
-    header: 1,
-    raw: true,
-    defval: "",
-    blankrows: false,
-  });
-  let targeted = null;
-  let offTarget = null;
-  for (let rowIndex = 0; rowIndex < pivotRows.length - 1; rowIndex += 1) {
-    const row = pivotRows[rowIndex];
-    const targetedColumn = row.findIndex((value) => normalizeKey(value) === "cadres");
-    const offTargetColumn = row.findIndex((value) => normalizeKey(value) === "non cadres");
-    if (targetedColumn === -1 || offTargetColumn === -1) continue;
-    const ratioRow = pivotRows[rowIndex + 1] ?? [];
-    const countRow = pivotRows[rowIndex + 2] ?? [];
-    const ratioTargeted = parseNumber(ratioRow[targetedColumn]);
-    const ratioOffTarget = parseNumber(ratioRow[offTargetColumn]);
-    const countTargeted = parseNumber(countRow[targetedColumn]);
-    const countOffTarget = parseNumber(countRow[offTargetColumn]);
-    const targetedValue = countTargeted !== null && countTargeted > 1 ? countTargeted : ratioTargeted;
-    const offTargetValue = countOffTarget !== null && countOffTarget > 1 ? countOffTarget : ratioOffTarget;
-    if (targetedValue !== null && offTargetValue !== null) {
-      targeted = targetedValue;
-      offTarget = offTargetValue;
-      break;
-    }
+  if (!workbook || !Array.isArray(matchRows)) return empty;
+  const loadingDetailsByTravel = readLoadingDetails(workbook);
+  const groups = new Map();
+  for (const row of matchRows) {
+    if (row.operationType !== "CHG" || !row.travelCode) continue;
+    if (!groups.has(row.travelCode)) groups.set(row.travelCode, []);
+    groups.get(row.travelCode).push(row);
   }
 
-  const matchSheetName = workbook.SheetNames.find((name) => normalizeKey(name) === "feuille de match");
-  const matchSheet = matchSheetName ? workbook.Sheets[matchSheetName] : null;
-  const matchRows = matchSheet
-    ? XLSX.utils.sheet_to_json(matchSheet, { header: 1, raw: false, defval: "", blankrows: false })
-    : [];
-  const titleRowIndex = matchRows.findIndex((row) => row.some((value) => normalizeKey(value) === "tirs non cadres"));
-  const nonTargetedShots = [];
-  if (titleRowIndex >= 0) {
-    const headerRow = matchRows[titleRowIndex + 1] ?? [];
-    const columns = {
-      travelCode: headerRow.findIndex((value) => normalizeKey(value) === "voyage"),
-      time: headerRow.findIndex((value) => normalizeKey(value) === "heure"),
-      positions: headerRow.findIndex((value) => normalizeKey(value) === "nb poz"),
-      timePerPosition: headerRow.findIndex((value) => normalizeKey(value) === "temps poz"),
-      where: headerRow.findIndex((value) => normalizeKey(value) === "ou"),
+  const loadingRows = Array.from(groups.entries()).map(([travelCode, rows]) => {
+    const firstOperation = minDate(rows.map((row) => row.startedAt));
+    const lastOperation = maxDate(rows.map((row) => row.startedAt));
+    const elapsedSeconds = firstOperation && lastOperation
+      ? Math.max(0, Math.round((lastOperation.getTime() - firstOperation.getTime()) / 1000))
+      : 0;
+    const timePerPositionSeconds = rows.length > 0 ? elapsedSeconds / rows.length : 0;
+    return {
+      travelCode,
+      rows,
+      firstOperation,
+      positions: rows.length,
+      elapsedSeconds,
+      timePerPositionSeconds,
+      eligible: rows.length >= 15 && elapsedSeconds > 0,
     };
-    for (const row of matchRows.slice(titleRowIndex + 2)) {
-      const travelCode = cleanText(row[columns.travelCode]);
-      if (!travelCode) break;
-      nonTargetedShots.push({
-        travelCode,
-        time: formatImportedClock(row[columns.time]),
-        positions: cleanText(row[columns.positions]),
-        timePerPosition: formatImportedClock(row[columns.timePerPosition]),
-        where: cleanText(row[columns.where]),
-      });
-    }
-  }
+  }).filter((row) => row.eligible);
 
-  if (targeted === null || offTarget === null) {
-    return { ...empty, targetTimePerPosition, averageTimePerPositionSeconds: targetSeconds, nonTargetedShots };
-  }
-  const total = targeted + offTarget;
+  const targeted = loadingRows.filter((row) => row.timePerPositionSeconds <= targetSeconds).length;
+  const total = loadingRows.length;
+  const offTarget = Math.max(0, total - targeted);
+  const averageTimePerPositionSeconds = total > 0
+    ? Math.round(loadingRows.reduce((sum, row) => sum + row.timePerPositionSeconds, 0) / total)
+    : null;
+  const nonTargetedShots = loadingRows
+    .filter((row) => row.timePerPositionSeconds > targetSeconds)
+    .sort((left, right) => right.timePerPositionSeconds - left.timePerPositionSeconds || left.travelCode.localeCompare(right.travelCode, "fr"))
+    .slice(0, 14)
+    .map((row) => ({
+      travelCode: row.travelCode,
+      time: loadingDetailsByTravel.get(row.travelCode)?.time ?? formatDateClock(row.firstOperation),
+      positions: loadingDetailsByTravel.get(row.travelCode)?.positions ?? String(row.positions),
+      timePerPosition: loadingDetailsByTravel.get(row.travelCode)?.timePerPosition ?? formatDuration(row.timePerPositionSeconds),
+      where: loadingDetailsByTravel.get(row.travelCode)?.where ?? "",
+    }));
   return {
     targeted,
     offTarget,
-    targetedPercent: percent(targeted, total),
-    offTargetPercent: percent(offTarget, total),
-    targetTimePerPosition,
-    averageTimePerPositionSeconds: targetSeconds,
+    targetedPercent: total > 0 ? percent(targeted, total) : null,
+    offTargetPercent: total > 0 ? percent(offTarget, total) : null,
+    targetTimePerPosition: formatDuration(targetSeconds),
+    averageTimePerPositionSeconds,
     nonTargetedShots,
   };
 }
 
-function buildOperationalScore(loadingQuality) {
-  const targetSeconds = 165;
+function buildUnloadingQuality(matchRows, configuredTargetSeconds) {
+  const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.unloadingSeconds);
+  const empty = {
+    targeted: 0,
+    offTarget: 0,
+    targetedPercent: null,
+    offTargetPercent: null,
+    targetTimePerPosition: formatDuration(targetSeconds),
+    averageTimePerPositionSeconds: null,
+    eligibleTrips: 0,
+  };
+  if (!Array.isArray(matchRows)) return empty;
+
+  const groups = new Map();
+  for (const row of matchRows) {
+    if (row.operationType !== "DECHG" || !row.travelCode) continue;
+    if (!groups.has(row.travelCode)) groups.set(row.travelCode, []);
+    groups.get(row.travelCode).push(row);
+  }
+
+  // Keep the denominator aligned with the Excel TCD: one counted position
+  // row per voyage, with the total elapsed time divided by that count.
+  const unloadingRows = Array.from(groups.entries()).map(([travelCode, rows]) => {
+    const firstOperation = minDate(rows.map((row) => row.startedAt));
+    const lastOperation = maxDate(rows.map((row) => row.startedAt));
+    const elapsedSeconds = firstOperation && lastOperation
+      ? Math.max(0, Math.round((lastOperation.getTime() - firstOperation.getTime()) / 1000))
+      : 0;
+    const timePerPositionSeconds = rows.length > 0 ? elapsedSeconds / rows.length : 0;
+    return {
+      travelCode,
+      elapsedSeconds,
+      timePerPositionSeconds,
+      eligible: rows.length > 0 && elapsedSeconds > 0,
+    };
+  }).filter((row) => row.eligible);
+
+  const targeted = unloadingRows.filter((row) => row.timePerPositionSeconds <= targetSeconds).length;
+  const total = unloadingRows.length;
+  const offTarget = Math.max(0, total - targeted);
+  const averageTimePerPositionSeconds = total > 0
+    ? Math.round(unloadingRows.reduce((sum, row) => sum + row.timePerPositionSeconds, 0) / total)
+    : null;
+  return {
+    targeted,
+    offTarget,
+    targetedPercent: total > 0 ? percent(targeted, total) : null,
+    offTargetPercent: total > 0 ? percent(offTarget, total) : null,
+    targetTimePerPosition: formatDuration(targetSeconds),
+    averageTimePerPositionSeconds,
+    eligibleTrips: total,
+  };
+}
+
+function readLoadingDetails(workbook) {
+  const matchSheetName = workbook.SheetNames.find((name) => normalizeKey(name) === "feuille de match");
+  const matchSheet = matchSheetName ? workbook.Sheets[matchSheetName] : null;
+  if (!matchSheet) return new Map();
+  const matchRows = XLSX.utils.sheet_to_json(matchSheet, { header: 1, raw: false, defval: "", blankrows: false });
+  const titleRowIndex = matchRows.findIndex((row) => row.some((value) => normalizeKey(value) === "tirs non cadres"));
+  if (titleRowIndex < 0) return new Map();
+  const headerRow = matchRows[titleRowIndex + 1] ?? [];
+  const columns = {
+    travelCode: headerRow.findIndex((value) => normalizeKey(value) === "voyage"),
+    time: headerRow.findIndex((value) => normalizeKey(value) === "heure"),
+    positions: headerRow.findIndex((value) => normalizeKey(value) === "nb poz"),
+    timePerPosition: headerRow.findIndex((value) => normalizeKey(value) === "temps poz"),
+    where: headerRow.findIndex((value) => normalizeKey(value) === "ou"),
+  };
+  const details = new Map();
+  for (const row of matchRows.slice(titleRowIndex + 2)) {
+    const travelCode = cleanText(row[columns.travelCode]);
+    if (!travelCode) break;
+    details.set(travelCode, {
+      time: formatImportedClock(cleanText(row[columns.time])),
+      positions: cleanText(row[columns.positions]),
+      timePerPosition: formatImportedDuration(cleanText(row[columns.timePerPosition])),
+      where: cleanText(row[columns.where]),
+    });
+  }
+  return details;
+}
+
+function buildOperationalScore(loadingQuality, unloadingQuality, duelRate, possessionPercent, configuredTargetSeconds, scoreTargetPercent) {
+  const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.loadingSeconds);
   const scored = Number.isFinite(loadingQuality?.targeted) ? Math.round(loadingQuality.targeted) : null;
   const conceded = Number.isFinite(loadingQuality?.offTarget) ? Math.round(loadingQuality.offTarget) : null;
-  if (scored === null || conceded === null) {
-    return {
-      goalsFor: 0,
-      goalsAgainst: 0,
-      loading: { status: "unavailable", scored: null, conceded: null, targetSeconds },
-    };
-  }
+  const loadingPercent = loadingQuality?.targetedPercent;
+  const unloadingPercent = unloadingQuality?.targetedPercent;
+  const indicators = { duelRate, loadingPercent, unloadingPercent, possessionPercent };
+  const available = Object.values(indicators).every((value) => Number.isFinite(value));
+  const reachedIndicators = available
+    ? Object.values(indicators).filter((value) => value >= scoreTargetPercent).length
+    : null;
   return {
-    goalsFor: scored,
-    goalsAgainst: conceded,
-    loading: { status: "available", scored, conceded, targetSeconds },
+    status: available ? "available" : "unavailable",
+    targetPercent: scoreTargetPercent,
+    goalsFor: reachedIndicators,
+    goalsAgainst: reachedIndicators === null ? null : Object.keys(indicators).length - reachedIndicators,
+    indicators,
+    loading: {
+      status: scored !== null && conceded !== null && scored + conceded > 0 ? "available" : "unavailable",
+      scored,
+      conceded,
+      targetSeconds,
+    },
+  };
+}
+
+function buildPossessionScore(rows) {
+  const zonagePositions = new Set();
+  const receptionPositions = new Set();
+  for (const row of rows) {
+    if (row.operationType === "ZONAGE") zonagePositions.add(row.position);
+    if (row.operationType === "DECHG") receptionPositions.add(row.position);
+  }
+  const zonageCount = zonagePositions.size;
+  const receptionCount = receptionPositions.size;
+  return {
+    percent: receptionCount > 0 ? percent(zonageCount, receptionCount) : null,
+    zonagePositions: zonageCount,
+    receptionPositions: receptionCount,
   };
 }
 
@@ -809,7 +1049,7 @@ function topCategoryPlayer(players, operationType, excludedNames) {
   })[0] ?? null;
 }
 
-function buildPositions(rows, period) {
+function buildPositions(rows, period, scoringRows, criteria) {
   const map = new Map();
   for (const row of rows) {
     if (!map.has(row.position)) {
@@ -831,18 +1071,24 @@ function buildPositions(rows, period) {
     position.operators.add(row.operator);
     const current = position.byTypeDates[row.operationType];
     position.byTypeDates[row.operationType] = current ? minDate([current, row.startedAt]) : row.startedAt;
-    if (isScoringRow(row, period) && (row.duelWonFlag === 0 || row.duelWonFlag === 1)) {
-      position.duelRows += 1;
-      if (row.duelWonFlag === 1) position.duelWonRows += 1;
-    }
     if (!position.travelCode && row.travelCode) position.travelCode = row.travelCode;
+  }
+
+  for (const row of scoringRows ?? []) {
+    const position = map.get(row.position);
+    if (!position || (row.duelWonFlag !== 0 && row.duelWonFlag !== 1)) continue;
+    position.duelRows += 1;
+    if (row.duelWonFlag === 1) position.duelWonRows += 1;
   }
 
   return Array.from(map.values()).map((position) => {
     const start = position.byTypeDates.DECHG ?? position.firstOperation;
     const zonage = position.byTypeDates.ZONAGE ?? null;
-    const delayMinutes = zonage ? Math.max(0, Math.round((zonage.getTime() - start.getTime()) / 60000)) : null;
-    const duelWon = position.duelRows > 0 ? position.duelWonRows > 0 : delayMinutes !== null && delayMinutes <= DZ_TARGET_MINUTES;
+    const delaySeconds = zonage ? Math.max(0, Math.round((zonage.getTime() - start.getTime()) / 1000)) : null;
+    const delayMinutes = delaySeconds === null ? null : Math.round(delaySeconds / 60);
+    const duelWon = position.duelRows > 0
+      ? position.duelWonRows > 0
+      : delaySeconds !== null && delaySeconds <= (criteria?.zonageMinutes ?? DEFAULT_PERFORMANCE_CRITERIA.zonageMinutes) * 60;
     return {
       id: position.id,
       travelCode: position.travelCode || "",
@@ -911,9 +1157,15 @@ function buildAlerts({ validation, openDuelRows, duelTotal, weakRole }) {
   return alerts.slice(0, 5);
 }
 
-function buildCauserie({ score, openDuelRows, weakRole, validation }) {
-  const priority =
-    score >= 85 ? "Maintenir le rythme et sécuriser les fins de séquence." : "Reprendre les duels hors délai cible.";
+function buildCauserie({ duelRate, loadingPercent, unloadingPercent, possessionPercent, scoreTargetPercent, openDuelRows, weakRole, validation, zonageMinutes }) {
+  const indicators = [duelRate, loadingPercent, unloadingPercent, possessionPercent];
+  const indicatorsAvailable = indicators.every((value) => Number.isFinite(value));
+  const reachedIndicators = indicatorsAvailable ? indicators.filter((value) => value >= scoreTargetPercent).length : 0;
+  const priority = !indicatorsAvailable
+    ? "Compléter les indicateurs avant de conclure le match."
+    : reachedIndicators > indicators.length - reachedIndicators
+      ? "Maintenir le rythme et sécuriser les fins de séquence."
+      : "Reprendre les indicateurs sous l'objectif de la ligue.";
   const risk =
     openDuelRows.length > 0
       ? `${openDuelRows.length} duel(s) à reprendre dans le plan de jeu.`
@@ -922,7 +1174,7 @@ function buildCauserie({ score, openDuelRows, weakRole, validation }) {
   return [
     { label: "Priorité", value: priority },
     { label: "Risque principal", value: risk },
-    { label: "Objectif", value: "Tenir le délai cible de 30 minutes sur les duels." },
+    { label: "Objectif", value: `Tenir le délai cible de ${zonageMinutes} minutes sur les duels.` },
     { label: "Arbitrage", value: weakRole ? `Surveiller l'équilibre ${weakRole.role.toLowerCase()}.` : "Aucun arbitrage critique." },
     {
       label: "Heure de revue",
@@ -994,13 +1246,13 @@ function hasUsableCalculatedColumns(matrix, columnMap) {
   return duelFlags.length >= sourceRows.length * 0.8 && dzValues.length > 0;
 }
 
-function buildFilterStats(rows, period) {
+function buildFilterStats(rows, period, criteria) {
   const periodRows = rows.filter((row) => period.useExcelPeriod ? isExcelBlank(row.hourFilter) : isInTimeRange(row.startedAt, period));
   const operatorRows = period.useDerivedRows ? rows : rows.filter((row) => isExcelBlank(row.operatorFilter));
   const matchRows = rows.filter((row) => isMatchRow(row, period));
   const scoringRows = period.useDerivedRows
-    ? buildDerivedScoringRows(matchRows)
-    : matchRows.filter((row) => isScoringRow(row, period));
+    ? buildDerivedScoringRows(matchRows, (criteria?.zonageMinutes ?? DEFAULT_PERFORMANCE_CRITERIA.zonageMinutes) * 60)
+    : buildScoringRows(matchRows, period, (criteria?.zonageMinutes ?? DEFAULT_PERFORMANCE_CRITERIA.zonageMinutes) * 60);
 
   return {
     sourceRows: rows.length,
@@ -1019,11 +1271,26 @@ function isMatchRow(row, period) {
   return (period?.useDerivedRows || isExcelBlank(row.operatorFilter)) && periodMatches;
 }
 
+function isPossessionRow(row, period) {
+  return period?.useExcelPeriod ? isExcelBlank(row.hourFilter) : isInActiveTimeRange(row.startedAt, period);
+}
+
 function isScoringRow(row, period) {
   return isMatchRow(row, period) && (period?.useDerivedRows || isExcelBlank(row.unzonedFilter));
 }
 
-function buildDerivedScoringRows(rows) {
+function buildScoringRows(rows, period, targetSeconds) {
+  return rows
+    .filter((row) => isScoringRow(row, period))
+    .map((row) => ({
+      ...row,
+      duelWonFlag: Number.isFinite(row.dz)
+        ? (row.dz <= targetSeconds ? 1 : 0)
+        : row.duelWonFlag,
+    }));
+}
+
+function buildDerivedScoringRows(rows, targetSeconds) {
   const byPosition = new Map();
   for (const row of rows) {
     if (!byPosition.has(row.position)) byPosition.set(row.position, []);
@@ -1038,13 +1305,13 @@ function buildDerivedScoringRows(rows) {
     const zonage = positionRows
       .filter((row) => row.operationType === "ZONAGE" && row.startedAt >= start.startedAt)
       .sort((a, b) => a.startedAt - b.startedAt)[0];
-    const delayMinutes = zonage
-      ? Math.max(0, Math.round((zonage.startedAt.getTime() - start.startedAt.getTime()) / 60000))
+    const delaySeconds = zonage
+      ? Math.max(0, Math.round((zonage.startedAt.getTime() - start.startedAt.getTime()) / 1000))
       : null;
     return [{
       ...start,
       position,
-      duelWonFlag: delayMinutes !== null && delayMinutes <= DZ_TARGET_MINUTES ? 1 : 0,
+      duelWonFlag: delaySeconds !== null && delaySeconds <= targetSeconds ? 1 : 0,
       unzonedFilter: "",
     }];
   });
@@ -1052,6 +1319,10 @@ function buildDerivedScoringRows(rows) {
 
 function isInTimeRange(date, period) {
   if (period?.useExcelPeriod) return true;
+  return isInActiveTimeRange(date, period);
+}
+
+function isInActiveTimeRange(date, period) {
   if (!date || !period) return false;
   const minutes = parisMinutes(date);
   if (minutes === null) return false;
@@ -1060,6 +1331,7 @@ function isInTimeRange(date, period) {
 
 function parisMinutes(date) {
   if (!date) return null;
+  if (Number.isFinite(date.__parisMinutes)) return date.__parisMinutes;
   const parts = new Intl.DateTimeFormat("fr-FR", {
     timeZone: "Europe/Paris",
     hour: "2-digit",
@@ -1071,6 +1343,15 @@ function parisMinutes(date) {
   if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
   const minutes = (hour === 24 ? 0 : hour) * 60 + minute;
   return minutes;
+}
+
+function annotateParisMinutes(date, minutes) {
+  Object.defineProperty(date, "__parisMinutes", {
+    configurable: false,
+    enumerable: false,
+    value: minutes,
+  });
+  return date;
 }
 
 function parseTimeInput(value) {
@@ -1107,7 +1388,21 @@ function parseExcelDate(value) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
   if (typeof value === "number" && Number.isFinite(value)) {
     const epoch = Date.UTC(1899, 11, 30);
-    return new Date(epoch + value * 86400000);
+    const serialDate = new Date(epoch + value * 86400000);
+    const parisMinutesValue = serialDate.getUTCHours() * 60 + serialDate.getUTCMinutes();
+    const wallClock = Date.UTC(
+      serialDate.getUTCFullYear(),
+      serialDate.getUTCMonth(),
+      serialDate.getUTCDate(),
+      serialDate.getUTCHours(),
+      serialDate.getUTCMinutes(),
+      serialDate.getUTCSeconds(),
+      serialDate.getUTCMilliseconds(),
+    );
+    return annotateParisMinutes(
+      new Date(wallClock - timeZoneOffsetMilliseconds(wallClock, "Europe/Paris")),
+      parisMinutesValue,
+    );
   }
   const text = String(value).trim();
   const parsed = new Date(text);
@@ -1121,6 +1416,27 @@ function parseExcelDate(value) {
     if (!Number.isNaN(date.getTime())) return date;
   }
   return null;
+}
+
+function timeZoneOffsetMilliseconds(timestamp, timeZone) {
+  const dateKey = new Date(timestamp).toISOString().slice(0, 10);
+  const cacheKey = `${timeZone}:${dateKey}`;
+  if (parisOffsetCache.has(cacheKey)) return parisOffsetCache.get(cacheKey);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "longOffset",
+  }).formatToParts(new Date(timestamp));
+  const offset = parts.find((part) => part.type === "timeZoneName")?.value ?? "GMT";
+  const match = offset.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/);
+  if (!match) {
+    parisOffsetCache.set(cacheKey, 0);
+    return 0;
+  }
+  const [, sign, hours, minutes = "0"] = match;
+  const absolute = (Number(hours) * 60 + Number(minutes)) * 60 * 1000;
+  const result = sign === "+" ? absolute : -absolute;
+  parisOffsetCache.set(cacheKey, result);
+  return result;
 }
 
 function cleanText(value) {
@@ -1159,6 +1475,23 @@ function parseNumber(value) {
   if (!normalized) return null;
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseDurationSeconds(value, displayValue = "") {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    if (value === 0 && !String(displayValue ?? "").trim()) return null;
+    return Math.round(value * 86400);
+  }
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return Math.round((value.getTime() - Date.UTC(1899, 11, 30)) / 1000);
+  }
+  const parsedClock = parseClockSeconds(value);
+  return parsedClock === null ? null : parsedClock;
+}
+
+function formatImportedDuration(value) {
+  const seconds = parseClockSeconds(value);
+  return seconds === null ? cleanText(value) : formatDuration(seconds);
 }
 
 function parseDuelFlag(value) {
@@ -1226,9 +1559,10 @@ function polyvalenceScore(byType, topByType) {
   return Math.round(clamp(normalizedScores.reduce((sum, score) => sum + score, 0) / 3, 0, 1) * 100);
 }
 
-function buildHourlyPerformance(rows) {
+function buildHourlyPerformance(rows, period) {
   const buckets = new Map();
   for (const row of rows) {
+    if (!isInActiveTimeRange(row.startedAt, period)) continue;
     const hour = parisHour(row.startedAt);
     if (hour === null) continue;
     if (!buckets.has(hour)) buckets.set(hour, { hour, won: 0, total: 0 });
@@ -1245,6 +1579,7 @@ function buildHourlyPerformance(rows) {
 
 function parisHour(date) {
   if (!date) return null;
+  if (Number.isFinite(date.__parisMinutes)) return Math.floor(date.__parisMinutes / 60);
   const value = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", hour12: false })
     .formatToParts(date)
     .find((part) => part.type === "hour")?.value;
@@ -1255,6 +1590,13 @@ function parisHour(date) {
 function statusFromScore(score) {
   if (score >= 85) return "MAÎTRISÉ";
   if (score >= 70) return "À SURVEILLER";
+  return "ACTION NÉCESSAIRE";
+}
+
+function statusFromOperationalScore(operationalScore) {
+  if (!operationalScore || operationalScore.status !== "available") return "À COMPLÉTER";
+  if ((operationalScore.goalsFor ?? 0) > (operationalScore.goalsAgainst ?? 0)) return "MAÎTRISÉ";
+  if (operationalScore.goalsFor === operationalScore.goalsAgainst) return "À SURVEILLER";
   return "ACTION NÉCESSAIRE";
 }
 

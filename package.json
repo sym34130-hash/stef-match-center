@@ -20,11 +20,11 @@
     "concurrently": "^9.2.0",
     "express": "^5.1.0",
     "lucide-react": "^0.539.0",
-    "multer": "^2.0.2",
+    "multer": "^2.3.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "vite": "^7.1.2",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

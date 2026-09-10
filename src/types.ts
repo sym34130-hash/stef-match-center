@@ -1,4 +1,4 @@
-export type MatchStatus = "MAÎTRISÉ" | "À SURVEILLER" | "ACTION NÉCESSAIRE";
+export type MatchStatus = "MAÎTRISÉ" | "À SURVEILLER" | "ACTION NÉCESSAIRE" | "À COMPLÉTER";
 
 export type Agency = {
   code: string;
@@ -58,6 +58,12 @@ export type Snapshot = {
   version: number;
   sourceName: string;
   importedAt: string;
+  performanceCriteria?: {
+    zonageMinutes: number;
+    loadingSeconds: number;
+    unloadingSeconds: number;
+    scoreTargetPercent: number;
+  };
   agency: {
     code: string;
     detectedCode: string;
@@ -68,7 +74,7 @@ export type Snapshot = {
     firstOperation: string | null;
     lastOperation: string | null;
     timeRangeLabel: string;
-    score: number;
+    score: number | null;
     status: MatchStatus;
     objective: string;
     dzTargetMinutes: number;
@@ -79,8 +85,16 @@ export type Snapshot = {
     scoringFilterDescription?: string;
   };
   operationalScore?: {
-    goalsFor: number;
-    goalsAgainst: number;
+    status: "available" | "unavailable";
+    targetPercent: number;
+    goalsFor: number | null;
+    goalsAgainst: number | null;
+    indicators: {
+      duelRate: number | null;
+      loadingPercent: number | null;
+      unloadingPercent: number | null;
+      possessionPercent: number | null;
+    };
     loading: {
       status: "available" | "unavailable";
       scored: number | null;
@@ -95,7 +109,12 @@ export type Snapshot = {
     travels: number;
     duelWon: number;
     duelTotal: number;
-    duelRate: number;
+    duelRate: number | null;
+    possessionPercent: number | null;
+    possessionPositions: {
+      zonage: number;
+      reception: number;
+    };
     operationCounts: Record<string, number>;
     roleDistribution: Array<{ role: string; count: number; percent: number }>;
     sourceRows?: number;
@@ -114,8 +133,8 @@ export type Snapshot = {
   loadingQuality?: {
     targeted: number;
     offTarget: number;
-    targetedPercent: number;
-    offTargetPercent: number;
+    targetedPercent: number | null;
+    offTargetPercent: number | null;
     targetTimePerPosition?: string;
     averageTimePerPositionSeconds?: number | null;
     nonTargetedShots: Array<{
@@ -126,11 +145,20 @@ export type Snapshot = {
       where: string;
     }>;
   };
+  unloadingQuality?: {
+    targeted: number;
+    offTarget: number;
+    targetedPercent: number | null;
+    offTargetPercent: number | null;
+    targetTimePerPosition?: string;
+    averageTimePerPositionSeconds?: number | null;
+    eligibleTrips?: number;
+  };
   duelQuality?: {
     won: number;
     lost: number;
-    wonPercent: number;
-    lostPercent: number;
+    wonPercent: number | null;
+    lostPercent: number | null;
     lostDuels: Array<{
       travelCode: string;
       agency: string;

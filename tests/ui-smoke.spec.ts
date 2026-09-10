@@ -5,7 +5,7 @@ const screens = [
   { name: "02-feuille-match", button: "02 Feuille de match", marker: "02 - Feuille de match" },
   { name: "03-composition", button: "03 Composition", marker: "03 - Composition" },
   { name: "04-coach", button: "04 Coach", marker: "04 - Coach" },
-  { name: "05-ecran-quai", button: "05 Écran quai", marker: "DUELS GAGNÉS" },
+  { name: "05-ecran-quai", button: "05 Écran quai", marker: "CÉLÉBRATION ACTIVÉE" },
 ];
 
 test("les vues principales restent lisibles sur desktop, tablette et mobile", async ({ page }, testInfo) => {
@@ -39,21 +39,97 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
     await page.getByRole("button", { name: screen.button, exact: true }).click();
     if (screen.name === "05-ecran-quai") {
       await expect(page.locator(".tv-mode")).toHaveCount(1);
+      await expect(page.locator(".tv-plan-empty-state")).toHaveCount(3);
+      await expect(page.locator(".tv-grid").getByText("OPÉRATIONS", { exact: true })).toHaveCount(0);
+      await expect(page.locator(".tv-grid").getByText("NB DE BLESSURES (A.T)", { exact: true })).toBeVisible();
+      await expect(page.locator(".tv-grid").getByText("2", { exact: true })).toBeVisible();
+      await expect(page.locator(".tv-grid").getByText("90,9%", { exact: true })).toBeVisible();
+      await expect(page.locator(".tv-grid").getByText("À renseigner", { exact: true })).toHaveCount(1);
     } else if ("heading" in screen) {
       await expect(page.getByRole("heading", { name: screen.heading, exact: true })).toBeVisible();
     } else {
       await expect(page.getByText(screen.marker, { exact: true })).toBeVisible();
     }
+    if (screen.name === "04-coach") {
+      await expect(page.locator(".coach-written-plan").getByText("À écrire", { exact: true })).toHaveCount(3);
+      await expect(page.locator(".coach-written-plan").getByText("À planifier", { exact: true })).toHaveCount(1);
+    }
     if (screen.name === "02-feuille-match") {
       await expect(page.locator(".match-page.is-threshold-reached")).toHaveCount(1);
       await expect(page.getByText("Célébration activée", { exact: true })).toBeVisible();
-      await expect(page.getByText("Score chargement", { exact: true })).toBeVisible();
-      await expect(page.locator(".operational-score-card strong")).toHaveText("34 - 35");
+      await expect(page.locator(".match-score-bubble")).toHaveCount(4);
+      const matchBubbleLayout = await page.evaluate(() => {
+        const bubbles = Array.from(document.querySelectorAll<HTMLElement>(".match-score-bubble"));
+        const sizes = bubbles.map((bubble) => {
+          const rect = bubble.getBoundingClientRect();
+          return {
+            width: Math.round(rect.width * 10) / 10,
+            height: Math.round(rect.height * 10) / 10,
+            overflow: bubble.scrollHeight > bubble.clientHeight + 1,
+          };
+        });
+        return {
+          widths: sizes.map(({ width }) => width),
+          heights: sizes.map(({ height }) => height),
+          sameWidth: sizes.every(({ width }) => width === sizes[0]?.width),
+          sameHeight: sizes.every(({ height }) => height === sizes[0]?.height),
+          overflow: sizes.some(({ overflow }) => overflow),
+        };
+      });
+      expect(matchBubbleLayout.sameWidth).toBe(true);
+      expect(matchBubbleLayout.sameHeight).toBe(true);
+      expect(matchBubbleLayout.overflow).toBe(false);
+      await expect(page.locator(".match-score-bubbles").getByText("% passes réussies", { exact: true })).toBeVisible();
+      await expect(page.getByText("% chargements cadrés", { exact: true })).toBeVisible();
+      await expect(page.locator(".loading-score-bubble strong")).toHaveText("97,1%");
+      await expect(page.locator(".unloading-score-bubble")).toBeVisible();
+      await expect(page.locator(".match-score-bubbles").getByText("% déchargements dans la cible", { exact: true })).toBeVisible();
+      await expect(page.locator(".football-score-panel")).toHaveCount(1);
+      await expect(page.locator(".football-score-side-for strong")).toHaveText("4");
+      await expect(page.locator(".football-score-side-against strong")).toHaveText("0");
+      await expect(page.getByText("Indicateurs atteints", { exact: true })).toBeVisible();
+      await expect(page.getByText("Indicateurs sous l'objectif", { exact: true })).toBeVisible();
+      await expect(page.locator(".match-score-bubbles").getByText("% possession Zody", { exact: true })).toBeVisible();
+      await expect(page.locator(".team-motivation-message")).toHaveText("Excellente dynamique. On garde l'intensité jusqu'au bout.");
       await expect(page.locator(".match-result-actions")).toHaveCount(0);
+      await expect(page.locator(".match-kpi-board").getByText("NB DE BLESSURES (A.T)", { exact: true })).toBeVisible();
+      await expect(page.locator(".match-kpi-board").getByText("Duels gagnés", { exact: true })).toHaveCount(0);
+      await expect(page.locator(".real-staff-metric").getByText("À renseigner", { exact: true })).toBeVisible();
+      await expect(page.locator(".tonnage-kpi-card strong.kpi-manual-placeholder")).toHaveText("À renseigner");
+      await page.getByRole("button", { name: "Modifier les chiffres", exact: true }).click();
+      await expect(page.getByLabel("Nombre de blessures A.T")).toBeVisible();
+      await expect(page.locator(".team-performance-title").getByLabel("Effectif prévu du jour")).toBeVisible();
+      await page.getByLabel("Nombre de blessures A.T").selectOption("2");
+      await page.getByLabel("Effectif prévu du jour").fill("22");
+      await page.getByRole("button", { name: "Enregistrer les chiffres", exact: true }).click();
+      await expect(page.locator(".match-kpi-board > div").first()).toContainText("2");
+      await expect(page.locator(".real-staff-metric strong")).toHaveText("90,9%");
       await expect(page.locator(".match-kpi-board").getByText("À renseigner", { exact: true })).toBeVisible();
-      await expect(page.getByText("623 opérations RECEPTION", { exact: true })).toBeVisible();
+      await expect(page.locator(".category-awards .award-card:not(.polyvalent) .award-copy > b")).toHaveCount(0);
+      await expect(page.locator(".category-awards .award-card.polyvalent .award-copy > b")).toHaveCount(0);
+      const awardOrder = await page.locator(".category-awards .award-card").evaluateAll((cards) => cards.map((card) => card.classList.contains("polyvalent") ? "polyvalent" : ["attack", "defense", "midfield"].find((kind) => card.classList.contains(kind))));
+      expect(awardOrder).toEqual(["attack", "defense", "midfield", "polyvalent"]);
       await expect(page.locator(".award-card.polyvalent .award-challenger")).toHaveCount(2);
-      await expect(page.getByText("Chargements contrôlés", { exact: true })).toBeVisible();
+      await expect(page.locator(".operational-charts-carousel").getByText("Chargements contrôlés", { exact: true })).toBeVisible();
+      await expect(page.locator(".operational-charts-carousel").getByText("Temps de déchargement", { exact: true })).toBeVisible();
+      await expect(page.locator(".operational-chart-slide")).toHaveCount(4);
+      const qualityCarouselLayout = await page.evaluate(() => {
+        const viewport = document.querySelector<HTMLElement>(".operational-charts-carousel-viewport");
+        const slides = Array.from(document.querySelectorAll<HTMLElement>(".operational-chart-slide"));
+        const cards = slides.map((slide) => slide.firstElementChild as HTMLElement | null).filter((card): card is HTMLElement => Boolean(card));
+        const widths = slides.map((slide) => slide.offsetWidth);
+        const heights = cards.map((card) => card.offsetHeight);
+        return {
+          slideCount: slides.length,
+          sameSlideWidth: widths.every((width) => width === widths[0]),
+          sameCardHeight: heights.every((height) => height === heights[0]),
+          horizontalOverflow: Boolean(viewport && viewport.scrollWidth > viewport.clientWidth + 1),
+        };
+      });
+      expect(qualityCarouselLayout).toEqual({ slideCount: 4, sameSlideWidth: true, sameCardHeight: true, horizontalOverflow: true });
+      await page.getByRole("button", { name: "Graphique suivant", exact: true }).click();
+      await expect(page.locator(".operational-charts-carousel-counter")).toHaveText("2 / 4");
+      await expect(page.locator(".operational-charts-carousel-dots button.is-active")).toHaveCount(1);
       await expect(page.getByText("Détails des chargements non cadrés", { exact: true })).toBeVisible();
       await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
       await expect(page.getByRole("button", { name: "Sortir du mode Célébration", exact: true })).toBeVisible();
@@ -136,7 +212,47 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
 
   await page.getByRole("button", { name: "05 Écran quai", exact: true }).click();
   await expect(page.locator(".tv-mode.is-threshold-reached")).toHaveCount(1);
-  await expect(page.getByRole("button", { name: "Écrire", exact: true })).toBeVisible();
+  await expect(page.locator(".tv-match-ceremony")).toHaveCount(1);
+  await expect(page.locator(".tv-match-ceremony .match-emblem.trophy")).toHaveCount(1);
+  await expect(page.locator(".tv-match-ceremony .match-score-bubble")).toHaveCount(4);
+  const tvBubbleLayout = await page.locator(".tv-match-ceremony").evaluate((ceremony) => {
+    const bubbles = Array.from(ceremony.querySelectorAll<HTMLElement>(".match-score-bubble"));
+    const sizes = bubbles.map((bubble) => {
+      const rect = bubble.getBoundingClientRect();
+      return {
+        width: Math.round(rect.width * 10) / 10,
+        height: Math.round(rect.height * 10) / 10,
+        overflow: bubble.scrollHeight > bubble.clientHeight + 1,
+      };
+    });
+    return {
+      sameWidth: sizes.every(({ width }) => width === sizes[0]?.width),
+      sameHeight: sizes.every(({ height }) => height === sizes[0]?.height),
+      overflow: sizes.some(({ overflow }) => overflow),
+    };
+  });
+  expect(tvBubbleLayout).toEqual({ sameWidth: true, sameHeight: true, overflow: false });
+  await expect(page.locator(".tv-match-ceremony .loading-score-bubble strong")).toHaveText("97,1%");
+  await expect(page.locator(".tv-match-ceremony .unloading-score-bubble")).toBeVisible();
+  await expect(page.locator(".tv-match-ceremony .football-score-side-for strong")).toHaveText("4");
+  await expect(page.locator(".tv-match-ceremony .football-score-side-against strong")).toHaveText("0");
+  await page.waitForTimeout(500);
+  const tvMotionBudget = await page.evaluate(() => Array.from(document.getAnimations({ subtree: true }))
+    .filter((animation) => animation.effect?.getComputedTiming().iterations === Infinity)
+    .map((animation) => animation.animationName ?? "unknown"));
+  expect(tvMotionBudget).toEqual([]);
+  await expect(page.locator(".tv-grid").getByText("NB DE BLESSURES (A.T)", { exact: true })).toBeVisible();
+  await expect(page.locator(".tv-grid").getByText("2", { exact: true })).toBeVisible();
+      await expect(page.locator(".tv-grid").getByText("90,9%", { exact: true })).toBeVisible();
+      await expect(page.locator(".tv-grid").getByText("Opérations", { exact: true })).toHaveCount(0);
+      await expect(page.locator(".tv-key-players")).toHaveCount(1);
+      await expect(page.locator(".tv-key-player")).toHaveCount(3);
+      await expect(page.locator(".tv-key-player-shirt")).toHaveCount(3);
+      await expect(page.locator(".tv-key-player-value")).toHaveCount(3);
+      await expect(page.locator(".tv-key-player-bar")).toHaveCount(3);
+      const tvPlayerOrder = await page.locator(".tv-key-player").evaluateAll((cards) => cards.map((card) => ["attack", "defense", "midfield"].find((kind) => card.classList.contains(kind))));
+      expect(tvPlayerOrder).toEqual(["attack", "defense", "midfield"]);
+      await expect(page.getByRole("button", { name: "Écrire", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Écrire", exact: true }).click();
   await expect(page.locator('input[type="file"][accept="image/png,image/jpeg,image/webp"]')).toHaveCount(3);
   await expect(page.getByLabel("SAV, contenu du brief")).toBeVisible();
@@ -186,6 +302,51 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
 });
 
 test("la plage horaire et le graphique horaire restent explicites", async ({ page }) => {
+  let baseSnapshot: Record<string, any> | null = null;
+  await page.route(/\/api\/agencies\/058\/snapshot(?:\?.*)?$/, async (route) => {
+    const response = await route.fetch();
+    const payload = await response.json();
+    baseSnapshot = payload.snapshot;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
+  });
+  await page.route("**/api/agencies/058/time-range", async (route) => {
+    const request = route.request().postDataJSON() as { start: string; end: string };
+    if (!baseSnapshot) throw new Error("Le snapshot de test n'est pas disponible.");
+    const snapshot = JSON.parse(JSON.stringify(baseSnapshot)) as Record<string, any>;
+    const rangeLabel = `${request.start} - ${request.end}`;
+    snapshot.match = {
+      ...snapshot.match,
+      periodStart: request.start,
+      periodEnd: request.end,
+      periodLabel: `${request.start}-${request.end}`,
+      timeRangeLabel: rangeLabel,
+    };
+    if (request.start === "13:00" && request.end === "22:30") {
+      snapshot.hourlyPerformance = [
+        { hour: 13, won: 99, total: 245, label: "13h", rate: 40.4 },
+        { hour: 14, won: 329, total: 467, label: "14h", rate: 70.4 },
+        { hour: 15, won: 354, total: 427, label: "15h", rate: 82.9 },
+        { hour: 16, won: 263, total: 447, label: "16h", rate: 58.8 },
+        { hour: 17, won: 151, total: 288, label: "17h", rate: 52.4 },
+        { hour: 18, won: 173, total: 238, label: "18h", rate: 72.7 },
+        { hour: 19, won: 172, total: 200, label: "19h", rate: 86 },
+        { hour: 20, won: 266, total: 304, label: "20h", rate: 87.5 },
+        { hour: 21, won: 237, total: 289, label: "21h", rate: 82 },
+        { hour: 22, won: 16, total: 20, label: "22h", rate: 80 },
+      ];
+    } else if (request.start === "16:00" && request.end === "18:00") {
+      snapshot.hourlyPerformance = [
+        { hour: 16, won: 263, total: 447, label: "16h", rate: 58.8 },
+        { hour: 17, won: 151, total: 288, label: "17h", rate: 52.4 },
+        { hour: 18, won: 6, total: 7, label: "18h", rate: 85.7 },
+      ];
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ message: "PLAGE HORAIRE ACTUALISÉE", snapshot }),
+    });
+  });
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("058");
   await page.getByLabel("Code d'accès").fill("STEF-058");
@@ -195,6 +356,23 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   await expect(page.locator(".performance-chart-panel")).toBeVisible();
   await expect(page.getByRole("img", { name: "Évolution horaire du pourcentage de duels gagnés" })).toBeVisible();
   await expect(page.getByText("Duels gagnés / duels joués, heure par heure")).toBeVisible();
+
+  await page.locator(".time-range-control input").nth(0).fill("13:00");
+  await page.locator(".time-range-control input").nth(1).fill("22:30");
+  await page.getByRole("button", { name: "Appliquer", exact: true }).click();
+  await expect(page.locator(".time-range-control input").nth(0)).toHaveValue("13:00");
+  await expect(page.locator(".time-range-control input").nth(1)).toHaveValue("22:30");
+  const initialHours = await page.locator(".performance-chart-hour").allTextContents();
+  expect(initialHours).not.toContain("00h");
+  expect(initialHours).toEqual(["13h", "14h", "15h", "16h", "17h", "18h", "19h", "20h", "21h", "22h"]);
+
+  await page.locator(".time-range-control input").nth(0).fill("16:00");
+  await page.locator(".time-range-control input").nth(1).fill("18:00");
+  await page.getByRole("button", { name: "Appliquer", exact: true }).click();
+  await expect(page.locator(".time-range-control input").nth(0)).toHaveValue("16:00");
+  await expect(page.locator(".time-range-control input").nth(1)).toHaveValue("18:00");
+  await expect(page.locator(".performance-chart-hour")).toHaveText(["16h", "17h", "18h"]);
+  expect(await page.locator(".performance-chart-hour").allTextContents()).not.toContain("00h");
 });
 
 test("le guide et le retour de l'écran quai restent accessibles avant le premier import", async ({ page }) => {
@@ -225,11 +403,15 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
   await page.getByRole("button", { name: "ADM Administrateur", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: "Centre de pilotage des ligues", exact: true })).toBeVisible();
+  await expect(page.locator(".administrator-rule-strip select")).toHaveCount(3);
+  await expect(page.locator(".league-card .league-values select")).toHaveCount(12);
   await expect(page.locator(".administrator-rule-strip")).not.toContainText("Position");
   await expect(page.getByLabel("Cible zonage Argent")).toHaveValue("30");
   await expect(page.getByLabel("Modifier chargement Argent")).toHaveValue("00:02:45");
-  await page.getByLabel("Cible zonage Argent").fill("31");
-  await page.getByLabel("Cible zonage Argent").blur();
+  await expect(page.getByLabel("Temps déchargement Argent")).toHaveValue("00:01:00");
+  await expect(page.getByLabel("Modifier déchargement Argent")).toHaveValue("00:01:00");
+  await expect(page.getByLabel("Objectif score Argent").first()).toHaveValue("50");
+  await page.getByLabel("Cible zonage Argent").selectOption("31");
   await expect(page.getByLabel("Cible zonage Argent")).toHaveValue("31");
 
   await page.getByRole("button", { name: "Activer", exact: true }).last().click();
@@ -239,12 +421,14 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
   const animationState = await page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll<HTMLElement>(".league-card"));
     const reflections = cards.map((card) => getComputedStyle(card, "::after"));
+    const valueRows = Array.from(document.querySelectorAll<HTMLElement>(".league-card .league-values"));
     return {
       reflectionDurations: reflections.map((style) => style.animationDuration),
       reflectionDelays: reflections.map((style) => style.animationDelay),
       sceneAnimation: getComputedStyle(document.querySelector<HTMLElement>(".administrator-scene")!, "::after").display,
       sceneBackground: getComputedStyle(document.querySelector<HTMLElement>(".administrator-scene")!).backgroundImage,
       cardOverflow: cards.every((card) => getComputedStyle(card).overflow === "hidden"),
+      criteriaRows: valueRows.length === 4 && valueRows.every((row) => getComputedStyle(row).gridTemplateColumns.split(" ").length === 1 && row.querySelectorAll("label").length === 4),
     };
   });
   expect(animationState).toEqual({
@@ -253,6 +437,7 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
     sceneAnimation: "none",
     sceneBackground: expect.stringContaining("administrator-coach-office.png"),
     cardOverflow: true,
+    criteriaRows: true,
   });
 
   await page.reload();
@@ -261,9 +446,16 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
   await expect(page.locator(".administrator-page")).toBeVisible();
   await expect(page.getByLabel("Modifier zonage Argent")).toHaveValue("31");
   await expect(page.getByLabel("Modifier chargement Argent")).toHaveValue("00:02:45");
+  await expect(page.getByLabel("Temps déchargement Platine")).toHaveValue("00:00:50");
+  await expect(page.getByLabel("Modifier déchargement Argent")).toHaveValue("00:01:00");
   await expect(page.locator(".administrator-active-badge strong")).toHaveText("Platine");
   await expect(page.locator(".app-shell")).toHaveClass(/league-platine/);
   await expect(page.locator(".top-league-badge")).toContainText("Platine");
+
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  await expect(page.locator(".football-score-side-for strong")).toHaveText("1");
+  await expect(page.locator(".football-score-side-against strong")).toHaveText("3");
+  await expect(page.getByText("Célébration activée", { exact: true })).toHaveCount(0);
 });
 
 test("le nom de l'agence connectée reste correct dans tous les onglets", async ({ page }) => {
@@ -308,6 +500,7 @@ test("l'écran quai porte le brief unique avec ses zones et son mode plein écra
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await page.getByRole("button", { name: "05 Écran quai", exact: true }).click();
   await expect(page.locator(".tv-mode")).toHaveCount(1);
+  await expect(page.locator(".tv-match-ceremony .match-score-bubble")).toHaveCount(4);
   await expect(page.getByRole("button", { name: "Mode plein écran", exact: true })).toBeVisible();
   await expect(page.getByText("Plan de jeu", { exact: true })).toBeVisible();
   await expect(page.locator(".tv-plan-column")).toHaveCount(3);

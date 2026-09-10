@@ -89,7 +89,11 @@ Source de vérité retenue : Excel filtré actuel.
 
 - Les volumes, joueurs, positions, compositions et highlights utilisent les lignes avec `Filtre opérateur` vide et `Filtre heure` vide.
 - Le score et les duels utilisent ces mêmes lignes en excluant aussi les lignes où `Poz non zonées` est marqué.
-- Le score est calculé avec `Duels gagnés / lignes éligibles au score`.
+- Le taux de duels gagnés est calculé avec `Duels gagnés / lignes éligibles au score`.
+- Le score opérationnel affiché au format football compte, sur 4, les indicateurs qui atteignent l'objectif de la ligue active : taux de duels gagnés, chargements cadrés, déchargements dans la cible et possession Zody. Le format est `indicateurs atteints - indicateurs sous l'objectif`.
+- Les objectifs par défaut sont : Bronze `45 min / 00:03:15 / 00:01:15 / 45%`, Argent `30 min / 00:02:45 / 00:01:00 / 50%`, Or `25 min / 00:02:30 / 00:00:55 / 60%`, Platine `20 min / 00:02:15 / 00:00:50 / 70%` pour zonage, chargement, déchargement et objectif du score.
+- Le temps de déchargement est calculé sur les lignes `DECHG` de la plage active, par voyage : `(dernière opération - première opération) / nombre de positions`. Un voyage est dans la cible si ce temps moyen par position est inférieur ou égal au seuil de la ligue. Les voyages sans durée positive ne sont pas comptabilisés.
+- Le seuil de déchargement est configurable et affiché dans les ligues. Le pourcentage de voyages dans la cible entre dans le score opérationnel à 4 indicateurs, avec la même cible de réussite que les autres indicateurs.
 - La composition utilise le champ Excel `Poste`.
 - La fiche joueur affiche un `Indice volume`, pas une contribution équipe.
 - Les distinctions affichent la valeur du KPI gagné : CHG, ZONAGE ou DECHG selon le cas.

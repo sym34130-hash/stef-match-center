@@ -3,7 +3,11 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   timeout: 30_000,
-  fullyParallel: true,
+  globalSetup: "./tests/ui-global-setup.mjs",
+  globalTeardown: "./tests/ui-global-teardown.mjs",
+  // The API test harness persists one shared snapshot per agency.
+  fullyParallel: false,
+  workers: 1,
   reporter: "line",
   use: {
     baseURL: "http://localhost:5173",

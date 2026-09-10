@@ -50,6 +50,17 @@ try {
   });
   assert.equal(sessionResponse.status, 200, await safeText(sessionResponse));
 
+  const invalidWorkbookForm = new FormData();
+  invalidWorkbookForm.append("file", new Blob(["not an xlsx workbook"]), "invalid.xlsx");
+  const invalidImportResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/import`, {
+    method: "POST",
+    headers: { "x-access-code": accessCode },
+    body: invalidWorkbookForm,
+  });
+  const invalidImportPayload = await invalidImportResponse.json();
+  assert.equal(invalidImportResponse.status, 400, JSON.stringify(invalidImportPayload));
+  assert.equal(invalidImportPayload.title, "FICHIER NON IMPORTÉ", "Un classeur illisible doit rester une erreur contrôlée");
+
   const workbook = await fs.readFile(workbookPath);
   const formData = new FormData();
   formData.append(
@@ -73,12 +84,18 @@ try {
   assert.equal(snapshot.summary.operations, 4595, "Opérations filtrées après import API");
   assert.equal(snapshot.summary.positions, 1430, "Positions filtrées après import API");
   assert.equal(snapshot.summary.players, 20, "Joueurs filtrés après import API");
-  assert.equal(snapshot.summary.duelWon, 2060, "Duels gagnés après import API");
+  assert.equal(snapshot.summary.duelWon, 2064, "Duels gagnés recalculés après import API");
   assert.equal(snapshot.summary.duelTotal, 2925, "Dénominateur score après import API");
-  assert.equal(snapshot.summary.duelRate, 70.4, "Taux duels gagnés après import API");
-  assert.equal(snapshot.match.score, 70, "Score après import API");
+  assert.equal(snapshot.summary.duelRate, 70.6, "Taux duels gagnés recalculé après import API");
+  assert.equal(snapshot.summary.possessionPercent, 56.3, "Possession Zody après import API");
+  assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 720, reception: 1279 }, "Positions du ratio possession après import API");
+  assert.equal(snapshot.match.score, 71, "Score recalculé après import API");
+  assert.equal(snapshot.operationalScore.status, "available", "Score opérationnel disponible après import API");
+  assert.equal(snapshot.operationalScore.goalsFor, 4, "Score opérationnel marqué après import API");
+  assert.equal(snapshot.operationalScore.goalsAgainst, 0, "Score opérationnel encaissé après import API");
+  assert.equal(typeof snapshot.operationalScore.indicators.unloadingPercent, "number", "Indicateur déchargement disponible après import API");
   assert.equal(snapshot.loadingQuality.targeted, 34, "Chargements cadrés après import API");
-  assert.equal(snapshot.loadingQuality.offTarget, 35, "Chargements non cadrés après import API");
+  assert.equal(snapshot.loadingQuality.offTarget, 1, "Chargements non cadrés après import API");
   assert.equal(snapshot.loadingQuality.nonTargetedShots[0].travelCode, "X47890", "Tir non cadré après import API");
 
   const latestResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot`, {
@@ -86,7 +103,7 @@ try {
   });
   const latestPayload = await latestResponse.json();
   assert.equal(latestResponse.status, 200, JSON.stringify(latestPayload));
-  assert.equal(latestPayload.snapshot.match.score, 70, "Snapshot relu depuis STEF_DATA_DIR");
+  assert.equal(latestPayload.snapshot.match.score, 71, "Snapshot relu depuis STEF_DATA_DIR");
 
   const timeRangeResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/time-range`, {
     method: "POST",
@@ -101,8 +118,34 @@ try {
   assert.equal(timeRangePayload.snapshot.summary.operations, 4595, "Opérations après changement de plage");
   assert.equal(timeRangePayload.snapshot.match.periodLabel, "13:00-22:30", "Plage active après changement");
   assert.equal(timeRangePayload.snapshot.match.timeRangeLabel, "13:00 - 22:30", "Libellé de plage affiché après changement");
+  assert.equal(timeRangePayload.snapshot.summary.possessionPercent, 56.3, "Possession conservée sur la plage Excel de référence");
+  assert.deepEqual(timeRangePayload.snapshot.summary.possessionPositions, { zonage: 720, reception: 1279 }, "Positions possession sur la plage Excel de référence");
+  assert.deepEqual(
+    timeRangePayload.snapshot.hourlyPerformance.map((item) => item.label),
+    ["13h", "14h", "15h", "16h", "17h", "18h", "19h", "20h", "21h", "22h"],
+    "Graphique horaire borné par la plage active par défaut",
+  );
   assert.equal(timeRangePayload.snapshot.compositionPeriods.first.label, "13:00 - 17:45", "Première mi-temps alignée sur la plage active");
   assert.equal(timeRangePayload.snapshot.compositionPeriods.second.label, "17:45 - 22:30", "Deuxième mi-temps alignée sur la plage active");
+
+  const narrowTimeRangeResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/time-range`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-access-code": accessCode,
+    },
+    body: JSON.stringify({ start: "16:00", end: "18:00" }),
+  });
+  const narrowTimeRangePayload = await narrowTimeRangeResponse.json();
+  assert.equal(narrowTimeRangeResponse.status, 200, JSON.stringify(narrowTimeRangePayload));
+  assert.equal(narrowTimeRangePayload.snapshot.summary.operations, 1185, "Opérations après réduction de la plage");
+  assert.equal(narrowTimeRangePayload.snapshot.summary.possessionPercent, 44.5, "Possession recalculée après réduction de la plage");
+  assert.deepEqual(narrowTimeRangePayload.snapshot.summary.possessionPositions, { zonage: 126, reception: 283 }, "Positions possession après réduction de la plage");
+  assert.deepEqual(
+    narrowTimeRangePayload.snapshot.hourlyPerformance.map((item) => item.label),
+    ["16h", "17h", "18h"],
+    "Graphique horaire recalculé après réduction de la plage",
+  );
 
   const wideTimeRangeResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/time-range`, {
     method: "POST",

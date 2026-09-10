@@ -4,7 +4,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, KPI_DICTIONARY_VERSION, normalizeSnapshotContract, normalizeTimeRange } from "./match-engine.mjs";
+import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, KPI_DICTIONARY_VERSION, normalizePerformanceCriteria, normalizeSnapshotContract, normalizeTimeRange, primeWorkbookCache } from "./match-engine.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,6 +16,7 @@ const agenciesPath = path.join(__dirname, "agencies.json");
 const port = Number(process.env.PORT ?? 4174);
 const uploadLimitMb = readEnvNumber("STEF_UPLOAD_LIMIT_MB", 20);
 const compositionRangeCache = new Map();
+const workbookWarmupPromises = new Map();
 
 const app = express();
 const upload = multer({
@@ -57,7 +58,7 @@ app.post("/api/session", (req, res) => {
 });
 
 app.get("/api/agencies/:agencyCode/snapshot", requireAgency, async (req, res) => {
-  const snapshot = await readLatestSnapshot(req.agency.code);
+  const snapshot = await readLatestSnapshot(req.agency.code, readRequestedPerformanceCriteria(req.query));
   if (!snapshot) {
     res.status(404).json({
       title: "AUCUN MATCH IMPORTÉ",
@@ -105,14 +106,15 @@ app.post("/api/agencies/:agencyCode/time-range", requireAgency, async (req, res)
   const agencyDir = path.join(dataDir, sanitizeSegment(req.agency.code));
   try {
     const [buffer, currentSnapshot] = await Promise.all([
-      readLatestWorkbook(agencyDir),
+      readWorkbookForBuild(agencyDir),
       readLatestSnapshot(req.agency.code),
     ]);
+    const criteria = readRequestedPerformanceCriteria(req.body?.criteria) ?? currentSnapshot?.performanceCriteria;
     const result = buildSnapshotFromWorkbook(
       buffer,
       currentSnapshot?.sourceName ?? "match.xlsx",
       req.agency.code,
-      period,
+      { ...period, criteria },
     );
     if (!result.ok) {
       res.status(400).json(result.error);
@@ -183,7 +185,7 @@ app.post("/api/agencies/:agencyCode/composition-range", requireAgency, async (re
     let calculation = compositionRangeCache.get(cacheKey);
     if (!calculation) {
       calculation = (async () => {
-        const buffer = await readLatestWorkbook(path.join(dataDir, sanitizeSegment(req.agency.code)));
+        const buffer = await readWorkbookForBuild(path.join(dataDir, sanitizeSegment(req.agency.code)));
         return buildCompositionViewFromWorkbook(
           buffer,
           currentSnapshot.sourceName ?? "match.xlsx",
@@ -271,19 +273,27 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
     return;
   }
 
-  const result = buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code);
-  if (!result.ok) {
-    res.status(400).json(result.error);
-    return;
-  }
+  try {
+    const result = buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code);
+    if (!result.ok) {
+      res.status(400).json(result.error);
+      return;
+    }
 
-  result.snapshot.agency.name = req.agency.name;
-  await saveImport(req.agency.code, req.file.originalname, req.file.buffer, result.snapshot);
-  compositionRangeCache.clear();
-  res.json({
-    message: "MATCH ACTUALISÉ",
-    snapshot: result.snapshot,
-  });
+    result.snapshot.agency.name = req.agency.name;
+    await saveImport(req.agency.code, req.file.originalname, req.file.buffer, result.snapshot);
+    compositionRangeCache.clear();
+    res.json({
+      message: "MATCH ACTUALISÉ",
+      snapshot: result.snapshot,
+    });
+  } catch {
+    res.status(400).json({
+      title: "FICHIER NON IMPORTÉ",
+      message: "Le classeur Excel n'a pas pu être lu ou contrôlé.",
+      action: "Vérifie que le fichier est bien un .xlsx valide, puis réessaie.",
+    });
+  }
 });
 
 const distDir = path.join(rootDir, "dist");
@@ -308,7 +318,15 @@ app.use((error, _req, res, next) => {
     });
     return;
   }
-  next(error);
+  if (res.headersSent) {
+    next(error);
+    return;
+  }
+  res.status(500).json({
+    title: "SERVICE INDISPONIBLE",
+    message: "Le serveur n'a pas pu terminer cette opération.",
+    action: "Réessaie dans quelques instants ou contacte le responsable.",
+  });
 });
 
 app.listen(port, () => {
@@ -374,26 +392,70 @@ async function saveImport(agencyCode, originalName, buffer, snapshot) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const safeName = sanitizeSegment(originalName.replace(/\.xlsx$/i, "")) || "match";
   const uploadPath = path.join(uploadsDir, `${stamp}-${safeName}.xlsx`);
+  workbookWarmupPromises.delete(agencyDir);
   await fs.writeFile(uploadPath, buffer);
   await fs.writeFile(path.join(agencyDir, "latest.xlsx"), buffer);
   await fs.writeFile(path.join(agencyDir, "latest.json"), JSON.stringify(snapshot, null, 2), "utf8");
 }
 
-async function readLatestSnapshot(agencyCode) {
+async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
   const agencyDir = path.join(dataDir, sanitizeSegment(agencyCode));
   const latestPath = path.join(agencyDir, "latest.json");
   try {
     let snapshot = normalizeSnapshotContract(JSON.parse(await fs.readFile(latestPath, "utf8")));
     const agency = agencies.find((item) => String(item.code).toUpperCase() === String(agencyCode).toUpperCase());
+    let shouldPersistRebuiltSnapshot = false;
+    const operationalScoreNeedsRefresh =
+      !snapshot.operationalScore ||
+      !["available", "unavailable"].includes(snapshot.operationalScore.status) ||
+      snapshot.operationalScore.targetPercent === undefined ||
+      !snapshot.operationalScore.indicators ||
+      snapshot.operationalScore.indicators.unloadingPercent === undefined ||
+      (!["available", "unavailable"].includes(snapshot.operationalScore.loading?.status) ||
+        snapshot.operationalScore.loading?.scored === undefined ||
+        snapshot.operationalScore.loading?.conceded === undefined);
+    const snapshotNeedsRefresh =
+      snapshot.kpiDictionaryVersion !== KPI_DICTIONARY_VERSION ||
+      !Array.isArray(snapshot.hourlyPerformance) ||
+      !snapshot.compositionPeriods?.quarters ||
+      !snapshot.loadingQuality ||
+      !snapshot.unloadingQuality ||
+      snapshot.unloadingQuality.targetedPercent === undefined ||
+      snapshot.unloadingQuality.offTargetPercent === undefined ||
+      !snapshot.duelQuality ||
+      operationalScoreNeedsRefresh;
+
+    const storedCriteriaMatchesRequest = requestedCriteria
+      ? Object.entries(requestedCriteria).every(([key, value]) => snapshot.performanceCriteria?.[key] === value)
+      : false;
+    if (requestedCriteria && storedCriteriaMatchesRequest && !snapshotNeedsRefresh) {
+      void warmLatestWorkbook(agencyDir);
+    }
+    if (requestedCriteria && (!storedCriteriaMatchesRequest || snapshotNeedsRefresh)) {
+      try {
+        const workbook = await readLatestWorkbook(agencyDir);
+        const period = normalizeTimeRange(snapshot.match?.periodStart, snapshot.match?.periodEnd);
+        const rebuilt = buildSnapshotFromWorkbook(
+          workbook,
+          snapshot.sourceName || "match.xlsx",
+          agency?.code || agencyCode,
+          { ...period, criteria: requestedCriteria },
+        );
+        if (rebuilt.ok) {
+          snapshot = rebuilt.snapshot;
+          shouldPersistRebuiltSnapshot = storedCriteriaMatchesRequest;
+        } else if (!storedCriteriaMatchesRequest || snapshotNeedsRefresh) {
+          return null;
+        }
+      } catch {
+        // Never show a snapshot calculated with another league's criteria.
+        if (!storedCriteriaMatchesRequest || snapshotNeedsRefresh) return null;
+      }
+    }
 
     // Older snapshots predate the hourly chart and half-time composition.
     // Rebuild them once from the latest workbook so new views work without a second import.
-    const operationalScoreNeedsRefresh =
-      !snapshot.operationalScore ||
-      (snapshot.operationalScore.loading?.status !== "available" ||
-        snapshot.operationalScore.loading?.scored === undefined ||
-        snapshot.operationalScore.loading?.conceded === undefined);
-    if (snapshot.kpiDictionaryVersion !== KPI_DICTIONARY_VERSION || !Array.isArray(snapshot.hourlyPerformance) || !snapshot.compositionPeriods?.quarters || !snapshot.loadingQuality || !snapshot.duelQuality || operationalScoreNeedsRefresh) {
+    if (!requestedCriteria && snapshotNeedsRefresh) {
       try {
         const workbook = await readLatestWorkbook(agencyDir);
         const rebuilt = buildSnapshotFromWorkbook(
@@ -414,10 +476,38 @@ async function readLatestSnapshot(agencyCode) {
       snapshot.agency.code = agency.code;
       snapshot.agency.name = agency.name;
     }
+    if (shouldPersistRebuiltSnapshot) {
+      await fs.writeFile(latestPath, JSON.stringify(snapshot, null, 2), "utf8");
+    }
     return snapshot;
   } catch {
     return null;
   }
+}
+
+function warmLatestWorkbook(agencyDir) {
+  if (workbookWarmupPromises.has(agencyDir)) return workbookWarmupPromises.get(agencyDir);
+  const warmup = readLatestWorkbook(agencyDir)
+    .then((buffer) => {
+      primeWorkbookCache(buffer);
+      return buffer;
+    })
+    .catch(() => undefined)
+    .finally(() => {
+      if (workbookWarmupPromises.get(agencyDir) === warmup) workbookWarmupPromises.delete(agencyDir);
+    });
+  workbookWarmupPromises.set(agencyDir, warmup);
+  return warmup;
+}
+
+function readWorkbookForBuild(agencyDir) {
+  return workbookWarmupPromises.get(agencyDir) ?? readLatestWorkbook(agencyDir);
+}
+
+function readRequestedPerformanceCriteria(value) {
+  if (!value || typeof value !== "object") return null;
+  const hasCriteria = ["zonageMinutes", "loadingSeconds", "unloadingSeconds", "scoreTargetPercent"].some((key) => Object.hasOwn(value, key));
+  return hasCriteria ? normalizePerformanceCriteria(value) : null;
 }
 
 async function readLatestWorkbook(agencyDir) {
