@@ -50,6 +50,15 @@ try {
   });
   assert.equal(sessionResponse.status, 200, await safeText(sessionResponse));
 
+  const oversizedPlanResponse = await fetch(`http://localhost:${port}/api/session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ payload: "x".repeat(10 * 1024 * 1024) }),
+  });
+  const oversizedPlanPayload = await oversizedPlanResponse.json();
+  assert.equal(oversizedPlanResponse.status, 413, JSON.stringify(oversizedPlanPayload));
+  assert.equal(oversizedPlanPayload.title, "REQUÊTE TROP VOLUMINEUSE", "Une requête JSON trop volumineuse doit rester contrôlée");
+
   const invalidWorkbookForm = new FormData();
   invalidWorkbookForm.append("file", new Blob(["not an xlsx workbook"]), "invalid.xlsx");
   const invalidImportResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/import`, {
@@ -87,8 +96,8 @@ try {
   assert.equal(snapshot.summary.duelWon, 2064, "Duels gagnés recalculés après import API");
   assert.equal(snapshot.summary.duelTotal, 2925, "Dénominateur score après import API");
   assert.equal(snapshot.summary.duelRate, 70.6, "Taux duels gagnés recalculé après import API");
-  assert.equal(snapshot.summary.possessionPercent, 56.3, "Possession Zody après import API");
-  assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 720, reception: 1279 }, "Positions du ratio possession après import API");
+  assert.equal(snapshot.summary.possessionPercent, 50.2, "Possession Zody après import API");
+  assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 663, reception: 1131, matched: 568 }, "Positions possession après import API");
   assert.equal(snapshot.match.score, 71, "Score recalculé après import API");
   assert.equal(snapshot.operationalScore.status, "available", "Score opérationnel disponible après import API");
   assert.equal(snapshot.operationalScore.goalsFor, 4, "Score opérationnel marqué après import API");
@@ -118,8 +127,8 @@ try {
   assert.equal(timeRangePayload.snapshot.summary.operations, 4595, "Opérations après changement de plage");
   assert.equal(timeRangePayload.snapshot.match.periodLabel, "13:00-22:30", "Plage active après changement");
   assert.equal(timeRangePayload.snapshot.match.timeRangeLabel, "13:00 - 22:30", "Libellé de plage affiché après changement");
-  assert.equal(timeRangePayload.snapshot.summary.possessionPercent, 56.3, "Possession conservée sur la plage Excel de référence");
-  assert.deepEqual(timeRangePayload.snapshot.summary.possessionPositions, { zonage: 720, reception: 1279 }, "Positions possession sur la plage Excel de référence");
+  assert.equal(timeRangePayload.snapshot.summary.possessionPercent, 50.2, "Possession conservée sur la plage active de référence");
+  assert.deepEqual(timeRangePayload.snapshot.summary.possessionPositions, { zonage: 663, reception: 1131, matched: 568 }, "Positions possession sur la plage active de référence");
   assert.deepEqual(
     timeRangePayload.snapshot.hourlyPerformance.map((item) => item.label),
     ["13h", "14h", "15h", "16h", "17h", "18h", "19h", "20h", "21h", "22h"],
@@ -139,8 +148,8 @@ try {
   const narrowTimeRangePayload = await narrowTimeRangeResponse.json();
   assert.equal(narrowTimeRangeResponse.status, 200, JSON.stringify(narrowTimeRangePayload));
   assert.equal(narrowTimeRangePayload.snapshot.summary.operations, 1185, "Opérations après réduction de la plage");
-  assert.equal(narrowTimeRangePayload.snapshot.summary.possessionPercent, 44.5, "Possession recalculée après réduction de la plage");
-  assert.deepEqual(narrowTimeRangePayload.snapshot.summary.possessionPositions, { zonage: 126, reception: 283 }, "Positions possession après réduction de la plage");
+  assert.equal(narrowTimeRangePayload.snapshot.summary.possessionPercent, 34.1, "Possession recalculée après réduction de la plage");
+  assert.deepEqual(narrowTimeRangePayload.snapshot.summary.possessionPositions, { zonage: 117, reception: 179, matched: 61 }, "Positions possession après réduction de la plage");
   assert.deepEqual(
     narrowTimeRangePayload.snapshot.hourlyPerformance.map((item) => item.label),
     ["16h", "17h", "18h"],
@@ -171,6 +180,7 @@ try {
   });
   assert.equal(invalidTimeRangeResponse.status, 400, "Une plage qui n'est pas sur 00/30 doit être refusée");
 
+  const tinyAttachment = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
   const causerieResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/causerie`, {
     method: "POST",
     headers: {
@@ -185,6 +195,11 @@ try {
         attack: ["Contrôle import"],
         midfield: ["Contrôle snapshot"],
         defense: ["Contrôle stockage"],
+        attachments: {
+          attack: [tinyAttachment, tinyAttachment],
+          midfield: [tinyAttachment],
+          defense: [],
+        },
         coach: {
           tactic: "Valider le déploiement",
           priority: "Ne pas dégrader l'import Excel",
@@ -196,6 +211,9 @@ try {
   });
   const causeriePayload = await causerieResponse.json();
   assert.equal(causerieResponse.status, 200, JSON.stringify(causeriePayload));
+  assert.equal(causeriePayload.plan.attachments.attack.length, 2, "Les captures multiples de la zone attaque doivent être conservées");
+  assert.equal(causeriePayload.plan.attachments.midfield.length, 1, "La capture de la zone milieu doit être conservée");
+  assert.equal(causeriePayload.plan.attachments.defense.length, 0, "Une zone sans capture doit rester vide");
 
   const expectedLatestPath = path.join(dataDir, sanitizeSegment(agencyCode), "latest.json");
   const expectedCauseriePath = path.join(
@@ -206,6 +224,8 @@ try {
   );
   assert.equal(await fileExists(expectedLatestPath), true, "latest.json doit être écrit dans STEF_DATA_DIR");
   assert.equal(await fileExists(expectedCauseriePath), true, "La causerie doit être écrite dans STEF_DATA_DIR");
+  const savedCauserie = JSON.parse(await fs.readFile(expectedCauseriePath, "utf8"));
+  assert.equal(savedCauserie.attachments.attack.length, 2, "Les captures multiples doivent être persistées dans STEF_DATA_DIR");
 
   console.log(`Déploiement smoke test OK - ${path.basename(workbookPath)}`);
   console.log(`Serveur production: port ${port}, stockage temporaire ${dataDir}`);

@@ -1090,7 +1090,7 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
               <div className="match-score-bubble possession-score-bubble">
                 <span>% possession Zody</span>
                 <strong>{snapshot.summary.possessionPercent === null ? "À renseigner" : `${formatNumber(snapshot.summary.possessionPercent)}%`}</strong>
-                <small>Positions ZONAGE uniques ÷<br />positions RECEPTION uniques</small>
+                <small>Réceptions associées à un ZONAGE ÷<br />réceptions uniques</small>
               </div>
             </div>
             <FootballScoreDisplay footballScore={footballScore} />
@@ -2907,7 +2907,7 @@ function TvMode({ snapshot, activeLeague, session, onMatch, onExit }: { snapshot
               <div className="match-score-bubble possession-score-bubble">
                 <span>% possession Zody</span>
                 <strong>{snapshot.summary.possessionPercent === null ? "À renseigner" : `${formatNumber(snapshot.summary.possessionPercent)}%`}</strong>
-                <small>Positions ZONAGE uniques ÷<br />positions RECEPTION uniques</small>
+                <small>Réceptions associées à un ZONAGE ÷<br />réceptions uniques</small>
               </div>
             </div>
             <FootballScoreDisplay footballScore={footballScore} />

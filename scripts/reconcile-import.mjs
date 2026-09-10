@@ -44,8 +44,8 @@ assert.deepEqual(snapshot.summary.operationCounts, { CHG: 1728, DECHG: 1900, ZON
 assert.equal(snapshot.summary.duelWon, 2064, "Duels gagnés recalculés avec la cible zonage");
 assert.equal(snapshot.summary.duelTotal, 2925, "Dénominateur score Excel");
 assert.equal(snapshot.summary.duelRate, 70.6, "Taux duels gagnés recalculé");
-assert.equal(snapshot.summary.possessionPercent, 56.3, "Possession Zody sur la plage active");
-assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 720, reception: 1279 }, "Positions distinctes du ratio possession");
+assert.equal(snapshot.summary.possessionPercent, 50.2, "Possession Zody sur la plage active");
+assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 663, reception: 1131, matched: 568 }, "Positions possession sur le même périmètre filtré");
 assert.equal(snapshot.match.score, 71, "Score arrondi");
 assert.equal(snapshot.match.status, "MAÎTRISÉ", "Statut du match aligné sur le score opérationnel");
 assert.equal(snapshot.operationalScore.status, "available", "Score opérationnel disponible");
@@ -88,6 +88,18 @@ for (const expected of leagueExpectations) {
   ].filter((value) => value >= expected.criteria.scoreTargetPercent).length;
   assert.equal(`${reachedIndicators}-${4 - reachedIndicators}`, expected.score, `Score opérationnel ${expected.name}`);
   assert.equal(leagueSnapshot.causerie.find((item) => item.label === "Priorité")?.value, expected.priority, `Priorité causerie ${expected.name}`);
+}
+
+const boundedPossessionResult = buildSnapshotFromWorkbook(buffer, path.basename(workbookPath), agencyCode, {
+  start: "14:00",
+  end: "15:00",
+  criteria: { zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 },
+});
+assert.equal(boundedPossessionResult.ok, true, "La possession doit rester recalculable sur une sous-plage");
+if (boundedPossessionResult.ok) {
+  assert.equal(boundedPossessionResult.snapshot.summary.possessionPercent, 58.6, "Possession bornée sur une sous-plage déséquilibrée");
+  assert.deepEqual(boundedPossessionResult.snapshot.summary.possessionPositions, { zonage: 191, reception: 145, matched: 85 }, "Positions communes de possession sur une sous-plage");
+  assert.ok(boundedPossessionResult.snapshot.summary.possessionPercent <= 100, "Une possession ne doit jamais dépasser 100 %");
 }
 
 const narrowResult = buildSnapshotFromWorkbook(buffer, path.basename(workbookPath), agencyCode, {

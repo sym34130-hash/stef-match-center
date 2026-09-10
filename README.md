@@ -90,6 +90,7 @@ Source de vérité retenue : Excel filtré actuel.
 - Les volumes, joueurs, positions, compositions et highlights utilisent les lignes avec `Filtre opérateur` vide et `Filtre heure` vide.
 - Le score et les duels utilisent ces mêmes lignes en excluant aussi les lignes où `Poz non zonées` est marqué.
 - Le taux de duels gagnés est calculé avec `Duels gagnés / lignes éligibles au score`.
+- La possession Zody compte les positions RECEPTION uniques qui ont aussi une opération ZONAGE, divisées par les positions RECEPTION uniques du même périmètre filtré ; elle reste donc entre `0 %` et `100 %`, y compris sur une plage personnalisée.
 - Le score opérationnel affiché au format football compte, sur 4, les indicateurs qui atteignent l'objectif de la ligue active : taux de duels gagnés, chargements cadrés, déchargements dans la cible et possession Zody. Le format est `indicateurs atteints - indicateurs sous l'objectif`.
 - Les objectifs par défaut sont : Bronze `45 min / 00:03:15 / 00:01:15 / 45%`, Argent `30 min / 00:02:45 / 00:01:00 / 50%`, Or `25 min / 00:02:30 / 00:00:55 / 60%`, Platine `20 min / 00:02:15 / 00:00:50 / 70%` pour zonage, chargement, déchargement et objectif du score.
 - Le temps de déchargement est calculé sur les lignes `DECHG` de la plage active, par voyage : `(dernière opération - première opération) / nombre de positions`. Un voyage est dans la cible si ce temps moyen par position est inférieur ou égal au seuil de la ligue. Les voyages sans durée positive ne sont pas comptabilisés.

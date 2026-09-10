@@ -114,6 +114,7 @@ export type Snapshot = {
     possessionPositions: {
       zonage: number;
       reception: number;
+      matched: number | null;
     };
     operationCounts: Record<string, number>;
     roleDistribution: Array<{ role: string; count: number; percent: number }>;

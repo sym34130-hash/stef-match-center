@@ -32,7 +32,7 @@ const DEFAULT_PERFORMANCE_CRITERIA = Object.freeze({
 });
 const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
-export const KPI_DICTIONARY_VERSION = 9;
+export const KPI_DICTIONARY_VERSION = 10;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -125,10 +125,10 @@ export const KPI_DICTIONARY = [
   {
     id: "score.possession",
     label: "Possession Zody",
-    source: "X!BJ4",
-    formula: "COUNTA(ZONAGE) / COUNTA(DECHG) dans la table des positions distinctes, avec Filtre heure vide",
-    denominator: "Positions distinctes de réception (DECHG) dans le périmètre actif",
-    display: "Part des positions ZONAGE par rapport aux positions Réception",
+    source: "Données filtrées",
+    formula: "Positions RECEPTION uniques ayant aussi un ZONAGE / positions RECEPTION uniques, dans le même périmètre actif",
+    denominator: "Positions distinctes de réception (DECHG) du match filtré",
+    display: "Part des réceptions associées à un zonage, bornée entre 0 et 100 %",
   },
   {
     id: "player.volumeIndex",
@@ -252,7 +252,6 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   }
 
   const matchRows = rows.filter((row) => isMatchRow(row, period));
-  const possessionRows = rows.filter((row) => isPossessionRow(row, period));
   const scoringRows = isDerivedTemplate
     ? buildDerivedScoringRows(matchRows, criteria.zonageMinutes * 60)
     : buildScoringRows(matchRows, period, criteria.zonageMinutes * 60);
@@ -283,7 +282,6 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     sourceRows: rows,
     matchRows,
     scoringRows,
-    possessionRows,
     sourceName,
     expectedAgencyCode,
     detectedAgency,
@@ -467,7 +465,11 @@ export function normalizeSnapshotContract(snapshot) {
     ? {
         ...snapshot.summary,
         possessionPercent: snapshot.summary.possessionPercent ?? null,
-        possessionPositions: snapshot.summary.possessionPositions ?? { zonage: 0, reception: 0 },
+        possessionPositions: {
+          zonage: snapshot.summary.possessionPositions?.zonage ?? 0,
+          reception: snapshot.summary.possessionPositions?.reception ?? 0,
+          matched: snapshot.summary.possessionPositions?.matched ?? null,
+        },
       }
     : snapshot.summary;
   const validation = snapshot.validation
@@ -494,7 +496,7 @@ export function normalizeSnapshotContract(snapshot) {
   };
 }
 
-function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, possessionRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period, criteria, loadingQuality, unloadingQuality }) {
+function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period, criteria, loadingQuality, unloadingQuality }) {
   const importedAt = new Date();
   const firstOperation = minDate(matchRows.map((row) => row.startedAt));
   const lastOperation = maxDate(matchRows.map((row) => row.startedAt));
@@ -506,7 +508,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, possessionRows
   const duelWon = scoringRows.filter((row) => row.duelWonFlag === 1).length;
   const duelTotal = scoringRows.filter((row) => row.duelWonFlag === 0 || row.duelWonFlag === 1).length;
   const duelRate = duelTotal > 0 ? percent(duelWon, duelTotal) : null;
-  const possession = buildPossessionScore(possessionRows);
+  const possession = buildPossessionScore(matchRows);
   const score = duelRate === null ? null : Math.round(duelRate);
   const operationalScore = buildOperationalScore(
     loadingQuality,
@@ -593,6 +595,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, possessionRows
       possessionPositions: {
         zonage: possession.zonagePositions,
         reception: possession.receptionPositions,
+        matched: possession.matchedPositions,
       },
       operationCounts,
       roleDistribution,
@@ -893,10 +896,12 @@ function buildPossessionScore(rows) {
   }
   const zonageCount = zonagePositions.size;
   const receptionCount = receptionPositions.size;
+  const matchedCount = [...receptionPositions].filter((position) => zonagePositions.has(position)).length;
   return {
-    percent: receptionCount > 0 ? percent(zonageCount, receptionCount) : null,
+    percent: receptionCount > 0 ? percent(matchedCount, receptionCount) : null,
     zonagePositions: zonageCount,
     receptionPositions: receptionCount,
+    matchedPositions: matchedCount,
   };
 }
 
@@ -1269,10 +1274,6 @@ function buildFilterStats(rows, period, criteria) {
 function isMatchRow(row, period) {
   const periodMatches = period?.useExcelPeriod ? isExcelBlank(row.hourFilter) : isInTimeRange(row.startedAt, period);
   return (period?.useDerivedRows || isExcelBlank(row.operatorFilter)) && periodMatches;
-}
-
-function isPossessionRow(row, period) {
-  return period?.useExcelPeriod ? isExcelBlank(row.hourFilter) : isInActiveTimeRange(row.startedAt, period);
 }
 
 function isScoringRow(row, period) {

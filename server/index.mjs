@@ -17,6 +17,7 @@ const port = Number(process.env.PORT ?? 4174);
 const uploadLimitMb = readEnvNumber("STEF_UPLOAD_LIMIT_MB", 20);
 const compositionRangeCache = new Map();
 const workbookWarmupPromises = new Map();
+const workbookReadPromises = new Map();
 
 const app = express();
 const upload = multer({
@@ -24,7 +25,9 @@ const upload = multer({
   limits: { fileSize: uploadLimitMb * 1024 * 1024 },
 });
 
-app.use(express.json({ limit: "1mb" }));
+// A plan can contain several resized captures; keep the JSON body bounded but
+// large enough for the client-side gallery limit.
+app.use(express.json({ limit: "10mb" }));
 
 const agencies = await loadAgencies();
 
@@ -305,6 +308,14 @@ if (existsSync(distDir)) {
 }
 
 app.use((error, _req, res, next) => {
+  if (error?.type === "entity.too.large") {
+    res.status(413).json({
+      title: "REQUÊTE TROP VOLUMINEUSE",
+      message: "Le contenu envoyé dépasse la limite autorisée de 10 Mo.",
+      action: "Réduis le nombre ou la taille des captures, puis réessaie.",
+    });
+    return;
+  }
   if (error instanceof multer.MulterError) {
     const isTooLarge = error.code === "LIMIT_FILE_SIZE";
     res.status(isTooLarge ? 413 : 400).json({
@@ -393,9 +404,12 @@ async function saveImport(agencyCode, originalName, buffer, snapshot) {
   const safeName = sanitizeSegment(originalName.replace(/\.xlsx$/i, "")) || "match";
   const uploadPath = path.join(uploadsDir, `${stamp}-${safeName}.xlsx`);
   workbookWarmupPromises.delete(agencyDir);
+  workbookReadPromises.delete(agencyDir);
   await fs.writeFile(uploadPath, buffer);
   await fs.writeFile(path.join(agencyDir, "latest.xlsx"), buffer);
   await fs.writeFile(path.join(agencyDir, "latest.json"), JSON.stringify(snapshot, null, 2), "utf8");
+  workbookWarmupPromises.delete(agencyDir);
+  workbookReadPromises.delete(agencyDir);
 }
 
 async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
@@ -433,7 +447,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
     }
     if (requestedCriteria && (!storedCriteriaMatchesRequest || snapshotNeedsRefresh)) {
       try {
-        const workbook = await readLatestWorkbook(agencyDir);
+        const workbook = await readWorkbookForBuild(agencyDir);
         const period = normalizeTimeRange(snapshot.match?.periodStart, snapshot.match?.periodEnd);
         const rebuilt = buildSnapshotFromWorkbook(
           workbook,
@@ -457,7 +471,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
     // Rebuild them once from the latest workbook so new views work without a second import.
     if (!requestedCriteria && snapshotNeedsRefresh) {
       try {
-        const workbook = await readLatestWorkbook(agencyDir);
+        const workbook = await readWorkbookForBuild(agencyDir);
         const rebuilt = buildSnapshotFromWorkbook(
           workbook,
           snapshot.sourceName || "match.xlsx",
@@ -487,7 +501,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
 
 function warmLatestWorkbook(agencyDir) {
   if (workbookWarmupPromises.has(agencyDir)) return workbookWarmupPromises.get(agencyDir);
-  const warmup = readLatestWorkbook(agencyDir)
+  const warmup = readWorkbookForBuild(agencyDir)
     .then((buffer) => {
       primeWorkbookCache(buffer);
       return buffer;
@@ -501,7 +515,13 @@ function warmLatestWorkbook(agencyDir) {
 }
 
 function readWorkbookForBuild(agencyDir) {
-  return workbookWarmupPromises.get(agencyDir) ?? readLatestWorkbook(agencyDir);
+  if (workbookReadPromises.has(agencyDir)) return workbookReadPromises.get(agencyDir);
+  const readPromise = readLatestWorkbook(agencyDir).catch((error) => {
+    if (workbookReadPromises.get(agencyDir) === readPromise) workbookReadPromises.delete(agencyDir);
+    throw error;
+  });
+  workbookReadPromises.set(agencyDir, readPromise);
+  return readPromise;
 }
 
 function readRequestedPerformanceCriteria(value) {
@@ -560,9 +580,9 @@ function normalizeCauseriePlan(plan) {
     midfield: normalizeLines(input.midfield),
     defense: normalizeLines(input.defense),
     attachments: {
-      attack: normalizeAttachment(input.attachments?.attack),
-      midfield: normalizeAttachment(input.attachments?.midfield),
-      defense: normalizeAttachment(input.attachments?.defense),
+      attack: normalizeAttachments(input.attachments?.attack),
+      midfield: normalizeAttachments(input.attachments?.midfield),
+      defense: normalizeAttachments(input.attachments?.defense),
     },
     coach: {
       tactic: limitText(input.coach?.tactic, 120),
@@ -581,9 +601,13 @@ function normalizeLines(lines) {
   return clean;
 }
 
-function normalizeAttachment(value) {
-  const image = String(value ?? "").trim();
-  return /^data:image\/(jpeg|png|webp);base64,/.test(image) && image.length <= 260_000 ? image : "";
+function normalizeAttachments(value) {
+  const values = Array.isArray(value) ? value : [value];
+  return values
+    .filter((item) => typeof item === "string")
+    .map((item) => item.trim())
+    .filter((image) => /^data:image\/(jpeg|png|webp);base64,/.test(image) && image.length <= 260_000)
+    .slice(0, 12);
 }
 
 function limitMultilineText(value, maxLength) {

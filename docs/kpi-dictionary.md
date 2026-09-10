@@ -2,7 +2,7 @@
 
 Statut : `READY_FOR_REVIEW`
 
-Source de verite retenue : Excel filtre actuel du classeur `HM 58 J V10 MAJ.xlsx`.
+Source de verification : Excel filtre actuel du classeur `HM 58 J V10 MAJ.xlsx`.
 
 ## Regle generale
 
@@ -36,7 +36,7 @@ Il lit l'onglet `Donnees` complet et reprend les colonnes Excel calculees :
 | Taux de duels | `Duels gagnes / lignes score officiel` | Lignes score officiel ; indisponible si vide | Pourcentage de duels gagnes |
 | Chargements cadres | Chargements dont le temps par position est `<=` a la cible de la ligue active | Chargements exploitables ; indisponible si aucun chargement | Pourcentage charge dans le delai |
 | Temps de dechargement | Pour chaque voyage `DECHG`, `(derniere operation - premiere operation) / nombre de positions`; dans la cible si `<=` au seuil de la ligue | Voyages `DECHG` avec au moins une position et une duree strictement positive, sur la plage active | Pourcentage de voyages dans la cible et moyenne par position |
-| Possession Zody | Positions ZONAGE uniques / positions RECEPTION uniques | Positions des deux activites ; indisponible si un denominateur manque | Pourcentage de possession |
+| Possession Zody | Positions RECEPTION uniques ayant aussi un ZONAGE / positions RECEPTION uniques, dans le meme perimetre actif | Positions RECEPTION distinctes du match filtre ; indisponible si le denominateur manque | Part des receptions associees a un zonage, bornee entre 0 et 100 % |
 | Score operationnel | Nombre des 4 indicateurs dont le pourcentage atteint l'objectif de la ligue active | Duels gagnes, chargements cadres, dechargements dans la cible et possession Zody, tous disponibles | Score au format football `atteints - sous objectif` |
 | Indice volume | Operations joueur / meilleur volume joueur | Plus gros volume joueur du match filtre | Fiche joueur |
 | Polyvalence | `0` si une seule activite ; sinon moyenne des volumes CHG, ZONAGE et DECHG rapportes au meilleur volume de chaque activite | Meilleur volume observe dans chaque activite du match filtre | Diversite et volume multi-activite |
@@ -63,6 +63,19 @@ plage active. Le pourcentage de voyages dans la cible devient le quatrieme indic
 du score operationnel ; la duree moyenne detaillee reste disponible dans le graphique
 des dechargements.
 
+### Controle de coherence de la possession
+
+La formule historique `X!BJ4` divisait deux compteurs distincts issus de populations
+differentes : des positions ZONAGE d'un cote et des positions DECHG de l'autre. Sur
+une sous-plage, le numerateur pouvait donc depasser le denominateur et produire une
+valeur impossible comme `126,8 %`. Cette cellule reste un repere de comparaison, mais
+elle n'est plus utilisee comme pourcentage operationnel.
+
+Le site utilise maintenant le meme filtre de match que les autres KPI. Le numerateur
+compte uniquement les positions RECEPTION qui disposent aussi d'une operation ZONAGE,
+puis le divise par le nombre de positions RECEPTION uniques. Le resultat est donc
+recalculable par plage et toujours compris entre `0 %` et `100 %`.
+
 ## Controle de reconciliation actuel
 
 Pour le fichier importe `HM 58 J V10 MAJ.xlsx`, les valeurs attendues sont :
@@ -72,7 +85,8 @@ Pour le fichier importe `HM 58 J V10 MAJ.xlsx`, les valeurs attendues sont :
 - Score officiel : 2 925 lignes.
 - Duels gagnes : 2 064.
 - Score duels : 70,6 %, affiche 71 / 100.
-- Score operationnel Argent : 3 - 0, avec un objectif de 50 % par indicateur.
+- Possession Zody : 50,2 % (568 positions RECEPTION associees a un ZONAGE / 1 131 positions RECEPTION).
+- Score operationnel Argent : 4 - 0, avec un objectif de 50 % par indicateur.
 - Joueurs : 20.
 - Composition : 10 Attaquants, 5 Milieux, 5 Defenseurs.
 - Distinctions : Attaque = JEAN LUC LASSORT, Milieu = THIERRY BOUGNAGUE, Defense = YOUNES EL KICH.
