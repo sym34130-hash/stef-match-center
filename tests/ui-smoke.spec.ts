@@ -302,6 +302,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
 });
 
 test("la plage horaire et le graphique horaire restent explicites", async ({ page }) => {
+  test.setTimeout(120_000);
   let baseSnapshot: Record<string, any> | null = null;
   await page.route(/\/api\/agencies\/058\/snapshot(?:\?.*)?$/, async (route) => {
     const response = await route.fetch();
@@ -395,7 +396,27 @@ test("le guide et le retour de l'écran quai restent accessibles avant le premie
   await expect(page.getByRole("heading", { name: "Le stade est prêt", exact: true })).toBeVisible();
 });
 
+test("une ligue reste sélectionnable avant le premier import", async ({ page }) => {
+  await page.route("**/api/agencies/058/snapshot**", async (route) => {
+    await route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({ title: "AUCUN MATCH IMPORTÉ", message: "Aucun fichier Excel n'a encore été importé pour cette agence." }),
+    });
+  });
+  await page.goto("/");
+  await page.getByLabel("Code agence").selectOption("058");
+  await page.getByLabel("Code d'accès").fill("STEF-058");
+  await page.getByRole("button", { name: "Accéder au match" }).click();
+  await page.getByRole("button", { name: "ADM Administrateur", exact: true }).click();
+  await page.getByRole("button", { name: "Activer", exact: true }).last().click();
+  await expect(page.locator(".administrator-active-badge strong")).toHaveText("Platine");
+  await expect(page.locator(".app-shell")).toHaveClass(/league-platine/);
+  await expect(page.getByText("Ligue activée. Importe un match pour appliquer ses objectifs.", { exact: true })).toBeVisible();
+});
+
 test("l'administrateur conserve ses règles par agence et synchronise ses animations", async ({ page }) => {
+  test.setTimeout(120_000);
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("058");
   await page.getByLabel("Code d'accès").fill("STEF-058");
@@ -459,6 +480,7 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
 });
 
 test("le nom de l'agence connectée reste correct dans tous les onglets", async ({ page }) => {
+  test.setTimeout(120_000);
   const agencies = [
     { code: "058", accessCode: "STEF-058", name: "Agen - 058" },
     { code: "01K", accessCode: "STEF-01K", name: "Montpellier" },

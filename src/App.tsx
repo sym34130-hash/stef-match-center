@@ -343,6 +343,11 @@ export default function App() {
       setStatusMessage("");
     } catch (error) {
       if (requestId === snapshotRequestRef.current) {
+        if (error instanceof ApiError && error.status === 404) {
+          setSnapshot(null);
+          setStatusMessage("Ligue activée. Importe un match pour appliquer ses objectifs.");
+          return;
+        }
         setActiveLeague(previousLeague);
         localStorage.setItem(`stef-match-active-league-${session.agency.code}`, previousLeague);
         setStatusMessage(error instanceof Error ? error.message : "La ligue n'a pas pu être appliquée.");
