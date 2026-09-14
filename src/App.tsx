@@ -1987,6 +1987,11 @@ function Coach({
   const decisionLabel = !footballScore.available ? "Données à compléter" : footballScore.goalsFor > footballScore.goalsAgainst ? "Collectif sous contrôle" : "Point d'attention prioritaire";
   const primaryAction = actions[0];
   const activeCoachPlan = coachBoardMode === "edit" ? coachDraft : coachPlan;
+  const coachActionFields = [
+    { field: "tactic" as const, label: "Priorité terrain", placeholder: "Ex. Sécuriser les positions prioritaires avant le prochain départ." },
+    { field: "priority" as const, label: "Zone à surveiller", placeholder: "Ex. Contrôler la zone ou le voyage à suivre en priorité." },
+    { field: "arbitration" as const, label: "Équilibre d'équipe", placeholder: "Ex. Renforcer la ligne qui a besoin d'un appui immédiat." },
+  ];
 
   useEffect(() => {
     document.body.classList.toggle("coach-room-active", coachMode);
@@ -2179,16 +2184,39 @@ function Coach({
         </section>
 
         <section className="coach-actions-section" aria-labelledby="coach-actions-title">
-          <div className="coach-section-heading"><div><span>Plan de jeu</span><h3 id="coach-actions-title">Trois actions, dans l'ordre</h3></div><small>Calculé sur la plage active</small></div>
+          <div className="coach-section-heading">
+            <div><span>Plan de jeu</span><h3 id="coach-actions-title">Priorités du chef de quai</h3><p className="coach-section-note">Les titres sont proposés par l'analyse. La consigne de chaque bulle est à renseigner par le chef de quai.</p></div>
+            {coachBoardMode === "view" ? (
+              <button className="secondary-button compact" type="button" onClick={startCoachBoardEdit}><Edit3 size={15} /> Écrire</button>
+            ) : (
+              <div className="coach-writing-actions"><button className="secondary-button compact" type="button" onClick={cancelCoachBoardEdit} disabled={savingCoachPlan}><XCircle size={15} /> Annuler</button><button className="primary-button compact" type="button" onClick={saveCoachBoard} disabled={savingCoachPlan}><Save size={15} /> {savingCoachPlan ? "Enregistrement..." : "Enregistrer"}</button></div>
+            )}
+          </div>
+          {coachBoardFeedback && <div className={`coach-board-feedback ${coachBoardFeedback.tone}`}><strong>{coachBoardFeedback.title}</strong><span>{coachBoardFeedback.detail}</span></div>}
           <div className="coach-actions-grid">
-            {actions.map((action, index) => (
-              <article className={`coach-action-card ${action.level}`} key={action.title}>
-                <span>0{index + 1} · {action.kicker}</span>
-                <strong>{action.title}</strong>
-                <p>{action.detail}</p>
-                <small>{action.next}</small>
-              </article>
-            ))}
+            {actions.map((action, index) => {
+              const actionField = coachActionFields[index];
+              const value = activeCoachPlan.coach[actionField.field];
+              return (
+                <article className={`coach-action-card ${action.level}`} key={action.title}>
+                  <span>0{index + 1} · {actionField.label}</span>
+                  <strong>{action.title}</strong>
+                  {coachBoardMode === "edit" ? (
+                    <label className="coach-action-input">
+                      <span className="sr-only">{actionField.label}, consigne du chef de quai</span>
+                      <textarea aria-label={`${actionField.label}, consigne du chef de quai`} value={value} onChange={(event) => updateCoachDraft(actionField.field, event.target.value)} placeholder={actionField.placeholder} rows={3} />
+                    </label>
+                  ) : (
+                    <p className={`coach-action-entry ${value.trim() ? "" : "is-empty"}`}>{value.trim() || "À renseigner par le chef de quai"}</p>
+                  )}
+                  <small>{coachBoardMode === "edit" ? "Consigne opérationnelle à transmettre." : action.next}</small>
+                </article>
+              );
+            })}
+          </div>
+          <div className="coach-review-line">
+            <span>Prochaine revue</span>
+            {coachBoardMode === "edit" ? <input aria-label="Prochaine revue du plan" value={activeCoachPlan.coach.review} onChange={(event) => updateCoachDraft("review", event.target.value)} placeholder="Ex. 18:30" /> : <strong>{activeCoachPlan.coach.review.trim() || "À planifier"}</strong>}
           </div>
         </section>
 
@@ -2209,34 +2237,6 @@ function Coach({
           </div>
         </section>
 
-        <section className="coach-plan-section" aria-label="Plan d'action éditable">
-          <div className="coach-plan-heading">
-            <div><span>Transmission équipe</span><h3>Plan d'action du coach</h3><p>Un espace court pour transformer la lecture en consignes concrètes.</p></div>
-            {coachBoardMode === "view" ? (
-              <button className="secondary-button compact" type="button" onClick={startCoachBoardEdit}><Edit3 size={15} /> Écrire</button>
-            ) : (
-              <div className="coach-writing-actions"><button className="secondary-button compact" type="button" onClick={cancelCoachBoardEdit} disabled={savingCoachPlan}><XCircle size={15} /> Annuler</button><button className="primary-button compact" type="button" onClick={saveCoachBoard} disabled={savingCoachPlan}><Save size={15} /> {savingCoachPlan ? "Enregistrement..." : "Enregistrer"}</button></div>
-            )}
-          </div>
-
-          {coachBoardFeedback && <div className={`coach-board-feedback ${coachBoardFeedback.tone}`}><strong>{coachBoardFeedback.title}</strong><span>{coachBoardFeedback.detail}</span></div>}
-
-          {coachBoardMode === "edit" ? (
-            <div className="coach-edit-fields">
-              <label>Tactique du jour<textarea value={activeCoachPlan.coach.tactic} onChange={(event) => updateCoachDraft("tactic", event.target.value)} placeholder="Ex. Réduire les écarts sur les positions ouvertes." rows={2} /></label>
-              <label>Priorité<textarea value={activeCoachPlan.coach.priority} onChange={(event) => updateCoachDraft("priority", event.target.value)} placeholder="Ex. Sécuriser les positions non closes." rows={2} /></label>
-              <label>Arbitrage<textarea value={activeCoachPlan.coach.arbitration} onChange={(event) => updateCoachDraft("arbitration", event.target.value)} placeholder="Ex. Renforcer la réception si le retard augmente." rows={2} /></label>
-              <label>Prochaine revue<input value={activeCoachPlan.coach.review} onChange={(event) => updateCoachDraft("review", event.target.value)} placeholder="Ex. 18:30" /></label>
-            </div>
-          ) : (
-            <div className="coach-written-plan">
-              <article><span>Tactique</span><p>{activeCoachPlan.coach.tactic || "À écrire"}</p></article>
-              <article><span>Priorité</span><p>{activeCoachPlan.coach.priority || "À écrire"}</p></article>
-              <article><span>Arbitrage</span><p>{activeCoachPlan.coach.arbitration || "À écrire"}</p></article>
-              <article><span>Revue</span><p>{activeCoachPlan.coach.review || "À planifier"}</p></article>
-            </div>
-          )}
-        </section>
       </main>
     </section>
   );

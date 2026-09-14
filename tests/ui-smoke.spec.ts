@@ -74,8 +74,20 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".coach-workforce-metrics")).toBeVisible();
       await expect(page.getByText("Ligue active", { exact: true })).toBeVisible();
       await expect(page.getByRole("button", { name: "Mode briefing", exact: true })).toBeVisible();
-      await expect(page.locator(".coach-written-plan").getByText("À écrire", { exact: true })).toHaveCount(3);
-      await expect(page.locator(".coach-written-plan").getByText("À planifier", { exact: true })).toHaveCount(1);
+      await expect(page.locator(".coach-action-entry.is-empty")).toHaveCount(3);
+      await expect(page.getByText("À planifier", { exact: true })).toHaveCount(1);
+      await page.getByRole("button", { name: "Écrire", exact: true }).click();
+      await expect(page.locator(".coach-action-input textarea")).toHaveCount(3);
+      await expect(page.getByLabel("Priorité terrain, consigne du chef de quai")).toBeVisible();
+      await page.getByLabel("Priorité terrain, consigne du chef de quai").fill("Sécuriser les positions prioritaires.");
+      await page.getByLabel("Zone à surveiller, consigne du chef de quai").fill("Suivre le voyage critique.");
+      await page.getByLabel("Équilibre d'équipe, consigne du chef de quai").fill("Renforcer la ligne en tension.");
+      await page.getByLabel("Prochaine revue du plan").fill("18:30");
+      await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+      await expect(page.locator(".coach-action-entry").nth(0)).toHaveText("Sécuriser les positions prioritaires.");
+      await expect(page.locator(".coach-action-entry").nth(1)).toHaveText("Suivre le voyage critique.");
+      await expect(page.locator(".coach-action-entry").nth(2)).toHaveText("Renforcer la ligne en tension.");
+      await expect(page.locator(".coach-review-line strong")).toHaveText("18:30");
       const coachLayout = await page.evaluate(() => {
         const pageElement = document.querySelector<HTMLElement>(".coach-decision-page");
         const contextRows = Array.from(document.querySelectorAll<HTMLElement>(".coach-context-list div"));
