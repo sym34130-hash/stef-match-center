@@ -157,6 +157,24 @@ function readLeagueConfig(agencyCode: string, leagueId: LeagueId): LeagueConfig 
   return readLeagueConfigs(agencyCode).find((league) => league.id === leagueId) ?? leagueOptions[1];
 }
 
+function mergeLeagueConfigs(value: unknown, agencyCode: string): LeagueConfig[] {
+  if (!Array.isArray(value)) return readLeagueConfigs(agencyCode);
+  return leagueOptions.map((defaultLeague) => {
+    const shared = value.find((league) => (league as Partial<LeagueConfig>)?.id === defaultLeague.id) as Partial<LeagueConfig> | undefined;
+    return {
+      ...defaultLeague,
+      zonageMinutes: Number.isFinite(Number(shared?.zonageMinutes)) ? Math.max(1, Math.round(Number(shared?.zonageMinutes))) : defaultLeague.zonageMinutes,
+      loadingSeconds: Number.isFinite(Number(shared?.loadingSeconds)) ? Math.max(1, Math.round(Number(shared?.loadingSeconds))) : defaultLeague.loadingSeconds,
+      unloadingSeconds: Number.isFinite(Number(shared?.unloadingSeconds)) ? Math.max(1, Math.round(Number(shared?.unloadingSeconds))) : defaultLeague.unloadingSeconds,
+      scoreTargetPercent: Number.isFinite(Number(shared?.scoreTargetPercent)) ? Math.min(100, Math.max(1, Math.round(Number(shared?.scoreTargetPercent)))) : defaultLeague.scoreTargetPercent,
+    };
+  });
+}
+
+function configForLeague(configs: LeagueConfig[], leagueId: LeagueId): LeagueConfig {
+  return configs.find((league) => league.id === leagueId) ?? leagueOptions.find((league) => league.id === leagueId) ?? leagueOptions[1];
+}
+
 function readActiveLeague(agencyCode: string): LeagueId {
   const saved = localStorage.getItem(`stef-match-active-league-${agencyCode}`);
   return leagueOptions.some((league) => league.id === saved) ? saved as LeagueId : "argent";
@@ -223,6 +241,7 @@ const kickoffScenePlayers: Array<{
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
+  const [leagueConfigs, setLeagueConfigs] = useState<LeagueConfig[]>(leagueOptions);
   const [activeLeague, setActiveLeague] = useState<LeagueId>("argent");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [screen, setScreen] = useState<Screen>("kickoff");
@@ -244,7 +263,13 @@ export default function App() {
       setActiveLeague(nextLeague);
       setSnapshotLoading(true);
       const requestId = ++snapshotRequestRef.current;
-      fetchSnapshot(nextSession, readLeagueConfig(nextSession.agency.code, nextLeague))
+      Promise.all([
+        fetchSharedLeagueConfigs(nextSession).catch(() => readLeagueConfigs(nextSession.agency.code)),
+      ])
+        .then(([nextConfigs]) => {
+          setLeagueConfigs(nextConfigs);
+          return fetchSnapshot(nextSession, configForLeague(nextConfigs, nextLeague));
+        })
         .then((nextSnapshot) => {
           if (requestId !== snapshotRequestRef.current) return;
           setSnapshot(nextSnapshot);
@@ -280,7 +305,10 @@ export default function App() {
       const requestVersion = snapshotRequestRef.current;
       const refreshId = ++backgroundRefreshRef.current;
       try {
-        const nextSnapshot = await fetchSnapshot(session, readLeagueConfig(session.agency.code, activeLeague));
+        const nextConfigs = await fetchSharedLeagueConfigs(session).catch(() => leagueConfigs);
+        if (disposed || refreshId !== backgroundRefreshRef.current || requestVersion !== snapshotRequestRef.current) return;
+        setLeagueConfigs(nextConfigs);
+        const nextSnapshot = await fetchSnapshot(session, configForLeague(nextConfigs, activeLeague));
         if (disposed || refreshId !== backgroundRefreshRef.current || requestVersion !== snapshotRequestRef.current) return;
         setSnapshot((current) => snapshotsHaveSameData(current, nextSnapshot) ? current : nextSnapshot);
       } catch {
@@ -320,14 +348,16 @@ export default function App() {
       if (!response.ok) throw new Error(payload.message ?? "Accès refusé.");
       const nextSession = { agency: payload.agency, accessCode };
       const nextLeague = readActiveLeague(agencyCode);
+      const nextConfigs = await fetchSharedLeagueConfigs(nextSession).catch(() => readLeagueConfigs(agencyCode));
       let nextSnapshot: Snapshot | null = null;
       try {
-        nextSnapshot = await fetchSnapshot(nextSession, readLeagueConfig(agencyCode, nextLeague));
+        nextSnapshot = await fetchSnapshot(nextSession, configForLeague(nextConfigs, nextLeague));
       } catch (error) {
         if (!(error instanceof ApiError && error.status === 404)) throw error;
       }
       if (requestId !== snapshotRequestRef.current) return;
       setSession(nextSession);
+      setLeagueConfigs(nextConfigs);
       setActiveLeague(nextLeague);
       sessionStorage.setItem("stef-match-session", JSON.stringify(nextSession));
       setSnapshot(nextSnapshot);
@@ -356,7 +386,7 @@ export default function App() {
     const requestId = ++snapshotRequestRef.current;
     setSnapshotLoading(true);
     try {
-      const nextSnapshot = await fetchSnapshot(session, readLeagueConfig(session.agency.code, activeLeague));
+      const nextSnapshot = await fetchSnapshot(session, configForLeague(leagueConfigs, activeLeague));
       if (requestId !== snapshotRequestRef.current) return;
       setSnapshot(nextSnapshot);
       setStatusMessage("");
@@ -370,7 +400,7 @@ export default function App() {
     }
   }
 
-  async function applyLeague(id: LeagueId, config = readLeagueConfig(session?.agency.code ?? "", id)) {
+  async function applyLeague(id: LeagueId, config = configForLeague(leagueConfigs, id)) {
     const previousLeague = activeLeague;
     setActiveLeague(id);
     if (!session) return;
@@ -408,7 +438,7 @@ export default function App() {
   }
 
   const playerScreen = screen === "player";
-  const activeLeagueConfig = readLeagueConfig(session.agency.code, activeLeague);
+  const activeLeagueConfig = configForLeague(leagueConfigs, activeLeague);
 
   return (
     <div className={`app-shell league-${activeLeagueConfig.id}`}>
@@ -512,8 +542,8 @@ export default function App() {
               <Coach snapshot={snapshot} session={session} onPlayer={openPlayer} onComposition={() => setScreen("composition")} />
             )}
             {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
-            {screen === "guide" && <GuideView snapshot={snapshot} onNavigate={setScreen} />}
-            {screen === "admin" && <AdministratorView agencyCode={session.agency.code} activeLeague={activeLeague} onActiveLeagueChange={applyLeague} />}
+            {screen === "guide" && <GuideView snapshot={snapshot} leagueConfigs={leagueConfigs} onNavigate={setScreen} />}
+            {screen === "admin" && <AdministratorView agencyCode={session.agency.code} activeLeague={activeLeague} leagueConfigs={leagueConfigs} onLeagueConfigsChange={async (next) => { const saved = await saveSharedLeagueConfigs(session, next); setLeagueConfigs(saved); }} onActiveLeagueChange={applyLeague} />}
             {screen === "import" && (
               <ImportView
                 session={session}
@@ -561,6 +591,27 @@ async function fetchSnapshot(session: Session, criteria?: PerformanceCriteria): 
   const payload = await response.json();
   if (!response.ok) throw new ApiError(response.status, payload.message ?? "Le match n'a pas pu être chargé.");
   return payload.snapshot;
+}
+
+async function fetchSharedLeagueConfigs(session: Session): Promise<LeagueConfig[]> {
+  const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/league-configs`, {
+    cache: "no-store",
+    headers: { "x-access-code": session.accessCode },
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new ApiError(response.status, payload.message ?? "Les paramètres des ligues n'ont pas pu être chargés.");
+  return mergeLeagueConfigs(payload.configs, session.agency.code);
+}
+
+async function saveSharedLeagueConfigs(session: Session, configs: LeagueConfig[]): Promise<LeagueConfig[]> {
+  const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/league-configs`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "x-access-code": session.accessCode },
+    body: JSON.stringify({ configs }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new ApiError(response.status, payload.message ?? "Les paramètres des ligues n'ont pas pu être enregistrés.");
+  return mergeLeagueConfigs(payload.configs, session.agency.code);
 }
 
 function snapshotsHaveSameData(left: Snapshot | null, right: Snapshot): boolean {
@@ -3044,12 +3095,14 @@ function TvMode({ snapshot, session, onExit }: { snapshot: Snapshot; session: Se
   );
 }
 
-function AdministratorView({ agencyCode, activeLeague, onActiveLeagueChange }: { agencyCode: string; activeLeague: LeagueId; onActiveLeagueChange: (league: LeagueId, config?: LeagueConfig) => void }) {
+function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLeagueConfigs, onLeagueConfigsChange, onActiveLeagueChange }: { agencyCode: string; activeLeague: LeagueId; leagueConfigs: LeagueConfig[]; onLeagueConfigsChange: (configs: LeagueConfig[]) => Promise<void>; onActiveLeagueChange: (league: LeagueId, config?: LeagueConfig) => void }) {
   const leagueConfigStorageKey = `stef-match-league-configs-${agencyCode}`;
   const activeLeagueStorageKey = `stef-match-active-league-${agencyCode}`;
-  const [leagueConfigs, setLeagueConfigs] = useState(() => readLeagueConfigs(agencyCode));
+  const [leagueConfigs, setLeagueConfigs] = useState(initialLeagueConfigs);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const selectedLeague = leagueConfigs.find((league) => league.id === activeLeague) ?? leagueConfigs[1];
+
+  useEffect(() => setLeagueConfigs(initialLeagueConfigs), [initialLeagueConfigs]);
 
   function selectLeague(id: LeagueId) {
     const selected = leagueConfigs.find((league) => league.id === id);
@@ -3081,6 +3134,7 @@ function AdministratorView({ agencyCode, activeLeague, onActiveLeagueChange }: {
     const next = leagueConfigs.map((league) => league.id === id ? { ...league, [field]: normalizedValue } : league);
     setLeagueConfigs(next);
     localStorage.setItem(leagueConfigStorageKey, JSON.stringify(next));
+    void onLeagueConfigsChange(next);
     if (activeLeague === id) {
       const updatedLeague = next.find((league) => league.id === id);
       if (updatedLeague) onActiveLeagueChange(id, updatedLeague);
@@ -3181,9 +3235,9 @@ function LeagueIcon({ leagueId, size = 20, className = "administrator-trophy" }:
 
 type GuideSection = "start" | "excel" | "import" | "read" | "edit" | "admin" | "help";
 
-function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavigate: (screen: Screen) => void }) {
+function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot | null; leagueConfigs: LeagueConfig[]; onNavigate: (screen: Screen) => void }) {
   const [section, setSection] = useState<GuideSection>("start");
-  const guideLeagues = snapshot?.agency.code ? readLeagueConfigs(snapshot.agency.code) : leagueOptions;
+  const guideLeagues = leagueConfigs;
 
   const sections: Array<{ id: GuideSection; number: string; label: string }> = [
     { id: "start", number: "01", label: "Démarrer" },

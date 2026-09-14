@@ -50,6 +50,28 @@ try {
   });
   assert.equal(sessionResponse.status, 200, await safeText(sessionResponse));
 
+  const leagueConfigHeaders = { "x-access-code": accessCode };
+  const leagueConfigResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/league-configs`, { headers: leagueConfigHeaders });
+  const leagueConfigPayload = await leagueConfigResponse.json();
+  assert.equal(leagueConfigResponse.status, 200, JSON.stringify(leagueConfigPayload));
+  assert.equal(leagueConfigPayload.configs.length, 4, "Les quatre ligues doivent être partagées par l'agence");
+  const originalLeagueConfigs = leagueConfigPayload.configs;
+  const sharedLeagueConfigs = originalLeagueConfigs.map((config) => config.id === "bronze" ? { ...config, zonageMinutes: config.zonageMinutes + 1 } : config);
+  const saveLeagueConfigResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/league-configs`, {
+    method: "PUT",
+    headers: { ...leagueConfigHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({ configs: sharedLeagueConfigs }),
+  });
+  assert.equal(saveLeagueConfigResponse.status, 200, await safeText(saveLeagueConfigResponse));
+  const secondLeagueConfigResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/league-configs`, { headers: leagueConfigHeaders });
+  const secondLeagueConfigPayload = await secondLeagueConfigResponse.json();
+  assert.deepEqual(secondLeagueConfigPayload.configs, sharedLeagueConfigs, "Les paramètres modifiés doivent être visibles par une seconde session");
+  await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/league-configs`, {
+    method: "PUT",
+    headers: { ...leagueConfigHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({ configs: originalLeagueConfigs }),
+  });
+
   const oversizedPlanResponse = await fetch(`http://localhost:${port}/api/session`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

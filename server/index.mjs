@@ -62,6 +62,33 @@ app.post("/api/session", (req, res) => {
   res.json({ agency: publicAgency(agency) });
 });
 
+app.get("/api/agencies/:agencyCode/league-configs", requireAgency, async (req, res) => {
+  try {
+    const configs = await readLeagueConfigs(req.agency.code);
+    res.set("Cache-Control", "no-store, max-age=0").json({ configs });
+  } catch (error) {
+    respondInternalError(res, `league-configs:${req.agency.code}`, error);
+  }
+});
+
+app.put("/api/agencies/:agencyCode/league-configs", requireAgency, async (req, res) => {
+  if (!req.agency.canImport) {
+    res.status(403).json({ title: "PARAMÈTRES NON MODIFIÉS", message: "Ce code d'accès permet uniquement de consulter les résultats." });
+    return;
+  }
+  try {
+    const configs = normalizeLeagueConfigs(req.body?.configs);
+    await withAgencyLock(req.agency.code, async () => {
+      const agencyDir = path.join(dataDir, sanitizeSegment(req.agency.code));
+      await fs.mkdir(agencyDir, { recursive: true });
+      await writeJsonAtomic(path.join(agencyDir, "league-configs.json"), configs);
+    });
+    res.json({ message: "PARAMÈTRES DES LIGUES ACTUALISÉS", configs });
+  } catch (error) {
+    res.status(400).json({ title: "PARAMÈTRES INVALIDES", message: error instanceof Error ? error.message : "Les paramètres n'ont pas pu être enregistrés." });
+  }
+});
+
 app.get("/api/agencies/:agencyCode/snapshot", requireAgency, async (req, res) => {
   res.set("Cache-Control", "no-store, max-age=0");
   const snapshot = await withAgencyLock(req.agency.code, () =>
@@ -423,6 +450,44 @@ function publicAgency(agency) {
     name: agency.name,
     canImport: Boolean(agency.canImport),
   };
+}
+
+const DEFAULT_LEAGUE_CONFIGS = [
+  { id: "bronze", zonageMinutes: 45, loadingSeconds: 195, unloadingSeconds: 75, scoreTargetPercent: 45 },
+  { id: "argent", zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 },
+  { id: "or", zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 },
+  { id: "platine", zonageMinutes: 20, loadingSeconds: 135, unloadingSeconds: 50, scoreTargetPercent: 70 },
+];
+
+function normalizeLeagueConfigs(value) {
+  if (!Array.isArray(value)) throw new Error("La liste des ligues est invalide.");
+  return DEFAULT_LEAGUE_CONFIGS.map((defaultConfig) => {
+    const input = value.find((item) => item?.id === defaultConfig.id) ?? {};
+    const zonageMinutes = Number(input.zonageMinutes);
+    const loadingSeconds = Number(input.loadingSeconds);
+    const unloadingSeconds = Number(input.unloadingSeconds);
+    const scoreTargetPercent = Number(input.scoreTargetPercent);
+    if (![zonageMinutes, loadingSeconds, unloadingSeconds, scoreTargetPercent].every(Number.isFinite)) {
+      throw new Error(`Paramètres incomplets pour la ligue ${defaultConfig.id}.`);
+    }
+    return {
+      id: defaultConfig.id,
+      zonageMinutes: Math.max(1, Math.round(zonageMinutes)),
+      loadingSeconds: Math.max(1, Math.round(loadingSeconds)),
+      unloadingSeconds: Math.max(1, Math.round(unloadingSeconds)),
+      scoreTargetPercent: Math.min(100, Math.max(1, Math.round(scoreTargetPercent))),
+    };
+  });
+}
+
+async function readLeagueConfigs(agencyCode) {
+  const configPath = path.join(dataDir, sanitizeSegment(agencyCode), "league-configs.json");
+  try {
+    return normalizeLeagueConfigs(JSON.parse(await fs.readFile(configPath, "utf8")));
+  } catch (error) {
+    if (error?.code === "ENOENT") return DEFAULT_LEAGUE_CONFIGS.map((config) => ({ ...config }));
+    throw error;
+  }
 }
 
 function requireAgency(req, res, next) {
