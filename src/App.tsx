@@ -2200,7 +2200,6 @@ function Coach({
               return (
                 <article className={`coach-action-card ${action.level}`} key={action.title}>
                   <span>0{index + 1} · {actionField.label}</span>
-                  <strong>{action.title}</strong>
                   {coachBoardMode === "edit" ? (
                     <label className="coach-action-input">
                       <span className="sr-only">{actionField.label}, consigne du chef de quai</span>
@@ -2209,7 +2208,6 @@ function Coach({
                   ) : (
                     <p className={`coach-action-entry ${value.trim() ? "" : "is-empty"}`}>{value.trim() || "À renseigner par le chef de quai"}</p>
                   )}
-                  <small>{coachBoardMode === "edit" ? "Consigne opérationnelle à transmettre." : action.next}</small>
                 </article>
               );
             })}
