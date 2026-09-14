@@ -3100,6 +3100,7 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
   const activeLeagueStorageKey = `stef-match-active-league-${agencyCode}`;
   const [leagueConfigs, setLeagueConfigs] = useState(initialLeagueConfigs);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
+  const [configSaveError, setConfigSaveError] = useState("");
   const selectedLeague = leagueConfigs.find((league) => league.id === activeLeague) ?? leagueConfigs[1];
 
   useEffect(() => setLeagueConfigs(initialLeagueConfigs), [initialLeagueConfigs]);
@@ -3134,7 +3135,10 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
     const next = leagueConfigs.map((league) => league.id === id ? { ...league, [field]: normalizedValue } : league);
     setLeagueConfigs(next);
     localStorage.setItem(leagueConfigStorageKey, JSON.stringify(next));
-    void onLeagueConfigsChange(next);
+    setConfigSaveError("");
+    void onLeagueConfigsChange(next).catch((error) => {
+      setConfigSaveError(error instanceof Error ? error.message : "Les paramètres de la ligue n'ont pas pu être partagés.");
+    });
     if (activeLeague === id) {
       const updatedLeague = next.find((league) => league.id === id);
       if (updatedLeague) onActiveLeagueChange(id, updatedLeague);
@@ -3185,6 +3189,7 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
               <label><CheckCircle2 size={18} /><span>Score · objectif par indicateur</span><input aria-label={`Objectif score ${selectedLeague.label}`} type="number" min="1" max="100" step="1" value={leagueInputValue(selectedLeague.id, "scoreTargetPercent", selectedLeague.scoreTargetPercent)} onChange={(event) => setLeagueDraft(selectedLeague.id, "scoreTargetPercent", event.target.value)} onBlur={(event) => commitLeague(selectedLeague.id, "scoreTargetPercent", event.target.value)} /></label>
             </div>
             <p className="administrator-note"><Sparkles size={17} /> Les critères sont modifiables et mémorisés sur ce poste. La ligue active recalcule les duels, les chargements, les déchargements et le score à 4 indicateurs.</p>
+            {configSaveError && <p className="form-error" role="alert">{configSaveError}</p>}
           </div>
         </div>
       </div>
