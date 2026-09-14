@@ -3567,7 +3567,7 @@ body.match-celebration-active .main-area {
 
 .loading-quality-table-row {
   display: grid;
-  grid-template-columns: 1.05fr 1.15fr 0.65fr 1fr 1.15fr;
+  grid-template-columns: 1.05fr 1.15fr 0.65fr 1fr 1.15fr 0.9fr;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
@@ -3593,6 +3593,24 @@ body.match-celebration-active .main-area {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.loading-result-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.loading-result-dot.is-targeted {
+  background: var(--green-field);
+  box-shadow: 0 0 0 3px rgba(67, 211, 148, 0.16);
+}
+
+.loading-result-dot.is-off-target {
+  background: var(--red-action);
+  box-shadow: 0 0 0 3px rgba(239, 11, 69, 0.14);
 }
 
 .duel-quality-card {
@@ -3653,12 +3671,12 @@ body.match-celebration-active .main-area {
 }
 
 .duel-quality-table {
-  min-width: 520px;
+  min-width: 640px;
 }
 
 .duel-quality-table-row {
   display: grid;
-  grid-template-columns: 1.1fr 0.8fr 1.05fr 0.65fr 0.9fr;
+  grid-template-columns: 1.1fr 0.8fr 1.05fr 0.65fr 0.9fr 0.7fr;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
@@ -3684,6 +3702,16 @@ body.match-celebration-active .main-area {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.duel-result-gagné {
+  color: var(--green-field);
+  font-weight: 900;
+}
+
+.duel-result-perdu {
+  color: var(--red-action);
+  font-weight: 900;
 }
 
 .control-panel,
@@ -8504,6 +8532,7 @@ body.tv-focus-active .tv-mode {
   }
 }
 
+
 body.tv-screen-active .app-shell {
   grid-template-columns: 1fr;
 }
@@ -8813,6 +8842,14 @@ body.tv-screen-active .tv-mode {
 
   .main-area {
     padding: 22px;
+  }
+
+  /* The mobile navigation already stays visible; avoid stacking a second
+     sticky header over the composition field while the page scrolls. */
+  .composition-header {
+    position: relative;
+    top: auto;
+    z-index: auto;
   }
 
   .top-bar,
@@ -16725,5 +16762,252 @@ body.tv-screen-active .app-shell.league-platine {
 
   body.tv-screen-active .tv-mode.is-threshold-reached .tv-plan-column:nth-child(3) {
     animation-delay: 180ms !important;
+  }
+}
+
+/* Match layout: league trophy and football score stay together while the
+   four operational indicators remain readable in a compact 2 x 2 grid. */
+@media (min-width: 901px) {
+  .match-result-stage {
+    grid-template-columns: minmax(230px, 0.72fr) minmax(0, 1.8fr);
+    align-items: stretch;
+    min-height: 492px;
+  }
+
+  .match-result-visual {
+    display: grid;
+    align-content: start;
+    justify-items: center;
+    gap: 20px;
+    min-width: 0;
+    padding: 12px 4px;
+  }
+
+  .match-result-visual .match-emblem {
+    width: clamp(150px, 13vw, 188px);
+    height: clamp(150px, 13vw, 188px);
+  }
+
+  .match-result-visual .football-score-panel {
+    width: 100%;
+    max-width: 320px;
+    margin: 0;
+  }
+
+  .match-scoreboard {
+    width: 100%;
+    max-width: none;
+    align-content: start;
+    padding: 28px 24px;
+  }
+
+  .match-scoreboard .match-score-bubbles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: minmax(170px, 1fr);
+    gap: 14px;
+    width: 100%;
+  }
+}
+
+@media (max-width: 900px) {
+  .match-result-visual {
+    display: grid;
+    justify-items: center;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  .match-result-visual .football-score-panel {
+    width: min(560px, 100%);
+  }
+}
+
+/* Celebration mode keeps the match score and yellow cards clear of the KPI panel. */
+@media (min-width: 901px) {
+  .match-page.is-celebration-mode .match-result-stage {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: auto;
+  }
+
+  .match-page.is-celebration-mode .match-result-visual {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 4px 0;
+  }
+
+  .match-page.is-celebration-mode .match-result-visual .football-score-panel {
+    width: min(320px, 100%);
+  }
+
+  .match-page.is-celebration-mode .match-result-visual .yellow-cards-panel {
+    width: min(320px, 100%);
+  }
+
+  .match-page.is-celebration-mode .match-scoreboard {
+    justify-self: stretch;
+  }
+}
+
+@media (max-width: 620px) {
+  .match-result-visual .football-score-panel {
+    width: 100%;
+  }
+}
+
+.yellow-cards-panel {
+  width: min(320px, 100%);
+  padding: 12px 14px;
+  color: #e9f4ff;
+  border: 1px solid rgba(255, 214, 92, 0.42);
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(255, 214, 92, 0.16), rgba(6, 22, 45, 0.72));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 24px rgba(0, 0, 0, 0.14);
+}
+
+.import-sources {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.import-source-drop-zone {
+  min-height: 210px;
+  cursor: pointer;
+}
+
+.import-source-drop-zone small {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.import-source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.daily-indicators-carousel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  grid-column: 1 / -1;
+  padding: 12px 14px;
+  border: 1px solid rgba(137, 198, 255, 0.26);
+  border-radius: 10px;
+  background: rgba(6, 22, 45, 0.22);
+}
+
+.daily-indicators-heading {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #89c6ff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.daily-indicators-heading small { color: #d9e9ff; font-size: 11px; letter-spacing: 0; text-transform: none; }
+.daily-indicator-card { min-width: 0; text-align: center; }
+.daily-indicator-card span { display: block; color: #d9e9ff; font-size: 12px; font-weight: 800; }
+.daily-indicator-card strong { display: block; margin-top: 3px; color: var(--white); font-size: 25px; line-height: 1; }
+.daily-indicators-dots { grid-column: 1 / -1; display: flex; justify-content: center; gap: 5px; }
+.daily-indicators-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(137, 198, 255, 0.35); }
+.daily-indicators-dots i.is-active { background: #72e0ae; }
+
+@media (max-width: 700px) {
+  .import-sources { grid-template-columns: 1fr; }
+  .import-source-actions > * { width: 100%; }
+}
+
+.yellow-cards-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.yellow-cards-heading span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #ffe18a;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.yellow-cards-heading strong {
+  color: #fff8d5;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.yellow-cards-panel ul {
+  display: grid;
+  gap: 7px;
+  max-height: 148px;
+  margin: 10px 0 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.yellow-cards-panel li {
+  display: grid;
+  gap: 2px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(255, 225, 138, 0.2);
+}
+
+.yellow-cards-panel li b {
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.yellow-cards-panel li small,
+.yellow-cards-panel p {
+  margin: 0;
+  color: rgba(229, 242, 255, 0.76);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.yellow-cards-panel > p {
+  margin-top: 9px;
+}
+
+.match-header-league-trophy {
+  display: inline-grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 auto;
+  color: #fff4c4;
+  border: 1px solid var(--league-line, rgba(255, 255, 255, 0.3));
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--league-glow, rgba(255, 215, 115, 0.3)), rgba(6, 22, 45, 0.62) 72%);
+  box-shadow: inset 0 0 24px var(--league-glow-soft, rgba(255, 255, 255, 0.1)), var(--league-trophy-shadow, 0 10px 24px rgba(0, 0, 0, 0.18));
+}
+
+.match-header-league-trophy svg {
+  filter: drop-shadow(0 0 10px currentColor);
+}
+
+@media (max-width: 900px) {
+  .yellow-cards-panel {
+    width: min(560px, 100%);
+  }
+
+  .match-header-league-trophy {
+    order: -1;
   }
 }

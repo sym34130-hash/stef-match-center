@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { FormEvent, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode } from "react";
 import {
   AlertTriangle,
   Award,
@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CirclePlay,
+  CreditCard,
   ClipboardList,
   Clock3,
   Crown,
@@ -39,6 +40,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Agency, Alert, Highlight, Player, Snapshot } from "./types";
+import { MatchIndicatorsCarousel } from "./MatchIndicatorsCarousel";
 
 type Session = {
   agency: Agency;
@@ -86,7 +88,7 @@ const screens: Array<{ id: Exclude<Screen, "player">; label: string; icon: Lucid
   { id: "match", label: "Feuille de match", icon: LayoutDashboard, step: "02" },
   { id: "composition", label: "Composition", icon: Shirt, step: "03" },
   { id: "coach", label: "Coach", icon: Dumbbell, step: "04" },
-  { id: "tv", label: "Écran quai", icon: Eye, step: "05" },
+  { id: "tv", label: "BRIEF ÉQUIPE", icon: Eye, step: "05" },
   { id: "import", label: "Import", icon: Upload, step: "MAJ" },
   { id: "guide", label: "Guide", icon: BookOpen, step: "?" },
   { id: "admin", label: "Administrateur", icon: Settings2, step: "ADM" },
@@ -134,12 +136,15 @@ function readLeagueConfigs(agencyCode: string): LeagueConfig[] {
     const parsed = JSON.parse(saved) as Array<Partial<LeagueConfig>>;
     return leagueOptions.map((defaultLeague) => {
       const savedLeague = parsed.find((league) => league.id === defaultLeague.id);
+      const zonageMinutes = Number(savedLeague?.zonageMinutes);
+      const loadingSeconds = Number(savedLeague?.loadingSeconds);
+      const unloadingSeconds = Number(savedLeague?.unloadingSeconds);
       const scoreTargetPercent = Number(savedLeague?.scoreTargetPercent);
       return {
         ...defaultLeague,
-        zonageMinutes: Number.isFinite(savedLeague?.zonageMinutes) ? Math.max(1, Number(savedLeague?.zonageMinutes)) : defaultLeague.zonageMinutes,
-        loadingSeconds: Number.isFinite(savedLeague?.loadingSeconds) ? Math.max(1, Number(savedLeague?.loadingSeconds)) : defaultLeague.loadingSeconds,
-        unloadingSeconds: Number.isFinite(savedLeague?.unloadingSeconds) ? Math.max(1, Number(savedLeague?.unloadingSeconds)) : defaultLeague.unloadingSeconds,
+        zonageMinutes: Number.isFinite(zonageMinutes) ? Math.max(1, zonageMinutes) : defaultLeague.zonageMinutes,
+        loadingSeconds: Number.isFinite(loadingSeconds) ? Math.max(1, loadingSeconds) : defaultLeague.loadingSeconds,
+        unloadingSeconds: Number.isFinite(unloadingSeconds) ? Math.max(1, unloadingSeconds) : defaultLeague.unloadingSeconds,
         scoreTargetPercent: Number.isFinite(scoreTargetPercent) ? Math.min(100, Math.max(1, Math.round(scoreTargetPercent))) : defaultLeague.scoreTargetPercent,
       };
     });
@@ -259,6 +264,7 @@ export default function App() {
 
   useEffect(() => {
     document.body.classList.toggle("tv-screen-active", screen === "tv");
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     return () => document.body.classList.remove("tv-screen-active");
   }, [screen]);
 
@@ -442,7 +448,7 @@ export default function App() {
         ) : !snapshot && screen !== "import" && screen !== "kickoff" && screen !== "guide" && screen !== "tv" && screen !== "admin" ? (
           <NoDataView onImport={() => setScreen("import")} />
         ) : (
-          <div className="screen-transition" key={`${screen}-${snapshot?.importedAt ?? "empty"}`}>
+          <div className="screen-transition" key={screen === "import" ? `import-${session.agency.code}` : `${screen}-${snapshot?.importedAt ?? "empty"}`}>
             {screen === "kickoff" && (
               <Kickoff
                 snapshot={snapshot}
@@ -471,7 +477,7 @@ export default function App() {
             {screen === "coach" && snapshot && (
               <Coach snapshot={snapshot} session={session} onPlayer={openPlayer} onComposition={() => setScreen("composition")} />
             )}
-            {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} activeLeague={activeLeague} session={session} onMatch={() => setScreen("match")} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
+            {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
             {screen === "guide" && <GuideView snapshot={snapshot} onNavigate={setScreen} />}
             {screen === "admin" && <AdministratorView agencyCode={session.agency.code} activeLeague={activeLeague} onActiveLeagueChange={applyLeague} />}
             {screen === "import" && (
@@ -515,6 +521,7 @@ async function fetchSnapshot(session: Session, criteria?: PerformanceCriteria): 
       })}`
     : "";
   const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/snapshot${query}`, {
+    cache: "no-store",
     headers: { "x-access-code": session.accessCode },
   });
   const payload = await response.json();
@@ -912,7 +919,7 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
         <div className="kickoff-header-actions">
           <button className="secondary-on-dark" type="button" onClick={onTv}>
             <Eye size={18} />
-            Écran quai
+            BRIEF ÉQUIPE
           </button>
         </div>
       </header>
@@ -995,7 +1002,7 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
 
           <button className="secondary-on-dark kickoff-secondary" type="button" onClick={onTv}>
             <Eye size={18} />
-            Préparer l'écran quai
+            Préparer le brief équipe
           </button>
         </aside>
       </div>
@@ -1054,6 +1061,12 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
             <ActivePeriodBadge snapshot={snapshot} />
           </div>
           <div className="match-header-actions">
+            <span className={`match-header-league-trophy ${activeLeague}`} aria-label={`Trophée de la ligue ${activeLeague}`}>
+              <span className={`trophy-cup small league-trophy ${activeLeague}`} aria-hidden="true">
+                <LeagueIcon leagueId={activeLeague} size={28} className="league-trophy-icon" />
+                <i />
+              </span>
+            </span>
             <button className="secondary-on-dark" type="button" onClick={() => setCelebrationMode((current) => !current)}>
               {celebrationMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
               {celebrationMode ? "Sortir du mode Célébration" : "Mode célébration"}
@@ -1066,15 +1079,9 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
         </header>
 
         <div className="match-result-stage">
-          <div className={`match-emblem ${outcome.celebration ? "trophy" : "signal"}`} aria-hidden="true">
-            {outcome.celebration ? (
-              <span className={`trophy-cup league-trophy ${activeLeague}`}>
-                <LeagueIcon leagueId={activeLeague} size={42} className="league-trophy-icon" />
-                <i />
-              </span>
-            ) : (
-              <Target size={54} />
-            )}
+          <div className="match-result-visual">
+            <FootballScoreDisplay footballScore={footballScore} />
+            <YellowCardsPanel snapshot={snapshot} />
           </div>
 
           <div className="match-scoreboard">
@@ -1082,7 +1089,7 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
             <strong>{outcome.verdict}</strong>
             <div className="match-score-bubbles" aria-label="Scores du match">
               <div className="match-score-bubble duel-score-bubble">
-                <span>% passes réussies</span>
+                <span>% duels gagnés</span>
                 <strong>{formatPercent(snapshot.summary.duelRate)}</strong>
                 <small>Duels gagnés ÷ duels joués<br />sur la plage active</small>
               </div>
@@ -1098,53 +1105,35 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
                 <small>Réceptions associées à un ZONAGE ÷<br />réceptions uniques</small>
               </div>
             </div>
-            <FootballScoreDisplay footballScore={footballScore} />
           </div>
 
         </div>
 
-        <div className="team-performance-panel">
-          <div className="team-performance-title">
-            <span>Performance d'équipe</span>
-            <strong>{outcome.collectiveTitle}</strong>
-            <p className="team-motivation-message">{teamMotivation}</p>
-              <div className="real-staff-metric">
-                <div>
-                  <span>Effectif réel</span>
-                  <strong className={kpiCopy.expectedPlayersValue.trim() === "" ? "kpi-manual-placeholder" : undefined}>{formatRealStaffPercent(snapshot, kpiCopy.expectedPlayersValue)}</strong>
-                </div>
-              <small>{formatRealStaffDetail(snapshot, kpiCopy.expectedPlayersValue)}</small>
-            </div>
-            {editingKpis && (
-              <label className="real-staff-editor" htmlFor="expected-players-value">
-                <span>Effectif prévu du jour</span>
-                <input id="expected-players-value" className="kpi-value-input" type="number" min="1" step="1" inputMode="numeric" value={kpiCopy.expectedPlayersValue} onChange={(event) => setKpiCopy({ ...kpiCopy, expectedPlayersValue: event.target.value })} aria-label="Effectif prévu du jour" placeholder="À renseigner" />
-              </label>
-            )}
-          </div>
+        <div className="match-indicators-area">
+          <MatchIndicatorsCarousel
+            snapshot={snapshot}
+            performance={outcome.collectiveTitle}
+            motivation={teamMotivation}
+            injuries={kpiCopy.injuriesValue}
+            staffPercent={formatRealStaffPercent(snapshot, kpiCopy.expectedPlayersValue)}
+            staffDetail={formatRealStaffDetail(snapshot, kpiCopy.expectedPlayersValue)}
+          />
           <div className="match-kpi-wrap">
-            <div className="match-kpi-board">
-            <div className="injuries-kpi-card">
-              <span>NB DE BLESSURES (A.T)</span>
-              {editingKpis ? (
-                <select className="kpi-value-input kpi-value-select" value={kpiCopy.injuriesValue} onChange={(event) => setKpiCopy({ ...kpiCopy, injuriesValue: event.target.value })} aria-label="Nombre de blessures A.T">
-                  <option value="">À renseigner</option>
-                  {Array.from({ length: 100 }, (_, value) => <option key={value} value={value}>{value}</option>)}
-                </select>
-              ) : <strong className={kpiCopy.injuriesValue.trim() === "" ? "kpi-manual-placeholder" : undefined}>{formatManualKpiValue(kpiCopy.injuriesValue)}</strong>}
-              <small>Saisie manuelle · accidents du travail</small>
-            </div>
-            <div className="tonnage-kpi-card">
-              <span>TONNAGE</span>
-              {editingKpis ? <input className="kpi-value-input" type="number" min="0" step="1" inputMode="numeric" value={kpiCopy.tonnageValue} onChange={(event) => setKpiCopy({ ...kpiCopy, tonnageValue: event.target.value })} aria-label="Tonnage manuel" /> : <strong className={kpiCopy.tonnageValue.trim() === "" ? "kpi-manual-placeholder" : undefined}>{formatManualKpiValue(kpiCopy.tonnageValue)}</strong>}
-              <small>Volume filtré Excel</small>
-            </div>
-            <div>
-              <span>Positions</span>
-              {editingKpis ? <input className="kpi-value-input" type="number" min="0" step="1" inputMode="numeric" value={kpiCopy.positionsValue || String(snapshot.summary.positions)} onChange={(event) => setKpiCopy({ ...kpiCopy, positionsValue: event.target.value })} aria-label="Positions" /> : <strong>{formatEditableKpiValue(kpiCopy.positionsValue, snapshot.summary.positions)}</strong>}
-              <small>Retenues dans le match</small>
-            </div>
-            </div>
+            {editingKpis && (
+              <div className="match-indicators-editor">
+                <label>
+                  Effectif prévu du jour
+                  <input type="number" min="1" step="1" inputMode="numeric" value={kpiCopy.expectedPlayersValue} onChange={(event) => setKpiCopy({ ...kpiCopy, expectedPlayersValue: event.target.value })} placeholder="À renseigner" />
+                </label>
+                <label>
+                  Nombre de blessures A.T
+                  <select value={kpiCopy.injuriesValue} onChange={(event) => setKpiCopy({ ...kpiCopy, injuriesValue: event.target.value })}>
+                    <option value="">À renseigner</option>
+                    {Array.from({ length: 100 }, (_, value) => <option key={value} value={value}>{value}</option>)}
+                  </select>
+                </label>
+              </div>
+            )}
             <div className="match-kpi-actions">
               {editingKpis ? (
                 <>
@@ -1249,24 +1238,19 @@ function OperationalChartsCarousel({ snapshot }: { snapshot: Snapshot }) {
   const slideRefs = useRef<Array<HTMLElement | null>>([]);
   const cards = [
     {
-      id: "passes",
-      label: "% passes réussies",
+      id: "passes-hourly",
+      label: "% passes réussies par heure",
       content: <PerformanceChart snapshot={snapshot} />,
     },
     {
-      id: "unloading",
-      label: "Temps de déchargement",
-      content: <UnloadingQualityCard snapshot={snapshot} />,
+      id: "unloading-duels",
+      label: "% duels gagnés (réceptions)",
+      content: <UnloadingDuelQualityCard snapshot={snapshot} />,
     },
     {
       id: "loading",
       label: "Chargements contrôlés",
       content: <LoadingQualityCard snapshot={snapshot} />,
-    },
-    {
-      id: "duels",
-      label: "Duels gagnés (réceptions)",
-      content: <DuelQualityCard snapshot={snapshot} />,
     },
   ];
 
@@ -1347,6 +1331,7 @@ function OperationalChartsCarousel({ snapshot }: { snapshot: Snapshot }) {
   );
 }
 
+
 function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
   const quality = snapshot.loadingQuality;
   if (!quality) return null;
@@ -1354,6 +1339,7 @@ function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
   const total = quality.targeted + quality.offTarget;
   const hasData = total > 0 && Number.isFinite(quality.targetedPercent) && Number.isFinite(quality.offTargetPercent);
   const targetedPercent = quality.targetedPercent ?? 0;
+  const loadingDetails = quality.loadingDetails ?? quality.nonTargetedShots.map((shot) => ({ ...shot, result: "non cadré" as const }));
 
   return (
     <section className="loading-quality-card" aria-label="Qualité des chargements">
@@ -1382,20 +1368,22 @@ function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
       ) : (
         <p className="loading-quality-empty">Aucune donnée de chargement disponible dans cet import Excel.</p>
       )}
-      {quality.nonTargetedShots.length > 0 && (
-        <div className="loading-quality-table-wrap">
-          <div className="loading-quality-table-title">Détails des chargements non cadrés</div>
-          <div className="loading-quality-table" role="table" aria-label="Détails des chargements non cadrés">
+      {loadingDetails.length > 0 && (
+        <details className="duel-quality-details loading-quality-details">
+          <summary>Voir les chargements <span>{formatNumber(loadingDetails.length)}</span></summary>
+          <div className="loading-quality-table-wrap">
+          <div className="loading-quality-table" role="table" aria-label="Détails des chargements cadrés et non cadrés">
             <div className="loading-quality-table-row is-head" role="row">
-              <span>Voyage</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Où ?</span>
+              <span>Voyage</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Frappe</span><span>Résultat</span>
             </div>
-            {quality.nonTargetedShots.map((shot) => (
+            {loadingDetails.map((shot) => (
               <div className="loading-quality-table-row" role="row" key={`${shot.travelCode}-${shot.time}`}>
-                <span>{shot.travelCode}</span><span>{shot.time}</span><span>{shot.positions}</span><span>{shot.timePerPosition}</span><span>{shot.where}</span>
+                <span>{shot.travelCode}</span><span>{shot.time}</span><span>{shot.positions}</span><span>{shot.timePerPosition}</span><span>{"where" in shot ? shot.where : ""}</span><span><i className={`loading-result-dot ${shot.result === "cadré" ? "is-targeted" : "is-off-target"}`} title={shot.result === "cadré" ? "Cadré" : "Non cadré"} aria-label={shot.result === "cadré" ? "Cadré" : "Non cadré"} /></span>
               </div>
             ))}
           </div>
-        </div>
+          </div>
+        </details>
       )}
     </section>
   );
@@ -1443,18 +1431,17 @@ function UnloadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
   );
 }
 
-function DuelQualityCard({ snapshot }: { snapshot: Snapshot }) {
-  const quality = snapshot.duelQuality;
+function UnloadingDuelQualityCard({ snapshot }: { snapshot: Snapshot }) {
+  const quality = snapshot.unloadingDuelQuality;
   if (!quality) return null;
-  const zonageTarget = snapshot.performanceCriteria?.zonageMinutes ?? 30;
   const total = quality.won + quality.lost;
   return (
-    <section className="duel-quality-card" aria-label="Qualité des duels">
+    <section className="loading-duel-quality-card" aria-label="Pourcentage de duels gagnés sur les réceptions">
       <div className="loading-quality-heading">
         <div>
-          <span>Réceptions</span>
-          <strong>Duels gagnés (réceptions)</strong>
-          <p className="loading-quality-explanation">Un duel est gagné lorsque la réception est réalisée dans un délai inférieur ou égal à {zonageTarget} minutes. Au-delà, il est considéré comme perdu et doit être vérifié dans le détail.</p>
+          <span>Déchargement</span>
+          <strong>% duels gagnés (réceptions)</strong>
+          <p className="loading-quality-explanation">Duels gagnés ÷ duels éligibles dans la période affichée.</p>
         </div>
         <b>{formatNumber(total)} duels</b>
       </div>
@@ -1474,23 +1461,21 @@ function DuelQualityCard({ snapshot }: { snapshot: Snapshot }) {
         </div>
       )}
       <details className="duel-quality-details">
-        <summary>Voir les duels perdus <span>{formatNumber(quality.lost)}</span></summary>
-        {quality.lostDuels.length > 0 ? (
+        <summary>Voir les duels <span>{formatNumber(total)}</span></summary>
+        {quality.duels.length > 0 ? (
           <div className="duel-quality-table-wrap">
-            <div className="duel-quality-table" role="table" aria-label="Duels perdus">
+            <div className="duel-quality-table" role="table" aria-label="Duels gagnés et perdus">
               <div className="duel-quality-table-row is-head" role="row">
-                <span>Voyage</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span>
+                <span>Voyage</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>
               </div>
-              {quality.lostDuels.map((duel) => (
+              {quality.duels.map((duel) => (
                 <div className="duel-quality-table-row" role="row" key={`${duel.travelCode}-${duel.time}`}>
-                  <span>{duel.travelCode}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span>
+                  <span>{duel.travelCode}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className={`duel-result duel-result-${duel.result}`}>{duel.result}</span>
                 </div>
               ))}
             </div>
           </div>
-        ) : (
-          <p className="loading-quality-empty">Aucun duel perdu à détailler sur cette plage.</p>
-        )}
+        ) : <p className="loading-quality-empty">Aucun duel à détailler sur cette plage.</p>}
       </details>
     </section>
   );
@@ -1522,15 +1507,15 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
         <div>
           <span>Performance horaire</span>
           <strong>% passes réussies</strong>
-          <small className="performance-chart-caption">Duels gagnés / duels joués, heure par heure</small>
+          <small className="performance-chart-caption">Donnée Excel Feuille de match, heure par heure</small>
         </div>
         <div className="performance-chart-total">
           <small>Total</small>
-          <b>{formatPercent(snapshot.summary.duelRate)}</b>
+          <b>{formatPercent(snapshot.summary.passRate ?? null)}</b>
         </div>
       </div>
       {data.length > 0 ? (
-        <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Évolution horaire du pourcentage de duels gagnés">
+        <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Évolution horaire du pourcentage de passes réussies">
           <rect className="performance-chart-plot" x={left} y={top} width={chartWidth} height={chartHeight} rx="10" />
           {[0, 20, 40, 60, 80, 100].map((value) => {
             const y = top + ((100 - value) / 100) * chartHeight;
@@ -1542,7 +1527,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
             <g className="performance-chart-point" key={point.label}>
               <circle cx={point.x} cy={point.y} r="6" />
               <text x={point.x} y={point.y - 14}>{point.rate}%</text>
-              <text className="performance-chart-volume" x={point.x} y={point.y + 25}>{point.won}/{point.total}</text>
+              <text className="performance-chart-volume" x={point.x} y={point.y + 25}>{point.won !== null && point.total !== null ? `${point.won}/${point.total}` : "Excel"}</text>
               <text className="performance-chart-hour" x={point.x} y={height - 20}>{point.label}</text>
             </g>
           ))}
@@ -2442,7 +2427,7 @@ function Causerie({ snapshot, session }: { snapshot: Snapshot; session: Session 
       setMode("view");
       setToast({
         title: "Plan de jeu validé",
-        detail: "La Causerie est prête pour le briefing.",
+        detail: "Le brief équipe est prêt.",
         tone: "success",
       });
     } catch {
@@ -2732,7 +2717,7 @@ function CauserieToastView({ toast }: { toast: NonNullable<CauserieToast> }) {
   );
 }
 
-function TvMode({ snapshot, activeLeague, session, onMatch, onExit }: { snapshot: Snapshot; activeLeague: LeagueId; session: Session; onMatch: () => void; onExit: () => void }) {
+function TvMode({ snapshot, session, onExit }: { snapshot: Snapshot; session: Session; onExit: () => void }) {
   const [focusMode, setFocusMode] = useState(false);
   const [planMode, setPlanMode] = useState<"view" | "edit">("view");
   const [plan, setPlan] = useState<CauseriePlan>(() => buildEmptyCauseriePlan());
@@ -2740,15 +2725,6 @@ function TvMode({ snapshot, activeLeague, session, onMatch, onExit }: { snapshot
   const [savingPlan, setSavingPlan] = useState(false);
   const [feedback, setFeedback] = useState<CauserieToast>(null);
   const [lightboxImage, setLightboxImage] = useState<{ src: string; label: string } | null>(null);
-  const [thresholdPulse, setThresholdPulse] = useState(false);
-  const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
-  const footballScore = buildFootballScore(snapshot, snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent);
-  const thresholdReached = footballScore.available && footballScore.goalsFor > footballScore.goalsAgainst;
-  const outcome = matchCeremonyOutcome(footballScore);
-  const kpiCopy = loadMatchKpiCopy(snapshot);
-  const action = matchAction(snapshot);
-  const categoryHighlights = reorderMatchSheetAwards(buildAwardItems(snapshot)).filter((award) => award.kind !== "polyvalent");
-  const jerseyNumbers = buildJerseyNumbers(snapshot.players);
 
   useEffect(() => {
     document.body.classList.toggle("tv-focus-active", focusMode);
@@ -2767,13 +2743,6 @@ function TvMode({ snapshot, activeLeague, session, onMatch, onExit }: { snapshot
       window.removeEventListener("keydown", onKeyDown);
     };
   }, [lightboxImage]);
-
-  useEffect(() => {
-    if (!thresholdReached) return;
-    setThresholdPulse(true);
-    const timer = window.setTimeout(() => setThresholdPulse(false), 3200);
-    return () => window.clearTimeout(timer);
-  }, [footballScore.goalsFor, footballScore.goalsAgainst, footballScore.available, thresholdReached]);
 
   useEffect(() => {
     function syncFullscreenState() {
@@ -2841,7 +2810,7 @@ function TvMode({ snapshot, activeLeague, session, onMatch, onExit }: { snapshot
       setPlan(normalizedPlan);
       setPlanDraft(normalizedPlan);
       setPlanMode("view");
-      setFeedback({ title: "Brief enregistré", detail: "Les consignes sont à jour dans Coach et l’Écran quai.", tone: "success" });
+      setFeedback({ title: "Brief enregistré", detail: "Les consignes du brief équipe sont à jour.", tone: "success" });
     } catch {
       setPlan(nextPlan);
       setPlanDraft(nextPlan);
@@ -2855,7 +2824,7 @@ function TvMode({ snapshot, activeLeague, session, onMatch, onExit }: { snapshot
   }
 
   return (
-    <section className={`${focusMode ? "tv-mode is-focus" : "tv-mode"} ${thresholdReached ? "is-threshold-reached" : ""} ${thresholdPulse ? "is-threshold-pulse" : ""}`}>
+    <section className={`${focusMode ? "tv-mode is-focus" : "tv-mode"}`}>
       <div className="tv-header">
         <div>
           <p>STEF MATCH CENTER</p>
@@ -2865,7 +2834,7 @@ function TvMode({ snapshot, activeLeague, session, onMatch, onExit }: { snapshot
         <div className="tv-header-actions">
           <button className="secondary-on-dark" type="button" onClick={onExit}>
             <ArrowLeft size={16} />
-            Quitter l’écran quai
+            Quitter le brief équipe
           </button>
           <button className="secondary-on-dark" type="button" onClick={toggleFocusMode} aria-pressed={focusMode}>
             {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
@@ -2873,93 +2842,11 @@ function TvMode({ snapshot, activeLeague, session, onMatch, onExit }: { snapshot
           </button>
         </div>
       </div>
-      <div className={`tv-match-ceremony match-ceremony ${outcome.tone}`}>
-        <div className="match-stands top" aria-hidden="true">
-          {Array.from({ length: 46 }).map((_, index) => <span key={`tv-top-${index}`} />)}
-        </div>
-        <div className="match-stands bottom" aria-hidden="true">
-          {Array.from({ length: 46 }).map((_, index) => <span key={`tv-bottom-${index}`} />)}
-        </div>
-        {outcome.celebration && (
-          <div className="match-confetti" aria-hidden="true">
-            {Array.from({ length: 18 }).map((_, index) => <span key={`tv-confetti-${index}`} />)}
-          </div>
-        )}
-        <div className="match-result-stage tv-match-result-stage">
-          <div className={`match-emblem ${outcome.celebration ? "trophy" : "signal"}`} aria-hidden="true">
-            {outcome.celebration ? (
-              <span className={`trophy-cup league-trophy ${activeLeague}`}>
-                <LeagueIcon leagueId={activeLeague} size={42} className="league-trophy-icon" />
-                <i />
-              </span>
-            ) : <Target size={54} />}
-          </div>
-          <div className="match-scoreboard">
-            <span>STEF MATCH CENTER</span>
-            <strong>{outcome.celebration ? "CÉLÉBRATION ACTIVÉE" : outcome.verdict}</strong>
-            <div className="match-score-bubbles" aria-label="Scores du match">
-              <div className="match-score-bubble duel-score-bubble">
-                <span>% passes réussies</span>
-                <strong>{formatPercent(snapshot.summary.duelRate)}</strong>
-                <small>Duels gagnés ÷ duels joués<br />sur la plage active</small>
-              </div>
-              <div className="match-score-bubble loading-score-bubble">
-                <span>% chargements cadrés</span>
-                <strong>{formatPercent(snapshot.loadingQuality?.targetedPercent)}</strong>
-                <small>Chargements cadrés ÷<br />chargements contrôlés</small>
-              </div>
-              <UnloadingScoreBubble snapshot={snapshot} />
-              <div className="match-score-bubble possession-score-bubble">
-                <span>% possession Zody</span>
-                <strong>{snapshot.summary.possessionPercent === null ? "À renseigner" : `${formatNumber(snapshot.summary.possessionPercent)}%`}</strong>
-                <small>Réceptions associées à un ZONAGE ÷<br />réceptions uniques</small>
-              </div>
-            </div>
-            <FootballScoreDisplay footballScore={footballScore} />
-          </div>
-        </div>
-      </div>
-      <div className="tv-grid">
-        <Fact label="NB DE BLESSURES (A.T)" value={formatManualKpiValue(kpiCopy.injuriesValue)} />
-        <Fact label="Tonnage" value={formatManualKpiValue(kpiCopy.tonnageValue)} />
-        <Fact label="Positions" value={formatEditableKpiValue(kpiCopy.positionsValue, snapshot.summary.positions)} />
-        <Fact label="Effectif réel" value={formatRealStaffPercent(snapshot, kpiCopy.expectedPlayersValue)} />
-      </div>
-      <div className="tv-key-players" aria-label="Joueurs clés par ligne">
-        {categoryHighlights.map((award, index) => {
-          const player = snapshot.players.find((item) => item.name === award.highlight.name) ?? null;
-          const role = player?.role ?? award.highlight.role;
-          const metric = award.highlight.value ?? award.highlight.operations;
-          const metricLabel = humanizeOperationLabel(award.highlight.valueLabel ?? "opérations");
-          return (
-            <article className={`tv-key-player ${award.kind} ${roleClass(role)}`} key={award.kind}>
-              <div className="tv-key-player-heading">
-                <span className="tv-key-player-symbol">{award.symbol}</span>
-                <span className="tv-key-player-kicker">Joueur clé · {award.podiumLabel}</span>
-              </div>
-              <span className={`tv-key-player-shirt ${roleClass(role)}`} aria-hidden="true">
-                <b>{formatJerseyNumber(jerseyNumbers.get(award.highlight.name) ?? index + 1)}</b>
-                <em>{initials(award.highlight.name)}</em>
-              </span>
-              <strong>{award.highlight.name}</strong>
-              <span className="tv-key-player-detail">{award.label} · {award.detail}</span>
-              <div className="tv-key-player-value">
-                <b>{formatNumber(metric)}</b>
-                <small>{metricLabel}</small>
-              </div>
-              <div className="tv-key-player-bar" aria-hidden="true">
-                <span style={{ width: `${Math.min(100, award.highlight.score ?? player?.volumeIndex ?? 0)}%` }} />
-              </div>
-              <span className="tv-key-player-role">{role}</span>
-            </article>
-          );
-        })}
-      </div>
       <div className={`tv-action ${planMode === "edit" ? "is-editing" : ""}`}>
         <div className="tv-action-heading">
           <div>
-            <span>Plan de jeu</span>
-            <strong>{action.title}</strong>
+            <span>BRIEF ÉQUIPE</span>
+            <strong>Consignes à transmettre</strong>
           </div>
           {planMode === "view" ? (
             <button className="tv-edit-button" type="button" onClick={startPlanEdit}>
@@ -3088,10 +2975,6 @@ function TvMode({ snapshot, activeLeague, session, onMatch, onExit }: { snapshot
         </div>
         {feedback && <p className={`tv-plan-feedback ${feedback.tone}`}>{feedback.title} · {feedback.detail}</p>}
       </div>
-      <button className="secondary-on-dark" type="button" onClick={onMatch}>
-        Voir la feuille de match
-        <ArrowRight size={18} />
-      </button>
       {lightboxImage && (
         <div
           className="tv-image-lightbox"
@@ -3318,9 +3201,9 @@ function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavi
               <p>Le site transforme un fichier Excel actualisé en une lecture opérationnelle du match. Le fichier reste la source de données ; le site sert à contrôler, comprendre et agir.</p>
               <div className="guide-flow">
                 <GuideFlowStep number="1" title="Préparer" detail="Remplacer l’onglet Données par la dernière base Excel." tone="blue" />
-                <GuideFlowStep number="2" title="Importer" detail="Déposer le fichier .xlsx puis cliquer sur Contrôler et importer." tone="green" />
+                <GuideFlowStep number="2" title="Importer" detail="Déposer l’Excel puis le PDF 106J dans les deux zones dédiées." tone="green" />
                 <GuideFlowStep number="3" title="Contrôler" detail="Lire le score, les alertes et les éventuels points à revoir." tone="orange" />
-                <GuideFlowStep number="4" title="Agir" detail="Utiliser Coach puis l’Écran quai pour préparer et afficher le brief avec la plage horaire choisie." tone="red" />
+                <GuideFlowStep number="4" title="Agir" detail="Utiliser Coach puis le brief équipe pour préparer et afficher les consignes avec la plage horaire choisie." tone="red" />
               </div>
               <div className="guide-callout success"><CheckCircle2 size={20} /><span><strong>Règle simple :</strong> chaque fois que la base Excel change, il faut refaire un import. Le bouton Actualiser sert ensuite à relire le dernier import enregistré.</span></div>
               <div className="guide-callout info"><Shield size={20} /><span><strong>Un espace séparé par agence :</strong> Agen - 058 utilise <code>STEF-058</code>, Montpellier <code>STEF-01K</code>, Toulouse <code>STEF-05R</code> et Bordeaux <code>STEF-04P</code>. L’import est rattaché à l’agence connectée et ne se mélange pas avec les trois autres.</span></div>
@@ -3339,7 +3222,7 @@ function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavi
                 <li><b>Faites une copie du fichier.</b><span>Dans Excel : Fichier → Enregistrer sous, puis donnez un nom clair à la copie, par exemple <code>HM_58_match_2026-09-07.xlsx</code>.</span></li>
                 <li><b>Remplacez l’onglet source.</b><span>Dans la copie utilisée pour l’import, remplacez l’ancien onglet <strong>Données</strong> par l’onglet actualisé. Le nom doit rester exactement <strong>Données</strong>.</span></li>
                 <li><b>Conservez la structure complète.</b><span>Ne réduisez pas le fichier aux seules premières colonnes : le site utilise les champs de données, de filtres, de poste, de voyage et de duel listés ci-dessous.</span></li>
-                <li><b>Enregistrez au format .xlsx.</b><span>Le site accepte le classeur Excel <strong>.xlsx</strong>. Évitez une capture d’écran, un PDF ou un fichier CSV pour cet import.</span></li>
+              <li><b>Enregistrez au format .xlsx.</b><span>Le site accepte le classeur Excel <strong>.xlsx</strong> dans la zone Excel. Le rapport PDF 106J se dépose séparément dans la zone dédiée.</span></li>
               </ol>
               <div className="guide-excel-howto">
                 <div><span className="guide-subtitle">Méthode simple pour remplacer les données</span><strong>Copier la base actualisée dans l’onglet Données</strong></div>
@@ -3376,7 +3259,7 @@ function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavi
           {section === "import" && (
             <GuidePanel eyebrow="03 · Importer & actualiser" title="Ce que fait chaque bouton" icon={RefreshCw}>
               <div className="guide-action-list">
-                <GuideAction icon={Upload} title="Contrôler et importer" tone="green" detail="À utiliser quand vous avez un nouveau fichier Excel. Le site vérifie le fichier, calcule le match et crée une nouvelle base pour l’agence connectée." />
+                <GuideAction icon={Upload} title="Contrôler et importer" tone="green" detail="L’Excel calcule le match. Le PDF 106J complète ensuite les indicateurs journaliers et le tonnage Expédition." />
                 <GuideAction icon={RefreshCw} title="Actualiser" tone="blue" detail="À utiliser pour relire le dernier import déjà enregistré. Ce bouton ne va pas chercher un fichier sur votre ordinateur et ne remplace pas un nouvel import." />
                 <GuideAction icon={Clock3} title="Appliquer la plage" tone="orange" detail="À utiliser après avoir choisi le début et la fin du créneau. Les heures sont limitées aux pas de 30 minutes, par exemple 08:00 ou 08:30." />
               </div>
@@ -3396,11 +3279,11 @@ function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavi
           {section === "read" && (
             <GuidePanel eyebrow="04 · Lire les écrans" title="Quel écran utiliser, et pour quoi faire ?" icon={LayoutDashboard}>
               <div className="guide-screen-grid">
-                <GuideScreenCard step="01" title="Coup d’envoi" detail="Vue d’ouverture du match. Elle confirme que les données sont prêtes et donne accès à l’Écran quai." />
-                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score opérationnel au format football, trois indicateurs, opérations, positions, joueurs clés par catégorie, challengers et contrôles d’import. Le score compare le pourcentage de passes réussies, le pourcentage de chargements cadrés et le pourcentage de possession Zody à l’objectif de la ligue." />
+                <GuideScreenCard step="01" title="Coup d’envoi" detail="Vue d’ouverture du match. Elle confirme que les données sont prêtes et donne accès au brief équipe." />
+                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score opérationnel au format football, quatre indicateurs, opérations, positions, joueurs clés par catégorie, challengers et contrôles d’import. Le score compare le pourcentage de duels gagnés, de chargements cadrés, de déchargements dans la cible et de possession Zody à l’objectif de la ligue." />
               <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. Compare le match complet, les deux mi-temps ou les quatre quarts calculés depuis la plage active. Une vue personnalisée permet aussi d’isoler une sous-plage, par exemple 1 heure, sans modifier les indicateurs du match. L’activité Réception correspond au scan de la palette." />
                 <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, titres par catégorie, polyvalence, sujets à travailler et prochaines actions." />
-                <GuideScreenCard step="05" title="Écran quai" detail="Vue prioritaire du brief : score, indicateurs, joueurs clés par ligne et trois grandes zones visibles, empilées verticalement : SAV, Expédition, Ramasse & emballage. Chaque zone accepte du texte et plusieurs captures d’écran, avec affichage plein écran." />
+                <GuideScreenCard step="05" title="Brief équipe" detail="Vue dédiée aux consignes : trois grandes zones visibles, empilées verticalement : SAV, Expédition, Ramasse & emballage. Chaque zone accepte du texte et plusieurs captures d’écran, avec affichage plein écran." />
               </div>
               <div className="guide-legend"><span className="legend-dot green" /> Vert = acquis ou action positive <span className="legend-dot orange" /> Orange = à surveiller <span className="legend-dot red" /> Rouge = action prioritaire</div>
               <div className="guide-callout info"><Shield size={20} /><span><strong>Réception dans l’application :</strong> le code interne <code>DECHG</code> reste inchangé pour les calculs, mais l’interface affiche <strong>Réception</strong>. Il s’agit du scan de la palette à la réception ; au déchargement, la palette est déposée en travée.</span></div>
@@ -3411,14 +3294,14 @@ function GuideView({ snapshot, onNavigate }: { snapshot: Snapshot | null; onNavi
             <GuidePanel eyebrow="05 · Modifier le plan" title="Écrire des consignes sans casser les données" icon={Edit3}>
               <p>Les données Excel alimentent les indicateurs. Les textes du plan de jeu sont des consignes opérationnelles que vous pouvez adapter à la situation du jour.</p>
               <div className="guide-edit-grid">
-                <GuideEditCard title="Dans Feuille de match" detail="Cliquez sur Modifier les chiffres pour renseigner le nombre de blessures A.T via la liste, le tonnage manuel et les positions. Les trois scores de la célébration restent calculés automatiquement. Le tonnage affiche À renseigner tant qu’aucune valeur n’est saisie et ne s’additionne pas au prochain import." />
+                <GuideEditCard title="Dans Feuille de match" detail="Modifier les chiffres permet de renseigner les blessures A.T et l'effectif prévu. Le carrousel Le collectif en chiffres conserve les positions calculées depuis l'Excel filtré. Le tonnage Expédition et les taux journaliers viennent du PDF 106J ; ils affichent PDF à importer tant que ce rapport n'a pas été chargé." />
                 <GuideEditCard title="Dans Coach" detail="Cliquez sur Écrire dans le tableau du coach, complétez Tactique, Priorité, Arbitrage et Revue, puis Enregistrer." />
-                <GuideEditCard title="Dans l’Écran quai" detail="Cliquez sur Écrire dans Plan de jeu. Les trois zones sont empilées et entièrement visibles : saisissez le brief dans SAV, Expédition ou Ramasse & emballage, ajoutez plusieurs captures si nécessaire, puis enregistrez. Cet écran est désormais le support unique du brief." />
+              <GuideEditCard title="Dans le brief équipe" detail="Cliquez sur Écrire. Les trois zones sont empilées et entièrement visibles : saisissez les consignes dans SAV, Expédition ou Ramasse & emballage, ajoutez plusieurs captures si nécessaire, puis enregistrez." />
               </div>
               <div className="guide-callout success"><CheckCircle2 size={20} /><span><strong>À retenir :</strong> les chiffres manuels sont mémorisés pour l’agence et le match affichés sur ce poste. Ils complètent la lecture opérationnelle sans modifier le fichier source importé.</span></div>
-              <div className="guide-callout info"><Upload size={20} /><span><strong>Ajouter une capture d’écran :</strong> dans chaque zone de l’Écran quai, cliquez sur <strong>Ajouter une capture d’écran</strong>, puis choisissez une image PNG, JPG ou WebP. L’image est redimensionnée automatiquement, affichée dans la zone correspondante et sauvegardée avec le texte. Chaque catégorie conserve sa propre capture ; il n’y a pas de menu déroulant.</span></div>
+              <div className="guide-callout info"><Upload size={20} /><span><strong>Ajouter une capture d’écran :</strong> dans chaque zone du brief équipe, cliquez sur <strong>Ajouter une capture d’écran</strong>, puis choisissez une image PNG, JPG ou WebP. L’image est redimensionnée automatiquement, affichée dans la zone correspondante et sauvegardée avec le texte. Chaque catégorie conserve sa propre capture.</span></div>
               <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Important :</strong> si un message indique une sauvegarde locale uniquement, le texte est conservé sur ce poste mais peut ne pas être partagé avec les autres utilisateurs.</span></div>
-              <div className="guide-actions"><button className="secondary-button" type="button" onClick={() => onNavigate("coach")}><Dumbbell size={17} /> Ouvrir Coach</button><button className="primary-button" type="button" onClick={() => onNavigate("tv")}><Eye size={17} /> Ouvrir Écran quai</button></div>
+              <div className="guide-actions"><button className="secondary-button" type="button" onClick={() => onNavigate("coach")}><Dumbbell size={17} /> Ouvrir Coach</button><button className="primary-button" type="button" onClick={() => onNavigate("tv")}><Eye size={17} /> Ouvrir le brief équipe</button></div>
             </GuidePanel>
           )}
 
@@ -3522,24 +3405,26 @@ function GuideTrouble({ title, detail }: { title: string; detail: string }) {
 }
 
 function ImportView({ session, onImported, onOpenMatch }: { session: Session; onImported: (snapshot: Snapshot) => void; onOpenMatch: () => void }) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const excelInputRef = useRef<HTMLInputElement | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement | null>(null);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [state, setState] = useState<"idle" | "uploading" | "success" | "error">("idle");
   const [message, setMessage] = useState<string>("");
   const [details, setDetails] = useState<string[]>([]);
   const [importedSnapshot, setImportedSnapshot] = useState<Snapshot | null>(null);
 
-  async function importFile() {
+  async function importFile(file: File | null, kind: "excel" | "pdf") {
     if (!file) {
       setState("error");
-      setMessage("Sélectionne un fichier Excel .xlsx.");
-      setDetails(["Fichier attendu : classeur Excel avec l'onglet Données."]);
+      setMessage(kind === "excel" ? "Sélectionne un fichier Excel .xlsx." : "Sélectionne un rapport PDF 106J.");
+      setDetails([kind === "excel" ? "Fichier attendu : classeur Excel avec l'onglet Données." : "Le PDF doit contenir les indicateurs journaliers SIE.106J."]);
       return;
     }
     const formData = new FormData();
     formData.append("file", file);
     setState("uploading");
-    setMessage("Contrôle du fichier en cours...");
+      setMessage(kind === "excel" ? "Contrôle du fichier Excel en cours..." : "Lecture du rapport PDF 106J en cours...");
     setDetails([]);
     setImportedSnapshot(null);
     try {
@@ -3561,7 +3446,7 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
         return;
       }
       setState("success");
-      setMessage("Le match est prêt.");
+      setMessage(kind === "excel" ? "Le match est prêt." : "Les indicateurs 106J sont prêts.");
       setDetails(payload.snapshot.validation.warnings ?? []);
       setImportedSnapshot(payload.snapshot);
       onImported(payload.snapshot);
@@ -3578,40 +3463,16 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
         <div>
           <p className="eyebrow">Import</p>
           <h2>Déposer le fichier, actualiser le match</h2>
-          <p>Fichier attendu : Excel .xlsx avec l'onglet Données et la structure complète du classeur actualisée.</p>
+          <p>Importe séparément la source Excel du match et le rapport PDF 106J du jour.</p>
         </div>
       </div>
-      <div
-        className={`drop-zone ${file ? "has-file" : ""}`}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          setFile(event.dataTransfer.files[0] ?? null);
-          setState("idle");
-          setMessage("");
-        }}
-        onClick={() => inputRef.current?.click()}
-      >
-        <FileSpreadsheet size={38} />
-        <strong>{file ? file.name : "Déposer ou sélectionner un fichier .xlsx"}</strong>
-        <span>Le site lit et archive une copie. Il ne modifie jamais le classeur importé.</span>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".xlsx"
-          onChange={(event) => {
-            setFile(event.target.files?.[0] ?? null);
-            setState("idle");
-            setMessage("");
-          }}
-          hidden
-        />
+      <div className="import-sources">
+        <ImportSourceDropZone file={excelFile} accept=".xlsx" icon={FileSpreadsheet} title="1. Excel du match" emptyLabel="Déposer ou sélectionner le fichier .xlsx" detail="Source des opérations, joueurs, positions et scores." inputRef={excelInputRef} onFile={(next) => { setExcelFile(next); setState("idle"); setMessage(""); }} />
+        <ImportSourceDropZone file={pdfFile} accept=".pdf" icon={FileCheck2} title="2. PDF 106J" emptyLabel="Déposer ou sélectionner le rapport PDF 106J" detail="Taux journaliers et ligne Expédition uniquement." inputRef={pdfInputRef} onFile={(next) => { setPdfFile(next); setState("idle"); setMessage(""); }} />
       </div>
-      <div className="import-actions">
-        <button className="primary-button" type="button" onClick={importFile} disabled={state === "uploading"}>
-          <Upload size={18} />
-          {state === "uploading" ? "Import en cours..." : "Contrôler et importer"}
-        </button>
+      <div className="import-actions import-source-actions">
+        <button className="primary-button" type="button" onClick={() => importFile(excelFile, "excel")} disabled={state === "uploading"}><Upload size={18} /> {state === "uploading" ? "Import en cours..." : "Contrôler et importer Excel"}</button>
+        <button className="secondary-button" type="button" onClick={() => importFile(pdfFile, "pdf")} disabled={state === "uploading"}><FileCheck2 size={18} /> Importer le PDF 106J</button>
       </div>
       {message && (
         <div className={`import-result ${state}`}>
@@ -3636,6 +3497,18 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
         </div>
       )}
     </section>
+  );
+}
+
+function ImportSourceDropZone({ file, accept, icon: Icon, title, emptyLabel, detail, inputRef, onFile }: { file: File | null; accept: string; icon: LucideIcon; title: string; emptyLabel: string; detail: string; inputRef: MutableRefObject<HTMLInputElement | null>; onFile: (file: File | null) => void }) {
+  return (
+    <div className={`drop-zone import-source-drop-zone ${file ? "has-file" : ""}`} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); onFile(event.dataTransfer.files[0] ?? null); }} onClick={() => inputRef.current?.click()}>
+      <Icon size={34} />
+      <strong>{title}</strong>
+      <span>{file ? file.name : emptyLabel}</span>
+      <small>{detail}</small>
+      <input ref={inputRef} type="file" accept={accept} onChange={(event) => onFile(event.target.files?.[0] ?? null)} hidden />
+    </div>
   );
 }
 
@@ -3870,6 +3743,30 @@ function FootballScoreDisplay({ footballScore }: { footballScore: FootballScore 
   );
 }
 
+function YellowCardsPanel({ snapshot }: { snapshot: Snapshot }) {
+  const cards = snapshot.yellowCards ?? [];
+  return (
+    <section className="yellow-cards-panel" aria-label="Cartons jaunes">
+      <div className="yellow-cards-heading">
+        <span><CreditCard size={16} /> Cartons jaunes</span>
+        <strong>{cards.length}</strong>
+      </div>
+      {cards.length > 0 ? (
+        <ul>
+          {cards.map((card, index) => (
+            <li key={`${card.playerName}-${card.time}-${index}`}>
+              <b>{card.playerName}</b>
+              <small>{card.time}{card.reason ? ` · ${card.reason}` : ""}{card.travelCode ? ` · ${card.travelCode}` : ""}</small>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p>Aucun carton jaune dans la plage active.</p>
+      )}
+    </section>
+  );
+}
+
 const TEAM_MOTIVATION_MESSAGES = [
   { minimumIndicators: 3, text: "Excellente dynamique. On garde l'intensité jusqu'au bout." },
   { minimumIndicators: 2, text: "Le collectif est lancé. On garde le rythme et on finit fort." },
@@ -3886,7 +3783,7 @@ function buildAwardItems(snapshot: Snapshot): MatchAward[] {
     {
       kind: "attack",
       label: "Meilleur buteur",
-      detail: "Meilleure valeur CHG",
+      detail: "Meilleur(e) buteur(se)",
       symbol: "ATQ",
       podiumLabel: "Attaque",
       highlight: snapshot.highlights.bestScorer,
@@ -3894,7 +3791,7 @@ function buildAwardItems(snapshot: Snapshot): MatchAward[] {
     {
       kind: "midfield",
       label: "Meilleur joueur",
-      detail: "Meilleure valeur ZONAGE",
+      detail: "Meilleur(e) passeur(se)",
       symbol: "MIL",
       podiumLabel: "Milieu",
       highlight: snapshot.highlights.bestPasser,
@@ -3902,7 +3799,7 @@ function buildAwardItems(snapshot: Snapshot): MatchAward[] {
     {
       kind: "defense",
       label: "Meilleur passeur",
-      detail: "Meilleure valeur Réception",
+      detail: "Meilleur(e) joueur(se)",
       symbol: "DEF",
       podiumLabel: "Défense",
       highlight: snapshot.highlights.defensiveWall,

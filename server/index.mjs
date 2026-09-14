@@ -2,9 +2,11 @@ import express from "express";
 import multer from "multer";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, KPI_DICTIONARY_VERSION, normalizePerformanceCriteria, normalizeSnapshotContract, normalizeTimeRange, primeWorkbookCache } from "./match-engine.mjs";
+import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, KPI_DICTIONARY_VERSION, normalizePerformanceCriteria, normalizeSnapshotContract, normalizeTimeRange } from "./match-engine.mjs";
+import { parse106jPdf } from "./pdf-106j.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,8 +18,8 @@ const agenciesPath = path.join(__dirname, "agencies.json");
 const port = Number(process.env.PORT ?? 4174);
 const uploadLimitMb = readEnvNumber("STEF_UPLOAD_LIMIT_MB", 20);
 const compositionRangeCache = new Map();
-const workbookWarmupPromises = new Map();
 const workbookReadPromises = new Map();
+const agencyOperationQueues = new Map();
 
 const app = express();
 const upload = multer({
@@ -61,7 +63,10 @@ app.post("/api/session", (req, res) => {
 });
 
 app.get("/api/agencies/:agencyCode/snapshot", requireAgency, async (req, res) => {
-  const snapshot = await readLatestSnapshot(req.agency.code, readRequestedPerformanceCriteria(req.query));
+  res.set("Cache-Control", "no-store, max-age=0");
+  const snapshot = await withAgencyLock(req.agency.code, () =>
+    readLatestSnapshot(req.agency.code, readRequestedPerformanceCriteria(req.query))
+  );
   if (!snapshot) {
     res.status(404).json({
       title: "AUCUN MATCH IMPORTÉ",
@@ -81,7 +86,7 @@ app.get("/api/agencies/:agencyCode/causerie", requireAgency, async (req, res) =>
     });
     return;
   }
-  const plan = await readCauseriePlan(req.agency.code, matchDate);
+  const plan = await withAgencyLock(req.agency.code, () => readCauseriePlan(req.agency.code, matchDate));
   res.json({ plan });
 });
 
@@ -108,34 +113,40 @@ app.post("/api/agencies/:agencyCode/time-range", requireAgency, async (req, res)
 
   const agencyDir = path.join(dataDir, sanitizeSegment(req.agency.code));
   try {
-    const [buffer, currentSnapshot] = await Promise.all([
-      readWorkbookForBuild(agencyDir),
-      readLatestSnapshot(req.agency.code),
-    ]);
-    const criteria = readRequestedPerformanceCriteria(req.body?.criteria) ?? currentSnapshot?.performanceCriteria;
-    const result = buildSnapshotFromWorkbook(
-      buffer,
-      currentSnapshot?.sourceName ?? "match.xlsx",
-      req.agency.code,
-      { ...period, criteria },
-    );
-    if (!result.ok) {
-      res.status(400).json(result.error);
+    await withAgencyLock(req.agency.code, async () => {
+      const [buffer, currentSnapshot] = await Promise.all([
+        readWorkbookForBuild(agencyDir),
+        readLatestSnapshot(req.agency.code),
+      ]);
+      const criteria = readRequestedPerformanceCriteria(req.body?.criteria) ?? currentSnapshot?.performanceCriteria;
+      const result = buildSnapshotFromWorkbook(
+        buffer,
+        currentSnapshot?.sourceName ?? "match.xlsx",
+        req.agency.code,
+        { ...period, criteria, dailyIndicators: currentSnapshot?.dailyIndicators ?? null },
+      );
+      if (!result.ok) {
+        res.status(400).json(result.error);
+        return;
+      }
+      if (result.snapshot.summary.operations === 0) {
+        res.status(422).json({
+          title: "AUCUNE DONNÉE SUR CETTE PLAGE",
+          message: `Aucune opération exploitable entre ${period.start} et ${period.end}.`,
+          action: "Choisis une autre plage horaire ou réimporte un fichier couvrant cette période.",
+        });
+        return;
+      }
+      result.snapshot.agency.name = req.agency.name;
+      await writeJsonAtomic(path.join(agencyDir, "latest.json"), result.snapshot);
+      clearCompositionCache(req.agency.code);
+      res.json({ message: "PLAGE HORAIRE ACTUALISÉE", snapshot: result.snapshot });
+    });
+  } catch (error) {
+    if (!isMissingSourceError(error)) {
+      respondInternalError(res, `time-range:${req.agency.code}`, error);
       return;
     }
-    if (result.snapshot.summary.operations === 0) {
-      res.status(422).json({
-        title: "AUCUNE DONNÉE SUR CETTE PLAGE",
-        message: `Aucune opération exploitable entre ${period.start} et ${period.end}.`,
-        action: "Choisis une autre plage horaire ou réimporte un fichier couvrant cette période.",
-      });
-      return;
-    }
-    result.snapshot.agency.name = req.agency.name;
-    await fs.writeFile(path.join(agencyDir, "latest.json"), JSON.stringify(result.snapshot, null, 2), "utf8");
-    compositionRangeCache.clear();
-    res.json({ message: "PLAGE HORAIRE ACTUALISÉE", snapshot: result.snapshot });
-  } catch {
     res.status(404).json({
       title: "SOURCE EXCEL INDISPONIBLE",
       message: "Réimporte le dernier fichier Excel avant de modifier la plage horaire.",
@@ -156,66 +167,72 @@ app.post("/api/agencies/:agencyCode/composition-range", requireAgency, async (re
     return;
   }
 
-  const currentSnapshot = await readLatestSnapshot(req.agency.code);
-  if (!currentSnapshot) {
-    res.status(404).json({
-      title: "AUCUN MATCH IMPORTÉ",
-      message: "Importe un fichier Excel avant de choisir une sous-plage de composition.",
-    });
-    return;
-  }
-
-  let activePeriod;
   try {
-    activePeriod = normalizeTimeRange(currentSnapshot.match.periodStart, currentSnapshot.match.periodEnd);
-  } catch {
-    res.status(409).json({
-      title: "PLAGE ACTIVE INDISPONIBLE",
-      message: "Actualise le match avant de choisir une sous-plage de composition.",
-    });
-    return;
-  }
-  if (period.startMinutes < activePeriod.startMinutes || period.endMinutes > activePeriod.endMinutes) {
-    res.status(400).json({
-      title: "SOUS-PLAGE HORS PÉRIMÈTRE",
-      message: `Choisis une sous-plage comprise entre ${activePeriod.start} et ${activePeriod.end}.`,
-    });
-    return;
-  }
+    await withAgencyLock(req.agency.code, async () => {
+      const currentSnapshot = await readLatestSnapshot(req.agency.code);
+      if (!currentSnapshot) {
+        res.status(404).json({
+          title: "AUCUN MATCH IMPORTÉ",
+          message: "Importe un fichier Excel avant de choisir une sous-plage de composition.",
+        });
+        return;
+      }
 
-  try {
-    const cacheKey = [req.agency.code, currentSnapshot.sourceName ?? "match.xlsx", period.start, period.end].join("|");
-    let calculation = compositionRangeCache.get(cacheKey);
-    if (!calculation) {
-      calculation = (async () => {
-        const buffer = await readWorkbookForBuild(path.join(dataDir, sanitizeSegment(req.agency.code)));
-        return buildCompositionViewFromWorkbook(
-          buffer,
-          currentSnapshot.sourceName ?? "match.xlsx",
-          req.agency.code,
-          period,
-        );
-      })().catch((error) => {
-        compositionRangeCache.delete(cacheKey);
-        throw error;
+      let activePeriod;
+      try {
+        activePeriod = normalizeTimeRange(currentSnapshot.match.periodStart, currentSnapshot.match.periodEnd);
+      } catch {
+        res.status(409).json({
+          title: "PLAGE ACTIVE INDISPONIBLE",
+          message: "Actualise le match avant de choisir une sous-plage de composition.",
+        });
+        return;
+      }
+      if (period.startMinutes < activePeriod.startMinutes || period.endMinutes > activePeriod.endMinutes) {
+        res.status(400).json({
+          title: "SOUS-PLAGE HORS PÉRIMÈTRE",
+          message: `Choisis une sous-plage comprise entre ${activePeriod.start} et ${activePeriod.end}.`,
+        });
+        return;
+      }
+
+      const cacheKey = [req.agency.code, currentSnapshot.sourceName ?? "match.xlsx", period.start, period.end].join("|");
+      let calculation = compositionRangeCache.get(cacheKey);
+      if (!calculation) {
+        calculation = (async () => {
+          const buffer = await readWorkbookForBuild(path.join(dataDir, sanitizeSegment(req.agency.code)));
+          return buildCompositionViewFromWorkbook(
+            buffer,
+            currentSnapshot.sourceName ?? "match.xlsx",
+            req.agency.code,
+            period,
+          );
+        })().catch((error) => {
+          compositionRangeCache.delete(cacheKey);
+          throw error;
+        });
+        compositionRangeCache.set(cacheKey, calculation);
+      }
+      const result = await calculation;
+      if (!result.ok || result.players.length === 0) {
+        res.status(422).json({
+          title: "AUCUNE DONNÉE SUR CETTE SOUS-PLAGE",
+          message: `Aucune opération exploitable entre ${period.start} et ${period.end}.`,
+          action: "Choisis une autre sous-plage dans la plage active.",
+        });
+        return;
+      }
+      res.json({
+        message: "VUE DE COMPOSITION ACTUALISÉE",
+        range: { start: period.start, end: period.end, label: `${period.start} - ${period.end}` },
+        players: result.players,
       });
-      compositionRangeCache.set(cacheKey, calculation);
-    }
-    const result = await calculation;
-    if (!result.ok || result.players.length === 0) {
-      res.status(422).json({
-        title: "AUCUNE DONNÉE SUR CETTE SOUS-PLAGE",
-        message: `Aucune opération exploitable entre ${period.start} et ${period.end}.`,
-        action: "Choisis une autre sous-plage dans la plage active.",
-      });
+    });
+  } catch (error) {
+    if (!isMissingSourceError(error)) {
+      respondInternalError(res, `composition-range:${req.agency.code}`, error);
       return;
     }
-    res.json({
-      message: "VUE DE COMPOSITION ACTUALISÉE",
-      range: { start: period.start, end: period.end, label: `${period.start} - ${period.end}` },
-      players: result.players,
-    });
-  } catch {
     res.status(404).json({
       title: "SOURCE EXCEL INDISPONIBLE",
       message: "Réimporte le dernier fichier Excel avant de choisir une sous-plage.",
@@ -242,7 +259,7 @@ app.post("/api/agencies/:agencyCode/causerie", requireAgency, async (req, res) =
   }
 
   const plan = normalizeCauseriePlan(req.body?.plan);
-  await saveCauseriePlan(req.agency.code, matchDate, plan);
+  await withAgencyLock(req.agency.code, () => saveCauseriePlan(req.agency.code, matchDate, plan));
   res.json({
     message: "PLAN DE JEU ENREGISTRÉ",
     plan,
@@ -261,40 +278,67 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
   if (!req.file) {
     res.status(400).json({
       title: "FICHIER NON IMPORTÉ",
-      message: "Aucun fichier Excel n'a été reçu.",
-      action: "Sélectionne un fichier .xlsx et réessaie.",
+      message: "Aucun fichier n'a été reçu.",
+      action: "Sélectionne un fichier Excel .xlsx ou un rapport PDF 106J.",
     });
     return;
   }
 
-  if (!req.file.originalname.toLowerCase().endsWith(".xlsx")) {
+  const extension = path.extname(req.file.originalname).toLowerCase();
+  if (!extension.endsWith(".xlsx") && extension !== ".pdf") {
     res.status(400).json({
       title: "FICHIER NON IMPORTÉ",
-      message: "Le fichier doit être au format .xlsx.",
-      action: "Exporte le match au format Excel .xlsx puis réessaie.",
+      message: "Le fichier doit être au format .xlsx ou PDF 106J.",
+      action: "Sélectionne le bon fichier puis réessaie.",
     });
     return;
   }
 
   try {
-    const result = buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code);
-    if (!result.ok) {
-      res.status(400).json(result.error);
-      return;
-    }
+    await withAgencyLock(req.agency.code, async () => {
+      const agencyDir = path.join(dataDir, sanitizeSegment(req.agency.code));
+      if (extension === ".pdf") {
+        const currentSnapshot = await readLatestSnapshot(req.agency.code);
+        if (!currentSnapshot) {
+          res.status(422).json({ title: "EXCEL REQUIS", message: "Importe d'abord le fichier Excel du match.", action: "Le PDF 106J complète le dernier Excel importé." });
+          return;
+        }
+        const workbook = await readWorkbookForBuild(agencyDir);
+        const dailyIndicators = await parse106jPdf(req.file.buffer, req.file.originalname);
+        const period = normalizeTimeRange(currentSnapshot.match?.periodStart, currentSnapshot.match?.periodEnd);
+        const result = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code, { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators });
+        if (!result.ok) {
+          res.status(400).json(result.error);
+          return;
+        }
+        result.snapshot.agency.name = req.agency.name;
+        await savePdfImport(req.agency.code, req.file.originalname, req.file.buffer);
+        await writeJsonAtomic(path.join(agencyDir, "latest.json"), result.snapshot);
+        clearCompositionCache(req.agency.code);
+        res.json({ message: "PDF 106J ACTUALISÉ", snapshot: result.snapshot });
+        return;
+      }
 
-    result.snapshot.agency.name = req.agency.name;
-    await saveImport(req.agency.code, req.file.originalname, req.file.buffer, result.snapshot);
-    compositionRangeCache.clear();
-    res.json({
-      message: "MATCH ACTUALISÉ",
-      snapshot: result.snapshot,
+      const dailyIndicators = await readLatestPdfIndicators(agencyDir);
+      const result = buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code, { dailyIndicators });
+      if (!result.ok) {
+        res.status(400).json(result.error);
+        return;
+      }
+
+      result.snapshot.agency.name = req.agency.name;
+      await saveImport(req.agency.code, req.file.originalname, req.file.buffer, result.snapshot);
+      clearCompositionCache(req.agency.code);
+      res.json({
+        message: dailyIndicators ? "MATCH ET 106J ACTUALISÉS" : "MATCH ACTUALISÉ",
+        snapshot: result.snapshot,
+      });
     });
-  } catch {
+  } catch (error) {
     res.status(400).json({
       title: "FICHIER NON IMPORTÉ",
-      message: "Le classeur Excel n'a pas pu être lu ou contrôlé.",
-      action: "Vérifie que le fichier est bien un .xlsx valide, puis réessaie.",
+      message: error instanceof Error ? error.message : "Le fichier n'a pas pu être lu ou contrôlé.",
+      action: "Vérifie le format du fichier et réessaie.",
     });
   }
 });
@@ -394,6 +438,20 @@ function requireAgency(req, res, next) {
   next();
 }
 
+function isMissingSourceError(error) {
+  return error?.code === "ENOENT" || error?.message === "Aucun Excel disponible.";
+}
+
+function respondInternalError(res, scope, error) {
+  console.error(`[${scope}]`, error);
+  if (res.headersSent) return;
+  res.status(500).json({
+    title: "SERVICE INDISPONIBLE",
+    message: "Le serveur n'a pas pu terminer cette opération.",
+    action: "Réessaie dans quelques instants ou contacte le responsable.",
+  });
+}
+
 async function saveImport(agencyCode, originalName, buffer, snapshot) {
   const safeAgency = sanitizeSegment(agencyCode);
   const agencyDir = path.join(dataDir, safeAgency);
@@ -403,13 +461,33 @@ async function saveImport(agencyCode, originalName, buffer, snapshot) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const safeName = sanitizeSegment(originalName.replace(/\.xlsx$/i, "")) || "match";
   const uploadPath = path.join(uploadsDir, `${stamp}-${safeName}.xlsx`);
-  workbookWarmupPromises.delete(agencyDir);
   workbookReadPromises.delete(agencyDir);
-  await fs.writeFile(uploadPath, buffer);
-  await fs.writeFile(path.join(agencyDir, "latest.xlsx"), buffer);
-  await fs.writeFile(path.join(agencyDir, "latest.json"), JSON.stringify(snapshot, null, 2), "utf8");
-  workbookWarmupPromises.delete(agencyDir);
+  await writeFileAtomic(uploadPath, buffer);
+  await writeFileAtomic(path.join(agencyDir, "latest.xlsx"), buffer);
+  await writeJsonAtomic(path.join(agencyDir, "latest.json"), snapshot);
   workbookReadPromises.delete(agencyDir);
+}
+
+async function savePdfImport(agencyCode, originalName, buffer) {
+  const safeAgency = sanitizeSegment(agencyCode);
+  const agencyDir = path.join(dataDir, safeAgency);
+  const uploadsDir = path.join(agencyDir, "uploads");
+  await fs.mkdir(uploadsDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const safeName = sanitizeSegment(originalName.replace(/\.pdf$/i, "")) || "indicateurs-106j";
+  await writeFileAtomic(path.join(uploadsDir, `${stamp}-${safeName}.pdf`), buffer);
+  await writeFileAtomic(path.join(agencyDir, "latest-106j.pdf"), buffer);
+}
+
+async function readLatestPdfIndicators(agencyDir) {
+  try {
+    const pdfPath = path.join(agencyDir, "latest-106j.pdf");
+    const buffer = await fs.readFile(pdfPath);
+    return await parse106jPdf(buffer, "latest-106j.pdf");
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
@@ -433,27 +511,27 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
       !Array.isArray(snapshot.hourlyPerformance) ||
       !snapshot.compositionPeriods?.quarters ||
       !snapshot.loadingQuality ||
+      !Array.isArray(snapshot.loadingQuality.loadingDetails) ||
       !snapshot.unloadingQuality ||
       snapshot.unloadingQuality.targetedPercent === undefined ||
       snapshot.unloadingQuality.offTargetPercent === undefined ||
+      !snapshot.unloadingDuelQuality ||
       !snapshot.duelQuality ||
       operationalScoreNeedsRefresh;
 
     const storedCriteriaMatchesRequest = requestedCriteria
       ? Object.entries(requestedCriteria).every(([key, value]) => snapshot.performanceCriteria?.[key] === value)
       : false;
-    if (requestedCriteria && storedCriteriaMatchesRequest && !snapshotNeedsRefresh) {
-      void warmLatestWorkbook(agencyDir);
-    }
     if (requestedCriteria && (!storedCriteriaMatchesRequest || snapshotNeedsRefresh)) {
       try {
         const workbook = await readWorkbookForBuild(agencyDir);
+        const dailyIndicators = await readLatestPdfIndicators(agencyDir);
         const period = normalizeTimeRange(snapshot.match?.periodStart, snapshot.match?.periodEnd);
         const rebuilt = buildSnapshotFromWorkbook(
           workbook,
           snapshot.sourceName || "match.xlsx",
           agency?.code || agencyCode,
-          { ...period, criteria: requestedCriteria },
+          { ...period, criteria: requestedCriteria, dailyIndicators },
         );
         if (rebuilt.ok) {
           snapshot = rebuilt.snapshot;
@@ -472,14 +550,18 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
     if (!requestedCriteria && snapshotNeedsRefresh) {
       try {
         const workbook = await readWorkbookForBuild(agencyDir);
+        const dailyIndicators = await readLatestPdfIndicators(agencyDir);
+        const storedCriteria = normalizePerformanceCriteria(snapshot.performanceCriteria);
+        const period = normalizeTimeRange(snapshot.match?.periodStart, snapshot.match?.periodEnd);
         const rebuilt = buildSnapshotFromWorkbook(
           workbook,
           snapshot.sourceName || "match.xlsx",
-          agency?.code || agencyCode
+          agency?.code || agencyCode,
+          { ...period, criteria: storedCriteria, dailyIndicators },
         );
         if (rebuilt.ok) {
           snapshot = rebuilt.snapshot;
-          await fs.writeFile(latestPath, JSON.stringify(snapshot, null, 2), "utf8");
+          await writeJsonAtomic(latestPath, snapshot);
         }
       } catch {
         // Keep serving the existing snapshot if its source workbook is absent.
@@ -491,27 +573,14 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
       snapshot.agency.name = agency.name;
     }
     if (shouldPersistRebuiltSnapshot) {
-      await fs.writeFile(latestPath, JSON.stringify(snapshot, null, 2), "utf8");
+      await writeJsonAtomic(latestPath, snapshot);
     }
     return snapshot;
-  } catch {
-    return null;
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    console.error(`[snapshot:${agencyCode}]`, error);
+    throw error;
   }
-}
-
-function warmLatestWorkbook(agencyDir) {
-  if (workbookWarmupPromises.has(agencyDir)) return workbookWarmupPromises.get(agencyDir);
-  const warmup = readWorkbookForBuild(agencyDir)
-    .then((buffer) => {
-      primeWorkbookCache(buffer);
-      return buffer;
-    })
-    .catch(() => undefined)
-    .finally(() => {
-      if (workbookWarmupPromises.get(agencyDir) === warmup) workbookWarmupPromises.delete(agencyDir);
-    });
-  workbookWarmupPromises.set(agencyDir, warmup);
-  return warmup;
 }
 
 function readWorkbookForBuild(agencyDir) {
@@ -522,6 +591,25 @@ function readWorkbookForBuild(agencyDir) {
   });
   workbookReadPromises.set(agencyDir, readPromise);
   return readPromise;
+}
+
+function withAgencyLock(agencyCode, operation) {
+  const key = sanitizeSegment(agencyCode).toUpperCase();
+  const previous = agencyOperationQueues.get(key) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(operation);
+  let tracked;
+  tracked = current.finally(() => {
+    if (agencyOperationQueues.get(key) === tracked) agencyOperationQueues.delete(key);
+  });
+  agencyOperationQueues.set(key, tracked);
+  return tracked;
+}
+
+function clearCompositionCache(agencyCode) {
+  const prefix = `${String(agencyCode).toUpperCase()}|`;
+  for (const key of compositionRangeCache.keys()) {
+    if (key.toUpperCase().startsWith(prefix)) compositionRangeCache.delete(key);
+  }
 }
 
 function readRequestedPerformanceCriteria(value) {
@@ -563,11 +651,7 @@ async function readCauseriePlan(agencyCode, matchDate) {
 async function saveCauseriePlan(agencyCode, matchDate, plan) {
   const causerieDir = path.join(dataDir, sanitizeSegment(agencyCode), "causeries");
   await fs.mkdir(causerieDir, { recursive: true });
-  await fs.writeFile(
-    path.join(causerieDir, `${sanitizeSegment(matchDate)}.json`),
-    JSON.stringify(plan, null, 2),
-    "utf8"
-  );
+  await writeJsonAtomic(path.join(causerieDir, `${sanitizeSegment(matchDate)}.json`), plan);
 }
 
 function normalizeCauseriePlan(plan) {
@@ -634,4 +718,18 @@ function sanitizeSegment(value) {
 function isWorkbookFile(name) {
   const normalized = String(name ?? "").toLowerCase();
   return normalized.endsWith(".xlsx") && !normalized.startsWith("~$");
+}
+
+async function writeJsonAtomic(filePath, value) {
+  return writeFileAtomic(filePath, JSON.stringify(value, null, 2), "utf8");
+}
+
+async function writeFileAtomic(filePath, data, encoding) {
+  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await fs.writeFile(temporaryPath, data, encoding);
+    await fs.rename(temporaryPath, filePath);
+  } finally {
+    await fs.rm(temporaryPath, { force: true }).catch(() => {});
+  }
 }

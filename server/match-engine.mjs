@@ -32,7 +32,9 @@ const DEFAULT_PERFORMANCE_CRITERIA = Object.freeze({
 });
 const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
-export const KPI_DICTIONARY_VERSION = 10;
+// Increment when a persisted snapshot's calculation semantics change so the
+// API rebuilds older snapshots instead of serving stale KPI values.
+export const KPI_DICTIONARY_VERSION = 12;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -69,16 +71,12 @@ export function normalizeTimeRange(start = DEFAULT_PERIOD_START, end = DEFAULT_P
   };
 }
 
-export function primeWorkbookCache(buffer) {
-  if (buffer) parseWorkbookSource(buffer);
-}
-
 export const KPI_DICTIONARY = [
   {
     id: "match.operations",
     label: "Opérations",
-    source: "Données",
-    formula: "COUNTROWS(Données) avec Filtre opérateur vide et Filtre heure vide",
+    source: "Données!A:G",
+    formula: "COUNTROWS(Données) avec Filtre opérateur vide et heure de début comprise dans la plage active (fin incluse)",
     denominator: "Lignes Excel retenues dans le match",
     display: "Volume filtré du match",
   },
@@ -86,7 +84,7 @@ export const KPI_DICTIONARY = [
     id: "match.positions",
     label: "Positions",
     source: "Données",
-    formula: "DISTINCTCOUNT(N° Position) avec Filtre opérateur vide et Filtre heure vide",
+    formula: "DISTINCTCOUNT(N° Position) avec Filtre opérateur vide et heure de début comprise dans la plage active (fin incluse)",
     denominator: "Positions distinctes du match filtré",
     display: "Positions retenues dans le match",
   },
@@ -94,17 +92,25 @@ export const KPI_DICTIONARY = [
     id: "match.players",
     label: "Joueurs",
     source: "Données",
-    formula: "DISTINCTCOUNT(Opérateur) avec Filtre opérateur vide et Filtre heure vide",
+    formula: "DISTINCTCOUNT(Opérateur) avec Filtre opérateur vide et heure de début comprise dans la plage active (fin incluse)",
     denominator: "Opérateurs retenus par l'Excel",
     display: "Joueurs actifs",
   },
   {
     id: "score.duels",
     label: "Duels gagnés",
-    source: "Données!S",
-    formula: "SUM(Duels gagnés, recalculés avec DZ <= cible zonage active lorsque DZ est renseigné) / COUNT(Duels gagnés) avec Filtre opérateur vide, Filtre heure vide et Poz non zonées vide",
+    source: "Données!R:T",
+    formula: "SUM(indicateur gagné) / COUNT(indicateur disponible) après Filtre opérateur vide, plage active (fin incluse) et exclusion Poz non zonées ; DZ <= cible zonage active lorsqu'il est renseigné, sinon le drapeau Duels gagnés",
     denominator: "Lignes éligibles au score Excel",
     display: "Score collectif",
+  },
+  {
+    id: "score.passesHourly",
+    label: "Passes réussies par heure",
+    source: "X!FD:FG (source chart1)",
+    formula: "Reprise de X!FG par heure X!FF ; taux Excel EX / (EW + EX)",
+    denominator: "Lignes horaires présentes dans la table graphique Excel",
+    display: "Courbe horaire % passes réussies",
   },
   {
     id: "score.operational",
@@ -117,7 +123,7 @@ export const KPI_DICTIONARY = [
   {
     id: "score.loading",
     label: "Chargements cadrés",
-    source: "Données!CHG",
+    source: "TCD PPT!U",
     formula: "COUNT des voyages éligibles dont le temps moyen par position est <= au seuil de chargement actif",
     denominator: "Voyages CHG avec au moins 15 positions et une durée positive dans la plage active",
     display: "Part des chargements dans le délai cible",
@@ -158,7 +164,7 @@ export const KPI_DICTIONARY = [
     id: "composition.roles",
     label: "Répartition terrain",
     source: "Données!O",
-    formula: "DISTINCTCOUNT(Opérateur) par Poste avec Filtre opérateur vide et Filtre heure vide",
+    formula: "DISTINCTCOUNT(Opérateur) par Poste avec Filtre opérateur vide et heure de début comprise dans la plage active (fin incluse)",
     denominator: "Joueurs actifs du match filtré",
     display: "Équilibre de la composition",
   },
@@ -172,9 +178,10 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   if (!parsed.ok) return parsed;
 
   const { workbook, matrix, columnMap, isDerivedTemplate, rows, sourceValidation, missingColumns, rawWorkbook, rawMatrix } = parsed;
-  const isDefaultPeriod = period.startMinutes === parseTimeInput(DEFAULT_PERIOD_START)
-    && period.endMinutes === parseTimeInput(DEFAULT_PERIOD_END);
-  period.useExcelPeriod = !isDerivedTemplate && isDefaultPeriod;
+  // The cached Excel "Filtre heure" is not authoritative in the current
+  // workbook: Feuille de match contains an error in the lookup that feeds it.
+  // Always apply the selected clock window to the parsed start date instead.
+  period.useExcelPeriod = false;
   period.useDerivedRows = isDerivedTemplate;
   const buildCacheKey = [
     parsed.cacheKey,
@@ -182,6 +189,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     period.label,
     period.useExcelPeriod ? "excel-period" : "clock-period",
     `criteria-${criteria.zonageMinutes}-${criteria.loadingSeconds}-${criteria.unloadingSeconds}-${criteria.scoreTargetPercent}`,
+    `106j-${periodInput.dailyIndicators?.importedAt ?? "none"}`,
     compositionOnly ? "composition" : "snapshot",
   ].join("|");
   const cachedSnapshot = snapshotBuildCache.get(buildCacheKey);
@@ -289,8 +297,12 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     filterStats,
     period,
     criteria,
-    loadingQuality: buildLoadingQuality(rawWorkbook, matchRows, period, criteria.loadingSeconds),
+    hourlyPassPerformance: buildHourlyPassPerformance(rawWorkbook, period),
+    loadingQuality: buildLoadingQualityFromTcd(rawWorkbook, period, criteria.loadingSeconds),
+    unloadingDuelQuality: buildUnloadingDuelQuality(rawWorkbook, period, expectedAgencyCode),
     unloadingQuality: buildUnloadingQuality(matchRows, criteria.unloadingSeconds),
+    yellowCards: buildYellowCards(rawWorkbook, period),
+    dailyIndicators: periodInput.dailyIndicators ?? null,
   });
 
   const result = { ok: true, snapshot };
@@ -496,7 +508,7 @@ export function normalizeSnapshotContract(snapshot) {
   };
 }
 
-function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period, criteria, loadingQuality, unloadingQuality }) {
+function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period, criteria, hourlyPassPerformance, loadingQuality, unloadingDuelQuality, unloadingQuality, yellowCards, dailyIndicators }) {
   const importedAt = new Date();
   const firstOperation = minDate(matchRows.map((row) => row.startedAt));
   const lastOperation = maxDate(matchRows.map((row) => row.startedAt));
@@ -591,6 +603,8 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
       duelWon,
       duelTotal,
       duelRate,
+      passRate: hourlyPassPerformance.totalRate,
+      tonnage: dailyIndicators?.expedition?.tonnage ?? null,
       possessionPercent: possession.percent,
       possessionPositions: {
         zonage: possession.zonagePositions,
@@ -605,10 +619,13 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
       excludedByOperator: filterStats.excludedByOperator,
       excludedFromScore: filterStats.excludedFromScore,
     },
-    hourlyPerformance: buildHourlyPerformance(scoringRows, period),
+    hourlyPerformance: hourlyPassPerformance.items,
     loadingQuality,
+    unloadingDuelQuality,
     unloadingQuality,
     operationalScore,
+    yellowCards,
+    dailyIndicators,
     duelQuality: buildDuelQuality(scoringRows, matchRows, positions, duelWon, duelTotal),
     compositionPeriods: buildCompositionPeriods(matchRows, period),
     highlights: buildCategoryHighlights(categoryLeaders),
@@ -712,6 +729,104 @@ function formatDuration(totalSeconds) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds) {
+  const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.loadingSeconds);
+  const empty = {
+    targeted: 0,
+    offTarget: 0,
+    targetedPercent: null,
+    offTargetPercent: null,
+    targetTimePerPosition: formatDuration(targetSeconds),
+    averageTimePerPositionSeconds: null,
+    loadingDetails: [],
+    nonTargetedShots: [],
+  };
+  const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "tcd ppt");
+  const sheet = sheetName ? workbook.Sheets[sheetName] : null;
+  if (!sheet) return empty;
+
+  const anchor = Object.entries(sheet).find(([address, cell]) => !address.startsWith("!") && normalizeKey(cell?.v) === "chargement");
+  if (!anchor) return empty;
+  const anchorCell = XLSX.utils.decode_cell(anchor[0]);
+  let header;
+  for (let row = anchorCell.r; row <= anchorCell.r + 16 && !header; row += 1) {
+    const cells = [];
+    for (let col = anchorCell.c; col <= anchorCell.c + 14; col += 1) {
+      const address = XLSX.utils.encode_cell({ r: row, c: col });
+      const value = normalizeKey(sheet[address]?.v);
+      if (value) cells.push({ col, value });
+    }
+    if (cells.some((cell) => cell.value === "code voyage") && cells.some((cell) => cell.value === "tc") && cells.some((cell) => cell.value === "tc poz")) {
+      header = { row, cells };
+    }
+  }
+  if (!header) return empty;
+  const findColumn = (predicate) => header.cells.find((cell) => predicate(cell.value))?.col;
+  const travelColumn = findColumn((value) => value === "code voyage");
+  const startColumn = findColumn((value) => value.startsWith("min de date heure de debut d operation"));
+  const positionsColumn = findColumn((value) => value === "nombre de n position");
+  const totalTimeColumn = findColumn((value) => value === "tc");
+  // In TCD PPT, U is the raw TC/S value. V is a separately filtered display
+  // formula and must not be used as the source for the KPI.
+  const timePerPositionColumn = totalTimeColumn === undefined ? undefined : totalTimeColumn + 1;
+  const commentColumn = findColumn((value) => value === "commentaire");
+  const strikeLexicon = new Map();
+  for (let row = 1; row <= 8; row += 1) {
+    const label = cleanText(sheet[XLSX.utils.encode_cell({ r: row, c: 24 })]?.v);
+    if (label) strikeLexicon.set(normalizeKey(label), label);
+  }
+  if ([travelColumn, startColumn, positionsColumn, totalTimeColumn, timePerPositionColumn].some((value) => value === undefined)) return empty;
+
+  const loadingDetails = [];
+  const loadingDurations = [];
+  const lastRow = sheetEndRow(sheet, header.row + 1);
+  for (let row = header.row + 1; row <= lastRow; row += 1) {
+    const travel = cleanText(sheet[XLSX.utils.encode_cell({ r: row, c: travelColumn })]?.v);
+    const timePerPositionCell = sheet[XLSX.utils.encode_cell({ r: row, c: timePerPositionColumn })];
+    const timePerPositionSeconds = parseDurationSeconds(timePerPositionCell?.v, timePerPositionCell?.w);
+    const positions = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: positionsColumn })]?.v);
+    if (!travel || !Number.isFinite(positions) || positions < 15 || !Number.isFinite(timePerPositionSeconds) || timePerPositionSeconds <= 0) continue;
+    const start = parseExcelDate(sheet[XLSX.utils.encode_cell({ r: row, c: startColumn })]?.v);
+    if (!isInActiveTimeRange(start, period)) continue;
+    const result = timePerPositionSeconds <= targetSeconds ? "cadré" : "non cadré";
+    const rawWhere = commentColumn === undefined ? "" : cleanText(sheet[XLSX.utils.encode_cell({ r: row, c: commentColumn })]?.v);
+    loadingDetails.push({
+      travelCode: travel,
+      time: formatDateClock(start),
+      positions: cleanText(sheet[XLSX.utils.encode_cell({ r: row, c: positionsColumn })]?.v),
+      timePerPosition: formatDuration(timePerPositionSeconds),
+      where: strikeLexicon.get(normalizeKey(rawWhere)) ?? rawWhere,
+      result,
+    });
+    loadingDurations.push(timePerPositionSeconds);
+  }
+  const targeted = loadingDetails.filter((detail) => detail.result === "cadré").length;
+  const offTarget = loadingDetails.length - targeted;
+  const averageTimePerPositionSeconds = loadingDetails.length > 0
+    ? Math.round(loadingDurations.reduce((sum, seconds) => sum + seconds, 0) / loadingDurations.length)
+    : null;
+  return {
+    targeted,
+    offTarget,
+    targetedPercent: loadingDetails.length > 0 ? percent(targeted, loadingDetails.length) : null,
+    offTargetPercent: loadingDetails.length > 0 ? percent(offTarget, loadingDetails.length) : null,
+    targetTimePerPosition: formatDuration(targetSeconds),
+    averageTimePerPositionSeconds,
+    loadingDetails,
+    nonTargetedShots: loadingDetails.filter((detail) => detail.result === "non cadré"),
+  };
+}
+
+function sheetEndRow(sheet, fallbackRow) {
+  const reference = sheet?.["!ref"];
+  if (!reference) return fallbackRow;
+  try {
+    return Math.max(fallbackRow, XLSX.utils.decode_range(reference).e.r);
+  } catch {
+    return fallbackRow;
+  }
+}
+
 function buildLoadingQuality(workbook, matchRows, period, configuredTargetSeconds) {
   const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.loadingSeconds);
   const empty = {
@@ -778,6 +893,84 @@ function buildLoadingQuality(workbook, matchRows, period, configuredTargetSecond
   };
 }
 
+function buildUnloadingDuelQuality(workbook, period, agencyCode) {
+  const empty = { won: 0, lost: 0, wonPercent: null, lostPercent: null, duels: [], lostDuels: [] };
+  const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "tcd ppt");
+  const sheet = sheetName ? workbook.Sheets[sheetName] : null;
+  if (!sheet) return empty;
+
+  // The Déchargement pivot is the authoritative source for this carousel card:
+  // one row per eligible reception, with the result in "Duels gagnés".
+  const anchor = Object.entries(sheet)
+    .find(([address, cell]) => !address.startsWith("!") && normalizeKey(cell?.v) === "dechargement");
+  if (!anchor) return empty;
+  const anchorCell = XLSX.utils.decode_cell(anchor[0]);
+  const headerRows = [];
+  for (let row = anchorCell.r; row <= anchorCell.r + 16; row += 1) {
+    const cells = [];
+    for (let col = anchorCell.c; col <= anchorCell.c + 14; col += 1) {
+      const address = XLSX.utils.encode_cell({ r: row, c: col });
+      const value = normalizeKey(sheet[address]?.v);
+      if (value) cells.push({ col, value });
+    }
+    if (cells.some((cell) => cell.value === "code voyage") && cells.some((cell) => cell.value === "duels gagnes") && cells.some((cell) => cell.value === "duels perdus")) {
+      headerRows.push({ row, cells });
+    }
+  }
+  const header = headerRows[0];
+  if (!header) return empty;
+  const findColumn = (predicate) => header.cells.find((cell) => predicate(cell.value))?.col;
+  const travelColumn = findColumn((value) => value === "code voyage");
+  const wonColumn = findColumn((value) => value === "duels gagnes");
+  const totalColumn = findColumn((value) => value === "duels");
+  const lostColumn = findColumn((value) => value === "duels perdus");
+  const positionsColumn = findColumn((value) => value === "nombre de n position");
+  const endColumn = findColumn((value) => value.startsWith("max de date heure de debut d operation"));
+  const startColumn = findColumn((value) => value.startsWith("min de date heure de debut d operation"));
+  if ([travelColumn, wonColumn, totalColumn, positionsColumn, startColumn, endColumn].some((value) => value === undefined)) return empty;
+
+  let total = 0;
+  let won = 0;
+  const duels = [];
+  const lostDuels = [];
+  const lastRow = sheetEndRow(sheet, header.row + 1);
+  for (let row = header.row + 1; row <= lastRow; row += 1) {
+    const travel = cleanText(sheet[XLSX.utils.encode_cell({ r: row, c: travelColumn })]?.v);
+    const wonCell = sheet[XLSX.utils.encode_cell({ r: row, c: wonColumn })];
+    const wonRaw = wonCell?.v;
+    const wonValue = Number(wonRaw);
+    const totalRaw = sheet[XLSX.utils.encode_cell({ r: row, c: totalColumn })]?.v;
+    const totalValue = Number(totalRaw);
+    if (!travel || !Number.isFinite(totalValue) || totalValue <= 0 || wonRaw === "" || wonRaw === null || wonRaw === undefined || !Number.isFinite(wonValue) || (wonValue !== 0 && wonValue !== 1)) continue;
+    const start = parseExcelDate(sheet[XLSX.utils.encode_cell({ r: row, c: startColumn })]?.v);
+    if (!isInActiveTimeRange(start, period)) continue;
+    total += totalValue;
+    won += wonValue;
+    const end = parseExcelDate(sheet[XLSX.utils.encode_cell({ r: row, c: endColumn })]?.v);
+    const positions = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: positionsColumn })]?.v) ?? 0;
+    const elapsedSeconds = start && end ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000)) : 0;
+    const duel = {
+      travelCode: travel,
+      agency: agencyCode || "Non renseignée",
+      time: formatDateClock(start),
+      positions,
+      timePerPosition: formatDuration(elapsedSeconds / Math.max(positions, 1)),
+      result: wonValue === 1 ? "gagné" : "perdu",
+    };
+    duels.push(duel);
+    if (wonValue < totalValue) lostDuels.push(duel);
+  }
+  const lost = Math.max(0, total - won);
+  return {
+    won,
+    lost,
+    wonPercent: total > 0 ? percent(won, total) : null,
+    lostPercent: total > 0 ? percent(lost, total) : null,
+    duels,
+    lostDuels,
+  };
+}
+
 function buildUnloadingQuality(matchRows, configuredTargetSeconds) {
   const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.unloadingSeconds);
   const empty = {
@@ -830,6 +1023,32 @@ function buildUnloadingQuality(matchRows, configuredTargetSeconds) {
     averageTimePerPositionSeconds,
     eligibleTrips: total,
   };
+}
+
+function buildYellowCards(workbook, period) {
+  const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "feuille de match");
+  const sheet = sheetName ? workbook.Sheets[sheetName] : null;
+  if (!sheet) return [];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "", blankrows: false });
+  const headerIndex = rows.findIndex((row) => normalizeKey(row[36]) === "nom" && normalizeKey(row[37]) === "heure carton");
+  if (headerIndex < 0) return [];
+
+  return rows.slice(headerIndex + 1, headerIndex + 101)
+    .map((row) => {
+      const playerName = cleanText(row[36]);
+      const rawTime = cleanText(row[37]);
+      const time = formatImportedClock(rawTime);
+      const clockSeconds = parseClockSeconds(rawTime);
+      return {
+        playerName,
+        time,
+        reason: cleanText(row[38]),
+        travelCode: cleanText(row[39]),
+        clockSeconds,
+      };
+    })
+    .filter((card) => card.playerName && (period.useExcelPeriod || (card.clockSeconds !== null && card.clockSeconds >= period.startMinutes * 60 && card.clockSeconds <= period.endMinutes * 60)))
+    .map(({ clockSeconds, ...card }) => card);
 }
 
 function readLoadingDetails(workbook) {
@@ -1023,9 +1242,9 @@ function buildPlayers(rows) {
 function buildCategoryHighlights(categoryLeaders) {
   return {
     manOfTheMatch: null,
-    bestScorer: playerCard(categoryLeaders.attack, "Joueur Attaque", "Meilleure valeur CHG", categoryLeaders.attack?.byType.CHG, "opérations CHG"),
-    bestPasser: playerCard(categoryLeaders.midfield, "Joueur Milieu", "Meilleure valeur ZONAGE", categoryLeaders.midfield?.byType.ZONAGE, "opérations ZONAGE"),
-    defensiveWall: playerCard(categoryLeaders.defense, "Joueur Défense", "Meilleure valeur Réception", categoryLeaders.defense?.byType.DECHG, "opérations RECEPTION"),
+    bestScorer: playerCard(categoryLeaders.attack, "Joueur Attaque", "Meilleur(e) buteur(se)", categoryLeaders.attack?.byType.CHG, "opérations CHG"),
+    bestPasser: playerCard(categoryLeaders.midfield, "Joueur Milieu", "Meilleur(e) passeur(se)", categoryLeaders.midfield?.byType.ZONAGE, "opérations ZONAGE"),
+    defensiveWall: playerCard(categoryLeaders.defense, "Joueur Défense", "Meilleur(e) joueur(se)", categoryLeaders.defense?.byType.DECHG, "opérations RECEPTION"),
   };
 }
 
@@ -1065,6 +1284,7 @@ function buildPositions(rows, period, scoringRows, criteria) {
         firstOperation: row.startedAt,
         lastOperation: row.startedAt,
         byTypeDates: {},
+        zonageDates: [],
         duelRows: 0,
         duelWonRows: 0,
         operators: new Set(),
@@ -1076,6 +1296,7 @@ function buildPositions(rows, period, scoringRows, criteria) {
     position.operators.add(row.operator);
     const current = position.byTypeDates[row.operationType];
     position.byTypeDates[row.operationType] = current ? minDate([current, row.startedAt]) : row.startedAt;
+    if (row.operationType === "ZONAGE") position.zonageDates.push(row.startedAt);
     if (!position.travelCode && row.travelCode) position.travelCode = row.travelCode;
   }
 
@@ -1088,7 +1309,11 @@ function buildPositions(rows, period, scoringRows, criteria) {
 
   return Array.from(map.values()).map((position) => {
     const start = position.byTypeDates.DECHG ?? position.firstOperation;
-    const zonage = position.byTypeDates.ZONAGE ?? null;
+    // A position can contain a zonage before its reception and another one
+    // after it. Only the first zonage after the reception starts the delay.
+    const zonage = minDate(
+      position.zonageDates.filter((date) => !start || date.getTime() >= start.getTime())
+    );
     const delaySeconds = zonage ? Math.max(0, Math.round((zonage.getTime() - start.getTime()) / 1000)) : null;
     const delayMinutes = delaySeconds === null ? null : Math.round(delaySeconds / 60);
     const duelWon = position.duelRows > 0
@@ -1406,21 +1631,43 @@ function parseExcelDate(value) {
     );
   }
   const text = String(value).trim();
+  // Do not let the runtime interpret a French date such as 11/09/2026 as
+  // November 9. Treat the wall clock as Europe/Paris, like Excel serials.
+  const frenchMatch = text.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})(?:[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i);
+  if (frenchMatch) {
+    const [, day, month, year, rawHour = "0", rawMinute = "0", rawSecond = "0", meridiem] = frenchMatch;
+    const fullYear = Number(year) < 100 ? 2000 + Number(year) : Number(year);
+    let hour = Number(rawHour);
+    const minute = Number(rawMinute);
+    const second = Number(rawSecond);
+    if (meridiem) {
+      if (hour < 1 || hour > 12) return null;
+      hour = meridiem.toUpperCase() === "AM" ? (hour === 12 ? 0 : hour) : (hour === 12 ? 12 : hour + 12);
+    }
+    if (fullYear < 1 || month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || hour > 23 || minute > 59 || second > 59) return null;
+    const wallClock = Date.UTC(fullYear, Number(month) - 1, Number(day), hour, minute, second);
+    const wallClockDate = new Date(wallClock);
+    if (
+      wallClockDate.getUTCFullYear() !== fullYear ||
+      wallClockDate.getUTCMonth() !== Number(month) - 1 ||
+      wallClockDate.getUTCDate() !== Number(day) ||
+      wallClockDate.getUTCHours() !== hour ||
+      wallClockDate.getUTCMinutes() !== minute ||
+      wallClockDate.getUTCSeconds() !== second
+    ) return null;
+    return annotateParisMinutes(
+      new Date(wallClock - timeZoneOffsetMilliseconds(wallClock, "Europe/Paris")),
+      hour * 60 + minute,
+    );
+  }
   const parsed = new Date(text);
   if (!Number.isNaN(parsed.getTime())) return parsed;
-
-  const frenchMatch = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
-  if (frenchMatch) {
-    const [, day, month, year, hour = "0", minute = "0", second = "0"] = frenchMatch;
-    const fullYear = Number(year) < 100 ? 2000 + Number(year) : Number(year);
-    const date = new Date(fullYear, Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second));
-    if (!Number.isNaN(date.getTime())) return date;
-  }
   return null;
 }
 
 function timeZoneOffsetMilliseconds(timestamp, timeZone) {
-  const dateKey = new Date(timestamp).toISOString().slice(0, 10);
+  // The Paris offset can change within a calendar day at DST boundaries.
+  const dateKey = new Date(timestamp).toISOString().slice(0, 13);
   const cacheKey = `${timeZone}:${dateKey}`;
   if (parisOffsetCache.has(cacheKey)) return parisOffsetCache.get(cacheKey);
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -1560,22 +1807,58 @@ function polyvalenceScore(byType, topByType) {
   return Math.round(clamp(normalizedScores.reduce((sum, score) => sum + score, 0) / 3, 0, 1) * 100);
 }
 
-function buildHourlyPerformance(rows, period) {
-  const buckets = new Map();
-  for (const row of rows) {
-    if (!isInActiveTimeRange(row.startedAt, period)) continue;
-    const hour = parisHour(row.startedAt);
-    if (hour === null) continue;
-    if (!buckets.has(hour)) buckets.set(hour, { hour, won: 0, total: 0 });
-    const bucket = buckets.get(hour);
-    if (row.duelWonFlag === 0 || row.duelWonFlag === 1) {
-      bucket.total += 1;
-      if (row.duelWonFlag === 1) bucket.won += 1;
+function buildHourlyPassPerformance(workbook, period) {
+  const empty = { items: [], totalRate: null };
+  const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "x");
+  const sheet = sheetName ? workbook.Sheets[sheetName] : null;
+  if (!sheet) return empty;
+
+  // The Excel curve is chart1.xml: categories X!FD:FF and values X!FG.
+  // X!EZ contains the same row-level formula, EX / (EW + EX).
+  const header = Object.entries(sheet).find(([address, cell]) => !address.startsWith("!") && normalizeKey(cell?.v) === "somme de passes reussies");
+  if (!header) return empty;
+  const headerCell = XLSX.utils.decode_cell(header[0]);
+  const headerRow = headerCell.r;
+  const findHeaderColumn = (value) => {
+    for (let col = 0; col < XLSX.utils.decode_range(sheet["!ref"] ?? "A1:A1").e.c + 1; col += 1) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: headerRow, c: col })];
+      if (normalizeKey(cell?.v) === value) return col;
     }
+    return undefined;
+  };
+  const hourColumn = findHeaderColumn("heure op");
+  const rateColumn = headerCell.c;
+  if (hourColumn === undefined) return empty;
+
+  // In the chart's source table, EW is the denominator's lost count and EX
+  // is the won count immediately before the EZ/FG rate columns.
+  const lostColumn = rateColumn - 10;
+  const wonColumn = rateColumn - 9;
+  const values = [];
+  const lastRow = sheetEndRow(sheet, headerRow + 1);
+  for (let row = headerRow + 1; row <= lastRow; row += 1) {
+    const hour = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: hourColumn })]?.v);
+    const rateFraction = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: rateColumn })]?.v);
+    if (!Number.isFinite(hour) || !Number.isFinite(rateFraction) || rateFraction < 0 || rateFraction > 1) continue;
+    if (hour < period.startMinutes / 60 || hour > period.endMinutes / 60) continue;
+    const lost = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: lostColumn })]?.v);
+    const won = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: wonColumn })]?.v);
+    const total = Number.isFinite(lost) && Number.isFinite(won) ? lost + won : null;
+    values.push({
+      label: `${String(hour).padStart(2, "0")}h`,
+      hour,
+      won: Number.isFinite(won) ? won : null,
+      total: Number.isFinite(total) && total > 0 ? total : null,
+      rate: Math.round(rateFraction * 1000) / 10,
+    });
   }
-  return Array.from(buckets.values())
-    .sort((a, b) => a.hour - b.hour)
-    .map((bucket) => ({ ...bucket, label: `${String(bucket.hour).padStart(2, "0")}h`, rate: percent(bucket.won, bucket.total) }));
+  values.sort((a, b) => a.hour - b.hour);
+  const weightedWon = values.reduce((sum, item) => sum + (Number.isFinite(item.won) ? item.won : 0), 0);
+  const weightedTotal = values.reduce((sum, item) => sum + (Number.isFinite(item.total) ? item.total : 0), 0);
+  return {
+    items: values,
+    totalRate: weightedTotal > 0 ? percent(weightedWon, weightedTotal) : null,
+  };
 }
 
 function parisHour(date) {

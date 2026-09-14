@@ -102,6 +102,19 @@ export type Snapshot = {
       targetSeconds: number;
     };
   };
+  yellowCards?: Array<{
+    playerName: string;
+    time: string;
+    reason: string;
+    travelCode: string;
+  }>;
+  dailyIndicators?: {
+    sourceName: string;
+    importedAt: string;
+    referenceDate: string | null;
+    punctuality: Partial<Record<"arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn", number>>;
+    expedition: { tonnage?: number };
+  } | null;
   summary: {
     operations: number;
     positions: number;
@@ -110,6 +123,8 @@ export type Snapshot = {
     duelWon: number;
     duelTotal: number;
     duelRate: number | null;
+    passRate?: number | null;
+    tonnage?: number | null;
     possessionPercent: number | null;
     possessionPositions: {
       zonage: number;
@@ -127,8 +142,8 @@ export type Snapshot = {
   hourlyPerformance?: Array<{
     label: string;
     hour: number;
-    won: number;
-    total: number;
+    won: number | null;
+    total: number | null;
     rate: number;
   }>;
   loadingQuality?: {
@@ -138,12 +153,41 @@ export type Snapshot = {
     offTargetPercent: number | null;
     targetTimePerPosition?: string;
     averageTimePerPositionSeconds?: number | null;
+    loadingDetails?: Array<{
+      travelCode: string;
+      time: string;
+      positions: string;
+      timePerPosition: string;
+      where: string;
+      result: "cadré" | "non cadré";
+    }>;
     nonTargetedShots: Array<{
       travelCode: string;
       time: string;
       positions: string;
       timePerPosition: string;
       where: string;
+    }>;
+  };
+  unloadingDuelQuality?: {
+    won: number;
+    lost: number;
+    wonPercent: number | null;
+    lostPercent: number | null;
+    duels: Array<{
+      travelCode: string;
+      agency: string;
+      time: string;
+      positions: number;
+      timePerPosition: string;
+      result: "gagné" | "perdu";
+    }>;
+    lostDuels: Array<{
+      travelCode: string;
+      agency: string;
+      time: string;
+      positions: number;
+      timePerPosition: string;
     }>;
   };
   unloadingQuality?: {

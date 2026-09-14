@@ -26,47 +26,156 @@ const roles = Object.fromEntries(snapshot.summary.roleDistribution.map((item) =>
 
 assert.equal(KPI_DICTIONARY.length >= 7, true, "Le dictionnaire KPI doit rester disponible dans le moteur.");
 assert.equal(snapshot.kpiDictionaryVersion, KPI_DICTIONARY_VERSION, "Le snapshot doit utiliser la version courante des règles KPI.");
-assert.equal(snapshot.validation.filterStats.sourceRows, 5742, "Lignes source A:G");
-assert.equal(snapshot.validation.filterStats.matchRows, 4595, "Lignes filtre opérateur + période");
-assert.equal(snapshot.validation.filterStats.scoringRows, 2925, "Lignes éligibles au score");
-assert.equal(snapshot.validation.filterStats.excludedByPeriod, 115, "Lignes exclues par période Excel");
-assert.equal(snapshot.validation.filterStats.excludedByOperator, 1051, "Lignes exclues par filtre opérateur Excel");
-assert.equal(snapshot.validation.filterStats.excludedFromScore, 1670, "Lignes exclues du score par Poz non zonées");
+assert.equal(snapshot.validation.filterStats.sourceRows, 6395, "Lignes source A:G");
+assert.equal(snapshot.validation.filterStats.matchRows, 5498, "Lignes filtre opérateur + plage horaire réelle");
+assert.equal(snapshot.validation.filterStats.scoringRows, 3517, "Lignes éligibles au score");
+assert.equal(snapshot.validation.filterStats.excludedByPeriod, 247, "Lignes exclues par plage horaire réelle");
+assert.equal(snapshot.validation.filterStats.excludedByOperator, 795, "Lignes exclues par filtre opérateur Excel");
+assert.equal(snapshot.validation.filterStats.excludedFromScore, 1981, "Lignes exclues du score par Poz non zonées");
 assert.equal(snapshot.validation.criticalMissingRows, 0, "Lignes source avec donnée critique manquante");
 assert.equal(snapshot.validation.invalidDateRows, 0, "Lignes source avec date illisible");
 assert.equal(snapshot.validation.issueRows, 0, "Lignes source distinctes avec anomalie d'import");
 
-assert.equal(snapshot.summary.operations, 4595, "Opérations filtrées");
-assert.equal(snapshot.summary.positions, 1430, "Positions filtrées");
-assert.equal(snapshot.summary.players, 20, "Joueurs filtrés");
-assert.deepEqual(snapshot.summary.operationCounts, { CHG: 1728, DECHG: 1900, ZONAGE: 967 });
+assert.equal(snapshot.summary.operations, 5498, "Opérations filtrées");
+assert.equal(snapshot.summary.positions, 1708, "Positions filtrées");
+assert.equal(snapshot.summary.players, 17, "Joueurs filtrés");
+assert.deepEqual(snapshot.summary.operationCounts, { CHG: 1862, DECHG: 2507, ZONAGE: 1129 });
 
-assert.equal(snapshot.summary.duelWon, 2064, "Duels gagnés recalculés avec la cible zonage");
-assert.equal(snapshot.summary.duelTotal, 2925, "Dénominateur score Excel");
-assert.equal(snapshot.summary.duelRate, 70.6, "Taux duels gagnés recalculé");
-assert.equal(snapshot.summary.possessionPercent, 50.2, "Possession Zody sur la plage active");
-assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 663, reception: 1131, matched: 568 }, "Positions possession sur le même périmètre filtré");
-assert.equal(snapshot.match.score, 71, "Score arrondi");
+assert.equal(snapshot.summary.duelWon, 2528, "Duels gagnés recalculés avec la cible zonage");
+assert.equal(snapshot.summary.duelTotal, 3517, "Dénominateur score Excel");
+assert.equal(snapshot.summary.duelRate, 71.9, "Taux duels gagnés recalculé");
+assert.equal(snapshot.summary.passRate, 69.2, "Taux de passes réussies repris de la table graphique Excel");
+assert.deepEqual(
+  snapshot.hourlyPerformance.map((item) => item.label),
+  ["13h", "14h", "16h", "17h", "18h", "19h", "20h", "21h", "22h"],
+  "Heures du graphique % passes réussies reprises de X!FF/X!FG",
+);
+assert.equal(snapshot.summary.possessionPercent, 55.7, "Possession Zody sur la plage active");
+assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 856, reception: 1432, matched: 797 }, "Positions possession sur le même périmètre filtré");
+assert.equal(snapshot.match.score, 72, "Score arrondi");
 assert.equal(snapshot.match.status, "MAÎTRISÉ", "Statut du match aligné sur le score opérationnel");
 assert.equal(snapshot.operationalScore.status, "available", "Score opérationnel disponible");
 assert.equal(snapshot.operationalScore.goalsFor, 4, "Buts opérationnels marqués");
 assert.equal(snapshot.operationalScore.goalsAgainst, 0, "Buts opérationnels encaissés");
 assert.equal(typeof snapshot.operationalScore.indicators.unloadingPercent, "number", "Indicateur déchargement disponible");
-assert.equal(snapshot.loadingQuality.targeted, 34, "Chargements cadrés issus de l'Excel");
-assert.equal(snapshot.loadingQuality.offTarget, 1, "Chargements non cadrés recalculés");
-assert.equal(snapshot.loadingQuality.nonTargetedShots[0].time, "15:37:07", "Heure complète du chargement non cadré");
-assert.equal(snapshot.loadingQuality.nonTargetedShots[0].timePerPosition, "02:56", "Temps par position du chargement non cadré");
-assert.equal(snapshot.loadingQuality.nonTargetedShots[0].travelCode, "X47890", "Tir non cadré repris depuis la feuille de match");
-assert.equal(snapshot.unloadingQuality.targeted, 43, "Déchargements dans la cible Argent");
-assert.equal(snapshot.unloadingQuality.offTarget, 23, "Déchargements hors cible Argent");
-assert.equal(snapshot.unloadingQuality.targetedPercent, 65.2, "Pourcentage de déchargements dans la cible Argent");
-assert.equal(snapshot.unloadingQuality.averageTimePerPositionSeconds, 117, "Moyenne du temps de déchargement par position");
+assert.equal(snapshot.loadingQuality.targeted, 33, "Chargements cadrés issus de TCD PPT!U");
+assert.equal(snapshot.loadingQuality.offTarget, 2, "Chargements non cadrés recalculés depuis TCD PPT!U");
+const nonTargetedX47890 = snapshot.loadingQuality.nonTargetedShots.find((shot) => shot.travelCode === "X47890");
+assert.equal(nonTargetedX47890?.time, "15:27:02", "Heure complète du chargement non cadré");
+assert.equal(nonTargetedX47890?.timePerPosition, "02:47", "Temps brut par position du chargement TCD PPT");
+assert.equal(nonTargetedX47890?.where, "Poteau!", "Lexique de frappe repris depuis TCD PPT");
+assert.equal(snapshot.unloadingQuality.targeted, 39, "Déchargements dans la cible Argent");
+assert.equal(snapshot.unloadingQuality.offTarget, 30, "Déchargements hors cible Argent");
+assert.equal(snapshot.unloadingQuality.targetedPercent, 56.5, "Pourcentage de déchargements dans la cible Argent");
+assert.equal(snapshot.unloadingQuality.averageTimePerPositionSeconds, 182, "Moyenne du temps de déchargement par position");
+assert.deepEqual(
+  snapshot.unloadingDuelQuality && { won: snapshot.unloadingDuelQuality.won, lost: snapshot.unloadingDuelQuality.lost },
+  { won: 27, lost: 21 },
+  "Duels gagnés réception issus du TCD Déchargement",
+);
+assert.deepEqual(snapshot.yellowCards, [], "Le carton de 22:34 est hors plage 13:00-22:30");
+
+const yellowCardRangeResult = buildSnapshotFromWorkbook(
+  buffer,
+  path.basename(workbookPath),
+  agencyCode,
+  { start: "13:00", end: "23:00", criteria: { zonageMinutes: 20, loadingSeconds: 135, unloadingSeconds: 50, scoreTargetPercent: 70 } },
+);
+assert.equal(yellowCardRangeResult.ok, true, "La plage élargie doit rester exploitable");
+if (yellowCardRangeResult.ok) {
+  assert.deepEqual(
+    yellowCardRangeResult.snapshot.yellowCards,
+    [{ playerName: "LUDOVIC LAGARDERE", time: "22:34:23", reason: "Chargement à quai", travelCode: "X47401" }],
+    "Le carton jaune doit apparaître dès que sa plage horaire le contient",
+  );
+}
+
+// Regression guard: the loading KPI must use the raw TCD value U = T / S,
+// not the presentation formula V, and must ignore voyages below 15 positions.
+const rawLoadingDataHeaders = [
+  "Operateur",
+  "Date Heure de debut d operation",
+  "Type d operation",
+  "N position",
+  "Code voyage",
+  "Agence segment",
+  "Type segment",
+  "Filtre operateur",
+  "Filtre heure",
+  "Poste",
+  "Poz non zonees",
+  "DZ",
+  "Duels gagnes",
+];
+const rawLoadingDataRows = Array.from({ length: 15 }, (_, index) => [
+  "Joueur",
+  new Date(Date.UTC(2026, 8, 11, 14, 0, index)),
+  "CHG",
+  String(index + 1),
+  "RAW-001",
+  "058",
+  "X",
+  "",
+  "",
+  "Attaquant",
+  "",
+  "",
+  1,
+]);
+const rawLoadingTcdRows = [
+  ["Chargement"],
+  ["Code Voyage", "Min. de Date/Heure de début d'opération", "Max. de Date/Heure de début d'opération", "Nombre de N° Position", "TC", "", "TC/poz", "Commentaire"],
+  ["RAW-001", new Date(Date.UTC(2026, 8, 11, 14, 0)), new Date(Date.UTC(2026, 8, 11, 14, 1)), 15, 0.015, 0.001, 0.5, "Poteau!"],
+  ["RAW-002", new Date(Date.UTC(2026, 8, 11, 14, 2)), new Date(Date.UTC(2026, 8, 11, 14, 3)), 14, 0.015, 0.001, 0.001, "Orbite lunaire"],
+];
+const rawLoadingWorkbook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(rawLoadingWorkbook, XLSX.utils.aoa_to_sheet([rawLoadingDataHeaders, ...rawLoadingDataRows]), "Données");
+XLSX.utils.book_append_sheet(rawLoadingWorkbook, XLSX.utils.aoa_to_sheet(rawLoadingTcdRows), "TCD PPT");
+const rawLoadingResult = buildSnapshotFromWorkbook(
+  XLSX.write(rawLoadingWorkbook, { type: "buffer", bookType: "xlsx" }),
+  "raw-loading.xlsx",
+  agencyCode,
+);
+assert.equal(rawLoadingResult.ok, true, "Le test TCD chargement doit être exploitable");
+if (rawLoadingResult.ok) {
+  assert.equal(rawLoadingResult.snapshot.loadingQuality.targeted, 1, "Le chargement lit U et exclut les voyages de moins de 15 positions");
+  assert.equal(rawLoadingResult.snapshot.loadingQuality.offTarget, 0, "La valeur brute U est sous la cible dans le test TCD");
+  assert.equal(rawLoadingResult.snapshot.loadingQuality.loadingDetails?.[0]?.timePerPosition, "01:26", "Le temps brut U est formaté correctement");
+  assert.equal(rawLoadingResult.snapshot.loadingQuality.loadingDetails?.[0]?.where, "Poteau!", "Le lexique TCD est conservé");
+}
+
+// Regression guard: French text dates must keep day/month order and a zonage
+// before a reception must not be used for that reception's delay.
+const chronologyRows = [
+  ["Joueur", "11/09/2026 13:10:00", "ZONAGE", "P-001", "V-001", "058", "X", "", "", "", "", "", ""],
+  ["Joueur", "11/09/2026 14:00:00", "DECHG", "P-001", "V-001", "058", "X", "", "", "", "", "", ""],
+  ["Joueur", "11/09/2026 14:05:00", "ZONAGE", "P-001", "V-001", "058", "X", "", "", "", "", "", ""],
+];
+const chronologyWorkbook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(
+  chronologyWorkbook,
+  XLSX.utils.aoa_to_sheet([rawLoadingDataHeaders, ...chronologyRows]),
+  "Données",
+);
+const chronologyResult = buildSnapshotFromWorkbook(
+  XLSX.write(chronologyWorkbook, { type: "buffer", bookType: "xlsx" }),
+  "chronology.xlsx",
+  agencyCode,
+  { start: "13:00", end: "22:30", criteria: { zonageMinutes: 1, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 } },
+);
+assert.equal(chronologyResult.ok, true, "Les dates texte françaises doivent être exploitables");
+if (chronologyResult.ok) {
+  assert.equal(chronologyResult.snapshot.validation.invalidDateRows, 0, "Une date française valide ne doit pas être signalée illisible");
+  assert.equal(chronologyResult.snapshot.match.date, "2026-09-11", "Une date 11/09/2026 doit rester le 11 septembre");
+  assert.equal(chronologyResult.snapshot.positions[0]?.delayMinutes, 5, "Le délai doit partir du premier zonage après la réception");
+  assert.equal(chronologyResult.snapshot.positions[0]?.duelWon, false, "Un zonage à 5 minutes dépasse la cible de 1 minute");
+}
 
 const leagueExpectations = [
-  { name: "Bronze", criteria: { zonageMinutes: 45, loadingSeconds: 195, unloadingSeconds: 75, scoreTargetPercent: 45 }, duelWon: 2229, targeted: 35, offTarget: 0, unloadingTargeted: 48, unloadingOffTarget: 18, score: "4-0", priority: "Maintenir le rythme et sécuriser les fins de séquence.", status: "MAÎTRISÉ" },
-  { name: "Argent", criteria: { zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 }, duelWon: 2064, targeted: 34, offTarget: 1, unloadingTargeted: 43, unloadingOffTarget: 23, score: "4-0", priority: "Maintenir le rythme et sécuriser les fins de séquence.", status: "MAÎTRISÉ" },
-  { name: "Or", criteria: { zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 }, duelWon: 1977, targeted: 33, offTarget: 2, unloadingTargeted: 41, unloadingOffTarget: 25, score: "3-1", priority: "Maintenir le rythme et sécuriser les fins de séquence.", status: "MAÎTRISÉ" },
-  { name: "Platine", criteria: { zonageMinutes: 20, loadingSeconds: 135, unloadingSeconds: 50, scoreTargetPercent: 70 }, duelWon: 1853, targeted: 32, offTarget: 3, unloadingTargeted: 40, unloadingOffTarget: 26, score: "1-3", priority: "Reprendre les indicateurs sous l'objectif de la ligue.", status: "ACTION NÉCESSAIRE" },
+  { name: "Bronze", criteria: { zonageMinutes: 45, loadingSeconds: 195, unloadingSeconds: 75, scoreTargetPercent: 45 }, duelWon: 2840, targeted: 34, offTarget: 1, unloadingTargeted: 43, unloadingOffTarget: 26, score: "4-0", priority: "Maintenir le rythme et sécuriser les fins de séquence.", status: "MAÎTRISÉ" },
+  { name: "Argent", criteria: { zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 }, duelWon: 2528, targeted: 33, offTarget: 2, unloadingTargeted: 39, unloadingOffTarget: 30, score: "4-0", priority: "Maintenir le rythme et sécuriser les fins de séquence.", status: "MAÎTRISÉ" },
+  { name: "Or", criteria: { zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 }, duelWon: 2307, targeted: 33, offTarget: 2, unloadingTargeted: 38, unloadingOffTarget: 31, score: "2-2", priority: "Reprendre les indicateurs sous l'objectif de la ligue.", status: "À SURVEILLER" },
+  { name: "Platine", criteria: { zonageMinutes: 20, loadingSeconds: 135, unloadingSeconds: 50, scoreTargetPercent: 70 }, duelWon: 1979, targeted: 32, offTarget: 3, unloadingTargeted: 37, unloadingOffTarget: 32, score: "1-3", priority: "Reprendre les indicateurs sous l'objectif de la ligue.", status: "ACTION NÉCESSAIRE" },
 ];
 for (const expected of leagueExpectations) {
   const leagueResult = buildSnapshotFromWorkbook(buffer, path.basename(workbookPath), agencyCode, { criteria: expected.criteria });
@@ -97,8 +206,8 @@ const boundedPossessionResult = buildSnapshotFromWorkbook(buffer, path.basename(
 });
 assert.equal(boundedPossessionResult.ok, true, "La possession doit rester recalculable sur une sous-plage");
 if (boundedPossessionResult.ok) {
-  assert.equal(boundedPossessionResult.snapshot.summary.possessionPercent, 58.6, "Possession bornée sur une sous-plage déséquilibrée");
-  assert.deepEqual(boundedPossessionResult.snapshot.summary.possessionPositions, { zonage: 191, reception: 145, matched: 85 }, "Positions communes de possession sur une sous-plage");
+  assert.equal(boundedPossessionResult.snapshot.summary.possessionPercent, 46.7, "Possession bornée sur une sous-plage déséquilibrée");
+  assert.deepEqual(boundedPossessionResult.snapshot.summary.possessionPositions, { zonage: 156, reception: 227, matched: 106 }, "Positions communes de possession sur une sous-plage");
   assert.ok(boundedPossessionResult.snapshot.summary.possessionPercent <= 100, "Une possession ne doit jamais dépasser 100 %");
 }
 
@@ -110,9 +219,9 @@ const narrowResult = buildSnapshotFromWorkbook(buffer, path.basename(workbookPat
 assert.equal(narrowResult.ok, true, "Une sous-plage doit rester recalculable");
 if (narrowResult.ok) {
   assert.equal(narrowResult.snapshot.match.periodLabel, "14:00-15:00", "Plage active du recalcul déchargement");
-  assert.equal(narrowResult.snapshot.unloadingQuality.targeted, 12, "Déchargements dans la cible sur la plage active");
-  assert.equal(narrowResult.snapshot.unloadingQuality.offTarget, 1, "Déchargements hors cible sur la plage active");
-  assert.equal(narrowResult.snapshot.unloadingQuality.targetedPercent, 92.3, "Pourcentage déchargement recalculé sur la plage active");
+  assert.equal(narrowResult.snapshot.unloadingQuality.targeted, 9, "Déchargements dans la cible sur la plage active");
+  assert.equal(narrowResult.snapshot.unloadingQuality.offTarget, 3, "Déchargements hors cible sur la plage active");
+  assert.equal(narrowResult.snapshot.unloadingQuality.targetedPercent, 75, "Pourcentage déchargement recalculé sur la plage active");
 }
 
 const emptyLoadingHeaders = [
@@ -169,19 +278,22 @@ if (emptyLoadingResult.ok) {
   assert.equal(emptyLoadingResult.snapshot.causerie.find((item) => item.label === "Priorité")?.value, "Compléter les indicateurs avant de conclure le match.");
 }
 
-assert.equal(roles.Attaquant.count, 10, "Composition attaque");
-assert.equal(roles.Milieu.count, 5, "Composition milieu");
-assert.equal(roles.Défenseur.count, 5, "Composition défense");
+assert.equal(roles.Attaquant.count, 8, "Composition attaque");
+assert.equal(roles.Milieu.count, 3, "Composition milieu");
+assert.equal(roles.Défenseur.count, 6, "Composition défense");
 
 assert.equal(snapshot.highlights.bestScorer.name, "JEAN LUC LASSORT");
-assert.equal(snapshot.highlights.bestScorer.value, 261);
+assert.equal(snapshot.highlights.bestScorer.value, 314);
 assert.equal(snapshot.highlights.bestScorer.label, "Joueur Attaque");
-assert.equal(snapshot.highlights.bestPasser.name, "THIERRY BOUGNAGUE");
-assert.equal(snapshot.highlights.bestPasser.value, 200);
+assert.equal(snapshot.highlights.bestScorer.detail, "Meilleur(e) buteur(se)");
+assert.equal(snapshot.highlights.bestPasser.name, "MORGAN JOUY");
+assert.equal(snapshot.highlights.bestPasser.value, 287);
 assert.equal(snapshot.highlights.bestPasser.label, "Joueur Milieu");
-assert.equal(snapshot.highlights.defensiveWall.name, "YOUNES EL KICH");
-assert.equal(snapshot.highlights.defensiveWall.value, 623);
+assert.equal(snapshot.highlights.bestPasser.detail, "Meilleur(e) passeur(se)");
+assert.equal(snapshot.highlights.defensiveWall.name, "SYLVIE JACQUIER");
+assert.equal(snapshot.highlights.defensiveWall.value, 941);
 assert.equal(snapshot.highlights.defensiveWall.label, "Joueur Défense");
+assert.equal(snapshot.highlights.defensiveWall.detail, "Meilleur(e) joueur(se)");
 assert.ok(
   snapshot.players.filter((player) => player.operationTypes < 2).every((player) => player.polyvalence === 0),
   "Un joueur mono-activité ne doit pas recevoir de score de polyvalence."

@@ -90,29 +90,82 @@ try {
   assert.equal(importPayload.message, "MATCH ACTUALISÉ");
 
   const snapshot = importPayload.snapshot;
-  assert.equal(snapshot.summary.operations, 4595, "Opérations filtrées après import API");
-  assert.equal(snapshot.summary.positions, 1430, "Positions filtrées après import API");
-  assert.equal(snapshot.summary.players, 20, "Joueurs filtrés après import API");
-  assert.equal(snapshot.summary.duelWon, 2064, "Duels gagnés recalculés après import API");
-  assert.equal(snapshot.summary.duelTotal, 2925, "Dénominateur score après import API");
-  assert.equal(snapshot.summary.duelRate, 70.6, "Taux duels gagnés recalculé après import API");
-  assert.equal(snapshot.summary.possessionPercent, 50.2, "Possession Zody après import API");
-  assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 663, reception: 1131, matched: 568 }, "Positions possession après import API");
-  assert.equal(snapshot.match.score, 71, "Score recalculé après import API");
+  assert.equal(snapshot.summary.operations, 5498, "Opérations filtrées après import API");
+  assert.equal(snapshot.summary.positions, 1708, "Positions filtrées après import API");
+  assert.equal(snapshot.summary.players, 17, "Joueurs filtrés après import API");
+  assert.equal(snapshot.summary.duelWon, 2528, "Duels gagnés recalculés après import API");
+  assert.equal(snapshot.summary.duelTotal, 3517, "Dénominateur score après import API");
+  assert.equal(snapshot.summary.duelRate, 71.9, "Taux duels gagnés recalculé après import API");
+  assert.equal(snapshot.summary.possessionPercent, 55.7, "Possession Zody après import API");
+  assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 856, reception: 1432, matched: 797 }, "Positions possession après import API");
+  assert.equal(snapshot.match.score, 72, "Score recalculé après import API");
   assert.equal(snapshot.operationalScore.status, "available", "Score opérationnel disponible après import API");
   assert.equal(snapshot.operationalScore.goalsFor, 4, "Score opérationnel marqué après import API");
   assert.equal(snapshot.operationalScore.goalsAgainst, 0, "Score opérationnel encaissé après import API");
   assert.equal(typeof snapshot.operationalScore.indicators.unloadingPercent, "number", "Indicateur déchargement disponible après import API");
-  assert.equal(snapshot.loadingQuality.targeted, 34, "Chargements cadrés après import API");
-  assert.equal(snapshot.loadingQuality.offTarget, 1, "Chargements non cadrés après import API");
-  assert.equal(snapshot.loadingQuality.nonTargetedShots[0].travelCode, "X47890", "Tir non cadré après import API");
+  assert.equal(snapshot.loadingQuality.targeted, 33, "Chargements cadrés après import API");
+  assert.equal(snapshot.loadingQuality.offTarget, 2, "Chargements non cadrés après import API");
+  assert.equal(snapshot.loadingQuality.nonTargetedShots.find((shot) => shot.travelCode === "X47890")?.timePerPosition, "02:47", "Tir non cadré après import API");
 
   const latestResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot`, {
     headers: { "x-access-code": accessCode },
   });
   const latestPayload = await latestResponse.json();
   assert.equal(latestResponse.status, 200, JSON.stringify(latestPayload));
-  assert.equal(latestPayload.snapshot.match.score, 71, "Snapshot relu depuis STEF_DATA_DIR");
+  assert.equal(latestPayload.snapshot.match.score, 72, "Snapshot relu depuis STEF_DATA_DIR");
+  assertFiniteJson(latestPayload.snapshot);
+
+  const storedLatestPath = path.join(dataDir, sanitizeSegment(agencyCode), "latest.json");
+  const validLatestText = await fs.readFile(storedLatestPath, "utf8");
+  await fs.writeFile(storedLatestPath, "{ invalid snapshot", "utf8");
+  const malformedSnapshotResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot`, {
+    headers: { "x-access-code": accessCode },
+  });
+  const malformedSnapshotPayload = await malformedSnapshotResponse.json();
+  assert.equal(malformedSnapshotResponse.status, 500, JSON.stringify(malformedSnapshotPayload));
+  assert.equal(malformedSnapshotPayload.title, "SERVICE INDISPONIBLE", "Un snapshot corrompu ne doit pas être assimilé à un 404");
+  await fs.writeFile(storedLatestPath, validLatestText, "utf8");
+
+  const leagueApiExpectations = [
+    { name: "Argent", criteria: { zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 }, goalsFor: 4, goalsAgainst: 0 },
+    { name: "Or", criteria: { zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 }, goalsFor: 2, goalsAgainst: 2 },
+    { name: "Platine", criteria: { zonageMinutes: 20, loadingSeconds: 135, unloadingSeconds: 50, scoreTargetPercent: 70 }, goalsFor: 1, goalsAgainst: 3 },
+  ];
+  for (const expected of leagueApiExpectations) {
+    const query = new URLSearchParams(Object.fromEntries(Object.entries(expected.criteria).map(([key, value]) => [key, String(value)])));
+    const leagueResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot?${query}`, {
+      headers: { "x-access-code": accessCode },
+    });
+    const leaguePayload = await leagueResponse.json();
+    assert.equal(leagueResponse.status, 200, `${expected.name}: ${JSON.stringify(leaguePayload)}`);
+    assert.deepEqual(leaguePayload.snapshot.performanceCriteria, expected.criteria, `Critères API ${expected.name}`);
+    assert.equal(leaguePayload.snapshot.operationalScore.goalsFor, expected.goalsFor, `Buts marqués API ${expected.name}`);
+    assert.equal(leaguePayload.snapshot.operationalScore.goalsAgainst, expected.goalsAgainst, `Buts encaissés API ${expected.name}`);
+    assertFiniteJson(leaguePayload.snapshot);
+  }
+
+  const platinumTimeRangePayload = await postTimeRange(port, agencyCode, accessCode, {
+    start: "13:00",
+    end: "22:30",
+    criteria: leagueApiExpectations[2].criteria,
+  });
+  assert.deepEqual(platinumTimeRangePayload.snapshot.performanceCriteria, leagueApiExpectations[2].criteria, "Ligue Platine persistée par la plage horaire");
+  assert.equal(platinumTimeRangePayload.snapshot.operationalScore.goalsFor, 1, "Score Platine après plage horaire");
+
+  // Simulate an older persisted snapshot: a no-query refresh must preserve
+  // the saved league instead of silently rebuilding with Argent defaults.
+  const staleSnapshot = JSON.parse(await fs.readFile(storedLatestPath, "utf8"));
+  staleSnapshot.kpiDictionaryVersion = 11;
+  delete staleSnapshot.hourlyPerformance;
+  await fs.writeFile(storedLatestPath, JSON.stringify(staleSnapshot, null, 2), "utf8");
+  const refreshedLatestResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot`, {
+    headers: { "x-access-code": accessCode },
+  });
+  const refreshedLatestPayload = await refreshedLatestResponse.json();
+  assert.equal(refreshedLatestResponse.status, 200, JSON.stringify(refreshedLatestPayload));
+  assert.deepEqual(refreshedLatestPayload.snapshot.performanceCriteria, leagueApiExpectations[2].criteria, "Un rafraîchissement sans query conserve la ligue active");
+  assert.equal(refreshedLatestPayload.snapshot.operationalScore.goalsFor, 1, "Le rafraîchissement sans query conserve le score Platine");
+  assertFiniteJson(refreshedLatestPayload.snapshot);
 
   const timeRangeResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/time-range`, {
     method: "POST",
@@ -124,14 +177,15 @@ try {
   });
   const timeRangePayload = await timeRangeResponse.json();
   assert.equal(timeRangeResponse.status, 200, JSON.stringify(timeRangePayload));
-  assert.equal(timeRangePayload.snapshot.summary.operations, 4595, "Opérations après changement de plage");
+  assert.equal(timeRangePayload.snapshot.summary.operations, 5498, "Opérations après changement de plage");
   assert.equal(timeRangePayload.snapshot.match.periodLabel, "13:00-22:30", "Plage active après changement");
   assert.equal(timeRangePayload.snapshot.match.timeRangeLabel, "13:00 - 22:30", "Libellé de plage affiché après changement");
-  assert.equal(timeRangePayload.snapshot.summary.possessionPercent, 50.2, "Possession conservée sur la plage active de référence");
-  assert.deepEqual(timeRangePayload.snapshot.summary.possessionPositions, { zonage: 663, reception: 1131, matched: 568 }, "Positions possession sur la plage active de référence");
+  assert.equal(timeRangePayload.snapshot.summary.possessionPercent, 55.7, "Possession conservée sur la plage active de référence");
+  assert.equal(timeRangePayload.snapshot.summary.passRate, 69.2, "Total des passes réussies repris automatiquement de la table Excel");
+  assert.deepEqual(timeRangePayload.snapshot.summary.possessionPositions, { zonage: 856, reception: 1432, matched: 797 }, "Positions possession sur la plage active de référence");
   assert.deepEqual(
     timeRangePayload.snapshot.hourlyPerformance.map((item) => item.label),
-    ["13h", "14h", "15h", "16h", "17h", "18h", "19h", "20h", "21h", "22h"],
+    ["13h", "14h", "16h", "17h", "18h", "19h", "20h", "21h", "22h"],
     "Graphique horaire borné par la plage active par défaut",
   );
   assert.equal(timeRangePayload.snapshot.compositionPeriods.first.label, "13:00 - 17:45", "Première mi-temps alignée sur la plage active");
@@ -147,9 +201,10 @@ try {
   });
   const narrowTimeRangePayload = await narrowTimeRangeResponse.json();
   assert.equal(narrowTimeRangeResponse.status, 200, JSON.stringify(narrowTimeRangePayload));
-  assert.equal(narrowTimeRangePayload.snapshot.summary.operations, 1185, "Opérations après réduction de la plage");
-  assert.equal(narrowTimeRangePayload.snapshot.summary.possessionPercent, 34.1, "Possession recalculée après réduction de la plage");
-  assert.deepEqual(narrowTimeRangePayload.snapshot.summary.possessionPositions, { zonage: 117, reception: 179, matched: 61 }, "Positions possession après réduction de la plage");
+  assert.equal(narrowTimeRangePayload.snapshot.summary.operations, 1509, "Opérations après réduction de la plage");
+  assert.equal(narrowTimeRangePayload.snapshot.summary.possessionPercent, 29.7, "Possession recalculée après réduction de la plage");
+  assert.equal(narrowTimeRangePayload.snapshot.summary.passRate, 59.4, "Total des passes réussies recalculé après réduction de la plage");
+  assert.deepEqual(narrowTimeRangePayload.snapshot.summary.possessionPositions, { zonage: 163, reception: 323, matched: 96 }, "Positions possession après réduction de la plage");
   assert.deepEqual(
     narrowTimeRangePayload.snapshot.hourlyPerformance.map((item) => item.label),
     ["16h", "17h", "18h"],
@@ -169,6 +224,36 @@ try {
   assert.equal(wideTimeRangePayload.snapshot.match.periodLabel, "08:00-22:30", "Nouvelle plage active après élargissement");
   assert.equal(wideTimeRangePayload.snapshot.compositionPeriods.first.label, "08:00 - 15:15", "Première mi-temps recalculée après élargissement");
   assert.equal(wideTimeRangePayload.snapshot.compositionPeriods.second.label, "15:15 - 22:30", "Deuxième mi-temps recalculée après élargissement");
+
+  const parallelRanges = [
+    { start: "13:00", end: "22:30", criteria: leagueApiExpectations[0].criteria },
+    { start: "16:00", end: "18:00", criteria: leagueApiExpectations[1].criteria },
+    { start: "14:00", end: "20:00", criteria: leagueApiExpectations[2].criteria },
+    { start: "16:00", end: "18:00", criteria: leagueApiExpectations[0].criteria },
+  ];
+  const parallelRangeResponses = await Promise.all(
+    parallelRanges.map((body) => postTimeRangeResponse(port, agencyCode, accessCode, body))
+  );
+  for (let index = 0; index < parallelRangeResponses.length; index += 1) {
+    const { response, payload } = parallelRangeResponses[index];
+    assert.equal(response.status, 200, `Écriture concurrente ${index + 1}: ${JSON.stringify(payload)}`);
+    assert.equal(payload.snapshot.match.periodLabel, `${parallelRanges[index].start}-${parallelRanges[index].end}`, `Plage concurrente ${index + 1}`);
+    assert.deepEqual(payload.snapshot.performanceCriteria, parallelRanges[index].criteria, `Critères concurrents ${index + 1}`);
+    assertFiniteJson(payload.snapshot);
+  }
+  const finalRangePayload = await postTimeRange(port, agencyCode, accessCode, {
+    start: "13:00",
+    end: "22:30",
+    criteria: leagueApiExpectations[0].criteria,
+  });
+  assert.deepEqual(finalRangePayload.snapshot.performanceCriteria, leagueApiExpectations[0].criteria, "La dernière écriture complète reste cohérente");
+  const finalSnapshotResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot`, {
+    headers: { "x-access-code": accessCode },
+  });
+  const finalSnapshotPayload = await finalSnapshotResponse.json();
+  assert.equal(finalSnapshotResponse.status, 200, JSON.stringify(finalSnapshotPayload));
+  assert.deepEqual(finalSnapshotPayload.snapshot.performanceCriteria, leagueApiExpectations[0].criteria, "Snapshot final après écritures concurrentes");
+  assertFiniteJson(finalSnapshotPayload.snapshot);
 
   const invalidTimeRangeResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/time-range`, {
     method: "POST",
@@ -296,6 +381,44 @@ async function safeText(response) {
     return await response.text();
   } catch {
     return "";
+  }
+}
+
+async function postTimeRangeResponse(targetPort, code, access, body) {
+  const response = await fetch(`http://localhost:${targetPort}/api/agencies/${code}/time-range`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-access-code": access,
+    },
+    body: JSON.stringify(body),
+  });
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = { message: await safeText(response) };
+  }
+  return { response, payload };
+}
+
+async function postTimeRange(targetPort, code, access, body) {
+  const { response, payload } = await postTimeRangeResponse(targetPort, code, access, body);
+  assert.equal(response.status, 200, JSON.stringify(payload));
+  return payload;
+}
+
+function assertFiniteJson(value, path = "$") {
+  if (typeof value === "number") {
+    assert.equal(Number.isFinite(value), true, `Valeur non finie dans ${path}`);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertFiniteJson(item, `${path}[${index}]`));
+    return;
+  }
+  if (value && typeof value === "object") {
+    Object.entries(value).forEach(([key, item]) => assertFiniteJson(item, `${path}.${key}`));
   }
 }
 
