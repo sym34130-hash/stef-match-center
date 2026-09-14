@@ -17292,6 +17292,43 @@ body.tv-screen-active .app-shell.league-platine {
 .coach-indicator-card.is-watch b { color: #ffe08a; }
 .coach-indicator-card.is-missing b { color: #d9e9ff; }
 
+.coach-context-panel {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid rgba(137, 198, 255, .25);
+  border-radius: 8px;
+  background: rgba(6, 22, 45, .46);
+}
+
+.coach-context-mark {
+  color: #72e0ae;
+  font-size: 18px;
+  line-height: 1;
+  text-shadow: 0 0 14px rgba(114, 224, 174, .7);
+}
+
+.coach-context-list {
+  display: grid;
+  gap: 0;
+}
+
+.coach-context-list div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid rgba(217, 233, 255, .14);
+}
+
+.coach-context-list div:last-child { border-bottom: 0; }
+.coach-context-list span { color: #cbe5ff; font-size: 12px; }
+.coach-context-list strong { color: #ffffff; font-size: 14px; text-align: right; }
+.coach-context-note { margin: 0; color: #cbe5ff; font-size: 13px; line-height: 1.35; }
+
 .coach-focus-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -17391,8 +17428,10 @@ body.tv-screen-active .app-shell.league-platine {
   .coach-actions-section,
   .coach-players-section,
   .coach-plan-section,
+  .coach-context-panel,
   .coach-indicators-panel,
   .coach-panel { padding: 16px; }
+  .coach-context-list strong { max-width: 55%; }
   .coach-section-heading > small,
   .coach-panel-heading > small { text-align: left; }
 }

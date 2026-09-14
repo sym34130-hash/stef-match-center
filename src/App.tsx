@@ -1971,7 +1971,7 @@ function Coach({
   const [coachDraft, setCoachDraft] = useState<CauseriePlan>(() => buildEmptyCauseriePlan());
   const [savingCoachPlan, setSavingCoachPlan] = useState(false);
   const [coachBoardFeedback, setCoachBoardFeedback] = useState<CauserieToast>(null);
-  const actions = coachActions(snapshot);
+  const actions = coachDecisionActions(snapshot);
   const late = delayedPositions(snapshot);
   const targetPercent = snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent;
   const footballScore = buildFootballScore(snapshot, targetPercent);
@@ -1983,14 +1983,8 @@ function Coach({
     ...snapshot.coach.polyvalents,
     ...snapshot.coach.specialists,
   ]).slice(0, 4);
-  const indicators = [
-    { label: "% Duels gagnés", value: snapshot.summary.duelRate, formula: "Duels gagnés ÷ duels joués", tone: "blue" },
-    { label: "% Chargements cadrés", value: snapshot.loadingQuality?.targetedPercent ?? null, formula: "Chargements cadrés ÷ chargements contrôlés", tone: "green" },
-    { label: "% Déchargements dans la cible", value: snapshot.unloadingQuality?.targetedPercent ?? null, formula: "Voyages dans la cible ÷ voyages contrôlés", tone: "sky" },
-    { label: "% Possession ZODY", value: snapshot.summary.possessionPercent, formula: "Réceptions associées à un zonage ÷ réceptions uniques", tone: "violet" },
-  ] as const;
   const decisionTone = !footballScore.available ? "missing" : footballScore.goalsFor > footballScore.goalsAgainst ? "safe" : "watch";
-  const decisionLabel = !footballScore.available ? "Données à compléter" : footballScore.goalsFor > footballScore.goalsAgainst ? "Collectif sous contrôle" : "Reprise prioritaire";
+  const decisionLabel = !footballScore.available ? "Données à compléter" : footballScore.goalsFor > footballScore.goalsAgainst ? "Collectif sous contrôle" : "Point d'attention prioritaire";
   const primaryAction = actions[0];
   const activeCoachPlan = coachBoardMode === "edit" ? coachDraft : coachPlan;
 
@@ -2142,25 +2136,18 @@ function Coach({
             <p className="coach-motivation">{teamMotivationMessage(footballScore)}</p>
           </article>
 
-          <section className="coach-indicators-panel" aria-labelledby="coach-indicators-title">
+          <section className="coach-context-panel" aria-labelledby="coach-context-title">
             <div className="coach-panel-heading">
-              <div><span>Lecture rapide</span><h3 id="coach-indicators-title">Les 4 indicateurs à piloter</h3></div>
-              <small>Seuil de la ligue : {formatNumber(targetPercent)}%</small>
+              <div><span>Cadre de décision</span><h3 id="coach-context-title">Les repères du jour</h3></div>
+              <span className="coach-context-mark" aria-hidden="true">●</span>
             </div>
-            <div className="coach-indicators-grid">
-              {indicators.map((indicator) => {
-                const available = Number.isFinite(indicator.value);
-                const reached = available && (indicator.value as number) >= targetPercent;
-                return (
-                  <article className={`coach-indicator-card ${indicator.tone} ${!available ? "is-missing" : reached ? "is-reached" : "is-watch"}`} key={indicator.label}>
-                    <span>{indicator.label}</span>
-                    <strong>{formatPercent(indicator.value)}</strong>
-                    <small>{indicator.formula}</small>
-                    <b>{!available ? "À compléter" : reached ? "Objectif atteint" : "Sous l'objectif"}</b>
-                  </article>
-                );
-              })}
+            <div className="coach-context-list">
+              <div><span>Plage active</span><strong>{snapshot.match.timeRangeLabel}</strong></div>
+              <div><span>Activité suivie</span><strong>{formatNumber(snapshot.summary.operations)} opérations</strong></div>
+              <div><span>Référence</span><strong>{leagueConfig.label} · {formatNumber(targetPercent)}%</strong></div>
+              <div><span>Source</span><strong>Import Excel validé</strong></div>
             </div>
+            <p className="coach-context-note">La feuille de match détaille les indicateurs. Ici, on se concentre sur la décision et la transmission à l'équipe.</p>
           </section>
         </section>
 
@@ -2185,7 +2172,7 @@ function Coach({
           <article className="coach-panel coach-risk-panel">
             <div className="coach-panel-heading"><div><span>Contrôle terrain</span><h3>Ce qui demande une action</h3></div><Target size={21} /></div>
             <div className="coach-risk-list">
-              <div className={late > 0 ? "is-warning" : "is-safe"}><strong>{formatNumber(late)}</strong><span>duels à reprendre</span><small>{late > 0 ? "Prioriser les positions hors délai." : "Aucun duel ouvert détecté."}</small></div>
+              <div className={late > 0 ? "is-warning" : "is-safe"}><strong>{formatNumber(late)}</strong><span>positions hors délai</span><small>{late > 0 ? "Prioriser les positions concernées." : "Aucun écart de délai détecté."}</small></div>
               <div className={snapshot.validation.warnings.length > 0 ? "is-warning" : "is-safe"}><strong>{snapshot.validation.warnings.length}</strong><span>alertes import</span><small>{snapshot.validation.warnings[0] ?? "Aucune anomalie signalée par le dernier import."}</small></div>
             </div>
           </article>
@@ -2236,7 +2223,7 @@ function Coach({
 
           {coachBoardMode === "edit" ? (
             <div className="coach-edit-fields">
-              <label>Tactique du jour<textarea value={activeCoachPlan.coach.tactic} onChange={(event) => updateCoachDraft("tactic", event.target.value)} placeholder="Ex. Reprendre les duels ouverts sur le prochain voyage." rows={2} /></label>
+              <label>Tactique du jour<textarea value={activeCoachPlan.coach.tactic} onChange={(event) => updateCoachDraft("tactic", event.target.value)} placeholder="Ex. Réduire les écarts sur les positions ouvertes." rows={2} /></label>
               <label>Priorité<textarea value={activeCoachPlan.coach.priority} onChange={(event) => updateCoachDraft("priority", event.target.value)} placeholder="Ex. Sécuriser les positions non closes." rows={2} /></label>
               <label>Arbitrage<textarea value={activeCoachPlan.coach.arbitration} onChange={(event) => updateCoachDraft("arbitration", event.target.value)} placeholder="Ex. Renforcer la réception si le retard augmente." rows={2} /></label>
               <label>Prochaine revue<input value={activeCoachPlan.coach.review} onChange={(event) => updateCoachDraft("review", event.target.value)} placeholder="Ex. 18:30" /></label>
@@ -3553,42 +3540,6 @@ function AlertCard({ alert }: { alert: Alert }) {
   );
 }
 
-type TacticalItem = {
-  title: string;
-  detail: string;
-};
-
-function TacticalColumn({ title, items, tone }: { title: string; items: TacticalItem[]; tone: "safe" | "watch" | "action" }) {
-  return (
-    <div className={`tactical-column ${tone}`}>
-      <span>{title}</span>
-      {items.slice(0, 3).map((item) => (
-        <article key={`${title}-${item.title}`}>
-          <strong>{item.title}</strong>
-          <p>{item.detail}</p>
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function PlayerList({ players, onPlayer, detail = "operations" }: { players: Player[]; onPlayer: (player: Player) => void; detail?: "operations" | "polyvalence" | "dominant" }) {
-  if (players.length === 0) return <p className="muted">Aucun joueur dans cette catégorie sur le dernier import.</p>;
-  return (
-    <div className="player-list">
-      {players.slice(0, 6).map((player) => (
-        <button key={player.name} type="button" onClick={() => onPlayer(player)}>
-          <span>{initials(player.name)}</span>
-          <strong>{player.name}</strong>
-          <small>
-            {detail === "polyvalence" ? `${player.polyvalence}% polyvalence` : detail === "dominant" ? `${player.dominantShare}% poste dominant` : `${player.operations} opérations`}
-          </small>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function kickoffState(snapshot: Snapshot): {
   tone: "ready" | "live" | "finished";
   title: string;
@@ -4171,116 +4122,22 @@ function playerLockerMetric(player: Player, snapshot: Snapshot) {
   return { label: "Activité totale", value: formatNumber(player.operations), detail: "opérations" };
 }
 
-function coachStrengths(snapshot: Snapshot): TacticalItem[] {
-  const items: TacticalItem[] = [];
-  const late = delayedPositions(snapshot);
-  const categoryLeaders = buildAwardItems(snapshot);
-
-  if (snapshot.summary.duelWon > late) {
-    items.push({
-      title: "Duels gagnés majoritaires",
-      detail: `${formatNumber(snapshot.summary.duelWon)} duels gagnés sur ${formatNumber(snapshot.summary.duelTotal)} dans le score Excel filtré.`,
-    });
-  }
-
-  if (categoryLeaders.length > 0) {
-    items.push({
-      title: "Référents par ligne",
-      detail: categoryLeaders
-        .map((award) => `${award.podiumLabel} : ${award.highlight.name}`)
-        .join("\n"),
-    });
-  }
-
-  if (snapshot.coach.polyvalents.length > 0) {
-    items.push({
-      title: "Polyvalence disponible",
-      detail: `${snapshot.coach.polyvalents.length} profil(s) couvrent plusieurs lignes opérationnelles.`,
-    });
-  }
-
-  if (items.length === 0) {
-    items.push({
-      title: "Aucun point fort isolé",
-      detail: "Le dernier import oriente surtout la lecture vers les ajustements à traiter.",
-    });
-  }
-
-  return items.slice(0, 3);
-}
-
-function coachProgressPoints(snapshot: Snapshot): TacticalItem[] {
-  const items: TacticalItem[] = [];
-  const late = delayedPositions(snapshot);
-  const risk = snapshot.coach.travelRisks[0];
-  const weakRole = snapshot.summary.roleDistribution.reduce((min, current) => (current.percent < min.percent ? current : min), snapshot.summary.roleDistribution[0]);
-
-  if (late > 0) {
-    items.push({
-      title: "Duels à reprendre",
-      detail: `${formatNumber(late)} duel(s) hors délai cible dans le score Excel filtré.`,
-    });
-  }
-
-  if (risk) {
-    items.push({
-      title: travelRiskTitle(risk.travelCode),
-      detail: travelRiskDetail(risk.travelCode, risk.delayedPositions),
-    });
-  }
-
-  if (weakRole) {
-    items.push({
-      title: `Équilibre ${displayRole(weakRole.role)}`,
-      detail: `${Math.round(weakRole.percent)}% des joueurs retenus sur cette ligne.`,
-    });
-  }
-
-  if (snapshot.validation.warnings.length > 0) {
-    items.push({
-      title: "Contrôle import",
-      detail: snapshot.validation.warnings[0],
-    });
-  }
-
-  if (items.length === 0) {
-    items.push({
-      title: "Aucun point critique",
-      detail: "Pas d'écart majeur détecté dans le dernier import.",
-    });
-  }
-
-  return items.slice(0, 3);
-}
-
-function coachMessage(snapshot: Snapshot, footballScore = buildFootballScore(snapshot, snapshot.performanceCriteria?.scoreTargetPercent ?? 50)) {
-  const late = delayedPositions(snapshot);
-  const scoreUnderControl = footballScore.available && footballScore.goalsFor > footballScore.goalsAgainst;
-  if (late > 0 && scoreUnderControl) {
-    return "Match lisible et score sous contrôle : le prochain ajustement porte sur les duels ouverts.";
-  }
-  if (late > 0) {
-    return "Priorité vestiaire : reprendre les duels hors délai avant le prochain point terrain.";
-  }
-  return "Le collectif tient le plan de jeu : maintenir le rythme au prochain import.";
-}
-
-function coachActions(snapshot: Snapshot) {
+function coachDecisionActions(snapshot: Snapshot) {
   const late = delayedPositions(snapshot);
   const risk = snapshot.coach.travelRisks[0];
   const weakRole = snapshot.summary.roleDistribution.reduce((min, current) => (current.percent < min.percent ? current : min), snapshot.summary.roleDistribution[0]);
   return [
     {
       kicker: "Priorité terrain",
-      title: late > 0 ? "Duels à reprendre" : "Match maîtrisé",
-      detail: late > 0 ? `${late} duel(s) hors délai cible dans le score Excel filtré.` : "Aucun duel ouvert dans le dernier import.",
+      title: late > 0 ? "Positions à sécuriser" : "Match maîtrisé",
+      detail: late > 0 ? `${late} position(s) hors délai cible dans le score Excel filtré.` : "Aucun écart de délai détecté dans le dernier import.",
       next: late > 0 ? "Action : vérifier les positions concernées avant le prochain brief." : "Action : maintenir le contrôle au prochain import.",
       level: late > 0 ? "danger" : "safe",
     },
     {
       kicker: "Zone à surveiller",
       title: risk ? travelRiskTitle(risk.travelCode) : "Aucun voyage critique",
-      detail: risk ? travelRiskDetail(risk.travelCode, risk.delayedPositions) : "Pas de concentration de retard détectée.",
+      detail: risk ? `${formatNumber(risk.delayedPositions)} position(s) à revoir sur cette zone.` : "Pas de concentration de retard détectée.",
       next: risk ? travelRiskAction(risk.travelCode) : "Action : conserver le suivi standard.",
       level: risk ? "watch" : "safe",
     },
@@ -4296,13 +4153,6 @@ function coachActions(snapshot: Snapshot) {
 
 function travelRiskTitle(travelCode: string) {
   return travelCode === "Non renseigné" ? "Code voyage manquant" : `Voyage ${travelCode}`;
-}
-
-function travelRiskDetail(travelCode: string, delayedPositions: number) {
-  if (travelCode === "Non renseigné") {
-    return `${formatNumber(delayedPositions)} duel(s) sans code voyage identifiable dans l'import.`;
-  }
-  return `${formatNumber(delayedPositions)} duel(s) à revoir sur le voyage ${travelCode}.`;
 }
 
 function travelRiskAction(travelCode: string) {

@@ -67,8 +67,9 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
     }
     if (screen.name === "04-coach") {
       await expect(page.getByRole("heading", { name: "Plan d'action du jour", exact: true })).toBeVisible();
-      await expect(page.getByRole("heading", { name: "Les 4 indicateurs à piloter", exact: true })).toBeVisible();
-      await expect(page.locator(".coach-indicator-card")).toHaveCount(4);
+      await expect(page.getByRole("heading", { name: "Les repères du jour", exact: true })).toBeVisible();
+      await expect(page.locator(".coach-context-list div")).toHaveCount(4);
+      await expect(page.getByText("La feuille de match détaille les indicateurs.", { exact: false })).toBeVisible();
       await expect(page.locator(".coach-actions-grid .coach-action-card")).toHaveCount(3);
       await expect(page.locator(".coach-workforce-metrics")).toBeVisible();
       await expect(page.getByText("Ligue active", { exact: true })).toBeVisible();
@@ -77,15 +78,14 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".coach-written-plan").getByText("À planifier", { exact: true })).toHaveCount(1);
       const coachLayout = await page.evaluate(() => {
         const pageElement = document.querySelector<HTMLElement>(".coach-decision-page");
-        const indicators = Array.from(document.querySelectorAll<HTMLElement>(".coach-indicator-card"));
-        const heights = indicators.map((item) => Math.round(item.getBoundingClientRect().height));
+        const contextRows = Array.from(document.querySelectorAll<HTMLElement>(".coach-context-list div"));
         return {
           noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
-          sameIndicatorHeight: heights.length === 4 && heights.every((height) => height === heights[0]),
+          contextRowsVisible: contextRows.length === 4 && contextRows.every((row) => row.getBoundingClientRect().height > 0),
           sceneContained: Boolean(pageElement && pageElement.scrollWidth <= pageElement.clientWidth + 1),
         };
       });
-      expect(coachLayout).toEqual({ noHorizontalOverflow: true, sameIndicatorHeight: true, sceneContained: true });
+      expect(coachLayout).toEqual({ noHorizontalOverflow: true, contextRowsVisible: true, sceneContained: true });
     }
     if (screen.name === "02-feuille-match") {
       await expect(page.locator(".match-page.is-threshold-reached")).toHaveCount(1);
