@@ -232,6 +232,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const snapshotRequestRef = useRef(0);
+  const backgroundRefreshRef = useRef(0);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("stef-match-session");
@@ -267,6 +268,40 @@ export default function App() {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     return () => document.body.classList.remove("tv-screen-active");
   }, [screen]);
+
+  // An agency import is shared by all screens, but each browser keeps its
+  // current snapshot in memory. Refresh visible screens so a second display
+  // does not remain on the previous import indefinitely.
+  useEffect(() => {
+    if (!session || screen === "import") return;
+    let disposed = false;
+
+    const syncSharedSnapshot = async () => {
+      const requestVersion = snapshotRequestRef.current;
+      const refreshId = ++backgroundRefreshRef.current;
+      try {
+        const nextSnapshot = await fetchSnapshot(session, readLeagueConfig(session.agency.code, activeLeague));
+        if (disposed || refreshId !== backgroundRefreshRef.current || requestVersion !== snapshotRequestRef.current) return;
+        setSnapshot((current) => snapshotsHaveSameData(current, nextSnapshot) ? current : nextSnapshot);
+      } catch {
+        // A transient refresh failure must not blank a valid operational view.
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void syncSharedSnapshot();
+    };
+
+    void syncSharedSnapshot();
+    const intervalId = window.setInterval(() => void syncSharedSnapshot(), 15000);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      disposed = true;
+      backgroundRefreshRef.current += 1;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [session?.agency.code, session?.accessCode, activeLeague, screen]);
 
   useEffect(() => {
     setActiveLeague(session ? readActiveLeague(session.agency.code) : "argent");
@@ -527,6 +562,15 @@ async function fetchSnapshot(session: Session, criteria?: PerformanceCriteria): 
   const payload = await response.json();
   if (!response.ok) throw new ApiError(response.status, payload.message ?? "Le match n'a pas pu être chargé.");
   return payload.snapshot;
+}
+
+function snapshotsHaveSameData(left: Snapshot | null, right: Snapshot): boolean {
+  if (!left) return false;
+  const comparable = (snapshot: Snapshot) => {
+    const { importedAt: _importedAt, ...data } = snapshot;
+    return data;
+  };
+  return JSON.stringify(comparable(left)) === JSON.stringify(comparable(right));
 }
 
 async function updateTimeRange(session: Session, start: string, end: string, criteria?: PerformanceCriteria): Promise<Snapshot> {
