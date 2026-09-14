@@ -292,7 +292,6 @@ export default function App() {
       if (document.visibilityState === "visible") void syncSharedSnapshot();
     };
 
-    void syncSharedSnapshot();
     const intervalId = window.setInterval(() => void syncSharedSnapshot(), 15000);
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
