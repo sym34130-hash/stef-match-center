@@ -182,15 +182,28 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       const celebrationLayout = await page.evaluate(() => {
         const ceremony = document.querySelector<HTMLElement>(".match-ceremony");
         const kpis = Array.from(document.querySelectorAll<HTMLElement>(".match-indicator-card"));
+        const score = document.querySelector<HTMLElement>(".match-page.is-celebration-mode .football-score-panel");
+        const kpiBubble = document.querySelector<HTMLElement>(".match-page.is-celebration-mode .match-score-bubble");
         return {
           ceremonyMinHeight: ceremony ? getComputedStyle(ceremony).minHeight : "",
           kpiVisible: kpis.every((kpi) => kpi.getBoundingClientRect().height > 0),
           maxKpiHeight: Math.max(...kpis.map((kpi) => kpi.getBoundingClientRect().height)),
+          scoreWidth: score ? Math.round(score.getBoundingClientRect().width) : 0,
+          kpiBorderAnimation: kpiBubble ? getComputedStyle(kpiBubble).animationName : "",
         };
       });
       expect(celebrationLayout.ceremonyMinHeight).toBe("auto");
       expect(celebrationLayout.kpiVisible).toBe(true);
       expect(celebrationLayout.maxKpiHeight).toBeLessThanOrEqual(352);
+      if (screen.name === "desktop" || screen.name === "tablet") {
+        expect(celebrationLayout.scoreWidth).toBeGreaterThanOrEqual(300);
+      }
+      const reducedMotion = await page.evaluate(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+      if (reducedMotion) {
+        expect(celebrationLayout.kpiBorderAnimation).toBe("none");
+      } else {
+        expect(celebrationLayout.kpiBorderAnimation).toContain("match-kpi-border-pulse");
+      }
       await page.getByRole("button", { name: "Sortir du mode Célébration", exact: true }).click();
     }
     if (screen.name === "03-composition") {
