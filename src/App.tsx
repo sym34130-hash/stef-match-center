@@ -539,7 +539,7 @@ export default function App() {
               />
             )}
             {screen === "coach" && snapshot && (
-              <Coach snapshot={snapshot} session={session} onPlayer={openPlayer} onComposition={() => setScreen("composition")} />
+              <Coach snapshot={snapshot} session={session} leagueConfig={activeLeagueConfig} onPlayer={openPlayer} onComposition={() => setScreen("composition")} />
             )}
             {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
             {screen === "guide" && <GuideView snapshot={snapshot} leagueConfigs={leagueConfigs} onNavigate={setScreen} />}
@@ -1955,11 +1955,13 @@ function Composition({ snapshot, session, onPlayer }: { snapshot: Snapshot; sess
 function Coach({
   snapshot,
   session,
+  leagueConfig,
   onPlayer,
   onComposition,
 }: {
   snapshot: Snapshot;
   session: Session;
+  leagueConfig: LeagueConfig;
   onPlayer: (player: Player) => void;
   onComposition: () => void;
 }) {
@@ -1969,21 +1971,27 @@ function Coach({
   const [coachDraft, setCoachDraft] = useState<CauseriePlan>(() => buildEmptyCauseriePlan());
   const [savingCoachPlan, setSavingCoachPlan] = useState(false);
   const [coachBoardFeedback, setCoachBoardFeedback] = useState<CauserieToast>(null);
-  const lockerPlayers = uniquePlayers([
-    ...snapshot.coach.playersInForm.slice(0, 5),
-    ...snapshot.coach.polyvalents.slice(0, 3),
-    ...snapshot.coach.specialists.slice(0, 3),
-  ]).slice(0, 8);
-  const [selectedName, setSelectedName] = useState(lockerPlayers[0]?.name ?? snapshot.players[0]?.name ?? "");
-  const selectedPlayer = snapshot.players.find((player) => player.name === selectedName) ?? lockerPlayers[0] ?? snapshot.players[0] ?? null;
   const actions = coachActions(snapshot);
-  const strengths = coachStrengths(snapshot);
-  const progress = coachProgressPoints(snapshot);
   const late = delayedPositions(snapshot);
-  const mainRisk = snapshot.coach.travelRisks[0];
-  const footballScore = buildFootballScore(snapshot, snapshot.performanceCriteria?.scoreTargetPercent ?? 50);
-  const thresholdReached = footballScore.available && footballScore.goalsFor > footballScore.goalsAgainst;
-  const jerseyNumbers = buildJerseyNumbers(snapshot.players);
+  const targetPercent = snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent;
+  const footballScore = buildFootballScore(snapshot, targetPercent);
+  const matchKpi = loadMatchKpiCopy(snapshot);
+  const yellowCards = snapshot.yellowCards ?? [];
+  const focusPlayers = uniquePlayers([
+    ...snapshot.coach.progressPlayers,
+    ...snapshot.coach.playersInForm,
+    ...snapshot.coach.polyvalents,
+    ...snapshot.coach.specialists,
+  ]).slice(0, 4);
+  const indicators = [
+    { label: "% Duels gagnés", value: snapshot.summary.duelRate, formula: "Duels gagnés ÷ duels joués", tone: "blue" },
+    { label: "% Chargements cadrés", value: snapshot.loadingQuality?.targetedPercent ?? null, formula: "Chargements cadrés ÷ chargements contrôlés", tone: "green" },
+    { label: "% Déchargements dans la cible", value: snapshot.unloadingQuality?.targetedPercent ?? null, formula: "Voyages dans la cible ÷ voyages contrôlés", tone: "sky" },
+    { label: "% Possession ZODY", value: snapshot.summary.possessionPercent, formula: "Réceptions associées à un zonage ÷ réceptions uniques", tone: "violet" },
+  ] as const;
+  const decisionTone = !footballScore.available ? "missing" : footballScore.goalsFor > footballScore.goalsAgainst ? "safe" : "watch";
+  const decisionLabel = !footballScore.available ? "Données à compléter" : footballScore.goalsFor > footballScore.goalsAgainst ? "Collectif sous contrôle" : "Reprise prioritaire";
+  const primaryAction = actions[0];
   const activeCoachPlan = coachBoardMode === "edit" ? coachDraft : coachPlan;
 
   useEffect(() => {
@@ -2087,284 +2095,162 @@ function Coach({
   }
 
   return (
-    <section className={coachMode ? "coach-page coach-room is-coach-mode" : "coach-page coach-room"}>
-      <header className="coach-room-header">
+    <section className={coachMode ? "coach-page coach-room coach-decision-page is-coach-mode" : "coach-page coach-room coach-decision-page"}>
+      <header className="coach-decision-header">
         <div>
           <p className="eyebrow">04 - Coach</p>
-          <h2>Vestiaire & analyse du match</h2>
-          <span>{snapshot.agency.name} - Match du {formatDate(snapshot.match.lastOperation ?? snapshot.match.date)} - {snapshot.match.timeRangeLabel}</span>
+          <h2>Plan d'action du jour</h2>
+          <p>{snapshot.agency.name} · Match du {formatDate(snapshot.match.lastOperation ?? snapshot.match.date)} · {snapshot.match.timeRangeLabel}</p>
           <ActivePeriodBadge snapshot={snapshot} />
         </div>
-        <div className="coach-room-header-actions">
+        <div className="coach-decision-header-actions">
+          <div className={`coach-league-badge ${leagueConfig.tone}`}>
+            <LeagueIcon leagueId={leagueConfig.id} />
+            <span>Ligue active</span>
+            <strong>{leagueConfig.label}</strong>
+          </div>
           <button className="secondary-on-dark" type="button" onClick={() => setCoachMode((current) => !current)}>
             {coachMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            {coachMode ? "Sortir du Mode Coach" : "Mode Coach"}
+            {coachMode ? "Quitter le mode plein écran" : "Mode briefing"}
           </button>
+          <button className="secondary-on-dark" type="button" onClick={onComposition}><Shirt size={16} /> Composition</button>
         </div>
       </header>
 
-      <div className="locker-room-scene">
-        <div className="locker-room-wall" aria-hidden="true" />
-        <div className="locker-room-lights" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
-        <div className="locker-room-led left" aria-hidden="true">STEF MATCH CENTER</div>
-        <div className="locker-room-led right" aria-hidden="true">VESTIAIRE COACH</div>
-
-        <section className="locker-zone" aria-label="Casiers joueurs">
-          <div className="locker-zone-heading">
-            <span>Casiers</span>
-            <strong>Équipe à regarder</strong>
-            <p>Profils utiles au point Coach, limités aux joueurs significatifs du dernier import.</p>
-          </div>
-          <div className="locker-row">
-            {lockerPlayers.map((player, index) => {
-              const isSelected = selectedPlayer?.name === player.name;
-              const metric = playerLockerMetric(player, snapshot);
-              const jersey = formatJerseyNumber(jerseyNumbers.get(player.name) ?? index + 1);
-              return (
-                <button
-                  className={`locker-card ${roleClass(player.role)} ${isSelected ? "is-selected" : ""}`}
-                  key={player.name}
-                  type="button"
-                  onFocus={() => setSelectedName(player.name)}
-                  onMouseEnter={() => setSelectedName(player.name)}
-                  onClick={() => onPlayer(player)}
-                  title={`${player.name} - ${displayRole(player.role)} - ${metric.label} : ${metric.value} ${metric.detail}`}
-                >
-                  <span className="locker-number">{jersey}</span>
-                  <span className="locker-hanger" aria-hidden="true" />
-                  <span className="locker-shirt" aria-hidden="true">
-                    <b>{jersey}</b>
-                    <em>STEF</em>
-                  </span>
-                  <strong>{player.name}</strong>
-                  <small>{displayRole(player.role)} - {operationLabel(roleCode(player.role))}</small>
-                  <span className="locker-metric">
-                    <small>Indicateur clé</small>
-                    <strong>{metric.label}</strong>
-                    <b>{metric.value}</b>
-                    <em>{metric.detail}</em>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        <div className="locker-room-core">
-          <button className="analysis-screen" type="button" onClick={() => setCoachMode(true)} aria-label="Agrandir l'analyse du match">
-            <span className="screen-brand">ANALYSE DU MATCH</span>
-            <div className="screen-main-score">
-              <strong>{snapshot.match.score === null ? "—" : snapshot.match.score}</strong>
-              {snapshot.match.score !== null && <small>%</small>}
+      <main className="coach-decision-scene">
+        <section className="coach-command-grid">
+          <article className={`coach-command-card ${decisionTone}`}>
+            <div className="coach-command-heading">
+              <span>Décision du jour</span>
+              <strong>{decisionLabel}</strong>
             </div>
-            <p>{snapshot.summary.duelWon}/{snapshot.summary.duelTotal} duels gagnés - {formatPercent(snapshot.summary.duelRate)}</p>
-            <div className="screen-facts">
+            <div className="coach-score-context">
               <div>
-                <span>Activité</span>
-                <b>{formatNumber(snapshot.summary.operations)}</b>
-                <small>opérations filtrées</small>
-              </div>
-              <div className={late > 0 ? "is-warning" : "is-safe"}>
-                <span>À travailler</span>
-                <b>{formatNumber(late)}</b>
-                <small>duels ouverts</small>
+                <small>Score opérationnel</small>
+                <b>{footballScore.available ? `${footballScore.goalsFor} - ${footballScore.goalsAgainst}` : "— - —"}</b>
               </div>
               <div>
-                <span>Équipe</span>
-                <b>{snapshot.summary.players}</b>
-                <small>joueurs actifs</small>
+                <small>Objectif ligue</small>
+                <b>{formatNumber(targetPercent)}%</b>
               </div>
             </div>
-            <div className="screen-role-bars" aria-label="Répartition terrain">
-              {snapshot.summary.roleDistribution.map((role) => (
-                <span key={role.role} style={{ "--bar-size": `${Math.max(6, role.percent)}%` } as CSSProperties}>
-                  <i className={roleClass(role.role)} aria-hidden="true" />
-                  <b>{operationLabel(roleCode(role.role))} <small>{Math.round(role.percent)}%</small></b>
-                </span>
-              ))}
+            <div className="coach-command-action">
+              <span>Priorité immédiate</span>
+              <strong>{primaryAction.title}</strong>
+              <p>{primaryAction.next}</p>
             </div>
-            <div className="screen-insight-strip">
-              <span>Lecture express</span>
-              <strong>{thresholdReached ? "Score sous contrôle" : "Reprise prioritaire"}</strong>
-              <p>{coachMessage(snapshot, footballScore)}</p>
-            </div>
-          </button>
+            <p className="coach-motivation">{teamMotivationMessage(footballScore)}</p>
+          </article>
 
-          <section className="tactical-board" aria-label="Tableau tactique du coach">
-            <div className="board-header">
-              <span>Tableau du coach</span>
-              <strong>Que fait-on maintenant ?</strong>
+          <section className="coach-indicators-panel" aria-labelledby="coach-indicators-title">
+            <div className="coach-panel-heading">
+              <div><span>Lecture rapide</span><h3 id="coach-indicators-title">Les 4 indicateurs à piloter</h3></div>
+              <small>Seuil de la ligue : {formatNumber(targetPercent)}%</small>
             </div>
-            <div className="board-columns">
-              <TacticalColumn title="Points forts" items={strengths} tone="safe" />
-              <TacticalColumn title="À travailler" items={progress} tone="watch" />
-              <TacticalColumn title="Ajustements" items={actions.map((action) => ({ title: action.title, detail: action.next }))} tone="action" />
-            </div>
-            <div className={coachBoardMode === "edit" ? "coach-writing-panel is-editing" : "coach-writing-panel"}>
-              <div className="coach-writing-head">
-                <div>
-                  <span>Plan d'action terrain</span>
-                  <strong>À écrire pour l'équipe</strong>
-                </div>
-                {coachBoardMode === "view" ? (
-                  <button className="secondary-button compact" type="button" onClick={startCoachBoardEdit}>
-                    <Edit3 size={15} />
-                    Écrire
-                  </button>
-                ) : (
-                  <div className="coach-writing-actions">
-                    <button className="secondary-button compact" type="button" onClick={cancelCoachBoardEdit} disabled={savingCoachPlan}>
-                      <XCircle size={15} />
-                      Annuler
-                    </button>
-                    <button className="primary-button compact" type="button" onClick={saveCoachBoard} disabled={savingCoachPlan}>
-                      <Save size={15} />
-                      {savingCoachPlan ? "Enregistrement..." : "Enregistrer"}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {coachBoardFeedback && (
-                <div className={`coach-board-feedback ${coachBoardFeedback.tone}`}>
-                  <strong>{coachBoardFeedback.title}</strong>
-                  <span>{coachBoardFeedback.detail}</span>
-                </div>
-              )}
-
-              {coachBoardMode === "edit" ? (
-                <div className="coach-edit-fields">
-                  <label>
-                    Tactique du jour
-                    <textarea
-                      value={activeCoachPlan.coach.tactic}
-                      onChange={(event) => updateCoachDraft("tactic", event.target.value)}
-                      placeholder="Ex. Reprendre les duels ouverts sur le premier voyage à risque."
-                      rows={2}
-                    />
-                  </label>
-                  <label>
-                    Priorité
-                    <textarea
-                      value={activeCoachPlan.coach.priority}
-                      onChange={(event) => updateCoachDraft("priority", event.target.value)}
-                      placeholder="Ex. Sécuriser les positions non closes avant la prochaine revue."
-                      rows={2}
-                    />
-                  </label>
-                  <label>
-                    Arbitrage
-                    <textarea
-                      value={activeCoachPlan.coach.arbitration}
-                      onChange={(event) => updateCoachDraft("arbitration", event.target.value)}
-                      placeholder="Ex. Renfort temporaire sur la réception si le retard augmente."
-                      rows={2}
-                    />
-                  </label>
-                  <label>
-                    Prochaine revue
-                    <input
-                      value={activeCoachPlan.coach.review}
-                      onChange={(event) => updateCoachDraft("review", event.target.value)}
-                      placeholder="Ex. 18:30"
-                    />
-                  </label>
-                </div>
-              ) : (
-                <div className="coach-written-plan">
-                  <article>
-                    <span>Tactique</span>
-                    <p>{activeCoachPlan.coach.tactic || "À écrire"}</p>
+            <div className="coach-indicators-grid">
+              {indicators.map((indicator) => {
+                const available = Number.isFinite(indicator.value);
+                const reached = available && (indicator.value as number) >= targetPercent;
+                return (
+                  <article className={`coach-indicator-card ${indicator.tone} ${!available ? "is-missing" : reached ? "is-reached" : "is-watch"}`} key={indicator.label}>
+                    <span>{indicator.label}</span>
+                    <strong>{formatPercent(indicator.value)}</strong>
+                    <small>{indicator.formula}</small>
+                    <b>{!available ? "À compléter" : reached ? "Objectif atteint" : "Sous l'objectif"}</b>
                   </article>
-                  <article>
-                    <span>Priorité</span>
-                    <p>{activeCoachPlan.coach.priority || "À écrire"}</p>
-                  </article>
-                  <article>
-                    <span>Arbitrage</span>
-                    <p>{activeCoachPlan.coach.arbitration || "À écrire"}</p>
-                  </article>
-                  <article>
-                    <span>Revue</span>
-                    <p>{activeCoachPlan.coach.review || "À planifier"}</p>
-                  </article>
-                </div>
-              )}
+                );
+              })}
             </div>
           </section>
-        </div>
+        </section>
 
-        <aside className="quick-locker-panel" aria-label="Fiche joueur rapide">
-          {selectedPlayer ? (
-            <>
-              <span>Fiche rapide</span>
-              <strong>{selectedPlayer.name}</strong>
-              <p>{displayRole(selectedPlayer.role)} - {operationLabel(roleCode(selectedPlayer.role))}</p>
-              <div className="quick-player-metrics">
-                <div>
-                  <b>{selectedPlayer.volumeIndex}</b>
-                  <small>indice volume</small>
-                </div>
-                <div>
-                  <b>{selectedPlayer.byType.CHG}</b>
-                  <small>CHG</small>
-                </div>
-                <div>
-                  <b>{selectedPlayer.byType.ZONAGE}</b>
-                  <small>ZONAGE</small>
-                </div>
-                <div>
-                  <b>{selectedPlayer.byType.DECHG}</b>
-                  <small>Réception</small>
-                </div>
-              </div>
-              <p className="quick-player-note">{playerProfile(selectedPlayer).detail}</p>
-              <button className="primary-button compact" type="button" onClick={() => onPlayer(selectedPlayer)}>
-                Voir la fiche complète
-                <ArrowRight size={16} />
-              </button>
-            </>
-          ) : (
-            <p>Aucun joueur disponible sur le dernier import.</p>
-          )}
-        </aside>
+        <section className="coach-focus-grid">
+          <article className="coach-panel coach-workforce-panel">
+            <div className="coach-panel-heading"><div><span>Effectif à piloter</span><h3>Disponibilité du groupe</h3></div><Users size={21} /></div>
+            <div className="coach-workforce-metrics">
+              <div><b>{formatNumber(snapshot.summary.players)}</b><span>présents</span></div>
+              <div><b>{formatRealStaffPercent(snapshot, matchKpi.expectedPlayersValue)}</b><span>effectif réel</span></div>
+              <div><b>{yellowCards.length}</b><span>cartons jaunes</span></div>
+            </div>
+            <div className="coach-availability-line">
+              <span>Effectif prévu</span>
+              <strong>{matchKpi.expectedPlayersValue.trim() ? `${formatNumber(Number(matchKpi.expectedPlayersValue))} joueurs` : "À renseigner"}</strong>
+            </div>
+            <div className="coach-yellow-summary">
+              <span>Vigilance disciplinaire</span>
+              {yellowCards.length > 0 ? <p>{yellowCards.slice(0, 3).map((card) => `${card.playerName} · ${card.time}`).join(" / ")}</p> : <p>Aucun carton jaune dans la plage active.</p>}
+            </div>
+          </article>
 
-        <section className="central-bench" aria-label="Banc central">
-          <div>
-            <span>Lecture coach</span>
-            <strong>Banc central</strong>
-            <p>{coachMessage(snapshot)}</p>
-          </div>
-          <div className="bench-facts">
-            <article className="bench-fact is-safe">
-              <span>Point fort</span>
-              <strong>{strengths[0]?.title ?? "Lecture indisponible"}</strong>
-              <small>{strengths[0]?.detail ?? "Aucun indicateur positif disponible."}</small>
-            </article>
-            <article className={`bench-fact ${late > 0 ? "is-warning" : "is-safe"}`}>
-              <span>À surveiller</span>
-              <strong>{progress[0]?.title ?? "Aucun écart critique"}</strong>
-              <small>{progress[0]?.detail ?? "Le dernier import ne signale pas de priorité."}</small>
-            </article>
-            <article className="bench-fact is-action">
-              <span>Prochaine action</span>
-              <strong>{actions[0]?.title ?? "Maintenir le rythme"}</strong>
-              <small>{actions[0]?.next ?? "Conserver le délai cible au prochain contrôle."}</small>
-            </article>
+          <article className="coach-panel coach-risk-panel">
+            <div className="coach-panel-heading"><div><span>Contrôle terrain</span><h3>Ce qui demande une action</h3></div><Target size={21} /></div>
+            <div className="coach-risk-list">
+              <div className={late > 0 ? "is-warning" : "is-safe"}><strong>{formatNumber(late)}</strong><span>duels à reprendre</span><small>{late > 0 ? "Prioriser les positions hors délai." : "Aucun duel ouvert détecté."}</small></div>
+              <div className={snapshot.validation.warnings.length > 0 ? "is-warning" : "is-safe"}><strong>{snapshot.validation.warnings.length}</strong><span>alertes import</span><small>{snapshot.validation.warnings[0] ?? "Aucune anomalie signalée par le dernier import."}</small></div>
+            </div>
+          </article>
+        </section>
+
+        <section className="coach-actions-section" aria-labelledby="coach-actions-title">
+          <div className="coach-section-heading"><div><span>Plan de jeu</span><h3 id="coach-actions-title">Trois actions, dans l'ordre</h3></div><small>Calculé sur la plage active</small></div>
+          <div className="coach-actions-grid">
+            {actions.map((action, index) => (
+              <article className={`coach-action-card ${action.level}`} key={action.title}>
+                <span>0{index + 1} · {action.kicker}</span>
+                <strong>{action.title}</strong>
+                <p>{action.detail}</p>
+                <small>{action.next}</small>
+              </article>
+            ))}
           </div>
         </section>
 
-        <button className="tunnel-return" type="button" onClick={onComposition}>
-          <span>Tunnel</span>
-          <strong>Retour sur le terrain</strong>
-          <small>{mainRisk ? `À contrôler : ${travelRiskTitle(mainRisk.travelCode)}` : "Revenir à la feuille de match"}</small>
-          <ArrowRight size={18} />
-        </button>
-      </div>
+        <section className="coach-players-section" aria-labelledby="coach-players-title">
+          <div className="coach-section-heading"><div><span>Effectif terrain</span><h3 id="coach-players-title">Joueurs à regarder</h3></div><small>Cliquez pour ouvrir la fiche complète</small></div>
+          <div className="coach-players-grid">
+            {focusPlayers.length > 0 ? focusPlayers.map((player) => {
+              const metric = playerLockerMetric(player, snapshot);
+              return (
+                <button className={`coach-player-card ${roleClass(player.role)}`} type="button" key={player.name} onClick={() => onPlayer(player)}>
+                  <span className="coach-player-avatar">{initials(player.name)}</span>
+                  <span><strong>{player.name}</strong><small>{displayRole(player.role)} · {metric.label}</small></span>
+                  <b>{metric.value}</b>
+                  <ArrowRight size={17} />
+                </button>
+              );
+            }) : <p className="coach-empty-state">Aucun joueur significatif à signaler sur le dernier import.</p>}
+          </div>
+        </section>
+
+        <section className="coach-plan-section" aria-label="Plan d'action éditable">
+          <div className="coach-plan-heading">
+            <div><span>Transmission équipe</span><h3>Plan d'action du coach</h3><p>Un espace court pour transformer la lecture en consignes concrètes.</p></div>
+            {coachBoardMode === "view" ? (
+              <button className="secondary-button compact" type="button" onClick={startCoachBoardEdit}><Edit3 size={15} /> Écrire</button>
+            ) : (
+              <div className="coach-writing-actions"><button className="secondary-button compact" type="button" onClick={cancelCoachBoardEdit} disabled={savingCoachPlan}><XCircle size={15} /> Annuler</button><button className="primary-button compact" type="button" onClick={saveCoachBoard} disabled={savingCoachPlan}><Save size={15} /> {savingCoachPlan ? "Enregistrement..." : "Enregistrer"}</button></div>
+            )}
+          </div>
+
+          {coachBoardFeedback && <div className={`coach-board-feedback ${coachBoardFeedback.tone}`}><strong>{coachBoardFeedback.title}</strong><span>{coachBoardFeedback.detail}</span></div>}
+
+          {coachBoardMode === "edit" ? (
+            <div className="coach-edit-fields">
+              <label>Tactique du jour<textarea value={activeCoachPlan.coach.tactic} onChange={(event) => updateCoachDraft("tactic", event.target.value)} placeholder="Ex. Reprendre les duels ouverts sur le prochain voyage." rows={2} /></label>
+              <label>Priorité<textarea value={activeCoachPlan.coach.priority} onChange={(event) => updateCoachDraft("priority", event.target.value)} placeholder="Ex. Sécuriser les positions non closes." rows={2} /></label>
+              <label>Arbitrage<textarea value={activeCoachPlan.coach.arbitration} onChange={(event) => updateCoachDraft("arbitration", event.target.value)} placeholder="Ex. Renforcer la réception si le retard augmente." rows={2} /></label>
+              <label>Prochaine revue<input value={activeCoachPlan.coach.review} onChange={(event) => updateCoachDraft("review", event.target.value)} placeholder="Ex. 18:30" /></label>
+            </div>
+          ) : (
+            <div className="coach-written-plan">
+              <article><span>Tactique</span><p>{activeCoachPlan.coach.tactic || "À écrire"}</p></article>
+              <article><span>Priorité</span><p>{activeCoachPlan.coach.priority || "À écrire"}</p></article>
+              <article><span>Arbitrage</span><p>{activeCoachPlan.coach.arbitration || "À écrire"}</p></article>
+              <article><span>Revue</span><p>{activeCoachPlan.coach.review || "À planifier"}</p></article>
+            </div>
+          )}
+        </section>
+      </main>
     </section>
   );
 }
