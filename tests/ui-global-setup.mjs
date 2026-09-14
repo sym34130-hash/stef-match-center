@@ -6,10 +6,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const snapshotPath = path.join(rootDir, "data", "agencies", "058", "latest.json");
 const backupPath = path.join(rootDir, "tmp", "ui-smoke-latest.json");
+const leagueConfigPath = path.join(rootDir, "data", "agencies", "058", "league-configs.json");
+const leagueConfigBackupPath = path.join(rootDir, "tmp", "ui-smoke-league-configs.json");
+const defaultLeagueConfigs = [
+  { id: "bronze", zonageMinutes: 45, loadingSeconds: 195, unloadingSeconds: 75, scoreTargetPercent: 45 },
+  { id: "argent", zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 },
+  { id: "or", zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 },
+  { id: "platine", zonageMinutes: 20, loadingSeconds: 135, unloadingSeconds: 50, scoreTargetPercent: 70 },
+];
 
 export default async function globalSetup() {
   await fs.mkdir(path.dirname(backupPath), { recursive: true });
   await fs.copyFile(snapshotPath, backupPath);
+  await fs.copyFile(leagueConfigPath, leagueConfigBackupPath);
+  await fs.writeFile(leagueConfigPath, JSON.stringify(defaultLeagueConfigs, null, 2), "utf8");
 
   let apiReady = false;
   for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -26,6 +36,18 @@ export default async function globalSetup() {
   }
 
   if (!apiReady) throw new Error("API STEF Match Center indisponible pour le smoke test UI.");
+
+  const leagueResponse = await fetch("http://localhost:4174/api/agencies/058/league-configs", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      "x-access-code": "STEF-058",
+    },
+    body: JSON.stringify({ configs: defaultLeagueConfigs }),
+  });
+  if (!leagueResponse.ok) {
+    throw new Error(`Impossible de préparer les règles de ligue UI (${leagueResponse.status}).`);
+  }
 
   const response = await fetch("http://localhost:4174/api/agencies/058/time-range", {
     method: "POST",

@@ -8,6 +8,24 @@ const screens = [
   { name: "05-brief-equipe", button: "05 BRIEF ÉQUIPE", marker: "BRIEF ÉQUIPE" },
 ];
 
+test.afterEach(async ({ page }, testInfo) => {
+  if (!testInfo.title.startsWith("l'administrateur conserve ses règles")) return;
+  const response = await page.evaluate(async () => {
+    const result = await fetch("/api/agencies/058/league-configs", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-access-code": "STEF-058" },
+      body: JSON.stringify({ configs: [
+        { id: "bronze", zonageMinutes: 45, loadingSeconds: 195, unloadingSeconds: 75, scoreTargetPercent: 45 },
+        { id: "argent", zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 },
+        { id: "or", zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 },
+        { id: "platine", zonageMinutes: 20, loadingSeconds: 135, unloadingSeconds: 50, scoreTargetPercent: 70 },
+      ] }),
+    });
+    return { ok: result.ok, status: result.status };
+  });
+  if (!response.ok) throw new Error(`Impossible de restaurer les paramètres de test (${response.status}).`);
+});
+
 test("les vues principales restent lisibles sur desktop, tablette et mobile", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   await page.route("**/api/agencies/058/causerie**", async (route) => {

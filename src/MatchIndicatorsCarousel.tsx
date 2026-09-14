@@ -21,6 +21,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   const geometry = useRef({ pitch: 296, width: 280, centers: 2, first: 0 });
   const drag = useRef<{ id: number; x: number; scroll: number; moved: boolean } | null>(null);
   const touching = useRef(false);
+  const manualScroll = useRef(false);
   const goRef = useRef<(index: number, instant?: boolean) => void>(() => {});
   const settleRef = useRef<() => void>(() => {});
   const [position, setPosition] = useState({ first: 0, centers: 2 });
@@ -48,12 +49,21 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     let frame = 0;
     let settleTimer = 0;
     let disposed = false;
+    let navigationTarget: number | null = null;
 
     // Depth follows the actual scroll position; React only tracks the settled group.
     const paint = () => {
       frame = 0;
       const { pitch, width, centers } = geometry.current;
-      const first = Math.max(0, Math.min(slides.length - centers, Math.round(viewport.scrollLeft / pitch)));
+      const maxFirst = Math.max(0, slides.length - centers);
+      const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      const atStart = viewport.scrollLeft <= 2;
+      const atEnd = viewport.scrollLeft >= maxScrollLeft - 2;
+      const first = atStart
+        ? 0
+        : atEnd
+          ? maxFirst
+          : Math.max(0, Math.min(maxFirst, Math.round(viewport.scrollLeft / pitch)));
       geometry.current.first = first;
       setPosition((current) => current.first === first && current.centers === centers ? current : { first, centers });
       const core = (centers - 1) * pitch / 2;
@@ -74,9 +84,22 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     const go = (requested: number, instant = false) => {
       if (disposed) return;
       const { pitch, centers } = geometry.current;
-      const next = Math.max(0, Math.min(slides.length - centers, requested));
-      viewport.scrollTo({ left: next * pitch, behavior: instant || motion.matches ? "instant" : "smooth" });
+      const maxFirst = Math.max(0, slides.length - centers);
+      const next = Math.max(0, Math.min(maxFirst, requested));
+      geometry.current.first = next;
+      manualScroll.current = false;
+      navigationTarget = next;
+      setPosition((current) => current.first === next && current.centers === centers ? current : { first: next, centers });
+      const target = next === maxFirst ? Math.max(0, viewport.scrollWidth - viewport.clientWidth) : next * pitch;
+      viewport.scrollTo({ left: target, behavior: instant || motion.matches ? "instant" : "smooth" });
       schedulePaint();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const maxFirst = Math.max(0, slides.length - geometry.current.centers);
+      const current = geometry.current.first;
+      go(event.key === "Home" ? 0 : event.key === "End" ? maxFirst : current + (event.key === "ArrowRight" ? 1 : -1));
     };
     goRef.current = go;
     const layout = () => {
@@ -91,7 +114,22 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       go(first, true);
       paint();
     };
-    const settle = () => { if (!drag.current && !touching.current) go(Math.round(viewport.scrollLeft / geometry.current.pitch)); };
+    const settle = () => {
+      if (drag.current || touching.current) return;
+      if (manualScroll.current) navigationTarget = null;
+      const target = navigationTarget;
+      if (target !== null) {
+        const maxFirst = Math.max(0, slides.length - geometry.current.centers);
+        const targetLeft = target === maxFirst ? Math.max(0, viewport.scrollWidth - viewport.clientWidth) : target * geometry.current.pitch;
+        if (Math.abs(viewport.scrollLeft - targetLeft) > 2) {
+          queueSettle();
+          return;
+        }
+      }
+      manualScroll.current = false;
+      navigationTarget = null;
+      go(Math.round(viewport.scrollLeft / geometry.current.pitch), true);
+    };
     const queueSettle = () => {
       clearTimeout(settleTimer);
       settleTimer = window.setTimeout(settle, 140);
@@ -104,11 +142,13 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     const observer = new ResizeObserver(layout);
     observer.observe(viewport);
     viewport.addEventListener("scroll", onScroll, { passive: true });
+    viewport.addEventListener("keydown", onKeyDown);
     layout();
     return () => {
       disposed = true;
       observer.disconnect();
       viewport.removeEventListener("scroll", onScroll);
+      viewport.removeEventListener("keydown", onKeyDown);
       cancelAnimationFrame(frame);
       clearTimeout(settleTimer);
       settleRef.current = () => {};
@@ -117,6 +157,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
 
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== "mouse" || event.button !== 0) return;
+    manualScroll.current = true;
     drag.current = { id: event.pointerId, x: event.clientX, scroll: event.currentTarget.scrollLeft, moved: false };
   };
   const moveDrag = (event: PointerEvent<HTMLDivElement>) => {
@@ -150,15 +191,11 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       </header>
       <div ref={viewportRef} className="match-indicators-viewport" tabIndex={0} role="group" aria-label="Défilement des indicateurs du match"
         onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
-        onTouchStart={() => { touching.current = true; }}
+        onTouchStart={() => { manualScroll.current = true; touching.current = true; }}
         onTouchEnd={(event) => { touching.current = event.touches.length > 0; settleRef.current(); }}
         onTouchCancel={() => { touching.current = false; settleRef.current(); }}
         onPointerLeave={() => { if (!drag.current?.moved) drag.current = null; }}
-        onKeyDown={(event) => {
-          if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-          event.preventDefault();
-          goRef.current(event.key === "Home" ? 0 : event.key === "End" ? last : position.first + (event.key === "ArrowRight" ? 1 : -1));
-        }}>
+        >
         <div className="match-indicators-track" ref={trackRef}>
           {cards.map(({ id, label, value, detail, icon: Icon, accent, percent }, index) => (
             <div className="match-indicator-slide" key={id} data-indicator={id} role="group" aria-roledescription="diapositive" aria-label={`${label}, ${index + 1} sur ${cards.length}`}>
