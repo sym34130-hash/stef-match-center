@@ -1182,7 +1182,7 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
               <div className="match-score-bubble pass-score-bubble">
                 <span>% passes réussies</span>
                 <strong>{formatPercent(snapshot.summary.passRate)}</strong>
-                <small>Passes réussies ÷ passes contrôlées<br />sur la plage active</small>
+                <small>Part des passes réussies parmi toutes les passes contrôlées<br />pendant la période sélectionnée</small>
               </div>
               <div className="match-score-bubble loading-score-bubble">
                 <span>% tirs cadrés</span>
