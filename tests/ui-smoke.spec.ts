@@ -171,8 +171,9 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       expect(matchBubbleLayout.sameWidth).toBe(true);
       expect(matchBubbleLayout.sameHeight).toBe(true);
       expect(matchBubbleLayout.overflow).toBe(false);
-      await expect(page.locator(".match-score-bubbles").getByText("% duels gagnés", { exact: true })).toBeVisible();
-    await expect(page.locator(".match-score-bubbles").getByText("% tirs cadrés", { exact: true })).toBeVisible();
+      await expect(page.locator(".match-score-bubbles").getByText("% passes réussies", { exact: true })).toBeVisible();
+      await expect(page.locator(".match-score-bubble.duel-score-bubble strong")).toHaveText("69,2%");
+      await expect(page.locator(".match-score-bubbles").getByText("% tirs cadrés", { exact: true })).toBeVisible();
       await expect(page.locator(".loading-score-bubble")).toContainText("inférieure ou égale à 2 min 45 s/poz");
       await expect(page.locator(".loading-score-bubble strong")).toHaveText("94,3%");
       await expect(page.locator(".football-score-panel")).toHaveCount(1);
@@ -182,6 +183,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.getByText("Indicateurs sous l'objectif", { exact: true })).toBeVisible();
       await expect(page.locator(".match-score-bubbles").getByText("% possession Zody", { exact: true })).toBeVisible();
       await expect(page.locator(".match-score-bubbles").getByText("% centres réussis", { exact: true })).toBeVisible();
+      await expect(page.locator(".operational-charts-carousel").getByText("Temps de réception", { exact: true })).toBeVisible();
       await expect(page.locator(".team-motivation-message")).toHaveText("Excellente dynamique. On garde l'intensité jusqu'au bout.");
       await expect(page.locator(".match-result-actions")).toHaveCount(0);
       await expect(page.locator(".match-indicators").getByText("NB DE BLESSURES (A.T)", { exact: true })).toBeVisible();

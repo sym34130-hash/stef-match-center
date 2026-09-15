@@ -90,9 +90,9 @@ export type Snapshot = {
     goalsFor: number | null;
     goalsAgainst: number | null;
     indicators: {
-      duelRate: number | null;
+      passRate: number | null;
       loadingPercent: number | null;
-      possessionPercent: number | null;
+      unloadingPercent: number | null;
     };
     loading: {
       status: "available" | "unavailable";

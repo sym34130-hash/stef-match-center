@@ -41,9 +41,9 @@ Il lit l'onglet `Donnees` complet et reprend les colonnes Excel calculees :
 | Tonnage Expédition 106J | Valeur de la ligne `Expédition > Tonnage` du dernier PDF SIE.106J importé | Rapport PDF 106J associé à l’agence | Tonnage importé en tonnes |
 | Ponctualité 106J | Valeur `Site` de la ligne correspondante du PDF SIE.106J | Dernier PDF 106J importé | Carrousel des indicateurs journaliers |
 | Chargements cadres | Pour chaque ligne du bloc `Chargement` de `TCD PPT`, `TC / Nombre de N° Position` lu en colonne `U` ; résultat `<=` à la cible de la ligue | Voyages avec au moins 15 positions, durée brute positive et début dans la plage active | Pourcentage charge dans le delai |
-| Temps de dechargement | Pour chaque voyage `DECHG`, `(derniere operation - premiere operation) / nombre de positions`; dans la cible si `<=` au seuil de la ligue | Voyages `DECHG` avec au moins une position et une duree strictement positive, sur la plage active | Pourcentage de voyages dans la cible et moyenne par position |
+| Temps de reception | Pour chaque voyage `DECHG`, `(derniere operation - premiere operation) / nombre de positions`; dans la cible si `<=` au seuil de la ligue | Voyages `DECHG` avec au moins une position et une duree strictement positive, sur la plage active | Pourcentage de voyages dans la cible et moyenne par position |
 | Possession Zody | Positions RECEPTION uniques ayant aussi un ZONAGE / positions RECEPTION uniques, dans le meme perimetre actif | Positions RECEPTION distinctes du match filtre ; indisponible si le denominateur manque | Part des receptions associees a un zonage, bornee entre 0 et 100 % |
-| Score operationnel | Nombre des 4 indicateurs dont le pourcentage atteint l'objectif de la ligue active | Duels gagnes, chargements cadres, dechargements dans la cible et possession Zody, tous disponibles | Score au format football `atteints - sous objectif` |
+| Score operationnel | Nombre des 3 indicateurs dont le pourcentage depasse strictement l'objectif de la ligue active | Passes reussies, chargements cadres et temps de reception dans la cible, tous disponibles | Score au format football `atteints - sous objectif` |
 | Indice volume | Operations joueur / meilleur volume joueur | Plus gros volume joueur du match filtre | Fiche joueur |
 | Polyvalence | `0` si une seule activite ; sinon moyenne des volumes CHG, ZONAGE et DECHG rapportes au meilleur volume de chaque activite | Meilleur volume observe dans chaque activite du match filtre | Diversite et volume multi-activite |
 | Contribution equipe | Operations joueur / operations du match filtre | Operations du match filtre | Detail fiche joueur |
@@ -65,9 +65,9 @@ Les objectifs actifs recalculent les indicateurs concernés et le score operatio
 
 Le seuil de dechargement est configurable et affiche dans les ligues. Le site calcule
 desormais le temps moyen par position pour chaque voyage `DECHG` exploitable de la
-plage active. Le pourcentage de voyages dans la cible devient le quatrieme indicateur
-du score operationnel ; la duree moyenne detaillee reste disponible dans le graphique
-des dechargements.
+plage active. Le pourcentage de voyages dans la cible est l'indicateur `Temps de
+reception` du score operationnel ; la duree moyenne detaillee reste visible dans le
+carrousel.
 
 ### Controle de coherence de la possession
 
@@ -90,7 +90,7 @@ Pour le fichier importe `HM 058 A V10 (3).xlsx`, sur la plage `13:00-22:30` et l
 - Match filtre : 5 498 lignes ; score officiel : 3 517 lignes.
 - Duels gagnes : 2 528 ; taux : 71,9 % ; score duel affiché : 72 / 100.
 - Possession Zody : 55,7 % (797 positions RECEPTION associees a un ZONAGE / 1 432 positions RECEPTION).
-- Score operationnel Argent : 4 - 0, avec un objectif de 50 % par indicateur.
+- Score operationnel Argent : 3 - 0, avec un objectif de 50 % par indicateur.
 - Chargement : 33 voyages dans la cible, 2 hors cible, source brute `TCD PPT!U`.
 - Dechargement : 39 voyages dans la cible, 30 hors cible, moyenne 182 secondes par position.
 - Joueurs : 17 ; composition : 8 Attaquants, 3 Milieux, 6 Defenseurs.

@@ -195,9 +195,9 @@ for (const expected of leagueExpectations) {
   assert.equal(leagueSnapshot.match.status, expected.status, `Statut du match ${expected.name}`);
   assert.equal(leagueSnapshot.summary.possessionPercent, snapshot.summary.possessionPercent, `Possession stable ${expected.name}`);
   const reachedIndicators = [
-    leagueSnapshot.summary.duelRate,
+    leagueSnapshot.summary.passRate,
     leagueSnapshot.loadingQuality.targetedPercent,
-    leagueSnapshot.summary.possessionPercent,
+    leagueSnapshot.unloadingQuality.targetedPercent,
   ].filter((value) => value > expected.criteria.scoreTargetPercent).length;
   assert.equal(`${reachedIndicators}-${3 - reachedIndicators}`, expected.score, `Score opérationnel ${expected.name}`);
   assert.equal(leagueSnapshot.causerie.find((item) => item.label === "Priorité")?.value, expected.priority, `Priorité causerie ${expected.name}`);

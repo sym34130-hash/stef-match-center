@@ -1180,9 +1180,9 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
             <strong>{outcome.verdict}</strong>
             <div className="match-score-bubbles" aria-label="Scores du match">
               <div className="match-score-bubble duel-score-bubble">
-                <span>% duels gagnés</span>
-                <strong>{formatPercent(snapshot.summary.duelRate)}</strong>
-                <small>% de poz zonées en moins<br />de 30 min après réception</small>
+                <span>% passes réussies</span>
+                <strong>{formatPercent(snapshot.summary.passRate)}</strong>
+                <small>Passes réussies ÷ passes contrôlées<br />sur la plage active</small>
               </div>
               <div className="match-score-bubble loading-score-bubble">
                 <span>% tirs cadrés</span>
@@ -1345,9 +1345,9 @@ function OperationalChartsCarousel({ snapshot }: { snapshot: Snapshot }) {
       content: <PerformanceChart snapshot={snapshot} />,
     },
     {
-      id: "unloading-duels",
-      label: "% duels gagnés (réceptions)",
-      content: <UnloadingDuelQualityCard snapshot={snapshot} />,
+      id: "reception-time",
+      label: "Temps de réception",
+      content: <ReceptionQualityCard snapshot={snapshot} />,
     },
     {
       id: "loading",
@@ -1543,52 +1543,63 @@ function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
   );
 }
 
-function UnloadingDuelQualityCard({ snapshot }: { snapshot: Snapshot }) {
-  const quality = snapshot.unloadingDuelQuality;
+function ReceptionQualityCard({ snapshot }: { snapshot: Snapshot }) {
+  const quality = snapshot.unloadingQuality;
+  const duelQuality = snapshot.unloadingDuelQuality;
   if (!quality) return null;
-  const total = quality.won + quality.lost;
+  const total = quality.targeted + quality.offTarget;
+  const hasData = total > 0 && Number.isFinite(quality.targetedPercent) && Number.isFinite(quality.offTargetPercent);
+  const targetedPercent = quality.targetedPercent ?? 0;
+  const target = formatReadableDuration(snapshot.performanceCriteria?.unloadingSeconds ?? 60);
+  const average = quality.averageTimePerPositionSeconds === null || quality.averageTimePerPositionSeconds === undefined
+    ? null
+    : formatReadableDuration(quality.averageTimePerPositionSeconds);
   return (
-    <section className="loading-duel-quality-card" aria-label="Pourcentage de duels gagnés sur les réceptions">
+    <section className="loading-duel-quality-card reception-quality-card" aria-label="Temps de réception">
       <div className="loading-quality-heading">
         <div>
           <span>Déchargement</span>
-          <strong>% duels gagnés (réceptions)</strong>
-          <p className="loading-quality-explanation">Duels gagnés ÷ duels éligibles dans la période affichée.</p>
+          <strong>Temps de réception</strong>
+          <p className="loading-quality-explanation">Voyages dans la cible : temps moyen inférieur ou égal à {target}/poz.</p>
         </div>
-        <b>{formatNumber(total)} duels</b>
+        <b>{formatNumber(total)} voyages</b>
       </div>
-      {total > 0 && (
+      {hasData && (
         <div className="loading-quality-overview">
           <div
-            className="loading-quality-pie duel-quality-pie"
-            style={{ background: `conic-gradient(#73b9a6 0 ${quality.wonPercent ?? 0}%, #ef0b45 ${quality.wonPercent ?? 0}% 100%)` }}
-            aria-label={`${formatPercent(quality.wonPercent)} gagnés, ${formatPercent(quality.lostPercent)} perdus`}
+            className="loading-quality-pie reception-quality-pie"
+            style={{ background: `conic-gradient(#73b9a6 0 ${targetedPercent}%, #ef0b45 ${targetedPercent}% 100%)` }}
+            aria-label={`${formatPercent(quality.targetedPercent)} dans la cible, ${formatPercent(quality.offTargetPercent)} hors cible`}
           >
-            <span>{formatPercent(quality.wonPercent)}</span>
+            <span>{formatPercent(quality.targetedPercent)}</span>
           </div>
           <div className="loading-quality-legend">
-            <span><i className="is-targeted" />Gagnés <b>{formatNumber(quality.won)} · {formatPercent(quality.wonPercent)}</b></span>
-            <span><i className="is-off-target" />Perdus <b>{formatNumber(quality.lost)} · {formatPercent(quality.lostPercent)}</b></span>
+            <span><i className="is-targeted" />Dans la cible <b>{formatNumber(quality.targeted)} voyages · {formatPercent(quality.targetedPercent)}</b></span>
+            <span><i className="is-off-target" />Hors cible <b>{formatNumber(quality.offTarget)} voyages · {formatPercent(quality.offTargetPercent)}</b></span>
           </div>
         </div>
       )}
-      <details className="duel-quality-details">
-        <summary>Voir les duels perdus <span>{formatNumber(quality.lostDuels.length)}</span></summary>
-        {quality.lostDuels.length > 0 ? (
-          <div className="duel-quality-table-wrap">
-            <div className="duel-quality-table" role="table" aria-label="Duels perdus">
-              <div className="duel-quality-table-row is-head" role="row">
-                <span>Voyage</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>
-              </div>
-              {quality.lostDuels.map((duel) => (
-                <div className="duel-quality-table-row" role="row" key={`${duel.travelCode}-${duel.time}`}>
-                  <span>{duel.travelCode}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className="duel-result duel-result-perdu">perdu</span>
+      {!hasData && <p className="loading-quality-empty">Aucune donnée de réception disponible sur cette plage.</p>}
+      {average && <p className="reception-quality-average">Moyenne observée : <strong>{average}/poz</strong></p>}
+      {duelQuality && (
+        <details className="duel-quality-details">
+          <summary>Voir les duels perdus <span>{formatNumber(duelQuality.lostDuels.length)}</span></summary>
+          {duelQuality.lostDuels.length > 0 ? (
+            <div className="duel-quality-table-wrap">
+              <div className="duel-quality-table" role="table" aria-label="Duels perdus">
+                <div className="duel-quality-table-row is-head" role="row">
+                  <span>Voyage</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>
                 </div>
-              ))}
+                {duelQuality.lostDuels.map((duel) => (
+                  <div className="duel-quality-table-row" role="row" key={`${duel.travelCode}-${duel.time}`}>
+                    <span>{duel.travelCode}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className="duel-result duel-result-perdu">perdu</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        ) : <p className="loading-quality-empty">Aucun duel à détailler sur cette plage.</p>}
-      </details>
+          ) : <p className="loading-quality-empty">Aucun duel à détailler sur cette plage.</p>}
+        </details>
+      )}
     </section>
   );
 }
@@ -3354,7 +3365,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
             <GuidePanel eyebrow="04 · Lire les écrans" title="Quel écran utiliser, et pour quoi faire ?" icon={LayoutDashboard}>
               <div className="guide-screen-grid">
                 <GuideScreenCard step="01" title="Coup d’envoi" detail="Vue d’ouverture du match. Elle confirme que les données sont prêtes et donne accès au brief équipe." />
-                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score opérationnel au format football, trois indicateurs, opérations, positions, joueurs clés par catégorie, challengers et contrôles d’import. Le score compare le pourcentage de duels gagnés, de chargements cadrés et de possession Zody à l’objectif de la ligue." />
+                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score opérationnel au format football, trois indicateurs, opérations, positions, joueurs clés par catégorie, challengers et contrôles d’import. Le score compare le pourcentage de passes réussies, de chargements cadrés et de temps de réception dans la cible à l’objectif de la ligue." />
               <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. Compare le match complet, les deux mi-temps ou les quatre quarts calculés depuis la plage active. Une vue personnalisée permet aussi d’isoler une sous-plage, par exemple 1 heure, sans modifier les indicateurs du match. L’activité Réception correspond au scan de la palette." />
                 <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, titres par catégorie, polyvalence, sujets à travailler et prochaines actions." />
                 <GuideScreenCard step="05" title="Brief équipe" detail="Vue dédiée aux consignes : trois grandes zones visibles, empilées verticalement : SAV, Expédition, Ramasse & emballage. Chaque zone accepte du texte et plusieurs captures d’écran, avec affichage plein écran." />
@@ -3667,11 +3678,11 @@ type FootballScore = {
 
 function buildFootballScore(snapshot: Snapshot, targetPercent: number): FootballScore {
   const indicators = [
-    snapshot.summary.duelRate,
+    snapshot.summary.passRate ?? null,
     snapshot.loadingQuality?.targetedPercent ?? null,
-    snapshot.summary.possessionPercent,
+    snapshot.unloadingQuality?.targetedPercent ?? null,
   ];
-  const available = snapshot.summary.duelTotal > 0 && indicators.every((value) => Number.isFinite(value));
+  const available = indicators.every((value) => Number.isFinite(value));
   const reachedIndicators = available ? indicators.filter((value) => (value as number) > targetPercent).length : 0;
   return {
     goalsFor: reachedIndicators,

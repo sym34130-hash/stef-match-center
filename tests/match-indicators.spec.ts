@@ -42,6 +42,8 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   await expect(value("departure")).toHaveText("64,1%");
   await expect(page.locator(".match-score-bubbles").getByText("% centres réussis", { exact: true })).toBeVisible();
   await expect(page.locator(".match-score-bubble.centers-score-bubble strong")).toHaveText("62%");
+  await expect(page.locator(".match-score-bubbles").getByText("% passes réussies", { exact: true })).toBeVisible();
+  await expect(page.locator(".match-score-bubble.duel-score-bubble strong")).toHaveText("69,2%");
   await expect(value("temperature")).toHaveText("92,19%");
   await expect(carousel.locator('[data-indicator="arrival"] .match-indicator-card')).toHaveClass(/is-below-target/);
   await expect(carousel.locator('[data-indicator="temperature"] .match-indicator-card')).toHaveClass(/is-below-target/);
@@ -51,6 +53,7 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   await expect(carousel.locator('[data-indicator="arrival"] .match-indicator-source')).toContainText("objectif 85%");
   await expect(page.locator(".operational-chart-slide")).toHaveCount(4);
   await expect(page.locator(".operational-charts-carousel").getByText("% centres réussis", { exact: true })).toBeVisible();
+  await expect(page.locator(".operational-charts-carousel").getByText("Temps de réception", { exact: true })).toBeVisible();
   await expect(page.locator(".centers-quality-pie span")).toHaveText("62%");
   await page.locator(".centers-quality-details summary").click();
   await expect(page.locator(".centers-quality-details")).toContainText("taux consolidé de ponctualité destination");

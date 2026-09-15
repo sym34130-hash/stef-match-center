@@ -34,7 +34,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 13;
+export const KPI_DICTIONARY_VERSION = 14;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -136,7 +136,7 @@ export const KPI_DICTIONARY = [
     label: "Score opérationnel",
     source: "Données!R:T + TCD PPT!U + Données filtrées DECHG/ZONAGE",
     formula: "Nombre des 3 indicateurs dont le pourcentage dépasse strictement l'objectif de la ligue - indicateurs atteints / indicateurs sous objectif",
-    denominator: "3 indicateurs disponibles : duels gagnés, chargements cadrés et possession Zody",
+    denominator: "3 indicateurs disponibles : passes réussies, chargements cadrés et temps de réception dans la cible",
     display: "Score au format football",
   },
   {
@@ -268,7 +268,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     zonageTarget: `${criteria.zonageMinutes} minutes`,
     loadingTarget: formatDuration(criteria.loadingSeconds),
     unloadingTarget: formatDuration(criteria.unloadingSeconds),
-    scoreIndicators: "3 indicateurs : duels gagnés, chargements cadrés et possession Zody",
+    scoreIndicators: "3 indicateurs : passes réussies, chargements cadrés et temps de réception dans la cible",
     scoreTarget: `${criteria.scoreTargetPercent}% par indicateur`,
     period: period.label,
   };
@@ -543,9 +543,9 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
   const possession = buildPossessionScore(matchRows);
   const score = duelRate === null ? null : Math.round(duelRate);
   const operationalScore = buildOperationalScore(
+    hourlyPassPerformance.totalRate,
     loadingQuality,
-    duelRate,
-    possession.percent,
+    unloadingQuality,
     criteria.loadingSeconds,
     criteria.scoreTargetPercent,
   );
@@ -659,9 +659,9 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
       travelRisks,
     },
     causerie: buildCauserie({
-      duelRate,
+      passRate: hourlyPassPerformance.totalRate,
       loadingPercent: loadingQuality.targetedPercent,
-      possessionPercent: possession.percent,
+      unloadingPercent: unloadingQuality.targetedPercent,
       scoreTargetPercent: criteria.scoreTargetPercent,
       openDuelRows,
       weakRole,
@@ -1098,12 +1098,13 @@ function readLoadingDetails(workbook) {
   return details;
 }
 
-function buildOperationalScore(loadingQuality, duelRate, possessionPercent, configuredTargetSeconds, scoreTargetPercent) {
+function buildOperationalScore(passRate, loadingQuality, unloadingQuality, configuredTargetSeconds, scoreTargetPercent) {
   const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.loadingSeconds);
   const scored = Number.isFinite(loadingQuality?.targeted) ? Math.round(loadingQuality.targeted) : null;
   const conceded = Number.isFinite(loadingQuality?.offTarget) ? Math.round(loadingQuality.offTarget) : null;
   const loadingPercent = loadingQuality?.targetedPercent;
-  const indicators = { duelRate, loadingPercent, possessionPercent };
+  const unloadingPercent = unloadingQuality?.targetedPercent;
+  const indicators = { passRate, loadingPercent, unloadingPercent };
   const available = Object.values(indicators).every((value) => Number.isFinite(value));
   const reachedIndicators = available
     ? Object.values(indicators).filter((value) => value > scoreTargetPercent).length
@@ -1410,8 +1411,8 @@ function buildAlerts({ validation, openDuelRows, duelTotal, weakRole }) {
   return alerts.slice(0, 5);
 }
 
-function buildCauserie({ duelRate, loadingPercent, possessionPercent, scoreTargetPercent, openDuelRows, weakRole, validation, zonageMinutes }) {
-  const indicators = [duelRate, loadingPercent, possessionPercent];
+function buildCauserie({ passRate, loadingPercent, unloadingPercent, scoreTargetPercent, openDuelRows, weakRole, validation, zonageMinutes }) {
+  const indicators = [passRate, loadingPercent, unloadingPercent];
   const indicatorsAvailable = indicators.every((value) => Number.isFinite(value));
   const reachedIndicators = indicatorsAvailable ? indicators.filter((value) => value > scoreTargetPercent).length : 0;
   const priority = !indicatorsAvailable
