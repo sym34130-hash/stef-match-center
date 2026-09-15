@@ -177,12 +177,13 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".loading-score-bubble")).toContainText("inférieure ou égale à 2 min 45 s/poz");
       await expect(page.locator(".loading-score-bubble strong")).toHaveText("94,3%");
       await expect(page.locator(".football-score-panel")).toHaveCount(1);
-      await expect(page.locator(".football-score-side-for strong")).toHaveText("3");
+      await expect(page.locator(".football-score-side-for strong")).toHaveText("4");
       await expect(page.locator(".football-score-side-against strong")).toHaveText("0");
+      await expect(page.getByLabel("KPI intégrés au score")).toContainText("% temps réception");
       await expect(page.getByText("Indicateurs atteints", { exact: true })).toBeVisible();
       await expect(page.getByText("Indicateurs sous l'objectif", { exact: true })).toBeVisible();
       await expect(page.locator(".match-score-bubbles").getByText("% possession Zody", { exact: true })).toBeVisible();
-      await expect(page.locator(".match-score-bubbles").getByText("% centres réussis", { exact: true })).toBeVisible();
+      await expect(page.locator(".match-score-bubbles").getByText("% temps réception", { exact: true })).toBeVisible();
       await expect(page.locator(".operational-charts-carousel").getByText("Temps de réception", { exact: true })).toBeVisible();
       await expect(page.locator(".team-motivation-message")).toHaveText("Excellente dynamique. On garde l'intensité jusqu'au bout.");
       await expect(page.locator(".match-result-actions")).toHaveCount(0);
@@ -565,7 +566,7 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
 
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
   await expect(page.locator(".football-score-side-for strong")).toHaveText("1");
-  await expect(page.locator(".football-score-side-against strong")).toHaveText("2");
+  await expect(page.locator(".football-score-side-against strong")).toHaveText("3");
   await expect(page.getByText("Célébration activée", { exact: true })).toHaveCount(0);
 });
 

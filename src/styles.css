@@ -16308,6 +16308,34 @@ body.tv-screen-active .app-shell.league-platine {
   line-height: 1.25;
 }
 
+.football-score-integrated {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px 9px;
+  color: rgba(231, 243, 255, .72);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.football-score-integrated span {
+  color: #a6d8ff;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.football-score-integrated b {
+  font-weight: 700;
+}
+
+.football-score-integrated b::before {
+  content: "•";
+  margin-right: 4px;
+  color: #62d29e;
+}
+
 .football-score-panel.is-unavailable {
   border-color: rgba(194, 211, 229, .32);
   background: linear-gradient(145deg, rgba(59, 78, 102, .72), rgba(6, 22, 45, .82));

@@ -66,7 +66,7 @@ assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 856, reception:
 assert.equal(snapshot.match.score, 72, "Score arrondi");
 assert.equal(snapshot.match.status, "MAÎTRISÉ", "Statut du match aligné sur le score opérationnel");
 assert.equal(snapshot.operationalScore.status, "available", "Score opérationnel disponible");
-assert.equal(snapshot.operationalScore.goalsFor, 3, "Buts opérationnels marqués");
+assert.equal(snapshot.operationalScore.goalsFor, 4, "Buts opérationnels marqués");
 assert.equal(snapshot.operationalScore.goalsAgainst, 0, "Buts opérationnels encaissés");
 assert.equal(snapshot.loadingQuality.targeted, 33, "Chargements cadrés issus de TCD PPT!U");
 assert.equal(snapshot.loadingQuality.offTarget, 2, "Chargements non cadrés recalculés depuis TCD PPT!U");
@@ -182,10 +182,10 @@ if (chronologyResult.ok) {
 }
 
 const leagueExpectations = [
-  { name: "Bronze", criteria: { zonageMinutes: 45, loadingSeconds: 195, unloadingSeconds: 75, scoreTargetPercent: 45 }, duelWon: 2840, targeted: 34, offTarget: 1, unloadingTargeted: 43, unloadingOffTarget: 26, score: "3-0", priority: "Maintenir le rythme et sécuriser les fins de séquence.", status: "MAÎTRISÉ" },
-  { name: "Argent", criteria: { zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 }, duelWon: 2528, targeted: 33, offTarget: 2, unloadingTargeted: 39, unloadingOffTarget: 30, score: "3-0", priority: "Maintenir le rythme et sécuriser les fins de séquence.", status: "MAÎTRISÉ" },
-  { name: "Or", criteria: { zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 }, duelWon: 2307, targeted: 33, offTarget: 2, unloadingTargeted: 38, unloadingOffTarget: 31, score: "2-1", priority: "Maintenir le rythme et sécuriser les fins de séquence.", status: "MAÎTRISÉ" },
-  { name: "Platine", criteria: { zonageMinutes: 20, loadingSeconds: 135, unloadingSeconds: 50, scoreTargetPercent: 70 }, duelWon: 1979, targeted: 32, offTarget: 3, unloadingTargeted: 37, unloadingOffTarget: 32, score: "1-2", priority: "Reprendre les indicateurs sous l'objectif de la ligue.", status: "ACTION NÉCESSAIRE" },
+  { name: "Bronze", criteria: { zonageMinutes: 45, loadingSeconds: 195, unloadingSeconds: 75, scoreTargetPercent: 45 }, duelWon: 2840, targeted: 34, offTarget: 1, unloadingTargeted: 43, unloadingOffTarget: 26, score: "4-0", priority: "Maintenir le rythme et sécuriser les fins de séquence.", status: "MAÎTRISÉ" },
+  { name: "Argent", criteria: { zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 }, duelWon: 2528, targeted: 33, offTarget: 2, unloadingTargeted: 39, unloadingOffTarget: 30, score: "4-0", priority: "Maintenir le rythme et sécuriser les fins de séquence.", status: "MAÎTRISÉ" },
+  { name: "Or", criteria: { zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 }, duelWon: 2307, targeted: 33, offTarget: 2, unloadingTargeted: 38, unloadingOffTarget: 31, score: "2-2", priority: "Reprendre les indicateurs sous l'objectif de la ligue.", status: "À SURVEILLER" },
+  { name: "Platine", criteria: { zonageMinutes: 20, loadingSeconds: 135, unloadingSeconds: 50, scoreTargetPercent: 70 }, duelWon: 1979, targeted: 32, offTarget: 3, unloadingTargeted: 37, unloadingOffTarget: 32, score: "1-3", priority: "Reprendre les indicateurs sous l'objectif de la ligue.", status: "ACTION NÉCESSAIRE" },
 ];
 for (const expected of leagueExpectations) {
   const leagueResult = buildSnapshotFromWorkbook(buffer, path.basename(workbookPath), agencyCode, { criteria: expected.criteria });
@@ -203,8 +203,9 @@ for (const expected of leagueExpectations) {
     leagueSnapshot.summary.passRate,
     leagueSnapshot.loadingQuality.targetedPercent,
     leagueSnapshot.unloadingQuality.targetedPercent,
+    leagueSnapshot.summary.possessionPercent,
   ].filter((value) => value > expected.criteria.scoreTargetPercent).length;
-  assert.equal(`${reachedIndicators}-${3 - reachedIndicators}`, expected.score, `Score opérationnel ${expected.name}`);
+  assert.equal(`${reachedIndicators}-${4 - reachedIndicators}`, expected.score, `Score opérationnel ${expected.name}`);
   assert.equal(leagueSnapshot.causerie.find((item) => item.label === "Priorité")?.value, expected.priority, `Priorité causerie ${expected.name}`);
 }
 

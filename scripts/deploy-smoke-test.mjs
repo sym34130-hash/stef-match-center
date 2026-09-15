@@ -122,7 +122,7 @@ try {
   assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 856, reception: 1432, matched: 797 }, "Positions possession après import API");
   assert.equal(snapshot.match.score, 72, "Score recalculé après import API");
   assert.equal(snapshot.operationalScore.status, "available", "Score opérationnel disponible après import API");
-  assert.equal(snapshot.operationalScore.goalsFor, 3, "Score opérationnel marqué après import API");
+  assert.equal(snapshot.operationalScore.goalsFor, 4, "Score opérationnel marqué après import API");
   assert.equal(snapshot.operationalScore.goalsAgainst, 0, "Score opérationnel encaissé après import API");
   assert.equal(snapshot.loadingQuality.targeted, 33, "Chargements cadrés après import API");
   assert.equal(snapshot.loadingQuality.offTarget, 2, "Chargements non cadrés après import API");
@@ -148,9 +148,9 @@ try {
   await fs.writeFile(storedLatestPath, validLatestText, "utf8");
 
   const leagueApiExpectations = [
-    { name: "Argent", criteria: { zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 }, goalsFor: 3, goalsAgainst: 0 },
-    { name: "Or", criteria: { zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 }, goalsFor: 2, goalsAgainst: 1 },
-    { name: "Platine", criteria: { zonageMinutes: 20, loadingSeconds: 135, unloadingSeconds: 50, scoreTargetPercent: 70 }, goalsFor: 1, goalsAgainst: 2 },
+    { name: "Argent", criteria: { zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 }, goalsFor: 4, goalsAgainst: 0 },
+    { name: "Or", criteria: { zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 }, goalsFor: 2, goalsAgainst: 2 },
+    { name: "Platine", criteria: { zonageMinutes: 20, loadingSeconds: 135, unloadingSeconds: 50, scoreTargetPercent: 70 }, goalsFor: 1, goalsAgainst: 3 },
   ];
   for (const expected of leagueApiExpectations) {
     const query = new URLSearchParams(Object.fromEntries(Object.entries(expected.criteria).map(([key, value]) => [key, String(value)])));

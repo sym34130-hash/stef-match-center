@@ -40,8 +40,9 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   await expect(value("positions")).toHaveText(new Intl.NumberFormat("fr-FR").format(excelPositions));
   await expect(value("arrival")).toHaveText("80%");
   await expect(value("departure")).toHaveText("64,1%");
-  await expect(page.locator(".match-score-bubbles").getByText("% centres réussis", { exact: true })).toBeVisible();
-  await expect(page.locator(".match-score-bubble.centers-score-bubble strong")).toHaveText("62%");
+  await expect(page.locator(".match-score-bubbles").getByText("% temps réception", { exact: true })).toBeVisible();
+  await expect(page.locator(".match-score-bubble.reception-score-bubble strong")).toHaveText("56,5%");
+  await expect(page.getByLabel("KPI intégrés au score")).toContainText("% possession Zody");
   await expect(page.locator(".match-score-bubbles").getByText("% passes réussies", { exact: true })).toBeVisible();
   await expect(page.locator(".match-score-bubble.pass-score-bubble strong")).toHaveText("69,2%");
   await expect(value("temperature")).toHaveText("92,19%");

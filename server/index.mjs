@@ -567,11 +567,12 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
       !["available", "unavailable"].includes(snapshot.operationalScore.status) ||
       snapshot.operationalScore.targetPercent === undefined ||
       !snapshot.operationalScore.indicators ||
-      Object.keys(snapshot.operationalScore.indicators).length !== 3 ||
+      Object.keys(snapshot.operationalScore.indicators).length !== 4 ||
       !Object.hasOwn(snapshot.operationalScore.indicators, "passRate") ||
+      !Object.hasOwn(snapshot.operationalScore.indicators, "loadingPercent") ||
       !Object.hasOwn(snapshot.operationalScore.indicators, "unloadingPercent") ||
+      !Object.hasOwn(snapshot.operationalScore.indicators, "possessionPercent") ||
       Object.hasOwn(snapshot.operationalScore.indicators, "duelRate") ||
-      Object.hasOwn(snapshot.operationalScore.indicators, "possessionPercent") ||
       (!["available", "unavailable"].includes(snapshot.operationalScore.loading?.status) ||
         snapshot.operationalScore.loading?.scored === undefined ||
         snapshot.operationalScore.loading?.conceded === undefined);

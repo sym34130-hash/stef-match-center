@@ -1190,15 +1190,15 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
                 <strong>{formatPercent(snapshot.loadingQuality?.targetedPercent)}</strong>
                 <small>Chargement avec une moyenne<br />inférieure ou égale à {loadingTarget}/poz</small>
               </div>
+              <div className="match-score-bubble reception-score-bubble">
+                <span>% temps réception</span>
+                <strong>{formatPercent(snapshot.unloadingQuality?.targetedPercent)}</strong>
+                <small>Voyages dans la cible selon le temps maximum par position</small>
+              </div>
               <div className="match-score-bubble possession-score-bubble">
                 <span>% possession Zody</span>
                 <strong>{snapshot.summary.possessionPercent === null ? "À renseigner" : `${formatNumber(snapshot.summary.possessionPercent)}%`}</strong>
                 <small>Zonage dynamique</small>
-              </div>
-              <div className="match-score-bubble centers-score-bubble">
-                <span>% centres réussis</span>
-                <strong>{formatPercent(snapshot.dailyIndicators?.punctuality.destinationPunctuality)}</strong>
-                <small>Ponctualité destination</small>
               </div>
             </div>
           </div>
@@ -3367,7 +3367,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
             <GuidePanel eyebrow="04 · Lire les écrans" title="Quel écran utiliser, et pour quoi faire ?" icon={LayoutDashboard}>
               <div className="guide-screen-grid">
                 <GuideScreenCard step="01" title="Coup d’envoi" detail="Vue d’ouverture du match. Elle confirme que les données sont prêtes et donne accès au brief équipe." />
-                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score opérationnel au format football, trois indicateurs, opérations, positions, joueurs clés par catégorie, challengers et contrôles d’import. Le score compare le pourcentage de passes réussies, de chargements cadrés et de temps de réception dans la cible à l’objectif de la ligue." />
+                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score opérationnel au format football, quatre indicateurs, opérations, positions, joueurs clés par catégorie, challengers et contrôles d’import. Le score compare les pourcentages de passes réussies, de tirs cadrés, de temps de réception dans la cible et de possession Zody à l’objectif de la ligue." />
               <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. Compare le match complet, les deux mi-temps ou les quatre quarts calculés depuis la plage active. Une vue personnalisée permet aussi d’isoler une sous-plage, par exemple 1 heure, sans modifier les indicateurs du match. L’activité Réception correspond au scan de la palette." />
                 <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, titres par catégorie, polyvalence, sujets à travailler et prochaines actions." />
                 <GuideScreenCard step="05" title="Brief équipe" detail="Vue dédiée aux consignes : trois grandes zones visibles, empilées verticalement : SAV, Expédition, Ramasse & emballage. Chaque zone accepte du texte et plusieurs captures d’écran, avec affichage plein écran." />
@@ -3413,7 +3413,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                   </article>
                 ))}
               </div>
-              <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Avant validation :</strong> les seuils sont partagés pour chaque agence, tandis que la ligue active est mémorisée sur ce poste. Les scores du match sont recalculés avec les seuils de la ligue active ; le score opérationnel repose sur trois indicateurs.</span></div>
+              <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Avant validation :</strong> les seuils sont partagés pour chaque agence, tandis que la ligue active est mémorisée sur ce poste. Les scores du match sont recalculés avec les seuils de la ligue active ; le score opérationnel repose sur quatre indicateurs.</span></div>
               <div className="guide-callout info"><Settings2 size={20} /><span><strong>Bon réflexe :</strong> vérifiez la ligue active, comparez les conditions avec le niveau attendu, puis contrôlez le résultat sur plusieurs imports avant toute diffusion officielle.</span></div>
             </GuidePanel>
           )}
@@ -3683,6 +3683,7 @@ function buildFootballScore(snapshot: Snapshot, targetPercent: number): Football
     snapshot.summary.passRate ?? null,
     snapshot.loadingQuality?.targetedPercent ?? null,
     snapshot.unloadingQuality?.targetedPercent ?? null,
+    snapshot.summary.possessionPercent ?? null,
   ];
   const available = indicators.every((value) => Number.isFinite(value));
   const reachedIndicators = available ? indicators.filter((value) => (value as number) > targetPercent).length : 0;
@@ -3708,14 +3709,14 @@ function matchCeremonyOutcome(footballScore: FootballScore): {
       tone: "rework",
       title: "Match à compléter",
       verdict: "SCORE INCOMPLET",
-      message: "Score opérationnel indisponible : les 3 indicateurs doivent être renseignés pour établir le résultat.",
+      message: "Score opérationnel indisponible : les 4 indicateurs doivent être renseignés pour établir le résultat.",
       collectiveTitle: "Performance à compléter",
       celebration: false,
     };
   }
 
   const scoreLabel = `${footballScore.goalsFor} - ${footballScore.goalsAgainst}`;
-  const scoreDetail = `${footballScore.reachedIndicators} indicateur(s) sur 3 dépassent l'objectif de ${formatNumber(footballScore.targetPercent)}%`;
+  const scoreDetail = `${footballScore.reachedIndicators} indicateur(s) sur 4 dépassent l'objectif de ${formatNumber(footballScore.targetPercent)}%`;
 
   if (footballScore.goalsFor > footballScore.goalsAgainst) {
     return {
@@ -3752,8 +3753,8 @@ function matchCeremonyOutcome(footballScore: FootballScore): {
 function FootballScoreDisplay({ footballScore }: { footballScore: FootballScore }) {
   const scoreLabel = footballScore.available ? `${footballScore.goalsFor} - ${footballScore.goalsAgainst}` : "— - —";
   const scoreDescription = footballScore.available
-    ? `${footballScore.reachedIndicators} indicateur(s) dépassent l'objectif sur 3 · seuil ${formatNumber(footballScore.targetPercent)}%`
-    : "Score à compléter · les 3 indicateurs doivent être disponibles";
+    ? `${footballScore.reachedIndicators} indicateur(s) dépassent l'objectif sur 4 · seuil ${formatNumber(footballScore.targetPercent)}%`
+    : "Score à compléter · les 4 indicateurs doivent être disponibles";
 
   return (
     <div
@@ -3762,7 +3763,7 @@ function FootballScoreDisplay({ footballScore }: { footballScore: FootballScore 
     >
       <div className="football-score-heading">
         <span>Score opérationnel</span>
-        <small>3 indicateurs</small>
+        <small>4 indicateurs</small>
       </div>
       <div className="football-score-line">
         <div className="football-score-side football-score-side-for">
@@ -3778,6 +3779,13 @@ function FootballScoreDisplay({ footballScore }: { footballScore: FootballScore 
         </div>
       </div>
       <p>{scoreDescription}</p>
+      <div className="football-score-integrated" aria-label="KPI intégrés au score">
+        <span>Intègre :</span>
+        <b>% passes réussies</b>
+        <b>% tirs cadrés</b>
+        <b>% temps réception</b>
+        <b>% possession Zody</b>
+      </div>
     </div>
   );
 }
