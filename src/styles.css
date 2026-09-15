@@ -12251,6 +12251,17 @@ body.causerie-brief-active .causerie-stadium.is-brief .field-zone li {
   line-height: 1.3;
 }
 
+.match-score-bubble.is-data-unavailable {
+  border-style: dashed;
+  border-color: rgba(217, 233, 255, .3);
+  background: linear-gradient(145deg, rgba(217, 233, 255, .08), rgba(6, 22, 45, .52));
+}
+
+.match-score-bubble.is-data-unavailable > strong {
+  color: rgba(248, 251, 255, .78);
+  font-size: clamp(19px, 2.2vw, 30px);
+}
+
 .match-score-bubble.loading-score-bubble > span {
   color: #72e0ae;
 }
@@ -15441,6 +15452,14 @@ kbd {
 .league-values select { width: 100%; min-width: 0; padding: 0; color: var(--navy-950); border: 0; background: transparent; font-size: 15px; font-weight: 800; line-height: 1.15; text-align: right; text-align-last: right; outline: none; }
 .league-values input:focus,
 .league-values select:focus { color: var(--league-deep, var(--blue-stef)); }
+.league-target-meter,
+.guide-league-card .league-target-meter { display: grid; gap: 5px; padding-top: 10px; border-top: 1px solid rgba(29, 78, 137, .18); }
+.league-target-meter-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: var(--league-ink, var(--muted)); font-size: 10px; font-weight: 800; }
+.league-target-meter-heading strong { color: var(--league-deep, var(--navy-950)); font-size: 15px; }
+.league-target-meter-track { position: relative; height: 7px; border-radius: 999px; background: rgba(29, 78, 137, .13); }
+.league-target-meter-track span { display: block; width: 100%; height: 100%; border-radius: inherit; background: linear-gradient(90deg, rgba(98, 210, 158, .42), rgba(137, 198, 255, .65)); }
+.league-target-meter-track b { position: absolute; top: -4px; width: 2px; height: 15px; border-radius: 2px; background: var(--league-deep, var(--navy-950)); box-shadow: 0 0 0 1px rgba(255, 255, 255, .74); transform: translateX(-1px); }
+.league-target-meter-scale { display: flex; justify-content: space-between; color: var(--muted); font-size: 9px; font-weight: 700; }
 .league-card.bronze .league-values label { background: rgba(255, 236, 218, .32); border-color: rgba(184, 109, 57, .24); }
 .league-card.silver .league-values label { background: rgba(226, 239, 253, .34); border-color: rgba(113, 139, 167, .24); }
 .league-card.gold .league-values label { background: rgba(255, 236, 183, .34); border-color: rgba(197, 139, 12, .26); }
@@ -16279,7 +16298,7 @@ body.tv-screen-active .app-shell.league-platine {
 
 .football-score-side > strong {
   color: #ffffff;
-  font-size: clamp(52px, 6vw, 82px);
+  font-size: clamp(58px, 6.6vw, 94px);
   font-weight: 950;
   line-height: .9;
 }
@@ -16306,6 +16325,35 @@ body.tv-screen-active .app-shell.league-platine {
   font-size: 13px !important;
   font-weight: 700;
   line-height: 1.25;
+}
+
+.football-score-meter {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  width: min(420px, 100%);
+  margin: 1px auto 0;
+}
+
+.football-score-meter span {
+  display: block;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(217, 233, 255, .2);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, .22);
+}
+
+.football-score-meter span.is-reached {
+  background: #62d29e;
+  box-shadow: 0 0 12px rgba(98, 210, 158, .38);
+}
+
+.football-score-meter span.is-below {
+  background: rgba(235, 93, 119, .72);
+}
+
+.football-score-meter span.is-unavailable {
+  background: rgba(217, 233, 255, .12);
 }
 
 .football-score-integrated {
@@ -16490,7 +16538,7 @@ body.tv-screen-active .app-shell.league-platine {
   padding: 2px 2px 10px;
   scroll-behavior: smooth;
   scroll-snap-type: x mandatory;
-  scroll-padding-inline: 2px;
+  scroll-padding-inline: 9%;
   scrollbar-color: rgba(29, 78, 137, 0.45) transparent;
   scrollbar-width: thin;
   touch-action: pan-x;
@@ -16510,6 +16558,7 @@ body.tv-screen-active .app-shell.league-platine {
   min-width: 0;
   padding: 0 2px;
   scroll-snap-align: start;
+  will-change: transform, opacity;
 }
 
 .operational-chart-slide > .performance-chart-panel,
@@ -16652,6 +16701,10 @@ body.tv-screen-active .app-shell.league-platine {
 @media (max-width: 900px) {
   .operational-charts-carousel-track {
     padding-inline: 6%;
+  }
+
+  .operational-charts-carousel-viewport {
+    scroll-padding-inline: 6%;
   }
 
   .operational-charts-carousel-track::before,
@@ -17537,7 +17590,7 @@ body.tv-screen-active .app-shell.league-platine {
   }
 
   .match-page.is-celebration-mode .football-score-side > strong {
-    font-size: clamp(54px, 6vw, 82px);
+    font-size: clamp(64px, 7.2vw, 104px);
   }
 
   .match-page.is-celebration-mode .football-score-side > span,

@@ -1180,22 +1180,22 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
             <span>STEF MATCH CENTER</span>
             <strong>{outcome.verdict}</strong>
             <div className="match-score-bubbles" aria-label="Scores du match">
-              <div className="match-score-bubble pass-score-bubble">
+              <div className={`match-score-bubble pass-score-bubble ${Number.isFinite(snapshot.summary.passRate) ? "" : "is-data-unavailable"}`}>
                 <span>% passes réussies</span>
                 <strong>{formatPercent(snapshot.summary.passRate)}</strong>
                 <small>Part des passes réussies parmi toutes les passes contrôlées<br />pendant la période sélectionnée</small>
               </div>
-              <div className="match-score-bubble loading-score-bubble">
+              <div className={`match-score-bubble loading-score-bubble ${Number.isFinite(snapshot.loadingQuality?.targetedPercent) ? "" : "is-data-unavailable"}`}>
                 <span>% tirs cadrés</span>
                 <strong>{formatPercent(snapshot.loadingQuality?.targetedPercent)}</strong>
                 <small>Chargement avec une moyenne<br />inférieure ou égale à {loadingTarget}/poz</small>
               </div>
-              <div className="match-score-bubble reception-score-bubble">
+              <div className={`match-score-bubble reception-score-bubble ${Number.isFinite(snapshot.unloadingQuality?.targetedPercent) ? "" : "is-data-unavailable"}`}>
                 <span>% temps réception</span>
                 <strong>{formatPercent(snapshot.unloadingQuality?.targetedPercent)}</strong>
                 <small>Voyages dans la cible selon le temps maximum par position</small>
               </div>
-              <div className="match-score-bubble possession-score-bubble">
+              <div className={`match-score-bubble possession-score-bubble ${Number.isFinite(snapshot.summary.possessionPercent) ? "" : "is-data-unavailable"}`}>
                 <span>% possession Zody</span>
                 <strong>{snapshot.summary.possessionPercent === null ? "À renseigner" : `${formatNumber(snapshot.summary.possessionPercent)}%`}</strong>
                 <small>Zonage dynamique</small>
@@ -1407,7 +1407,19 @@ function OperationalChartsCarousel({ snapshot }: { snapshot: Snapshot }) {
         </div>
       </div>
 
-      <div className="operational-charts-carousel-viewport" ref={viewportRef} role="region" aria-label="Graphiques de lecture opérationnelle" tabIndex={0}>
+      <div
+        className="operational-charts-carousel-viewport"
+        ref={viewportRef}
+        role="region"
+        aria-label="Graphiques de lecture opérationnelle"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (!(["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))) return;
+          event.preventDefault();
+          const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? cards.length - 1 : activeIndex + (event.key === "ArrowRight" ? 1 : -1);
+          goToSlide(nextIndex);
+        }}
+      >
         <div className="operational-charts-carousel-track">
           {cards.map((card, index) => (
             <article
@@ -3188,6 +3200,7 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
               <div className="league-card-top"><strong>{league.label}</strong><button className="league-select-button" type="button" onClick={() => selectLeague(league.id)} aria-pressed={activeLeague === league.id}>{activeLeague === league.id ? "Sélectionnée" : "Activer"}</button></div>
               <span className="league-description">{league.description}</span>
               <div className="league-values"><label><small>Zonage · min</small><select aria-label={`Modifier zonage ${league.label}`} value={String(league.zonageMinutes)} onChange={(event) => commitLeague(league.id, "zonageMinutes", event.target.value)}>{selectOptions(zonageMinuteOptions, league.zonageMinutes).map((minutes) => <option key={minutes} value={minutes}>{minutes} min</option>)}</select></label><label><small>Chargement · HH:MM:SS</small><select aria-label={`Modifier chargement ${league.label}`} value={formatTimeInput(league.loadingSeconds)} onChange={(event) => commitLeague(league.id, "loadingSeconds", parseTimeInput(event.target.value))}>{selectOptions(loadingTimeOptions, league.loadingSeconds).map((seconds) => <option key={seconds} value={formatTimeInput(seconds)}>{formatTimeInput(seconds)}</option>)}</select></label><label><small>Réception · HH:MM:SS</small><select aria-label={`Modifier réception ${league.label}`} value={formatTimeInput(league.unloadingSeconds)} onChange={(event) => commitLeague(league.id, "unloadingSeconds", parseTimeInput(event.target.value))}>{selectOptions(unloadingTimeOptions, league.unloadingSeconds).map((seconds) => <option key={seconds} value={formatTimeInput(seconds)}>{formatTimeInput(seconds)}</option>)}</select></label><label><small>Objectif score · %</small><input aria-label={`Objectif score ${league.label}`} type="number" min="1" max="100" step="1" value={leagueInputValue(league.id, "scoreTargetPercent", league.scoreTargetPercent)} onChange={(event) => setLeagueDraft(league.id, "scoreTargetPercent", event.target.value)} onBlur={(event) => commitLeague(league.id, "scoreTargetPercent", event.target.value)} /></label></div>
+              <LeagueTargetMeter league={league} />
             </article>
           ))}
         </div>
@@ -3221,6 +3234,16 @@ function parseTimeInput(value: string) {
 function LeagueIcon({ leagueId, size = 20, className = "administrator-trophy" }: { leagueId: LeagueId; size?: number; className?: string }) {
   const Icon = leagueId === "bronze" ? Medal : leagueId === "argent" ? Award : leagueId === "or" ? Trophy : Crown;
   return <Icon className={className} size={size} aria-hidden="true" />;
+}
+
+function LeagueTargetMeter({ league }: { league: LeagueConfig }) {
+  return (
+    <div className="league-target-meter" aria-label={`Objectif du score ${league.label} : ${league.scoreTargetPercent}%`}>
+      <div className="league-target-meter-heading"><span>Objectif du score</span><strong>{league.scoreTargetPercent}%</strong></div>
+      <div className="league-target-meter-track"><span /><b style={{ left: `${Math.max(0, Math.min(100, league.scoreTargetPercent))}%` }} aria-hidden="true" /></div>
+      <div className="league-target-meter-scale" aria-hidden="true"><span>0%</span><span>100%</span></div>
+    </div>
+  );
 }
 
 type GuideSection = "start" | "excel" | "import" | "read" | "edit" | "admin" | "help";
@@ -3410,6 +3433,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                     <div className="guide-league-card-top"><strong>{league.label}</strong><span>{league.id === "argent" ? "Référence" : "Niveau"}</span></div>
                     <p>{league.description}</p>
                     <div className="guide-league-values"><div><small>Zonage</small><strong>{league.zonageMinutes} min</strong></div><div><small>Chargement</small><strong>{formatTimeInput(league.loadingSeconds)}</strong></div><div><small>Réception</small><strong>{formatTimeInput(league.unloadingSeconds)}</strong></div><div><small>Objectif score</small><strong>{league.scoreTargetPercent}%</strong></div></div>
+                    <LeagueTargetMeter league={league} />
                   </article>
                 ))}
               </div>
@@ -3779,6 +3803,15 @@ function FootballScoreDisplay({ footballScore }: { footballScore: FootballScore 
         </div>
       </div>
       <p>{scoreDescription}</p>
+      <div className="football-score-meter" aria-label={`Barème : ${footballScore.available ? `${footballScore.goalsFor} indicateur(s) atteint(s) sur 4` : "indisponible"}`}>
+        {Array.from({ length: 4 }, (_, index) => (
+          <span
+            className={footballScore.available ? (index < footballScore.goalsFor ? "is-reached" : "is-below") : "is-unavailable"}
+            key={`score-segment-${index}`}
+            aria-hidden="true"
+          />
+        ))}
+      </div>
       <div className="football-score-integrated" aria-label="KPI intégrés au score">
         <span>Intègre :</span>
         <b>% passes réussies</b>
