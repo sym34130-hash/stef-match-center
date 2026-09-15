@@ -516,11 +516,12 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
   await page.getByRole("button", { name: "ADM Administrateur", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: "Centre de pilotage des ligues", exact: true })).toBeVisible();
-  await expect(page.locator(".administrator-rule-strip select")).toHaveCount(2);
-  await expect(page.locator(".league-card .league-values select")).toHaveCount(8);
+  await expect(page.locator(".administrator-rule-strip select")).toHaveCount(3);
+  await expect(page.locator(".league-card .league-values select")).toHaveCount(12);
   await expect(page.locator(".administrator-rule-strip")).not.toContainText("Position");
   await expect(page.getByLabel("Cible zonage Argent")).toHaveValue("30");
   await expect(page.getByLabel("Modifier chargement Argent")).toHaveValue("00:02:45");
+  await expect(page.getByLabel("Modifier réception Argent")).toHaveValue("00:01:00");
   await expect(page.getByLabel("Objectif score Argent").first()).toHaveValue("50");
   await page.getByLabel("Cible zonage Argent").selectOption("31");
   await expect(page.getByLabel("Cible zonage Argent")).toHaveValue("31");
@@ -539,7 +540,7 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
       sceneAnimation: getComputedStyle(document.querySelector<HTMLElement>(".administrator-scene")!, "::after").display,
       sceneBackground: getComputedStyle(document.querySelector<HTMLElement>(".administrator-scene")!).backgroundImage,
       cardOverflow: cards.every((card) => getComputedStyle(card).overflow === "hidden"),
-      criteriaRows: valueRows.length === 4 && valueRows.every((row) => getComputedStyle(row).gridTemplateColumns.split(" ").length === 1 && row.querySelectorAll("label").length === 3),
+      criteriaRows: valueRows.length === 4 && valueRows.every((row) => getComputedStyle(row).gridTemplateColumns.split(" ").length === 1 && row.querySelectorAll("label").length === 4),
     };
   });
   expect(animationState).toEqual({
@@ -557,6 +558,7 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
   await expect(page.locator(".administrator-page")).toBeVisible();
   await expect(page.getByLabel("Modifier zonage Argent")).toHaveValue("31");
   await expect(page.getByLabel("Modifier chargement Argent")).toHaveValue("00:02:45");
+  await expect(page.getByLabel("Modifier réception Argent")).toHaveValue("00:01:00");
   await expect(page.locator(".administrator-active-badge strong")).toHaveText("Platine");
   await expect(page.locator(".app-shell")).toHaveClass(/league-platine/);
   await expect(page.locator(".top-league-badge")).toContainText("Platine");

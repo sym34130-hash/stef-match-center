@@ -129,6 +129,7 @@ const leagueOptions: LeagueConfig[] = [
 
 const zonageMinuteOptions = Array.from({ length: 120 }, (_, index) => index + 1);
 const loadingTimeOptions = [105, 120, 135, 150, 165, 180, 195, 210, 225, 240, 255, 270, 300];
+const unloadingTimeOptions = [30, 40, 45, 50, 55, 60, 75, 90, 105, 120];
 
 function readLeagueConfigs(agencyCode: string): LeagueConfig[] {
   const saved = localStorage.getItem(`stef-match-league-configs-${agencyCode}`);
@@ -3095,7 +3096,7 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
     localStorage.setItem(activeLeagueStorageKey, id);
   }
 
-  type LeagueEditableField = "zonageMinutes" | "loadingSeconds" | "scoreTargetPercent";
+  type LeagueEditableField = "zonageMinutes" | "loadingSeconds" | "unloadingSeconds" | "scoreTargetPercent";
 
   function leagueDraftKey(id: LeagueId, field: LeagueEditableField) {
     return `${id}-${field}`;
@@ -3169,9 +3170,10 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
             <div className="administrator-rule-strip">
               <label><Target size={18} /><span>Zonage · cible en minutes</span><select aria-label={`Cible zonage ${selectedLeague.label}`} value={String(selectedLeague.zonageMinutes)} onChange={(event) => commitLeague(selectedLeague.id, "zonageMinutes", event.target.value)}>{selectOptions(zonageMinuteOptions, selectedLeague.zonageMinutes).map((minutes) => <option key={minutes} value={minutes}>{minutes} min</option>)}</select></label>
               <label><Clock3 size={18} /><span>Chargement · temps maximum</span><select aria-label={`Temps chargement ${selectedLeague.label}`} value={formatTimeInput(selectedLeague.loadingSeconds)} onChange={(event) => commitLeague(selectedLeague.id, "loadingSeconds", parseTimeInput(event.target.value))}>{selectOptions(loadingTimeOptions, selectedLeague.loadingSeconds).map((seconds) => <option key={seconds} value={formatTimeInput(seconds)}>{formatTimeInput(seconds)}</option>)}</select></label>
+              <label><Clock3 size={18} /><span>Réception · temps maximum</span><select aria-label={`Temps réception ${selectedLeague.label}`} value={formatTimeInput(selectedLeague.unloadingSeconds)} onChange={(event) => commitLeague(selectedLeague.id, "unloadingSeconds", parseTimeInput(event.target.value))}>{selectOptions(unloadingTimeOptions, selectedLeague.unloadingSeconds).map((seconds) => <option key={seconds} value={formatTimeInput(seconds)}>{formatTimeInput(seconds)}</option>)}</select></label>
               <label><CheckCircle2 size={18} /><span>Score · objectif par indicateur</span><input aria-label={`Objectif score ${selectedLeague.label}`} type="number" min="1" max="100" step="1" value={leagueInputValue(selectedLeague.id, "scoreTargetPercent", selectedLeague.scoreTargetPercent)} onChange={(event) => setLeagueDraft(selectedLeague.id, "scoreTargetPercent", event.target.value)} onBlur={(event) => commitLeague(selectedLeague.id, "scoreTargetPercent", event.target.value)} /></label>
             </div>
-            <p className="administrator-note"><Sparkles size={17} /> Les critères sont modifiables et mémorisés sur ce poste. La ligue active recalcule les duels, les chargements, la possession et le score à 3 indicateurs. Le calcul du déchargement reste conservé pour les contrôles de données.</p>
+            <p className="administrator-note"><Sparkles size={17} /> Les critères sont partagés pour l’agence. La ligue active recalcule les indicateurs dépendants des seuils : duels, chargements, temps de réception et score. Le taux de passes et la possession restent calculés sur la plage Excel.</p>
             {configSaveError && <p className="form-error" role="alert">{configSaveError}</p>}
           </div>
         </div>
@@ -3185,7 +3187,7 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
               <span className="league-medal"><LeagueIcon leagueId={league.id} /></span>
               <div className="league-card-top"><strong>{league.label}</strong><button className="league-select-button" type="button" onClick={() => selectLeague(league.id)} aria-pressed={activeLeague === league.id}>{activeLeague === league.id ? "Sélectionnée" : "Activer"}</button></div>
               <span className="league-description">{league.description}</span>
-              <div className="league-values"><label><small>Zonage · min</small><select aria-label={`Modifier zonage ${league.label}`} value={String(league.zonageMinutes)} onChange={(event) => commitLeague(league.id, "zonageMinutes", event.target.value)}>{selectOptions(zonageMinuteOptions, league.zonageMinutes).map((minutes) => <option key={minutes} value={minutes}>{minutes} min</option>)}</select></label><label><small>Chargement · HH:MM:SS</small><select aria-label={`Modifier chargement ${league.label}`} value={formatTimeInput(league.loadingSeconds)} onChange={(event) => commitLeague(league.id, "loadingSeconds", parseTimeInput(event.target.value))}>{selectOptions(loadingTimeOptions, league.loadingSeconds).map((seconds) => <option key={seconds} value={formatTimeInput(seconds)}>{formatTimeInput(seconds)}</option>)}</select></label><label><small>Objectif score · %</small><input aria-label={`Objectif score ${league.label}`} type="number" min="1" max="100" step="1" value={leagueInputValue(league.id, "scoreTargetPercent", league.scoreTargetPercent)} onChange={(event) => setLeagueDraft(league.id, "scoreTargetPercent", event.target.value)} onBlur={(event) => commitLeague(league.id, "scoreTargetPercent", event.target.value)} /></label></div>
+              <div className="league-values"><label><small>Zonage · min</small><select aria-label={`Modifier zonage ${league.label}`} value={String(league.zonageMinutes)} onChange={(event) => commitLeague(league.id, "zonageMinutes", event.target.value)}>{selectOptions(zonageMinuteOptions, league.zonageMinutes).map((minutes) => <option key={minutes} value={minutes}>{minutes} min</option>)}</select></label><label><small>Chargement · HH:MM:SS</small><select aria-label={`Modifier chargement ${league.label}`} value={formatTimeInput(league.loadingSeconds)} onChange={(event) => commitLeague(league.id, "loadingSeconds", parseTimeInput(event.target.value))}>{selectOptions(loadingTimeOptions, league.loadingSeconds).map((seconds) => <option key={seconds} value={formatTimeInput(seconds)}>{formatTimeInput(seconds)}</option>)}</select></label><label><small>Réception · HH:MM:SS</small><select aria-label={`Modifier réception ${league.label}`} value={formatTimeInput(league.unloadingSeconds)} onChange={(event) => commitLeague(league.id, "unloadingSeconds", parseTimeInput(event.target.value))}>{selectOptions(unloadingTimeOptions, league.unloadingSeconds).map((seconds) => <option key={seconds} value={formatTimeInput(seconds)}>{formatTimeInput(seconds)}</option>)}</select></label><label><small>Objectif score · %</small><input aria-label={`Objectif score ${league.label}`} type="number" min="1" max="100" step="1" value={leagueInputValue(league.id, "scoreTargetPercent", league.scoreTargetPercent)} onChange={(event) => setLeagueDraft(league.id, "scoreTargetPercent", event.target.value)} onBlur={(event) => commitLeague(league.id, "scoreTargetPercent", event.target.value)} /></label></div>
             </article>
           ))}
         </div>
@@ -3392,12 +3394,12 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
 
           {section === "admin" && (
             <GuidePanel eyebrow="06 · Administrateur" title="Régler les ligues et leurs standards" icon={Settings2}>
-              <p>L’onglet Administrateur sert à choisir un niveau de référence et à ajuster ses conditions de performance : la cible de zonage, le temps maximum de chargement et l’objectif en pourcentage de chaque indicateur du score.</p>
+              <p>L’onglet Administrateur sert à choisir un niveau de référence et à ajuster ses conditions de performance : la cible de zonage, les temps maximum de chargement et de réception, ainsi que l’objectif en pourcentage de chaque indicateur du score.</p>
               <div className="guide-action-list">
                 <GuideAction icon={Trophy} title="Choisir une ligue" tone="blue" detail="Activez Bronze, Argent, Or ou Platine. Le niveau sélectionné devient la référence affichée dans le centre de pilotage." />
                 <GuideAction icon={Target} title="Régler le zonage" tone="green" detail="Modifiez la cible en minutes directement dans le panneau de la ligue. Une valeur plus basse correspond à un standard plus exigeant." />
                 <GuideAction icon={Clock3} title="Régler le chargement" tone="orange" detail="Modifiez le temps maximum au format HH:MM:SS. Le seuil Argent proposé est 00:02:45." />
-              <GuideAction icon={Clock3} title="Contrôler le déchargement" tone="blue" detail="Le résultat est calculé par voyage pour les contrôles de données, sans entrer dans le score opérationnel." />
+              <GuideAction icon={Clock3} title="Régler le temps de réception" tone="blue" detail="Modifiez le temps maximum au format HH:MM:SS. Le seuil Argent proposé est 00:01:00 ; il entre dans le score opérationnel." />
               <GuideAction icon={CheckCircle2} title="Régler l'objectif du score" tone="green" detail="Chaque indicateur qui dépasse strictement cet objectif marque un but ; chaque indicateur qui l'atteint ou reste en dessous encaisse un but. Les valeurs proposées vont de 45 % en Bronze à 70 % en Platine." />
               </div>
               <h3>Référentiel proposé</h3>
@@ -3407,11 +3409,11 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                     <span className="guide-league-medal"><LeagueIcon leagueId={league.id} className="" /></span>
                     <div className="guide-league-card-top"><strong>{league.label}</strong><span>{league.id === "argent" ? "Référence" : "Niveau"}</span></div>
                     <p>{league.description}</p>
-                    <div className="guide-league-values"><div><small>Zonage</small><strong>{league.zonageMinutes} min</strong></div><div><small>Chargement</small><strong>{formatTimeInput(league.loadingSeconds)}</strong></div><div><small>Objectif score</small><strong>{league.scoreTargetPercent}%</strong></div></div>
+                    <div className="guide-league-values"><div><small>Zonage</small><strong>{league.zonageMinutes} min</strong></div><div><small>Chargement</small><strong>{formatTimeInput(league.loadingSeconds)}</strong></div><div><small>Réception</small><strong>{formatTimeInput(league.unloadingSeconds)}</strong></div><div><small>Objectif score</small><strong>{league.scoreTargetPercent}%</strong></div></div>
                   </article>
                 ))}
               </div>
-              <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Avant validation :</strong> les seuils et la ligue active sont mémorisés séparément pour chaque agence sur ce poste. Les scores du match sont recalculés avec les seuils de la ligue active ; le score opérationnel repose sur trois indicateurs.</span></div>
+              <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Avant validation :</strong> les seuils sont partagés pour chaque agence, tandis que la ligue active est mémorisée sur ce poste. Les scores du match sont recalculés avec les seuils de la ligue active ; le score opérationnel repose sur trois indicateurs.</span></div>
               <div className="guide-callout info"><Settings2 size={20} /><span><strong>Bon réflexe :</strong> vérifiez la ligue active, comparez les conditions avec le niveau attendu, puis contrôlez le résultat sur plusieurs imports avant toute diffusion officielle.</span></div>
             </GuidePanel>
           )}
