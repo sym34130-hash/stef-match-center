@@ -34,7 +34,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 16;
+export const KPI_DICTIONARY_VERSION = 17;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -182,9 +182,9 @@ export const KPI_DICTIONARY = [
   {
     id: "composition.roles",
     label: "Répartition terrain",
-    source: "Données!O",
-    formula: "DISTINCTCOUNT(Opérateur) par Poste avec Filtre opérateur vide et heure de début comprise dans la plage active (fin incluse)",
-    denominator: "Joueurs actifs du match filtré",
+    source: "Données!P + Données!C",
+    formula: "Match complet : DISTINCTCOUNT(Opérateur) par Poste ; mi-temps, quart-temps et plage personnalisée : poste dominant de chaque joueur selon son activité CHG, ZONAGE ou DECHG dans la période affichée",
+    denominator: "Joueurs actifs du match filtré ou de la sous-plage sélectionnée",
     display: "Équilibre de la composition",
   },
 ];
@@ -287,7 +287,9 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     const compositionResult = {
       ok: true,
       period,
-      players: buildPlayers(matchRows),
+      // A custom composition is a period-scoped view: recalculate each
+      // player's current line from the activities present in that range.
+      players: buildPlayers(matchRows, { periodScopedRole: true }),
       compositionPeriods: buildCompositionPeriods(matchRows, period),
     };
     snapshotBuildCache.set(buildCacheKey, compositionResult);
@@ -1170,17 +1172,17 @@ function buildCompositionPeriods(rows, period) {
   const quarters = quarterIds.map((id, index) => ({
     id,
     label: `${displayTime(quarterPoints[index])} - ${displayTime(quarterPoints[index + 1])}`,
-    players: buildPlayers(rowsBetween(quarterPoints[index], quarterPoints[index + 1], index === quarterIds.length - 1)),
+    players: buildPlayers(rowsBetween(quarterPoints[index], quarterPoints[index + 1], index === quarterIds.length - 1), { periodScopedRole: true }),
   }));
 
   return {
     first: {
       label: `${period.start} - ${displayTime(midpoint)}`,
-      players: buildPlayers(firstRows),
+      players: buildPlayers(firstRows, { periodScopedRole: true }),
     },
     second: {
       label: `${displayTime(midpoint)} - ${period.end}`,
-      players: buildPlayers(secondRows),
+      players: buildPlayers(secondRows, { periodScopedRole: true }),
     },
     quarters,
   };
@@ -1196,7 +1198,7 @@ function formatCompositionTime(minutes) {
   return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}${seconds ? `:${String(seconds).padStart(2, "0")}` : ""}`;
 }
 
-function buildPlayers(rows) {
+function buildPlayers(rows, options = {}) {
   const playerMap = new Map();
   for (const row of rows) {
     const player = ensurePlayer(playerMap, row.operator);
@@ -1212,7 +1214,9 @@ function buildPlayers(rows) {
 
   const players = Array.from(playerMap.values()).map((player) => {
     const roleEntry = topEntry(player.byType);
-    const role = topEntry(player.byPost)?.key ?? OPERATION_ROLE[roleEntry?.key] ?? "Joueur";
+    const role = options.periodScopedRole
+      ? OPERATION_ROLE[roleEntry?.key] ?? topEntry(player.byPost)?.key ?? "Joueur"
+      : topEntry(player.byPost)?.key ?? OPERATION_ROLE[roleEntry?.key] ?? "Joueur";
     const dominantCount = roleEntry?.value ?? 0;
     const dominantShare = percent(dominantCount, player.operations);
     const operationTypes = Object.values(player.byType).filter((count) => count > 0).length;

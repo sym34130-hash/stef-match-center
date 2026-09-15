@@ -292,6 +292,11 @@ assert.equal(roles.Attaquant.count, 8, "Composition attaque");
 assert.equal(roles.Milieu.count, 3, "Composition milieu");
 assert.equal(roles.Défenseur.count, 6, "Composition défense");
 
+const firstQuarterPlayers = snapshot.compositionPeriods.quarters.find((quarter) => quarter.id === "q1")?.players ?? [];
+assert.equal(snapshot.players.find((player) => player.name === "NORMAN HASSICI")?.role, "Attaquant", "Le poste du match complet doit rester global");
+assert.equal(firstQuarterPlayers.find((player) => player.name === "NORMAN HASSICI")?.role, "Milieu", "Le 1er quart doit recalculer le poste selon l'activité de la période");
+assert.equal(firstQuarterPlayers.find((player) => player.name === "ENZO GOROSTIDI")?.role, "Milieu", "Les rôles du 1er quart doivent être recalculés joueur par joueur");
+
 assert.equal(snapshot.highlights.bestScorer.name, "JEAN LUC LASSORT");
 assert.equal(snapshot.highlights.bestScorer.value, 314);
 assert.equal(snapshot.highlights.bestScorer.label, "Joueur Attaque");

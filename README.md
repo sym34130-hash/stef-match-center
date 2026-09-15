@@ -128,7 +128,10 @@ erreur Excel.
 - Le temps de réception est calculé sur les lignes `DECHG` de la plage active, par voyage : `(dernière opération - première opération) / nombre de positions`. Un voyage est dans la cible si ce temps moyen par position est inférieur ou égal au seuil de la ligue. Les voyages sans durée positive ne sont pas comptabilisés ; le score opérationnel utilise le pourcentage de voyages dans la cible.
 - Le KPI chargement lit le bloc `Chargement` de `TCD PPT` : `TC / Nombre de N° Position` dans la colonne `U` (valeur brute `T/S`), uniquement pour les voyages d'au moins 15 positions et dans la plage active. La colonne `V` est une formule de présentation et n'est pas utilisée pour le calcul.
 - Le détail chargement reprend le lexique de frappe `TCD PPT!X:Y` via le commentaire du TCD.
-- La composition utilise le champ Excel `Poste`.
+- La composition du match complet utilise le champ Excel `Poste`. Les
+  mi-temps, quart-temps et plages personnalisees recalculent le poste dominant
+  de chaque joueur selon ses activites de la periode (`CHG`, `ZONAGE` ou
+  `DECHG`) afin que la ligne affichee puisse changer entre deux vues.
 - La fiche joueur affiche un `Indice volume`, pas une contribution équipe.
 - Les distinctions affichent la valeur du KPI gagné : CHG, ZONAGE ou DECHG selon le cas.
 

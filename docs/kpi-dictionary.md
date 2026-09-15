@@ -50,7 +50,7 @@ Il lit l'onglet `Donnees` complet et reprend les colonnes Excel calculees :
 | Joueur Attaque | Max `CHG` joueur dans le match filtre | Joueurs du match filtre | Valeur CHG gagnante |
 | Joueur Milieu | Max `ZONAGE` joueur dans le match filtre | Joueurs du match filtre | Valeur ZONAGE gagnante |
 | Joueur Defense | Max `DECHG` joueur dans le match filtre | Joueurs du match filtre | Valeur DECHG gagnante |
-| Repartition terrain | Joueurs distincts par `Poste` Excel | Joueurs du match filtre | Equilibre composition |
+| Repartition terrain | Match complet : joueurs distincts par `Poste` Excel ; mi-temps, quart-temps et plage personnalisee : poste dominant recalcule selon l'activite `CHG`, `ZONAGE` ou `DECHG` de la periode | Joueurs du match filtre ou de la sous-plage selectionnee | Equilibre composition |
 
 ## Objectifs par ligue
 
