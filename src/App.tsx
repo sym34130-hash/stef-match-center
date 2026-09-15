@@ -59,6 +59,7 @@ type CauseriePlan = {
   midfield: string[];
   defense: string[];
   attachments: CauserieAttachments;
+  mercato: string;
   coach: {
     tactic: string;
     priority: string;
@@ -1972,7 +1973,6 @@ function Coach({
   const [savingCoachPlan, setSavingCoachPlan] = useState(false);
   const [coachBoardFeedback, setCoachBoardFeedback] = useState<CauserieToast>(null);
   const actions = coachDecisionActions(snapshot);
-  const late = delayedPositions(snapshot);
   const targetPercent = snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent;
   const footballScore = buildFootballScore(snapshot, targetPercent);
   const matchKpi = loadMatchKpiCopy(snapshot);
@@ -2050,12 +2050,17 @@ function Coach({
     }));
   }
 
+  function updateMercato(value: string) {
+    setCoachDraft((current) => ({ ...current, mercato: value.slice(0, 240) }));
+  }
+
   async function saveCoachBoard() {
     const nextPlan = {
       ...coachDraft,
       attack: padPlanLines(coachDraft.attack),
       midfield: padPlanLines(coachDraft.midfield),
       defense: padPlanLines(coachDraft.defense),
+      mercato: coachDraft.mercato.trim(),
       coach: {
         tactic: coachDraft.coach.tactic.trim(),
         priority: coachDraft.coach.priority.trim(),
@@ -2174,12 +2179,17 @@ function Coach({
             </div>
           </article>
 
-          <article className="coach-panel coach-risk-panel">
-            <div className="coach-panel-heading"><div><span>Contrôle terrain</span><h3>Ce qui demande une action</h3></div><Target size={21} /></div>
-            <div className="coach-risk-list">
-              <div className={late > 0 ? "is-warning" : "is-safe"}><strong>{formatNumber(late)}</strong><span>positions hors délai</span><small>{late > 0 ? "Prioriser les positions concernées." : "Aucun écart de délai détecté."}</small></div>
-              <div className={snapshot.validation.warnings.length > 0 ? "is-warning" : "is-safe"}><strong>{snapshot.validation.warnings.length}</strong><span>alertes import</span><small>{snapshot.validation.warnings[0] ?? "Aucune anomalie signalée par le dernier import."}</small></div>
-            </div>
+          <article className="coach-panel coach-mercato-panel">
+            <div className="coach-panel-heading"><div><span>Mercato</span><h3>Nouvel arrivant</h3></div><Users size={21} /></div>
+            <p className="coach-mercato-note">Présenter la nouvelle arrivée à l'équipe.</p>
+            {coachBoardMode === "edit" ? (
+              <label className="coach-mercato-input">
+                <span className="sr-only">Nouvel arrivant du mercato</span>
+                <textarea aria-label="Nouvel arrivant du mercato" value={activeCoachPlan.mercato} onChange={(event) => updateMercato(event.target.value)} placeholder="Ex. Accueillir Prénom NOM, nouveau renfort de l'équipe." rows={5} />
+              </label>
+            ) : (
+              <p className={`coach-mercato-entry ${activeCoachPlan.mercato.trim() ? "" : "is-empty"}`}>{activeCoachPlan.mercato.trim() || "À renseigner par le coach"}</p>
+            )}
           </article>
         </section>
 
@@ -3971,6 +3981,7 @@ function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
       midfield: [],
       defense: [],
     },
+    mercato: "",
     coach: {
       tactic: action.title,
       priority: priority || action.detail,
@@ -3993,6 +4004,7 @@ function buildEmptyCauseriePlan(): CauseriePlan {
       midfield: [],
       defense: [],
     },
+    mercato: "",
     coach: {
       tactic: "",
       priority: "",
@@ -4016,6 +4028,7 @@ function normalizeCauseriePlan(plan: CauseriePlan, snapshot: Snapshot): Causerie
       midfield: normalizeCauserieAttachments(plan.attachments?.midfield, fallback.attachments.midfield),
       defense: normalizeCauserieAttachments(plan.attachments?.defense, fallback.attachments.defense),
     },
+    mercato: plan.mercato ?? fallback.mercato,
     coach: {
       tactic: plan.coach?.tactic ?? fallback.coach.tactic,
       priority: plan.coach?.priority ?? fallback.coach.priority,
@@ -4029,7 +4042,7 @@ function hasManualCauserieContent(plan: CauseriePlan, snapshot: Snapshot) {
   const hasZoneContent = [...plan.attack, ...plan.midfield, ...plan.defense].some((item) => item.trim().length > 0);
   const hasAttachment = Object.values(plan.attachments).some((items) => items.length > 0);
   const hasMetadata = plan.team.trim().length > 0 || plan.manager.trim().length > 0;
-  if (hasZoneContent || hasAttachment || hasMetadata) return true;
+  if (hasZoneContent || hasAttachment || hasMetadata || plan.mercato.trim().length > 0) return true;
 
   const generated = buildDefaultCauseriePlan(snapshot).coach;
   const legacyGenerated = new Set([
@@ -4076,6 +4089,7 @@ function hasCauserieContent(plan: CauseriePlan) {
     plan.coach.priority,
     plan.coach.arbitration,
     plan.coach.review,
+    plan.mercato,
   ].some((item) => item.trim().length > 0);
 }
 

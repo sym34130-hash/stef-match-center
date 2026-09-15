@@ -733,6 +733,7 @@ function normalizeCauseriePlan(plan) {
       midfield: normalizeAttachments(input.attachments?.midfield),
       defense: normalizeAttachments(input.attachments?.defense),
     },
+    mercato: limitText(input.mercato, 240),
     coach: {
       tactic: limitText(input.coach?.tactic, 120),
       priority: limitText(input.coach?.priority, 120),

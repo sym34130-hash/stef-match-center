@@ -17364,6 +17364,18 @@ body.tv-screen-active .app-shell.league-platine {
 .coach-risk-list span { color: #ffffff; font-size: 13px; font-weight: 800; }
 .coach-risk-list small { color: #cbe5ff; font-size: 11px; line-height: 1.3; }
 
+.coach-mercato-panel {
+  background: linear-gradient(145deg, rgba(82, 54, 112, .28), rgba(6, 22, 45, .46));
+}
+.coach-mercato-panel .coach-panel-heading svg { color: #cba6f4; }
+.coach-mercato-note { margin: -5px 0 0; color: #cbe5ff; font-size: 13px; line-height: 1.35; }
+.coach-mercato-input { display: grid; min-width: 0; margin-top: 2px; }
+.coach-mercato-input textarea { width: 100%; min-height: 138px; resize: vertical; box-sizing: border-box; border: 1px solid rgba(203, 166, 244, .48); border-radius: 8px; padding: 13px 14px; color: #ffffff; background: rgba(6, 22, 45, .62); font: inherit; font-size: 15px; line-height: 1.4; }
+.coach-mercato-input textarea::placeholder { color: #c7b8dc; opacity: 1; }
+.coach-mercato-input textarea:focus { outline: 2px solid rgba(203, 166, 244, .42); border-color: #cba6f4; }
+.coach-mercato-entry { display: flex; align-items: flex-start; min-height: 138px; box-sizing: border-box; margin: 2px 0 0; padding: 14px; border: 1px solid rgba(203, 166, 244, .3); border-radius: 8px; color: #ffffff; background: rgba(6, 22, 45, .38); font-size: 16px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+.coach-mercato-entry.is-empty { color: #c7b8dc; font-style: italic; }
+
 .coach-actions-section,
 .coach-players-section,
 .coach-plan-section { display: grid; gap: 16px; padding: 21px; background: rgba(6, 22, 45, .34); }

@@ -28,16 +28,18 @@ test.afterEach(async ({ page }, testInfo) => {
 
 test("les vues principales restent lisibles sur desktop, tablette et mobile", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
+  let savedCauseriePlan: Record<string, unknown> | null = null;
   await page.route("**/api/agencies/058/causerie**", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ plan: null }),
+        body: JSON.stringify({ plan: savedCauseriePlan }),
       });
       return;
     }
     const body = route.request().postDataJSON() as { plan?: Record<string, unknown> };
+    savedCauseriePlan = body.plan ?? null;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -96,15 +98,18 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.getByText("À planifier", { exact: true })).toHaveCount(1);
       await page.getByRole("button", { name: "Écrire", exact: true }).click();
       await expect(page.locator(".coach-action-input textarea")).toHaveCount(3);
+      await expect(page.getByLabel("Nouvel arrivant du mercato")).toBeVisible();
       await expect(page.getByLabel("Priorité terrain, consigne du chef de quai")).toBeVisible();
       await page.getByLabel("Priorité terrain, consigne du chef de quai").fill("Sécuriser les positions prioritaires.");
       await page.getByLabel("Zone à surveiller, consigne du chef de quai").fill("Suivre le voyage critique.");
       await page.getByLabel("Équilibre d'équipe, consigne du chef de quai").fill("Renforcer la ligne en tension.");
+      await page.getByLabel("Nouvel arrivant du mercato").fill("Accueillir Camille Martin, nouveau renfort de l'équipe.");
       await page.getByLabel("Prochaine revue du plan").fill("18:30");
       await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
       await expect(page.locator(".coach-action-entry").nth(0)).toHaveText("Sécuriser les positions prioritaires.");
       await expect(page.locator(".coach-action-entry").nth(1)).toHaveText("Suivre le voyage critique.");
       await expect(page.locator(".coach-action-entry").nth(2)).toHaveText("Renforcer la ligne en tension.");
+      await expect(page.locator(".coach-mercato-entry")).toHaveText("Accueillir Camille Martin, nouveau renfort de l'équipe.");
       await expect(page.locator(".coach-review-line strong")).toHaveText("18:30");
       const coachLayout = await page.evaluate(() => {
         const pageElement = document.querySelector<HTMLElement>(".coach-decision-page");
@@ -116,6 +121,10 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
         };
       });
       expect(coachLayout).toEqual({ noHorizontalOverflow: true, contextRowsVisible: true, sceneContained: true });
+      await page.reload();
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await expect(page.getByLabel("Nouvel arrivant du mercato")).toHaveCount(0);
+      await expect(page.locator(".coach-mercato-entry")).toHaveText("Accueillir Camille Martin, nouveau renfort de l'équipe.");
     }
     if (screen.name === "02-feuille-match") {
       await expect(page.locator(".match-page.is-threshold-reached")).toHaveCount(1);
