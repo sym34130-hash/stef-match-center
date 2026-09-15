@@ -60,6 +60,7 @@ type CauseriePlan = {
   defense: string[];
   attachments: CauserieAttachments;
   mercato: string;
+  redCards: string;
   coach: {
     tactic: string;
     priority: string;
@@ -128,7 +129,6 @@ const leagueOptions: LeagueConfig[] = [
 
 const zonageMinuteOptions = Array.from({ length: 120 }, (_, index) => index + 1);
 const loadingTimeOptions = [105, 120, 135, 150, 165, 180, 195, 210, 225, 240, 255, 270, 300];
-const unloadingTimeOptions = [30, 45, 50, 55, 60, 75, 90, 105, 120, 150];
 
 function readLeagueConfigs(agencyCode: string): LeagueConfig[] {
   const saved = localStorage.getItem(`stef-match-league-configs-${agencyCode}`);
@@ -331,10 +331,6 @@ export default function App() {
     };
   }, [session?.agency.code, session?.accessCode, activeLeague, screen]);
 
-  useEffect(() => {
-    setActiveLeague(session ? readActiveLeague(session.agency.code) : "argent");
-  }, [session?.agency.code]);
-
   async function handleLogin(agencyCode: string, accessCode: string) {
     const requestId = ++snapshotRequestRef.current;
     setLoading(true);
@@ -402,8 +398,8 @@ export default function App() {
   }
 
   async function applyLeague(id: LeagueId, config = configForLeague(leagueConfigs, id)) {
-    const previousLeague = activeLeague;
     setActiveLeague(id);
+    if (session) localStorage.setItem(`stef-match-active-league-${session.agency.code}`, id);
     if (!session) return;
     const requestId = ++snapshotRequestRef.current;
     setSnapshotLoading(true);
@@ -419,8 +415,7 @@ export default function App() {
           setStatusMessage("Ligue activée. Importe un match pour appliquer ses objectifs.");
           return;
         }
-        setActiveLeague(previousLeague);
-        localStorage.setItem(`stef-match-active-league-${session.agency.code}`, previousLeague);
+        setSnapshot(null);
         setStatusMessage(error instanceof Error ? error.message : "La ligue n'a pas pu être appliquée.");
       }
     } finally {
@@ -797,7 +792,7 @@ function TopBar({ snapshot, agency, activeLeague, onRefresh, onTimeRangeChange, 
 
   async function submitTimeRange(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!start || !end || start >= end) {
+    if (!start || !end || start === end) {
       setRangeError("Choisis un début et une fin valides, par pas de 30 minutes.");
       return;
     }
@@ -835,7 +830,7 @@ function TopBar({ snapshot, agency, activeLeague, onRefresh, onTimeRangeChange, 
             <b>à</b>
             <label>
               <span className="sr-only">Fin</span>
-              <input type="time" min="00:30" max="23:30" step={1800} value={end} onChange={(event) => setEnd(event.target.value)} />
+              <input type="time" min="00:00" max="23:30" step={1800} value={end} onChange={(event) => setEnd(event.target.value)} />
             </label>
             <button className="secondary-button compact" type="submit" disabled={savingRange || loading}>
               {savingRange ? "Mise à jour..." : "Appliquer"}
@@ -1112,6 +1107,7 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
   const [kpiCopy, setKpiCopy] = useState<MatchKpiCopy>(() => loadMatchKpiCopy(snapshot));
   const [savedKpiCopy, setSavedKpiCopy] = useState<MatchKpiCopy>(kpiCopy);
   const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
+  const loadingTarget = formatReadableDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
   const footballScore = buildFootballScore(snapshot, snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent);
   const thresholdReached = footballScore.available && footballScore.goalsFor > footballScore.goalsAgainst;
   const outcome = matchCeremonyOutcome(footballScore);
@@ -1186,18 +1182,22 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
               <div className="match-score-bubble duel-score-bubble">
                 <span>% duels gagnés</span>
                 <strong>{formatPercent(snapshot.summary.duelRate)}</strong>
-                <small>Duels gagnés ÷ duels joués<br />sur la plage active</small>
+                <small>% de poz zonées en moins<br />de 30 min après réception</small>
               </div>
               <div className="match-score-bubble loading-score-bubble">
-                <span>% chargements cadrés</span>
+                <span>% tirs cadrés</span>
                 <strong>{formatPercent(snapshot.loadingQuality?.targetedPercent)}</strong>
-                <small>Chargements cadrés ÷<br />chargements contrôlés</small>
+                <small>Chargement avec une moyenne<br />inférieure ou égale à {loadingTarget}/poz</small>
               </div>
-              <UnloadingScoreBubble snapshot={snapshot} />
               <div className="match-score-bubble possession-score-bubble">
                 <span>% possession Zody</span>
                 <strong>{snapshot.summary.possessionPercent === null ? "À renseigner" : `${formatNumber(snapshot.summary.possessionPercent)}%`}</strong>
-                <small>Réceptions associées à un ZONAGE ÷<br />réceptions uniques</small>
+                <small>Zonage dynamique</small>
+              </div>
+              <div className="match-score-bubble centers-score-bubble">
+                <span>% centres réussis</span>
+                <strong>{formatPercent(snapshot.dailyIndicators?.punctuality.destinationPunctuality)}</strong>
+                <small>Ponctualité destination</small>
               </div>
             </div>
           </div>
@@ -1261,6 +1261,7 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
                 const jersey = formatJerseyNumber(jerseyNumbers.get(award.highlight.name) ?? index + 1);
                 const role = player?.role ?? award.highlight.role;
                 const challengers = buildAwardChallengers(snapshot.players, award);
+                const leaderScore = awardReferenceScore(award, player);
                 const className = `award-card ${award.kind} ${roleClass(role)}`;
                 const disabled = !player;
                 return (
@@ -1281,13 +1282,19 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
                       <i>{award.label}</i>
                       <strong>{award.highlight.name}</strong>
                       <small>{award.detail}</small>
+                      <span className="award-leader-score" aria-label={`Score du premier : ${formatNumber(leaderScore.value)}${leaderScore.suffix} ${leaderScore.label}`}>
+                        <b>{formatNumber(leaderScore.value)}{leaderScore.suffix}</b>
+                        <small>{leaderScore.label}</small>
+                      </span>
                     </span>
                     <span className="award-challengers">
                       <strong>CHALLENGERS</strong>
                       {challengers.length > 0 ? challengers.map((challenger) => (
                         <span className="award-challenger" key={challenger.player.name}>
                           <b>{challenger.player.name}</b>
-                          <small>{award.kind === "polyvalent" ? `${formatNumber(challenger.operations)}% polyvalence · ${challenger.delta === 0 ? "à égalité" : `${challenger.delta > 0 ? "-" : "+"}${formatNumber(Math.abs(challenger.delta))} point(s)`}` : `${formatNumber(challenger.operations)} opérations · ${challenger.delta === 0 ? "à égalité" : `${challenger.delta > 0 ? "-" : "+"}${formatNumber(Math.abs(challenger.delta))} avec le premier`}`}</small>
+                          <small>{award.kind === "polyvalent"
+                            ? `${formatNumber(challenger.score)}% polyvalence · ${challenger.scoreDelta === 0 ? "à égalité" : `${challenger.scoreDelta > 0 ? "-" : "+"}${formatNumber(Math.abs(challenger.scoreDelta))} point(s) avec le premier`}`
+                            : `${formatNumber(challenger.positions)} poz · ${challenger.positionDelta === 0 ? "à égalité" : `${challenger.positionDelta > 0 ? "-" : "+"}${formatNumber(Math.abs(challenger.positionDelta))} avec le premier`}`}</small>
                         </span>
                       )) : <small>Aucun challenger disponible</small>}
                     </span>
@@ -1344,8 +1351,13 @@ function OperationalChartsCarousel({ snapshot }: { snapshot: Snapshot }) {
     },
     {
       id: "loading",
-      label: "Chargements contrôlés",
+      label: "% tirs cadrés",
       content: <LoadingQualityCard snapshot={snapshot} />,
+    },
+    {
+      id: "centers",
+      label: "% centres réussis",
+      content: <CentersQualityCard snapshot={snapshot} />,
     },
   ];
 
@@ -1426,6 +1438,54 @@ function OperationalChartsCarousel({ snapshot }: { snapshot: Snapshot }) {
   );
 }
 
+function CentersQualityCard({ snapshot }: { snapshot: Snapshot }) {
+  const pdf = snapshot.dailyIndicators;
+  const percent = pdf?.punctuality.destinationPunctuality;
+  const target = pdf?.punctualityTargets?.destinationPunctuality;
+  const hasData = Number.isFinite(percent);
+  const successfulPercent = hasData ? Math.max(0, Math.min(100, percent as number)) : 0;
+  const offTargetPercent = hasData ? 100 - successfulPercent : null;
+  const pdfDetail = pdf?.referenceDate ? `PDF 106J · ${pdf.referenceDate}` : "PDF 106J";
+
+  return (
+    <section className="loading-quality-card centers-quality-card" aria-label="Pourcentage de centres réussis">
+      <div className="loading-quality-heading">
+        <div>
+          <span>Centres</span>
+          <strong>% centres réussis</strong>
+          <p className="loading-quality-explanation">Positions zonées dans la travée de chargement à temps, selon la ponctualité destination.</p>
+        </div>
+        {hasData && <b>{formatPercent(percent)}</b>}
+      </div>
+      {hasData ? (
+        <div className="loading-quality-overview">
+          <div
+            className="loading-quality-pie centers-quality-pie"
+            style={{ background: `conic-gradient(#73b9a6 0 ${successfulPercent}%, #ef0b45 ${successfulPercent}% 100%)` }}
+            aria-label={`${formatPercent(percent)} centres réussis, ${formatPercent(offTargetPercent)} hors cible${target === undefined ? "" : `, objectif ${formatPercent(target)}`}`}
+          >
+            <span>{formatPercent(percent)}</span>
+          </div>
+          <div className="loading-quality-legend">
+            <span><i className="is-targeted" />Réussis <b>{formatPercent(percent)}{target === undefined ? "" : ` · objectif ${formatPercent(target)}`}</b></span>
+            <span><i className="is-off-target" />Hors cible <b>{formatPercent(offTargetPercent)}</b></span>
+          </div>
+        </div>
+      ) : (
+        <p className="loading-quality-empty">Importe le PDF 106J pour afficher le taux de centres réussis.</p>
+      )}
+      <details className="duel-quality-details centers-quality-details">
+        <summary>Voir les éléments hors cible <span>{formatPercent(offTargetPercent)}</span></summary>
+        <p className="loading-quality-empty">
+          {hasData
+            ? `${pdfDetail} fournit un taux consolidé de ponctualité destination, mais pas le détail par voyage ou par position.`
+            : "Le détail sera disponible après import du PDF 106J."}
+        </p>
+      </details>
+    </section>
+  );
+}
+
 
 function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
   const quality = snapshot.loadingQuality;
@@ -1434,15 +1494,14 @@ function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
   const total = quality.targeted + quality.offTarget;
   const hasData = total > 0 && Number.isFinite(quality.targetedPercent) && Number.isFinite(quality.offTargetPercent);
   const targetedPercent = quality.targetedPercent ?? 0;
-  const loadingDetails = quality.loadingDetails ?? quality.nonTargetedShots.map((shot) => ({ ...shot, result: "non cadré" as const }));
 
   return (
     <section className="loading-quality-card" aria-label="Qualité des chargements">
       <div className="loading-quality-heading">
         <div>
           <span>Chargements</span>
-          <strong>Chargements contrôlés</strong>
-          <p className="loading-quality-explanation">Un chargement est cadré lorsque son temps moyen par position est inférieur ou égal à {loadingTarget}. Au-dessus, il est non cadré. Le tableau détaille les voyages séparément : le nombre de positions affiché sur une ligne ne représente pas le total des {formatNumber(quality.offTarget)} chargements non cadrés.</p>
+          <strong>% tirs cadrés</strong>
+          <p className="loading-quality-explanation">Chargement avec une moyenne inférieure ou égale à {loadingTarget} par position. Les tirs non cadrés sont identifiables par le point rouge.</p>
         </div>
         {hasData && <b>{formatNumber(total)} chargements</b>}
       </div>
@@ -1463,64 +1522,22 @@ function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
       ) : (
         <p className="loading-quality-empty">Aucune donnée de chargement disponible dans cet import Excel.</p>
       )}
-      {loadingDetails.length > 0 && (
+      {quality.nonTargetedShots.length > 0 && (
         <details className="duel-quality-details loading-quality-details">
-          <summary>Voir les chargements <span>{formatNumber(loadingDetails.length)}</span></summary>
+          <summary>Voir les tirs non cadrés <span>{formatNumber(quality.nonTargetedShots.length)}</span></summary>
           <div className="loading-quality-table-wrap">
-          <div className="loading-quality-table" role="table" aria-label="Détails des chargements cadrés et non cadrés">
+          <div className="loading-quality-table" role="table" aria-label="Détails des tirs non cadrés">
             <div className="loading-quality-table-row is-head" role="row">
               <span>Voyage</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Frappe</span><span>Résultat</span>
             </div>
-            {loadingDetails.map((shot) => (
+            {quality.nonTargetedShots.map((shot) => (
               <div className="loading-quality-table-row" role="row" key={`${shot.travelCode}-${shot.time}`}>
-                <span>{shot.travelCode}</span><span>{shot.time}</span><span>{shot.positions}</span><span>{shot.timePerPosition}</span><span>{"where" in shot ? shot.where : ""}</span><span><i className={`loading-result-dot ${shot.result === "cadré" ? "is-targeted" : "is-off-target"}`} title={shot.result === "cadré" ? "Cadré" : "Non cadré"} aria-label={shot.result === "cadré" ? "Cadré" : "Non cadré"} /></span>
+                <span>{shot.travelCode}</span><span>{shot.time}</span><span>{shot.positions}</span><span>{shot.timePerPosition}</span><span>{shot.where}</span><span><i className="loading-result-dot is-off-target" title="Non cadré" aria-label="Non cadré" /></span>
               </div>
             ))}
           </div>
           </div>
         </details>
-      )}
-    </section>
-  );
-}
-
-function UnloadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
-  const quality = snapshot.unloadingQuality;
-  if (!quality) return null;
-  const target = snapshot.performanceCriteria?.unloadingSeconds ?? 60;
-  const targetLabel = formatReadableDuration(target);
-  const total = quality.targeted + quality.offTarget;
-  const hasData = total > 0 && Number.isFinite(quality.targetedPercent) && Number.isFinite(quality.offTargetPercent);
-  const targetedPercent = quality.targetedPercent ?? 0;
-  const average = quality.averageTimePerPositionSeconds;
-
-  return (
-    <section className="unloading-quality-card" aria-label="Qualité des déchargements">
-      <div className="loading-quality-heading">
-        <div>
-          <span>Déchargement</span>
-          <strong>Temps de déchargement</strong>
-          <p className="loading-quality-explanation">Durée entre la première et la dernière opération DECHG d’un voyage, divisée par le nombre de positions. Dans la cible si le résultat est inférieur ou égal à {targetLabel} par position.</p>
-        </div>
-        <b>{hasData ? `${formatNumber(total)} voyages` : "À renseigner"}</b>
-      </div>
-      {hasData ? (
-        <div className="loading-quality-overview unloading-quality-overview">
-          <div
-            className="loading-quality-pie unloading-quality-pie"
-            style={{ background: `conic-gradient(#73b9a6 0 ${targetedPercent}%, #ef0b45 ${targetedPercent}% 100%)` }}
-            aria-label={`${formatPercent(quality.targetedPercent)} dans la cible, ${formatPercent(quality.offTargetPercent)} hors cible`}
-          >
-            <span>{formatPercent(quality.targetedPercent)}</span>
-          </div>
-          <div className="loading-quality-legend">
-            <span><i className="is-targeted" />Dans la cible <b>{formatNumber(quality.targeted)} voyages · {formatPercent(quality.targetedPercent)}</b></span>
-            <span><i className="is-off-target" />Hors cible <b>{formatNumber(quality.offTarget)} voyages · {formatPercent(quality.offTargetPercent)}</b></span>
-            <span><i className="is-average" />Moyenne observée <b>{average === null || average === undefined ? "À renseigner" : `${formatReadableDuration(average)} / position`}</b></span>
-          </div>
-        </div>
-      ) : (
-        <p className="loading-quality-empty">Aucune durée de déchargement exploitable dans cette plage.</p>
       )}
     </section>
   );
@@ -1556,16 +1573,16 @@ function UnloadingDuelQualityCard({ snapshot }: { snapshot: Snapshot }) {
         </div>
       )}
       <details className="duel-quality-details">
-        <summary>Voir les duels <span>{formatNumber(total)}</span></summary>
-        {quality.duels.length > 0 ? (
+        <summary>Voir les duels perdus <span>{formatNumber(quality.lostDuels.length)}</span></summary>
+        {quality.lostDuels.length > 0 ? (
           <div className="duel-quality-table-wrap">
-            <div className="duel-quality-table" role="table" aria-label="Duels gagnés et perdus">
+            <div className="duel-quality-table" role="table" aria-label="Duels perdus">
               <div className="duel-quality-table-row is-head" role="row">
                 <span>Voyage</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>
               </div>
-              {quality.duels.map((duel) => (
+              {quality.lostDuels.map((duel) => (
                 <div className="duel-quality-table-row" role="row" key={`${duel.travelCode}-${duel.time}`}>
-                  <span>{duel.travelCode}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className={`duel-result duel-result-${duel.result}`}>{duel.result}</span>
+                  <span>{duel.travelCode}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className="duel-result duel-result-perdu">perdu</span>
                 </div>
               ))}
             </div>
@@ -1643,6 +1660,7 @@ function Composition({ snapshot, session, onPlayer }: { snapshot: Snapshot; sess
   const [customComposition, setCustomComposition] = useState<{ label: string; players: Player[] } | null>(null);
   const [customLoading, setCustomLoading] = useState(false);
   const [customError, setCustomError] = useState("");
+  const activePeriodOvernight = Boolean(snapshot.match.periodStart && snapshot.match.periodEnd && snapshot.match.periodEnd < snapshot.match.periodStart);
   const selectedPeriod = compositionView === "first" || compositionView === "second"
     ? snapshot.compositionPeriods?.[compositionView]
     : null;
@@ -1771,12 +1789,12 @@ function Composition({ snapshot, session, onPlayer }: { snapshot: Snapshot; sess
               <div className="composition-custom-fields">
                 <label>
                   <span>Début</span>
-                  <input aria-label="Début de la vue personnalisée" type="time" min={snapshot.match.periodStart} max={snapshot.match.periodEnd} step={1800} value={customStart} onChange={(event) => setCustomStart(event.target.value)} />
+                  <input aria-label="Début de la vue personnalisée" type="time" min={activePeriodOvernight ? undefined : snapshot.match.periodStart} max={activePeriodOvernight ? undefined : snapshot.match.periodEnd} step={1800} value={customStart} onChange={(event) => setCustomStart(event.target.value)} />
                 </label>
                 <b aria-hidden="true">à</b>
                 <label>
                   <span>Fin</span>
-                  <input aria-label="Fin de la vue personnalisée" type="time" min={snapshot.match.periodStart} max={snapshot.match.periodEnd} step={1800} value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} />
+                  <input aria-label="Fin de la vue personnalisée" type="time" min={activePeriodOvernight ? undefined : snapshot.match.periodStart} max={activePeriodOvernight ? undefined : snapshot.match.periodEnd} step={1800} value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} />
                 </label>
                 <button className="composition-range-apply" type="submit" disabled={customLoading}>
                   <RefreshCw size={14} className={customLoading ? "is-spinning" : ""} />
@@ -1968,15 +1986,18 @@ function Coach({
 }) {
   const [coachMode, setCoachMode] = useState(false);
   const [coachBoardMode, setCoachBoardMode] = useState<"view" | "edit">("view");
+  const [redCardsMode, setRedCardsMode] = useState<"view" | "edit">("view");
   const [coachPlan, setCoachPlan] = useState<CauseriePlan>(() => buildEmptyCauseriePlan());
   const [coachDraft, setCoachDraft] = useState<CauseriePlan>(() => buildEmptyCauseriePlan());
+  const [redCardsDraft, setRedCardsDraft] = useState("");
   const [savingCoachPlan, setSavingCoachPlan] = useState(false);
+  const [savingRedCards, setSavingRedCards] = useState(false);
   const [coachBoardFeedback, setCoachBoardFeedback] = useState<CauserieToast>(null);
   const actions = coachDecisionActions(snapshot);
   const targetPercent = snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent;
   const footballScore = buildFootballScore(snapshot, targetPercent);
-  const matchKpi = loadMatchKpiCopy(snapshot);
   const yellowCards = snapshot.yellowCards ?? [];
+  const redCardEntries = redCardsDraft.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
   const focusPlayers = uniquePlayers([
     ...snapshot.coach.progressPlayers,
     ...snapshot.coach.playersInForm,
@@ -2004,6 +2025,8 @@ function Coach({
     setCoachPlan(emptyPlan);
     setCoachDraft(emptyPlan);
     setCoachBoardMode("view");
+    setRedCardsMode("view");
+    setRedCardsDraft("");
     setCoachBoardFeedback(null);
     fetchCauseriePlan(session, snapshot)
       .then((remotePlan) => {
@@ -2012,6 +2035,7 @@ function Coach({
         const visiblePlan = hasManualCauserieContent(nextPlan, snapshot) ? nextPlan : emptyPlan;
         setCoachPlan(visiblePlan);
         setCoachDraft(visiblePlan);
+        setRedCardsDraft(visiblePlan.redCards);
       })
       .catch(() => {
         if (!cancelled) {
@@ -2039,6 +2063,18 @@ function Coach({
     setCoachBoardFeedback(null);
   }
 
+  function startRedCardsEdit() {
+    setRedCardsDraft(coachPlan.redCards);
+    setRedCardsMode("edit");
+    setCoachBoardFeedback(null);
+  }
+
+  function cancelRedCardsEdit() {
+    setRedCardsDraft(coachPlan.redCards);
+    setRedCardsMode("view");
+    setCoachBoardFeedback(null);
+  }
+
   function updateCoachDraft(field: keyof CauseriePlan["coach"], value: string) {
     const maxLength = field === "review" ? 80 : 120;
     setCoachDraft((current) => ({
@@ -2057,6 +2093,7 @@ function Coach({
   async function saveCoachBoard() {
     const nextPlan = {
       ...coachDraft,
+      redCards: redCardsDraft.trim(),
       attack: padPlanLines(coachDraft.attack),
       midfield: padPlanLines(coachDraft.midfield),
       defense: padPlanLines(coachDraft.defense),
@@ -2094,6 +2131,38 @@ function Coach({
       });
     } finally {
       setSavingCoachPlan(false);
+      window.setTimeout(() => setCoachBoardFeedback(null), 3400);
+    }
+  }
+
+  async function saveRedCards() {
+    const nextPlan = normalizeCauseriePlan({ ...coachPlan, redCards: redCardsDraft.trim() }, snapshot);
+    setSavingRedCards(true);
+    try {
+      const savedPlan = await saveCauseriePlan(session, snapshot, nextPlan);
+      const normalizedPlan = normalizeCauseriePlan(savedPlan, snapshot);
+      setCoachPlan(normalizedPlan);
+      setCoachDraft(normalizedPlan);
+      setRedCardsDraft(normalizedPlan.redCards);
+      setRedCardsMode("view");
+      setCoachBoardFeedback({
+        title: "Cartons rouges enregistrés",
+        detail: "La saisie manuelle est enregistrée pour cette agence et cette journée.",
+        tone: "success",
+      });
+    } catch {
+      setCoachPlan(nextPlan);
+      setCoachDraft(nextPlan);
+      setRedCardsDraft(nextPlan.redCards);
+      setRedCardsMode("view");
+      localStorage.setItem(causerieStorageKey(snapshot), JSON.stringify(nextPlan));
+      setCoachBoardFeedback({
+        title: "Sauvegarde locale uniquement",
+        detail: "Les cartons rouges sont conservés sur ce poste, mais ne sont pas partagés.",
+        tone: "warning",
+      });
+    } finally {
+      setSavingRedCards(false);
       window.setTimeout(() => setCoachBoardFeedback(null), 3400);
     }
   }
@@ -2162,20 +2231,43 @@ function Coach({
         </section>
 
         <section className="coach-focus-grid">
-          <article className="coach-panel coach-workforce-panel">
-            <div className="coach-panel-heading"><div><span>Effectif à piloter</span><h3>Disponibilité du groupe</h3></div><Users size={21} /></div>
-            <div className="coach-workforce-metrics">
-              <div><b>{formatNumber(snapshot.summary.players)}</b><span>présents</span></div>
-              <div><b>{formatRealStaffPercent(snapshot, matchKpi.expectedPlayersValue)}</b><span>effectif réel</span></div>
-              <div><b>{yellowCards.length}</b><span>cartons jaunes</span></div>
+          <article className="coach-panel coach-discipline-panel">
+            <div className="coach-panel-heading">
+              <div><span>Discipline</span><h3>Cartons du match</h3></div>
+              <CreditCard size={21} />
             </div>
-            <div className="coach-availability-line">
-              <span>Effectif prévu</span>
-              <strong>{matchKpi.expectedPlayersValue.trim() ? `${formatNumber(Number(matchKpi.expectedPlayersValue))} joueurs` : "À renseigner"}</strong>
-            </div>
-            <div className="coach-yellow-summary">
-              <span>Vigilance disciplinaire</span>
-              {yellowCards.length > 0 ? <p>{yellowCards.slice(0, 3).map((card) => `${card.playerName} · ${card.time}`).join(" / ")}</p> : <p>Aucun carton jaune dans la plage active.</p>}
+            <div className="coach-discipline-grid">
+              <section className="coach-card-list coach-yellow-list" aria-label="Cartons jaunes">
+                <div className="coach-discipline-heading"><span>Cartons jaunes</span><strong>{yellowCards.length}</strong></div>
+                {yellowCards.length > 0 ? (
+                  <ul>
+                    {yellowCards.map((card, index) => (
+                      <li key={`${card.playerName}-${card.time}-${index}`}>
+                        <b>{card.playerName}</b>
+                        <small>{card.time}{card.reason ? ` · ${card.reason}` : ""}{card.travelCode ? ` · ${card.travelCode}` : ""}</small>
+                      </li>
+                    ))}
+                  </ul>
+                ) : <p>Aucun carton jaune dans la plage active.</p>}
+              </section>
+              <section className="coach-card-list coach-red-list" aria-label="Cartons rouges">
+                <div className="coach-discipline-heading">
+                  <span>Cartons rouges</span>
+                  <strong>{redCardEntries.length}</strong>
+                </div>
+                {redCardsMode === "edit" ? (
+                  <textarea aria-label="Cartons rouges manuels" value={redCardsDraft} onChange={(event) => setRedCardsDraft(event.target.value.slice(0, 1000))} placeholder="Nom Prénom · heure · motif SST" rows={6} />
+                ) : (
+                  redCardEntries.length > 0 ? <ul>{redCardEntries.map((entry, index) => <li key={`${entry}-${index}`}><b>{entry}</b></li>)}</ul> : <p>Aucun carton rouge saisi manuellement.</p>
+                )}
+                <div className="coach-discipline-actions">
+                  {redCardsMode === "view" ? (
+                    <button className="secondary-button compact" type="button" onClick={startRedCardsEdit}><Edit3 size={15} /> Saisir</button>
+                  ) : (
+                    <><button className="secondary-button compact" type="button" onClick={cancelRedCardsEdit} disabled={savingRedCards}><XCircle size={15} /> Annuler</button><button className="primary-button compact" type="button" onClick={saveRedCards} disabled={savingRedCards}><Save size={15} /> {savingRedCards ? "Enregistrement..." : "Enregistrer"}</button></>
+                  )}
+                </div>
+              </section>
             </div>
           </article>
 
@@ -2992,7 +3084,7 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
     localStorage.setItem(activeLeagueStorageKey, id);
   }
 
-  type LeagueEditableField = "zonageMinutes" | "loadingSeconds" | "unloadingSeconds" | "scoreTargetPercent";
+  type LeagueEditableField = "zonageMinutes" | "loadingSeconds" | "scoreTargetPercent";
 
   function leagueDraftKey(id: LeagueId, field: LeagueEditableField) {
     return `${id}-${field}`;
@@ -3032,7 +3124,7 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
   }
 
   function leagueInputValue(id: LeagueId, field: LeagueEditableField, value: number) {
-    return draftValues[leagueDraftKey(id, field)] ?? (field === "loadingSeconds" || field === "unloadingSeconds" ? formatTimeInput(value) : String(value));
+    return draftValues[leagueDraftKey(id, field)] ?? (field === "loadingSeconds" ? formatTimeInput(value) : String(value));
   }
 
   return (
@@ -3066,10 +3158,9 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
             <div className="administrator-rule-strip">
               <label><Target size={18} /><span>Zonage · cible en minutes</span><select aria-label={`Cible zonage ${selectedLeague.label}`} value={String(selectedLeague.zonageMinutes)} onChange={(event) => commitLeague(selectedLeague.id, "zonageMinutes", event.target.value)}>{selectOptions(zonageMinuteOptions, selectedLeague.zonageMinutes).map((minutes) => <option key={minutes} value={minutes}>{minutes} min</option>)}</select></label>
               <label><Clock3 size={18} /><span>Chargement · temps maximum</span><select aria-label={`Temps chargement ${selectedLeague.label}`} value={formatTimeInput(selectedLeague.loadingSeconds)} onChange={(event) => commitLeague(selectedLeague.id, "loadingSeconds", parseTimeInput(event.target.value))}>{selectOptions(loadingTimeOptions, selectedLeague.loadingSeconds).map((seconds) => <option key={seconds} value={formatTimeInput(seconds)}>{formatTimeInput(seconds)}</option>)}</select></label>
-              <label><Clock3 size={18} /><span>Déchargement · temps maximum</span><select aria-label={`Temps déchargement ${selectedLeague.label}`} value={formatTimeInput(selectedLeague.unloadingSeconds)} onChange={(event) => commitLeague(selectedLeague.id, "unloadingSeconds", parseTimeInput(event.target.value))}>{selectOptions(unloadingTimeOptions, selectedLeague.unloadingSeconds).map((seconds) => <option key={seconds} value={formatTimeInput(seconds)}>{formatTimeInput(seconds)}</option>)}</select></label>
               <label><CheckCircle2 size={18} /><span>Score · objectif par indicateur</span><input aria-label={`Objectif score ${selectedLeague.label}`} type="number" min="1" max="100" step="1" value={leagueInputValue(selectedLeague.id, "scoreTargetPercent", selectedLeague.scoreTargetPercent)} onChange={(event) => setLeagueDraft(selectedLeague.id, "scoreTargetPercent", event.target.value)} onBlur={(event) => commitLeague(selectedLeague.id, "scoreTargetPercent", event.target.value)} /></label>
             </div>
-            <p className="administrator-note"><Sparkles size={17} /> Les critères sont modifiables et mémorisés sur ce poste. La ligue active recalcule les duels, les chargements, les déchargements et le score à 4 indicateurs.</p>
+            <p className="administrator-note"><Sparkles size={17} /> Les critères sont modifiables et mémorisés sur ce poste. La ligue active recalcule les duels, les chargements, la possession et le score à 3 indicateurs. Le calcul du déchargement reste conservé pour les contrôles de données.</p>
             {configSaveError && <p className="form-error" role="alert">{configSaveError}</p>}
           </div>
         </div>
@@ -3083,7 +3174,7 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
               <span className="league-medal"><LeagueIcon leagueId={league.id} /></span>
               <div className="league-card-top"><strong>{league.label}</strong><button className="league-select-button" type="button" onClick={() => selectLeague(league.id)} aria-pressed={activeLeague === league.id}>{activeLeague === league.id ? "Sélectionnée" : "Activer"}</button></div>
               <span className="league-description">{league.description}</span>
-              <div className="league-values"><label><small>Zonage · min</small><select aria-label={`Modifier zonage ${league.label}`} value={String(league.zonageMinutes)} onChange={(event) => commitLeague(league.id, "zonageMinutes", event.target.value)}>{selectOptions(zonageMinuteOptions, league.zonageMinutes).map((minutes) => <option key={minutes} value={minutes}>{minutes} min</option>)}</select></label><label><small>Chargement · HH:MM:SS</small><select aria-label={`Modifier chargement ${league.label}`} value={formatTimeInput(league.loadingSeconds)} onChange={(event) => commitLeague(league.id, "loadingSeconds", parseTimeInput(event.target.value))}>{selectOptions(loadingTimeOptions, league.loadingSeconds).map((seconds) => <option key={seconds} value={formatTimeInput(seconds)}>{formatTimeInput(seconds)}</option>)}</select></label><label><small>Déchargement · HH:MM:SS</small><select aria-label={`Modifier déchargement ${league.label}`} value={formatTimeInput(league.unloadingSeconds)} onChange={(event) => commitLeague(league.id, "unloadingSeconds", parseTimeInput(event.target.value))}>{selectOptions(unloadingTimeOptions, league.unloadingSeconds).map((seconds) => <option key={seconds} value={formatTimeInput(seconds)}>{formatTimeInput(seconds)}</option>)}</select></label><label><small>Objectif score · %</small><input aria-label={`Objectif score ${league.label}`} type="number" min="1" max="100" step="1" value={leagueInputValue(league.id, "scoreTargetPercent", league.scoreTargetPercent)} onChange={(event) => setLeagueDraft(league.id, "scoreTargetPercent", event.target.value)} onBlur={(event) => commitLeague(league.id, "scoreTargetPercent", event.target.value)} /></label></div>
+              <div className="league-values"><label><small>Zonage · min</small><select aria-label={`Modifier zonage ${league.label}`} value={String(league.zonageMinutes)} onChange={(event) => commitLeague(league.id, "zonageMinutes", event.target.value)}>{selectOptions(zonageMinuteOptions, league.zonageMinutes).map((minutes) => <option key={minutes} value={minutes}>{minutes} min</option>)}</select></label><label><small>Chargement · HH:MM:SS</small><select aria-label={`Modifier chargement ${league.label}`} value={formatTimeInput(league.loadingSeconds)} onChange={(event) => commitLeague(league.id, "loadingSeconds", parseTimeInput(event.target.value))}>{selectOptions(loadingTimeOptions, league.loadingSeconds).map((seconds) => <option key={seconds} value={formatTimeInput(seconds)}>{formatTimeInput(seconds)}</option>)}</select></label><label><small>Objectif score · %</small><input aria-label={`Objectif score ${league.label}`} type="number" min="1" max="100" step="1" value={leagueInputValue(league.id, "scoreTargetPercent", league.scoreTargetPercent)} onChange={(event) => setLeagueDraft(league.id, "scoreTargetPercent", event.target.value)} onBlur={(event) => commitLeague(league.id, "scoreTargetPercent", event.target.value)} /></label></div>
             </article>
           ))}
         </div>
@@ -3263,7 +3354,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
             <GuidePanel eyebrow="04 · Lire les écrans" title="Quel écran utiliser, et pour quoi faire ?" icon={LayoutDashboard}>
               <div className="guide-screen-grid">
                 <GuideScreenCard step="01" title="Coup d’envoi" detail="Vue d’ouverture du match. Elle confirme que les données sont prêtes et donne accès au brief équipe." />
-                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score opérationnel au format football, quatre indicateurs, opérations, positions, joueurs clés par catégorie, challengers et contrôles d’import. Le score compare le pourcentage de duels gagnés, de chargements cadrés, de déchargements dans la cible et de possession Zody à l’objectif de la ligue." />
+                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score opérationnel au format football, trois indicateurs, opérations, positions, joueurs clés par catégorie, challengers et contrôles d’import. Le score compare le pourcentage de duels gagnés, de chargements cadrés et de possession Zody à l’objectif de la ligue." />
               <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. Compare le match complet, les deux mi-temps ou les quatre quarts calculés depuis la plage active. Une vue personnalisée permet aussi d’isoler une sous-plage, par exemple 1 heure, sans modifier les indicateurs du match. L’activité Réception correspond au scan de la palette." />
                 <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, titres par catégorie, polyvalence, sujets à travailler et prochaines actions." />
                 <GuideScreenCard step="05" title="Brief équipe" detail="Vue dédiée aux consignes : trois grandes zones visibles, empilées verticalement : SAV, Expédition, Ramasse & emballage. Chaque zone accepte du texte et plusieurs captures d’écran, avec affichage plein écran." />
@@ -3290,13 +3381,13 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
 
           {section === "admin" && (
             <GuidePanel eyebrow="06 · Administrateur" title="Régler les ligues et leurs standards" icon={Settings2}>
-              <p>L’onglet Administrateur sert à choisir un niveau de référence et à ajuster ses quatre conditions de performance : la cible de zonage, les temps maximum de chargement et de déchargement, ainsi que l’objectif en pourcentage de chaque indicateur du score.</p>
+              <p>L’onglet Administrateur sert à choisir un niveau de référence et à ajuster ses conditions de performance : la cible de zonage, le temps maximum de chargement et l’objectif en pourcentage de chaque indicateur du score.</p>
               <div className="guide-action-list">
                 <GuideAction icon={Trophy} title="Choisir une ligue" tone="blue" detail="Activez Bronze, Argent, Or ou Platine. Le niveau sélectionné devient la référence affichée dans le centre de pilotage." />
                 <GuideAction icon={Target} title="Régler le zonage" tone="green" detail="Modifiez la cible en minutes directement dans le panneau de la ligue. Une valeur plus basse correspond à un standard plus exigeant." />
                 <GuideAction icon={Clock3} title="Régler le chargement" tone="orange" detail="Modifiez le temps maximum au format HH:MM:SS. Le seuil Argent proposé est 00:02:45." />
-              <GuideAction icon={Clock3} title="Régler le déchargement" tone="blue" detail="Modifiez le temps maximum au format HH:MM:SS. Le seuil Argent proposé est 00:01:00 ; le résultat est calculé par voyage et affiché séparément dans la feuille de match." />
-                <GuideAction icon={CheckCircle2} title="Régler l'objectif du score" tone="green" detail="Chaque indicateur qui atteint cet objectif marque un but ; chaque indicateur en dessous encaisse un but. Les valeurs proposées vont de 45 % en Bronze à 70 % en Platine." />
+              <GuideAction icon={Clock3} title="Contrôler le déchargement" tone="blue" detail="Le résultat est calculé par voyage pour les contrôles de données, sans entrer dans le score opérationnel." />
+              <GuideAction icon={CheckCircle2} title="Régler l'objectif du score" tone="green" detail="Chaque indicateur qui dépasse strictement cet objectif marque un but ; chaque indicateur qui l'atteint ou reste en dessous encaisse un but. Les valeurs proposées vont de 45 % en Bronze à 70 % en Platine." />
               </div>
               <h3>Référentiel proposé</h3>
               <div className="guide-league-grid" aria-label="Référentiel visuel des ligues">
@@ -3305,11 +3396,11 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                     <span className="guide-league-medal"><LeagueIcon leagueId={league.id} className="" /></span>
                     <div className="guide-league-card-top"><strong>{league.label}</strong><span>{league.id === "argent" ? "Référence" : "Niveau"}</span></div>
                     <p>{league.description}</p>
-                    <div className="guide-league-values"><div><small>Zonage</small><strong>{league.zonageMinutes} min</strong></div><div><small>Chargement</small><strong>{formatTimeInput(league.loadingSeconds)}</strong></div><div><small>Déchargement</small><strong>{formatTimeInput(league.unloadingSeconds)}</strong></div><div><small>Objectif score</small><strong>{league.scoreTargetPercent}%</strong></div></div>
+                    <div className="guide-league-values"><div><small>Zonage</small><strong>{league.zonageMinutes} min</strong></div><div><small>Chargement</small><strong>{formatTimeInput(league.loadingSeconds)}</strong></div><div><small>Objectif score</small><strong>{league.scoreTargetPercent}%</strong></div></div>
                   </article>
                 ))}
               </div>
-              <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Avant validation :</strong> les seuils et la ligue active sont mémorisés séparément pour chaque agence sur ce poste. Les scores du match sont recalculés avec les seuils de la ligue active ; le déchargement compte désormais comme le quatrième indicateur du score opérationnel.</span></div>
+              <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Avant validation :</strong> les seuils et la ligue active sont mémorisés séparément pour chaque agence sur ce poste. Les scores du match sont recalculés avec les seuils de la ligue active ; le score opérationnel repose sur trois indicateurs.</span></div>
               <div className="guide-callout info"><Settings2 size={20} /><span><strong>Bon réflexe :</strong> vérifiez la ligue active, comparez les conditions avec le niveau attendu, puis contrôlez le résultat sur plusieurs imports avant toute diffusion officielle.</span></div>
             </GuidePanel>
           )}
@@ -3578,11 +3669,10 @@ function buildFootballScore(snapshot: Snapshot, targetPercent: number): Football
   const indicators = [
     snapshot.summary.duelRate,
     snapshot.loadingQuality?.targetedPercent ?? null,
-    snapshot.unloadingQuality?.targetedPercent ?? null,
     snapshot.summary.possessionPercent,
   ];
   const available = snapshot.summary.duelTotal > 0 && indicators.every((value) => Number.isFinite(value));
-  const reachedIndicators = available ? indicators.filter((value) => (value as number) >= targetPercent).length : 0;
+  const reachedIndicators = available ? indicators.filter((value) => (value as number) > targetPercent).length : 0;
   return {
     goalsFor: reachedIndicators,
     goalsAgainst: available ? indicators.length - reachedIndicators : 0,
@@ -3605,14 +3695,14 @@ function matchCeremonyOutcome(footballScore: FootballScore): {
       tone: "rework",
       title: "Match à compléter",
       verdict: "SCORE INCOMPLET",
-      message: "Score opérationnel indisponible : les 4 indicateurs doivent être renseignés pour établir le résultat.",
+      message: "Score opérationnel indisponible : les 3 indicateurs doivent être renseignés pour établir le résultat.",
       collectiveTitle: "Performance à compléter",
       celebration: false,
     };
   }
 
   const scoreLabel = `${footballScore.goalsFor} - ${footballScore.goalsAgainst}`;
-  const scoreDetail = `${footballScore.reachedIndicators} indicateur(s) sur 4 atteignent l'objectif de ${formatNumber(footballScore.targetPercent)}%`;
+  const scoreDetail = `${footballScore.reachedIndicators} indicateur(s) sur 3 dépassent l'objectif de ${formatNumber(footballScore.targetPercent)}%`;
 
   if (footballScore.goalsFor > footballScore.goalsAgainst) {
     return {
@@ -3646,22 +3736,11 @@ function matchCeremonyOutcome(footballScore: FootballScore): {
   };
 }
 
-function UnloadingScoreBubble({ snapshot }: { snapshot: Snapshot }) {
-  const targetSeconds = snapshot.performanceCriteria?.unloadingSeconds ?? 60;
-  return (
-    <div className="match-score-bubble unloading-score-bubble">
-      <span>% déchargements dans la cible</span>
-      <strong>{formatPercent(snapshot.unloadingQuality?.targetedPercent)}</strong>
-      <small>Voyages ≤ {formatTimeInput(targetSeconds)} /<br />voyages contrôlés</small>
-    </div>
-  );
-}
-
 function FootballScoreDisplay({ footballScore }: { footballScore: FootballScore }) {
   const scoreLabel = footballScore.available ? `${footballScore.goalsFor} - ${footballScore.goalsAgainst}` : "— - —";
   const scoreDescription = footballScore.available
-    ? `${footballScore.reachedIndicators} indicateur(s) atteint(s) sur 4 · objectif ${formatNumber(footballScore.targetPercent)}%`
-    : "Score à compléter · les 4 indicateurs doivent être disponibles";
+    ? `${footballScore.reachedIndicators} indicateur(s) dépassent l'objectif sur 3 · seuil ${formatNumber(footballScore.targetPercent)}%`
+    : "Score à compléter · les 3 indicateurs doivent être disponibles";
 
   return (
     <div
@@ -3670,7 +3749,7 @@ function FootballScoreDisplay({ footballScore }: { footballScore: FootballScore 
     >
       <div className="football-score-heading">
         <span>Score opérationnel</span>
-        <small>4 indicateurs</small>
+        <small>3 indicateurs</small>
       </div>
       <div className="football-score-line">
         <div className="football-score-side football-score-side-for">
@@ -3777,12 +3856,20 @@ function playerHighlight(player: Player | undefined, label: string, detail: stri
   return { label, detail, name: player.name, role: player.role, operations: player.operations, value: player.polyvalence, valueLabel: "polyvalence", score: player.score };
 }
 
+function awardReferenceScore(award: MatchAward, player: Player | undefined) {
+  if (award.kind === "polyvalent") return { value: award.highlight.value, label: "polyvalence", suffix: "%" };
+  const operationType = award.kind === "attack" ? "CHG" : award.kind === "midfield" ? "ZONAGE" : "DECHG";
+  const label = operationType === "DECHG" ? "positions RECEPTION" : `positions ${operationType}`;
+  return { value: player?.positionsByType?.[operationType] ?? 0, label, suffix: "" };
+}
+
 function buildAwardChallengers(players: Player[], award: MatchAward) {
   const operationType = award.kind === "attack" ? "CHG" : award.kind === "midfield" ? "ZONAGE" : award.kind === "defense" ? "DECHG" : null;
   const operationCount = (player: Player) => {
     if (!operationType) return player.polyvalence;
     return player.byType[operationType] ?? 0;
   };
+  const positionCount = (player: Player) => operationType ? player.positionsByType?.[operationType] ?? 0 : player.positions;
   const ranked = players
     .filter((player) => player.name !== award.highlight.name && (operationType ? operationCount(player) > 0 : player.operationTypes >= 2))
     .sort((a, b) => {
@@ -3791,10 +3878,15 @@ function buildAwardChallengers(players: Player[], award: MatchAward) {
     .slice(0, 2);
   const leader = players.find((player) => player.name === award.highlight.name);
   const leaderOperationCount = leader ? operationCount(leader) : 0;
+  const leaderPositionCount = leader ? positionCount(leader) : 0;
   return ranked.map((player) => ({
     player,
     operations: operationCount(player),
     delta: leaderOperationCount - operationCount(player),
+    positions: positionCount(player),
+    positionDelta: leaderPositionCount - positionCount(player),
+    score: player.polyvalence,
+    scoreDelta: (leader?.polyvalence ?? 0) - player.polyvalence,
   }));
 }
 
@@ -3982,6 +4074,7 @@ function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
       defense: [],
     },
     mercato: "",
+    redCards: "",
     coach: {
       tactic: action.title,
       priority: priority || action.detail,
@@ -4005,6 +4098,7 @@ function buildEmptyCauseriePlan(): CauseriePlan {
       defense: [],
     },
     mercato: "",
+    redCards: "",
     coach: {
       tactic: "",
       priority: "",
@@ -4029,6 +4123,7 @@ function normalizeCauseriePlan(plan: CauseriePlan, snapshot: Snapshot): Causerie
       defense: normalizeCauserieAttachments(plan.attachments?.defense, fallback.attachments.defense),
     },
     mercato: plan.mercato ?? fallback.mercato,
+    redCards: plan.redCards ?? fallback.redCards,
     coach: {
       tactic: plan.coach?.tactic ?? fallback.coach.tactic,
       priority: plan.coach?.priority ?? fallback.coach.priority,
@@ -4042,7 +4137,7 @@ function hasManualCauserieContent(plan: CauseriePlan, snapshot: Snapshot) {
   const hasZoneContent = [...plan.attack, ...plan.midfield, ...plan.defense].some((item) => item.trim().length > 0);
   const hasAttachment = Object.values(plan.attachments).some((items) => items.length > 0);
   const hasMetadata = plan.team.trim().length > 0 || plan.manager.trim().length > 0;
-  if (hasZoneContent || hasAttachment || hasMetadata || plan.mercato.trim().length > 0) return true;
+  if (hasZoneContent || hasAttachment || hasMetadata || plan.mercato.trim().length > 0 || plan.redCards.trim().length > 0) return true;
 
   const generated = buildDefaultCauseriePlan(snapshot).coach;
   const legacyGenerated = new Set([

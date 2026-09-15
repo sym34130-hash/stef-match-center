@@ -5,6 +5,7 @@ const dailyIndicators = {
   sourceName: "SIE.106J.pdf", importedAt: "2026-09-11T12:00:00Z", referenceDate: "11 septembre 2026",
   expedition: { tonnage: 478, positions: 9999 },
   punctuality: { arrivalPunctuality: 80, departurePunctuality: 64.1, destinationPunctuality: 62, temperatureReturn: 92.19 },
+  punctualityTargets: { arrivalPunctuality: 85, departurePunctuality: 85, destinationPunctuality: 85, temperatureReturn: 100 },
 };
 
 async function login(page: Page) {
@@ -39,8 +40,20 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   await expect(value("positions")).toHaveText(new Intl.NumberFormat("fr-FR").format(excelPositions));
   await expect(value("arrival")).toHaveText("80%");
   await expect(value("departure")).toHaveText("64,1%");
+  await expect(page.locator(".match-score-bubbles").getByText("% centres réussis", { exact: true })).toBeVisible();
+  await expect(page.locator(".match-score-bubble.centers-score-bubble strong")).toHaveText("62%");
   await expect(value("temperature")).toHaveText("92,19%");
-  await expect(page.locator(".operational-chart-slide")).toHaveCount(3);
+  await expect(carousel.locator('[data-indicator="arrival"] .match-indicator-card')).toHaveClass(/is-below-target/);
+  await expect(carousel.locator('[data-indicator="temperature"] .match-indicator-card')).toHaveClass(/is-below-target/);
+  await expect(carousel.locator('[data-indicator="temperature"] .match-indicator-meter')).toBeVisible();
+  await expect(carousel.locator('[data-indicator="temperature"] .match-indicator-target')).toHaveCSS("left", /.+/);
+  await expect(carousel.locator('[data-indicator="temperature"] .match-indicator-meter-scale')).toHaveText("0%Objectif 100%100%");
+  await expect(carousel.locator('[data-indicator="arrival"] .match-indicator-source')).toContainText("objectif 85%");
+  await expect(page.locator(".operational-chart-slide")).toHaveCount(4);
+  await expect(page.locator(".operational-charts-carousel").getByText("% centres réussis", { exact: true })).toBeVisible();
+  await expect(page.locator(".centers-quality-pie span")).toHaveText("62%");
+  await page.locator(".centers-quality-details summary").click();
+  await expect(page.locator(".centers-quality-details")).toContainText("taux consolidé de ponctualité destination");
   const centers = await viewport.evaluate((el) => el.clientWidth >= 640 ? 2 : 1);
   await expect(carousel.locator("[data-featured]")).toHaveCount(centers);
   await carousel.screenshot({ path: testInfo.outputPath("kpi-initial.png") });
@@ -82,10 +95,12 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   await viewport.focus();
   await page.keyboard.press("End");
   await expect(carousel.getByRole("button", { name: "Indicateurs suivants", exact: true })).toBeDisabled();
+  await expect.poll(() => viewport.evaluate((el) => el.scrollLeft)).toBeGreaterThan(1000);
   await expect(carousel.locator('[data-indicator="temperature"]')).toHaveAttribute("data-featured", "");
   await carousel.screenshot({ path: testInfo.outputPath("kpi-last.png") });
   await page.keyboard.press("Home");
   await expect(carousel.getByRole("button", { name: "Indicateurs précédents", exact: true })).toBeDisabled();
+  await expect.poll(() => viewport.evaluate((el) => el.scrollLeft)).toBeLessThan(1);
   await expect(carousel.locator('[data-indicator="performance"]')).toHaveAttribute("data-featured", "");
 
   await viewport.scrollIntoViewIfNeeded();

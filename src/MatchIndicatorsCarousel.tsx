@@ -14,6 +14,7 @@ type Props = {
 
 const number = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
+type PunctualityKey = "arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn";
 
 export function MatchIndicatorsCarousel({ snapshot, performance, motivation, injuries, staffPercent, staffDetail }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -27,17 +28,22 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   const [position, setPosition] = useState({ first: 0, centers: 2 });
   const pdf = snapshot.dailyIndicators;
   const punctuality = pdf?.punctuality;
+  const punctualityTargets = pdf?.punctualityTargets;
   const pdfDetail = pdf?.referenceDate ? `PDF 106J · ${pdf.referenceDate}` : "PDF 106J";
   const metric = (value: number | undefined | null, unit: string) => typeof value === "number" && Number.isFinite(value) ? `${number.format(value)}${unit}` : null;
-  const cards: Array<{ id: string; label: string; value: string | null; detail: string; icon: LucideIcon; accent: string; percent?: number }> = [
+  const pdfMetricDetail = (key: keyof NonNullable<typeof punctuality>) => {
+    const target = punctualityTargets?.[key];
+    return target === undefined ? pdfDetail : `${pdfDetail} · objectif ${number.format(target)}%`;
+  };
+  const cards: Array<{ id: string; label: string; value: string | null; detail: string; icon: LucideIcon; accent: string; percent?: number; targetKey?: PunctualityKey }> = [
     { id: "performance", label: "Performance d'équipe", value: performance, detail: motivation, icon: Users, accent: "#91d7c0" },
     { id: "injuries", label: "NB DE BLESSURES (A.T)", value: injuries.trim() ? number.format(Number(injuries)) : null, detail: "Accidents du travail · saisie manuelle", icon: ShieldPlus, accent: "#e1c58e" },
     { id: "tonnage", label: "Tonnage", value: metric(pdf?.expedition.tonnage, " t"), detail: `Expédition · ${pdfDetail}`, icon: Weight, accent: "#98d6d6" },
     { id: "positions", label: "Positions", value: metric(snapshot.summary.positions, ""), detail: `Excel · plage ${snapshot.match.timeRangeLabel}`, icon: Package, accent: "#a8c9f0" },
-    { id: "arrival", label: "Ponctualité arrivage", value: metric(punctuality?.arrivalPunctuality, "%"), detail: pdfDetail, icon: ArrowDownToLine, accent: "#a4cbee", percent: punctuality?.arrivalPunctuality },
-    { id: "departure", label: "Ponctualité départ", value: metric(punctuality?.departurePunctuality, "%"), detail: pdfDetail, icon: ArrowUpFromLine, accent: "#b9c6ed", percent: punctuality?.departurePunctuality },
-    { id: "destination", label: "Ponctualité destination", value: metric(punctuality?.destinationPunctuality, "%"), detail: pdfDetail, icon: Flag, accent: "#a4d5c8", percent: punctuality?.destinationPunctuality },
-    { id: "temperature", label: "Température retour ramasse", value: metric(punctuality?.temperatureReturn, "%"), detail: pdfDetail, icon: Thermometer, accent: "#dcc0d7", percent: punctuality?.temperatureReturn },
+    { id: "arrival", label: "Ponctualité arrivage", value: metric(punctuality?.arrivalPunctuality, "%"), detail: pdfMetricDetail("arrivalPunctuality"), icon: ArrowDownToLine, accent: "#a4cbee", percent: punctuality?.arrivalPunctuality, targetKey: "arrivalPunctuality" },
+    { id: "departure", label: "Ponctualité départ", value: metric(punctuality?.departurePunctuality, "%"), detail: pdfMetricDetail("departurePunctuality"), icon: ArrowUpFromLine, accent: "#b9c6ed", percent: punctuality?.departurePunctuality, targetKey: "departurePunctuality" },
+    { id: "destination", label: "Ponctualité destination", value: metric(punctuality?.destinationPunctuality, "%"), detail: pdfMetricDetail("destinationPunctuality"), icon: Flag, accent: "#a4d5c8", percent: punctuality?.destinationPunctuality, targetKey: "destinationPunctuality" },
+    { id: "temperature", label: "Température retour ramasse", value: metric(punctuality?.temperatureReturn, "%"), detail: pdfMetricDetail("temperatureReturn"), icon: Thermometer, accent: "#dcc0d7", percent: punctuality?.temperatureReturn, targetKey: "temperatureReturn" },
   ];
 
   useEffect(() => {
@@ -197,14 +203,25 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
         onPointerLeave={() => { if (!drag.current?.moved) drag.current = null; }}
         >
         <div className="match-indicators-track" ref={trackRef}>
-          {cards.map(({ id, label, value, detail, icon: Icon, accent, percent }, index) => (
-            <div className="match-indicator-slide" key={id} data-indicator={id} role="group" aria-roledescription="diapositive" aria-label={`${label}, ${index + 1} sur ${cards.length}`}>
-              <article className={`match-indicator-card ${id === "performance" ? "is-performance" : ""}`} style={{ "--indicator-accent": accent } as CSSProperties}>
+          {cards.map(({ id, label, value, detail, icon: Icon, accent, percent, targetKey }, index) => (
+            <div className="match-indicator-slide" key={id} data-indicator={id} data-featured={index >= position.first && index < position.first + position.centers ? "" : undefined} role="group" aria-roledescription="diapositive" aria-label={`${label}, ${index + 1} sur ${cards.length}`}>
+              <article className={`match-indicator-card ${id === "performance" ? "is-performance" : ""} ${typeof percent === "number" ? (percent >= (targetKey ? punctualityTargets?.[targetKey] ?? 100 : 100) ? "is-at-target" : "is-below-target") : ""}`} style={{ "--indicator-accent": accent } as CSSProperties}>
                 <div className="match-indicator-title"><Icon size={21} /><h3>{label}</h3></div>
                 <div className="match-indicator-body">
                   <strong className={`match-indicator-value ${value === null ? "is-empty" : ""}`}>{value ?? (id === "injuries" ? "À renseigner" : pdf ? "Indisponible" : "PDF à importer")}</strong>
                   {id === "performance" && <p className="team-motivation-message">{detail}</p>}
-                  {typeof percent === "number" && Number.isFinite(percent) && <div className="match-indicator-meter" aria-hidden="true"><i style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} /></div>}
+                  {typeof percent === "number" && Number.isFinite(percent) && (() => {
+                    const target = targetKey ? punctualityTargets?.[targetKey] : undefined;
+                    return (
+                      <div className="match-indicator-meter-wrap">
+                        <div className="match-indicator-meter" aria-label={`${number.format(percent)}% sur 100%${target === undefined ? "" : `, objectif ${number.format(target)}%`}`}>
+                          <i style={{ width: `${Math.max(0, Math.min(100, percent))}%` }} />
+                          {target !== undefined && <b className="match-indicator-target" style={{ left: `${Math.max(0, Math.min(100, target))}%` }} aria-hidden="true" />}
+                        </div>
+                        <div className="match-indicator-meter-scale" aria-hidden="true"><span>0%</span>{target !== undefined && <strong>Objectif {number.format(target)}%</strong>}<span>100%</span></div>
+                      </div>
+                    );
+                  })()}
                 </div>
                 {id === "performance" ? <div className="match-indicator-staff real-staff-metric"><span>Effectif réel</span><strong>{staffPercent}</strong><small>{staffDetail}</small></div> : <small className="match-indicator-source">{value === null && pdf && id !== "injuries" ? "Indicateur absent du PDF" : detail}</small>}
               </article>

@@ -34,7 +34,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 12;
+export const KPI_DICTIONARY_VERSION = 13;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -59,16 +59,35 @@ function normalizePositiveInteger(value, fallback) {
 export function normalizeTimeRange(start = DEFAULT_PERIOD_START, end = DEFAULT_PERIOD_END) {
   const startMinutes = parseTimeInput(start);
   const endMinutes = parseTimeInput(end);
-  if (startMinutes === null || endMinutes === null || startMinutes >= endMinutes) {
+  if (startMinutes === null || endMinutes === null || startMinutes === endMinutes) {
     throw new Error("La plage horaire doit être comprise entre deux heures valides, par pas de 30 minutes.");
   }
+  const isOvernight = endMinutes < startMinutes;
   return {
     start: formatTimeInput(startMinutes),
     end: formatTimeInput(endMinutes),
     startMinutes,
     endMinutes,
+    durationMinutes: isOvernight ? 1440 - startMinutes + endMinutes : endMinutes - startMinutes,
+    isOvernight,
     label: `${formatTimeInput(startMinutes)}-${formatTimeInput(endMinutes)}`,
   };
+}
+
+export function isTimeRangeWithin(period, activePeriod) {
+  if (!period || !activePeriod) return false;
+  const duration = period.durationMinutes ?? (period.endMinutes >= period.startMinutes
+    ? period.endMinutes - period.startMinutes
+    : 1440 - period.startMinutes + period.endMinutes);
+  const activeDuration = activePeriod.durationMinutes ?? (activePeriod.endMinutes >= activePeriod.startMinutes
+    ? activePeriod.endMinutes - activePeriod.startMinutes
+    : 1440 - activePeriod.startMinutes + activePeriod.endMinutes);
+  if (duration > activeDuration) return false;
+
+  const offset = activePeriod.isOvernight && period.startMinutes < activePeriod.startMinutes
+    ? period.startMinutes + 1440 - activePeriod.startMinutes
+    : period.startMinutes - activePeriod.startMinutes;
+  return offset >= 0 && offset + duration <= activeDuration;
 }
 
 export const KPI_DICTIONARY = [
@@ -115,9 +134,9 @@ export const KPI_DICTIONARY = [
   {
     id: "score.operational",
     label: "Score opérationnel",
-    source: "Données!Duels + CHG + DECHG + ZONAGE",
-    formula: "Nombre des 4 indicateurs dont le pourcentage atteint l'objectif de la ligue - indicateurs atteints / indicateurs sous objectif",
-    denominator: "4 indicateurs disponibles : duels gagnés, chargements cadrés, déchargements dans la cible et possession Zody",
+    source: "Données!R:T + TCD PPT!U + Données filtrées DECHG/ZONAGE",
+    formula: "Nombre des 3 indicateurs dont le pourcentage dépasse strictement l'objectif de la ligue - indicateurs atteints / indicateurs sous objectif",
+    denominator: "3 indicateurs disponibles : duels gagnés, chargements cadrés et possession Zody",
     display: "Score au format football",
   },
   {
@@ -249,6 +268,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     zonageTarget: `${criteria.zonageMinutes} minutes`,
     loadingTarget: formatDuration(criteria.loadingSeconds),
     unloadingTarget: formatDuration(criteria.unloadingSeconds),
+    scoreIndicators: "3 indicateurs : duels gagnés, chargements cadrés et possession Zody",
     scoreTarget: `${criteria.scoreTargetPercent}% par indicateur`,
     period: period.label,
   };
@@ -524,7 +544,6 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
   const score = duelRate === null ? null : Math.round(duelRate);
   const operationalScore = buildOperationalScore(
     loadingQuality,
-    unloadingQuality,
     duelRate,
     possession.percent,
     criteria.loadingSeconds,
@@ -642,7 +661,6 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
     causerie: buildCauserie({
       duelRate,
       loadingPercent: loadingQuality.targetedPercent,
-      unloadingPercent: unloadingQuality.targetedPercent,
       possessionPercent: possession.percent,
       scoreTargetPercent: criteria.scoreTargetPercent,
       openDuelRows,
@@ -1047,7 +1065,7 @@ function buildYellowCards(workbook, period) {
         clockSeconds,
       };
     })
-    .filter((card) => card.playerName && (period.useExcelPeriod || (card.clockSeconds !== null && card.clockSeconds >= period.startMinutes * 60 && card.clockSeconds <= period.endMinutes * 60)))
+    .filter((card) => card.playerName && (period.useExcelPeriod || isClockSecondsInPeriod(card.clockSeconds, period)))
     .map(({ clockSeconds, ...card }) => card);
 }
 
@@ -1080,16 +1098,15 @@ function readLoadingDetails(workbook) {
   return details;
 }
 
-function buildOperationalScore(loadingQuality, unloadingQuality, duelRate, possessionPercent, configuredTargetSeconds, scoreTargetPercent) {
+function buildOperationalScore(loadingQuality, duelRate, possessionPercent, configuredTargetSeconds, scoreTargetPercent) {
   const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.loadingSeconds);
   const scored = Number.isFinite(loadingQuality?.targeted) ? Math.round(loadingQuality.targeted) : null;
   const conceded = Number.isFinite(loadingQuality?.offTarget) ? Math.round(loadingQuality.offTarget) : null;
   const loadingPercent = loadingQuality?.targetedPercent;
-  const unloadingPercent = unloadingQuality?.targetedPercent;
-  const indicators = { duelRate, loadingPercent, unloadingPercent, possessionPercent };
+  const indicators = { duelRate, loadingPercent, possessionPercent };
   const available = Object.values(indicators).every((value) => Number.isFinite(value));
   const reachedIndicators = available
-    ? Object.values(indicators).filter((value) => value >= scoreTargetPercent).length
+    ? Object.values(indicators).filter((value) => value > scoreTargetPercent).length
     : null;
   return {
     status: available ? "available" : "unavailable",
@@ -1125,36 +1142,41 @@ function buildPossessionScore(rows) {
 }
 
 function buildCompositionPeriods(rows, period) {
-  const duration = period.endMinutes - period.startMinutes;
-  const midpoint = period.startMinutes + duration / 2;
+  const duration = period.durationMinutes ?? (period.endMinutes >= period.startMinutes ? period.endMinutes - period.startMinutes : 1440 - period.startMinutes + period.endMinutes);
+  const midpoint = duration / 2;
   const quarterPoints = [
-    period.startMinutes,
-    period.startMinutes + duration / 4,
+    0,
+    duration / 4,
     midpoint,
-    period.startMinutes + (duration * 3) / 4,
-    period.endMinutes,
+    (duration * 3) / 4,
+    duration,
   ];
+  const periodOffset = (minutes) => period.isOvernight && minutes < period.startMinutes
+    ? minutes + 1440 - period.startMinutes
+    : minutes - period.startMinutes;
+  const displayTime = (offset) => formatCompositionTime(period.startMinutes + offset);
   const rowsBetween = (start, end, includeEnd = false) => rows.filter((row) => {
     const minutes = parisMinutes(row.startedAt);
     if (minutes === null) return false;
-    return minutes >= start && (includeEnd ? minutes <= end : minutes < end);
+    const offset = periodOffset(minutes);
+    return offset >= start && (includeEnd ? offset <= end : offset < end);
   });
-  const firstRows = rowsBetween(period.startMinutes, midpoint);
-  const secondRows = rowsBetween(midpoint, period.endMinutes, true);
+  const firstRows = rowsBetween(0, midpoint);
+  const secondRows = rowsBetween(midpoint, duration, true);
   const quarterIds = ["q1", "q2", "q3", "q4"];
   const quarters = quarterIds.map((id, index) => ({
     id,
-    label: `${formatCompositionTime(quarterPoints[index])} - ${formatCompositionTime(quarterPoints[index + 1])}`,
+    label: `${displayTime(quarterPoints[index])} - ${displayTime(quarterPoints[index + 1])}`,
     players: buildPlayers(rowsBetween(quarterPoints[index], quarterPoints[index + 1], index === quarterIds.length - 1)),
   }));
 
   return {
     first: {
-      label: `${period.start} - ${formatCompositionTime(midpoint)}`,
+      label: `${period.start} - ${displayTime(midpoint)}`,
       players: buildPlayers(firstRows),
     },
     second: {
-      label: `${formatCompositionTime(midpoint)} - ${period.end}`,
+      label: `${displayTime(midpoint)} - ${period.end}`,
       players: buildPlayers(secondRows),
     },
     quarters,
@@ -1162,7 +1184,8 @@ function buildCompositionPeriods(rows, period) {
 }
 
 function formatCompositionTime(minutes) {
-  const totalSeconds = Math.round(minutes * 60);
+  const normalizedMinutes = ((minutes % 1440) + 1440) % 1440;
+  const totalSeconds = Math.round(normalizedMinutes * 60);
   const hours = Math.floor(totalSeconds / 3600) % 24;
   const remaining = totalSeconds % 3600;
   const mins = Math.floor(remaining / 60);
@@ -1387,10 +1410,10 @@ function buildAlerts({ validation, openDuelRows, duelTotal, weakRole }) {
   return alerts.slice(0, 5);
 }
 
-function buildCauserie({ duelRate, loadingPercent, unloadingPercent, possessionPercent, scoreTargetPercent, openDuelRows, weakRole, validation, zonageMinutes }) {
-  const indicators = [duelRate, loadingPercent, unloadingPercent, possessionPercent];
+function buildCauserie({ duelRate, loadingPercent, possessionPercent, scoreTargetPercent, openDuelRows, weakRole, validation, zonageMinutes }) {
+  const indicators = [duelRate, loadingPercent, possessionPercent];
   const indicatorsAvailable = indicators.every((value) => Number.isFinite(value));
-  const reachedIndicators = indicatorsAvailable ? indicators.filter((value) => value >= scoreTargetPercent).length : 0;
+  const reachedIndicators = indicatorsAvailable ? indicators.filter((value) => value > scoreTargetPercent).length : 0;
   const priority = !indicatorsAvailable
     ? "Compléter les indicateurs avant de conclure le match."
     : reachedIndicators > indicators.length - reachedIndicators
@@ -1552,7 +1575,20 @@ function isInActiveTimeRange(date, period) {
   if (!date || !period) return false;
   const minutes = parisMinutes(date);
   if (minutes === null) return false;
+  if (period.isOvernight || period.endMinutes < period.startMinutes) {
+    return minutes >= period.startMinutes || minutes <= period.endMinutes;
+  }
   return minutes >= period.startMinutes && minutes <= period.endMinutes;
+}
+
+function isClockSecondsInPeriod(clockSeconds, period) {
+  if (!Number.isFinite(clockSeconds) || !period) return false;
+  const startSeconds = period.startMinutes * 60;
+  const endSeconds = period.endMinutes * 60;
+  if (period.isOvernight || period.endMinutes < period.startMinutes) {
+    return clockSeconds >= startSeconds || clockSeconds <= endSeconds;
+  }
+  return clockSeconds >= startSeconds && clockSeconds <= endSeconds;
 }
 
 function parisMinutes(date) {
@@ -1840,7 +1876,11 @@ function buildHourlyPassPerformance(workbook, period) {
     const hour = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: hourColumn })]?.v);
     const rateFraction = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: rateColumn })]?.v);
     if (!Number.isFinite(hour) || !Number.isFinite(rateFraction) || rateFraction < 0 || rateFraction > 1) continue;
-    if (hour < period.startMinutes / 60 || hour > period.endMinutes / 60) continue;
+    const hourMinutes = hour * 60;
+    const inRange = period.isOvernight || period.endMinutes < period.startMinutes
+      ? hourMinutes >= period.startMinutes || hourMinutes <= period.endMinutes
+      : hourMinutes >= period.startMinutes && hourMinutes <= period.endMinutes;
+    if (!inRange) continue;
     const lost = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: lostColumn })]?.v);
     const won = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: wonColumn })]?.v);
     const total = Number.isFinite(lost) && Number.isFinite(won) ? lost + won : null;
@@ -1852,7 +1892,13 @@ function buildHourlyPassPerformance(workbook, period) {
       rate: Math.round(rateFraction * 1000) / 10,
     });
   }
-  values.sort((a, b) => a.hour - b.hour);
+  values.sort((a, b) => {
+    const toOffset = (hour) => {
+      const minutes = hour * 60;
+      return period.isOvernight && minutes < period.startMinutes ? minutes + 1440 - period.startMinutes : minutes - period.startMinutes;
+    };
+    return toOffset(a.hour) - toOffset(b.hour);
+  });
   const weightedWon = values.reduce((sum, item) => sum + (Number.isFinite(item.won) ? item.won : 0), 0);
   const weightedTotal = values.reduce((sum, item) => sum + (Number.isFinite(item.total) ? item.total : 0), 0);
   return {

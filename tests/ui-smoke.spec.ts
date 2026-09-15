@@ -29,6 +29,15 @@ test.afterEach(async ({ page }, testInfo) => {
 test("les vues principales restent lisibles sur desktop, tablette et mobile", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   let savedCauseriePlan: Record<string, unknown> | null = null;
+  await page.route("**/api/agencies/058/snapshot**", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    // This scenario explicitly covers the first-import state and must not
+    // depend on the developer's persisted local PDF import.
+    body.snapshot.dailyIndicators = null;
+    body.snapshot.yellowCards = [{ playerName: "Camille Martin", time: "18:42:00", reason: "Chargement à quai", travelCode: "ECHO123" }];
+    await route.fulfill({ response, json: body });
+  });
   await page.route("**/api/agencies/058/causerie**", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
@@ -91,7 +100,12 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".coach-context-list div")).toHaveCount(4);
       await expect(page.getByText("La feuille de match détaille les indicateurs.", { exact: false })).toBeVisible();
       await expect(page.locator(".coach-actions-grid .coach-action-card")).toHaveCount(3);
-      await expect(page.locator(".coach-workforce-metrics")).toBeVisible();
+      await expect(page.locator(".coach-discipline-panel")).toBeVisible();
+      await expect(page.getByText("Cartons jaunes", { exact: true })).toBeVisible();
+      await expect(page.locator(".coach-yellow-list")).toContainText("Camille Martin");
+      await expect(page.locator(".coach-yellow-list")).toContainText("18:42:00 · Chargement à quai · ECHO123");
+      await expect(page.getByText("Cartons rouges", { exact: true })).toBeVisible();
+      await expect(page.getByText("Aucun carton rouge saisi manuellement.", { exact: true })).toBeVisible();
       await expect(page.getByText("Ligue active", { exact: true })).toBeVisible();
       await expect(page.getByRole("button", { name: "Mode briefing", exact: true })).toBeVisible();
       await expect(page.locator(".coach-action-entry.is-empty")).toHaveCount(3);
@@ -111,6 +125,10 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".coach-action-entry").nth(2)).toHaveText("Renforcer la ligne en tension.");
       await expect(page.locator(".coach-mercato-entry")).toHaveText("Accueillir Camille Martin, nouveau renfort de l'équipe.");
       await expect(page.locator(".coach-review-line strong")).toHaveText("18:30");
+      await page.getByRole("button", { name: "Saisir", exact: true }).click();
+      await page.getByLabel("Cartons rouges manuels").fill("Camille Martin · 18:42 · règle SST");
+      await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+      await expect(page.locator(".coach-red-list")).toContainText("Camille Martin · 18:42 · règle SST");
       const coachLayout = await page.evaluate(() => {
         const pageElement = document.querySelector<HTMLElement>(".coach-decision-page");
         const contextRows = Array.from(document.querySelectorAll<HTMLElement>(".coach-context-list div"));
@@ -125,6 +143,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await page.getByRole("button", { name: "04 Coach", exact: true }).click();
       await expect(page.getByLabel("Nouvel arrivant du mercato")).toHaveCount(0);
       await expect(page.locator(".coach-mercato-entry")).toHaveText("Accueillir Camille Martin, nouveau renfort de l'équipe.");
+      await expect(page.locator(".coach-red-list")).toContainText("Camille Martin · 18:42 · règle SST");
     }
     if (screen.name === "02-feuille-match") {
       await expect(page.locator(".match-page.is-threshold-reached")).toHaveCount(1);
@@ -153,16 +172,16 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       expect(matchBubbleLayout.sameHeight).toBe(true);
       expect(matchBubbleLayout.overflow).toBe(false);
       await expect(page.locator(".match-score-bubbles").getByText("% duels gagnés", { exact: true })).toBeVisible();
-      await expect(page.getByText("% chargements cadrés", { exact: true })).toBeVisible();
+    await expect(page.locator(".match-score-bubbles").getByText("% tirs cadrés", { exact: true })).toBeVisible();
+      await expect(page.locator(".loading-score-bubble")).toContainText("inférieure ou égale à 2 min 45 s/poz");
       await expect(page.locator(".loading-score-bubble strong")).toHaveText("94,3%");
-      await expect(page.locator(".unloading-score-bubble")).toBeVisible();
-      await expect(page.locator(".match-score-bubbles").getByText("% déchargements dans la cible", { exact: true })).toBeVisible();
       await expect(page.locator(".football-score-panel")).toHaveCount(1);
-      await expect(page.locator(".football-score-side-for strong")).toHaveText("4");
+      await expect(page.locator(".football-score-side-for strong")).toHaveText("3");
       await expect(page.locator(".football-score-side-against strong")).toHaveText("0");
       await expect(page.getByText("Indicateurs atteints", { exact: true })).toBeVisible();
       await expect(page.getByText("Indicateurs sous l'objectif", { exact: true })).toBeVisible();
       await expect(page.locator(".match-score-bubbles").getByText("% possession Zody", { exact: true })).toBeVisible();
+      await expect(page.locator(".match-score-bubbles").getByText("% centres réussis", { exact: true })).toBeVisible();
       await expect(page.locator(".team-motivation-message")).toHaveText("Excellente dynamique. On garde l'intensité jusqu'au bout.");
       await expect(page.locator(".match-result-actions")).toHaveCount(0);
       await expect(page.locator(".match-indicators").getByText("NB DE BLESSURES (A.T)", { exact: true })).toBeVisible();
@@ -182,10 +201,19 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".category-awards .award-card.polyvalent .award-copy > b")).toHaveCount(0);
       const awardOrder = await page.locator(".category-awards .award-card").evaluateAll((cards) => cards.map((card) => card.classList.contains("polyvalent") ? "polyvalent" : ["attack", "defense", "midfield"].find((kind) => card.classList.contains(kind))));
       expect(awardOrder).toEqual(["attack", "defense", "midfield", "polyvalent"]);
+      await expect(page.locator(".category-awards .award-leader-score")).toHaveCount(4);
+      await expect(page.locator(".award-card.attack .award-leader-score b")).toHaveText("239");
+      await expect(page.locator(".award-card.attack .award-leader-score small")).toHaveText("positions CHG");
+      await expect(page.locator(".award-card.midfield:not(.polyvalent) .award-leader-score b")).toHaveText("236");
+      await expect(page.locator(".award-card.midfield:not(.polyvalent) .award-leader-score small")).toHaveText("positions ZONAGE");
+      await expect(page.locator(".award-card.polyvalent .award-leader-score b")).toHaveText(/\d+%/);
+      await expect(page.locator(".award-card.polyvalent .award-leader-score small")).toHaveText("polyvalence");
       await expect(page.locator(".award-card.polyvalent .award-challenger")).toHaveCount(2);
-      await expect(page.locator(".operational-charts-carousel").getByText("Chargements contrôlés", { exact: true })).toBeVisible();
-      await expect(page.locator(".loading-duel-quality-card .duel-quality-details summary")).toContainText("Voir les duels");
-      await expect(page.locator(".operational-chart-slide")).toHaveCount(3);
+      await expect(page.locator(".award-card.midfield .award-challenger").first()).toContainText("227 poz · -9 avec le premier");
+      await expect(page.locator(".award-card.polyvalent .award-challenger").first()).toContainText("% polyvalence");
+      await expect(page.locator(".operational-charts-carousel").getByText("% tirs cadrés", { exact: true })).toBeVisible();
+      await expect(page.locator(".loading-duel-quality-card .duel-quality-details summary")).toContainText("Voir les duels perdus");
+      await expect(page.locator(".operational-chart-slide")).toHaveCount(4);
       const qualityCarouselLayout = await page.evaluate(() => {
         const viewport = document.querySelector<HTMLElement>(".operational-charts-carousel-viewport");
         const slides = Array.from(document.querySelectorAll<HTMLElement>(".operational-chart-slide"));
@@ -199,11 +227,11 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
           horizontalOverflow: Boolean(viewport && viewport.scrollWidth > viewport.clientWidth + 1),
         };
       });
-      expect(qualityCarouselLayout).toEqual({ slideCount: 3, sameSlideWidth: true, sameCardHeight: true, horizontalOverflow: true });
+      expect(qualityCarouselLayout).toEqual({ slideCount: 4, sameSlideWidth: true, sameCardHeight: true, horizontalOverflow: true });
       await page.getByRole("button", { name: "Graphique suivant", exact: true }).click();
-      await expect(page.locator(".operational-charts-carousel-counter")).toHaveText("2 / 3");
+      await expect(page.locator(".operational-charts-carousel-counter")).toHaveText("2 / 4");
       await expect(page.locator(".operational-charts-carousel-dots button.is-active")).toHaveCount(1);
-      await expect(page.locator(".loading-duel-quality-card .duel-quality-details summary")).toContainText("Voir les duels");
+      await expect(page.locator(".loading-duel-quality-card .duel-quality-details summary")).toContainText("Voir les duels perdus");
       await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
       await expect(page.getByRole("button", { name: "Sortir du mode Célébration", exact: true })).toBeVisible();
       const celebrationLayout = await page.evaluate(() => {
@@ -429,6 +457,13 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   await expect(page.locator(".performance-chart-hour")).toHaveText(["16h", "17h", "18h"]);
   expect(await page.locator(".performance-chart-hour").allTextContents()).not.toContain("00h");
   await expect(page.locator(".performance-chart-total b")).toHaveText("59,4%");
+
+  await page.locator(".time-range-control input").nth(0).fill("22:30");
+  await page.locator(".time-range-control input").nth(1).fill("06:00");
+  await page.getByRole("button", { name: "Appliquer", exact: true }).click();
+  await expect(page.locator(".time-range-control input").nth(0)).toHaveValue("22:30");
+  await expect(page.locator(".time-range-control input").nth(1)).toHaveValue("06:00");
+  await expect(page.getByText("Plage 22:30 - 06:00", { exact: true })).toBeVisible();
 });
 
 test("le guide et le retour du brief équipe restent accessibles avant le premier import", async ({ page }) => {
@@ -479,13 +514,11 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
   await page.getByRole("button", { name: "ADM Administrateur", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: "Centre de pilotage des ligues", exact: true })).toBeVisible();
-  await expect(page.locator(".administrator-rule-strip select")).toHaveCount(3);
-  await expect(page.locator(".league-card .league-values select")).toHaveCount(12);
+  await expect(page.locator(".administrator-rule-strip select")).toHaveCount(2);
+  await expect(page.locator(".league-card .league-values select")).toHaveCount(8);
   await expect(page.locator(".administrator-rule-strip")).not.toContainText("Position");
   await expect(page.getByLabel("Cible zonage Argent")).toHaveValue("30");
   await expect(page.getByLabel("Modifier chargement Argent")).toHaveValue("00:02:45");
-  await expect(page.getByLabel("Temps déchargement Argent")).toHaveValue("00:01:00");
-  await expect(page.getByLabel("Modifier déchargement Argent")).toHaveValue("00:01:00");
   await expect(page.getByLabel("Objectif score Argent").first()).toHaveValue("50");
   await page.getByLabel("Cible zonage Argent").selectOption("31");
   await expect(page.getByLabel("Cible zonage Argent")).toHaveValue("31");
@@ -504,7 +537,7 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
       sceneAnimation: getComputedStyle(document.querySelector<HTMLElement>(".administrator-scene")!, "::after").display,
       sceneBackground: getComputedStyle(document.querySelector<HTMLElement>(".administrator-scene")!).backgroundImage,
       cardOverflow: cards.every((card) => getComputedStyle(card).overflow === "hidden"),
-      criteriaRows: valueRows.length === 4 && valueRows.every((row) => getComputedStyle(row).gridTemplateColumns.split(" ").length === 1 && row.querySelectorAll("label").length === 4),
+      criteriaRows: valueRows.length === 4 && valueRows.every((row) => getComputedStyle(row).gridTemplateColumns.split(" ").length === 1 && row.querySelectorAll("label").length === 3),
     };
   });
   expect(animationState).toEqual({
@@ -522,15 +555,13 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
   await expect(page.locator(".administrator-page")).toBeVisible();
   await expect(page.getByLabel("Modifier zonage Argent")).toHaveValue("31");
   await expect(page.getByLabel("Modifier chargement Argent")).toHaveValue("00:02:45");
-  await expect(page.getByLabel("Temps déchargement Platine")).toHaveValue("00:00:50");
-  await expect(page.getByLabel("Modifier déchargement Argent")).toHaveValue("00:01:00");
   await expect(page.locator(".administrator-active-badge strong")).toHaveText("Platine");
   await expect(page.locator(".app-shell")).toHaveClass(/league-platine/);
   await expect(page.locator(".top-league-badge")).toContainText("Platine");
 
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
   await expect(page.locator(".football-score-side-for strong")).toHaveText("1");
-  await expect(page.locator(".football-score-side-against strong")).toHaveText("3");
+  await expect(page.locator(".football-score-side-against strong")).toHaveText("2");
   await expect(page.getByText("Célébration activée", { exact: true })).toHaveCount(0);
 });
 

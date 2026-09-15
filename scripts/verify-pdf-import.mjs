@@ -21,6 +21,7 @@ const port = await freePort();
 const base = `http://127.0.0.1:${port}`;
 const headers = { "x-access-code": "pdf-audit-only" };
 const expected = { arrivalPunctuality: 80, departurePunctuality: 64.1, destinationPunctuality: 62, temperatureReturn: 92.19 };
+const expectedTargets = { arrivalPunctuality: 85, departurePunctuality: 85, destinationPunctuality: 85, temperatureReturn: 100 };
 let server;
 let browser;
 let logs = "";
@@ -64,6 +65,7 @@ async function snapshot(query = "") {
 function checkPdf(value) {
   assert.deepEqual(value.dailyIndicators.expedition, { tonnage: 478 });
   assert.deepEqual(value.dailyIndicators.punctuality, expected);
+  assert.deepEqual(value.dailyIndicators.punctualityTargets, expectedTargets);
 }
 
 try {
@@ -118,6 +120,12 @@ try {
   await browser.close();
   browser = null;
 
+  const latestPath = path.join(dataDir, "058", "latest.json");
+  const staleSnapshot = JSON.parse(await fs.readFile(latestPath, "utf8"));
+  delete staleSnapshot.dailyIndicators.punctualityTargets;
+  await fs.writeFile(latestPath, JSON.stringify(staleSnapshot));
+  checkPdf(await snapshot());
+
   const rangeResponse = await fetch(`${base}/api/agencies/058/time-range`, {
     method: "POST", headers: { ...headers, "Content-Type": "application/json" },
     body: JSON.stringify({ start: "16:00", end: "18:00" }),
@@ -143,7 +151,7 @@ try {
   checkPdf(await snapshot());
   const report = { status: "PASS", workbook: path.basename(workbookPath), pdf: path.basename(pdfPath),
     date: imported.match.lastOperation, positionsExcel: positions, positionsFiltered: filtered.summary.positions,
-    tonnage: 478, punctuality: expected, checks: ["real-browser-upload", "reload", "four-leagues", "filtered-period", "invalid-file-preserves-data", "reimport", "server-restart-same-storage"] };
+    tonnage: 478, punctuality: expected, punctualityTargets: expectedTargets, checks: ["real-browser-upload", "reload", "four-leagues", "filtered-period", "invalid-file-preserves-data", "reimport", "server-restart-same-storage"] };
   await fs.writeFile(path.join(outputDir, "report.json"), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
 } finally {

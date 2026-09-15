@@ -12,6 +12,7 @@ test("106J: uniquement les cellules Site et le tonnage Expedition", () => {
     Taux de prise de température retour ramasse%92,19 %+3%100,00 %`, "106J.pdf");
   assert.deepEqual(result.expedition, { tonnage: 478 });
   assert.deepEqual(result.punctuality, { arrivalPunctuality: 80, departurePunctuality: 64.1, destinationPunctuality: 62, temperatureReturn: 92.19 });
+  assert.deepEqual(result.punctualityTargets, { arrivalPunctuality: 85, departurePunctuality: 85, destinationPunctuality: 85, temperatureReturn: 100 });
   assert.equal(result.referenceDate, "11 septembre 2026");
 });
 

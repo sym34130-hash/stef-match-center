@@ -17,11 +17,14 @@ export async function parse106jPdf(buffer, sourceName) {
 
 export function parse106jText(rawText, sourceName) {
   const text = normalizeText(rawText);
-  const indicators = { sourceName, importedAt: new Date().toISOString(), referenceDate: findReferenceDate(text), punctuality: {}, expedition: {} };
+  const indicators = { sourceName, importedAt: new Date().toISOString(), referenceDate: findReferenceDate(text), punctuality: {}, punctualityTargets: {}, expedition: {} };
 
   for (const [key, label] of PERFORMANCE_ROWS) {
-    const value = findSitePercent(text, label);
-    if (value !== null) indicators.punctuality[key] = value;
+    const result = findSitePercent(text, label);
+    if (result !== null) {
+      indicators.punctuality[key] = result.value;
+      if (result.target !== null) indicators.punctualityTargets[key] = result.target;
+    }
   }
 
   const tonnage = findExpeditionTonnage(text);
@@ -30,6 +33,7 @@ export function parse106jText(rawText, sourceName) {
   if (Object.keys(indicators.punctuality).length === 0 && Object.keys(indicators.expedition).length === 0) {
     throw new Error("Le PDF ne contient pas les indicateurs attendus du rapport SIE.106J.");
   }
+  if (Object.keys(indicators.punctualityTargets).length === 0) delete indicators.punctualityTargets;
   return indicators;
 }
 
@@ -40,11 +44,15 @@ function normalizeText(value) {
 function findSitePercent(text, label) {
   const index = text.indexOf(label);
   if (index < 0) return null;
-  // Stay on the Site cell: never substitute a trend, norm or following row.
-  const match = text.slice(index + label.length).match(/^\s*%\s*(\d+(?:[.,]\d+)?)\s*%/);
+  // Stay on the Site cell, then read the optional Norme Site cell without using a following row.
+  const afterLabel = text.slice(index + label.length);
+  const match = afterLabel.match(/^\s*%\s*(\d+(?:[.,]\d+)?)\s*%/);
   if (!match) return null;
   const value = Number(match[1].replace(",", "."));
-  return Number.isFinite(value) && value <= 100 ? value : null;
+  if (!Number.isFinite(value) || value < 0 || value > 100) return null;
+  const normMatch = afterLabel.slice(match[0].length).match(/^\s*[+-]?\s*\d+(?:[.,]\d+)?\s*%\s*(\d+(?:[.,]\d+)?)\s*%/);
+  const target = normMatch ? Number(normMatch[1].replace(",", ".")) : null;
+  return { value, target: Number.isFinite(target) && target >= 0 && target <= 100 ? target : null };
 }
 
 function findExpeditionTonnage(text) {

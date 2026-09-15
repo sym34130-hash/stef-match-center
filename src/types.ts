@@ -92,7 +92,6 @@ export type Snapshot = {
     indicators: {
       duelRate: number | null;
       loadingPercent: number | null;
-      unloadingPercent: number | null;
       possessionPercent: number | null;
     };
     loading: {
@@ -113,6 +112,7 @@ export type Snapshot = {
     importedAt: string;
     referenceDate: string | null;
     punctuality: Partial<Record<"arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn", number>>;
+    punctualityTargets?: Partial<Record<"arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn", number>>;
     expedition: { tonnage?: number };
   } | null;
   summary: {

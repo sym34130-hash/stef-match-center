@@ -5,4 +5,6 @@ dist
 data/agencies/**
 !data/agencies/.gitkeep
 test-results
+output
+tmp
 .DS_Store

@@ -7,3 +7,5 @@ data/agencies/**
 .env
 playwright-report
 test-results
+output
+tmp

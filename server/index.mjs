@@ -5,7 +5,7 @@ import fs from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, KPI_DICTIONARY_VERSION, normalizePerformanceCriteria, normalizeSnapshotContract, normalizeTimeRange } from "./match-engine.mjs";
+import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, isTimeRangeWithin, KPI_DICTIONARY_VERSION, normalizePerformanceCriteria, normalizeSnapshotContract, normalizeTimeRange } from "./match-engine.mjs";
 import { parse106jPdf } from "./pdf-106j.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -215,7 +215,7 @@ app.post("/api/agencies/:agencyCode/composition-range", requireAgency, async (re
         });
         return;
       }
-      if (period.startMinutes < activePeriod.startMinutes || period.endMinutes > activePeriod.endMinutes) {
+      if (!isTimeRangeWithin(period, activePeriod)) {
         res.status(400).json({
           title: "SOUS-PLAGE HORS PÉRIMÈTRE",
           message: `Choisis une sous-plage comprise entre ${activePeriod.start} et ${activePeriod.end}.`,
@@ -567,10 +567,17 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
       !["available", "unavailable"].includes(snapshot.operationalScore.status) ||
       snapshot.operationalScore.targetPercent === undefined ||
       !snapshot.operationalScore.indicators ||
-      snapshot.operationalScore.indicators.unloadingPercent === undefined ||
+      Object.keys(snapshot.operationalScore.indicators).length !== 3 ||
+      Object.hasOwn(snapshot.operationalScore.indicators, "unloadingPercent") ||
       (!["available", "unavailable"].includes(snapshot.operationalScore.loading?.status) ||
         snapshot.operationalScore.loading?.scored === undefined ||
         snapshot.operationalScore.loading?.conceded === undefined);
+    const punctuality = snapshot.dailyIndicators?.punctuality;
+    const dailyIndicatorTargetsNeedRefresh = Boolean(
+      punctuality &&
+      Object.keys(punctuality).length > 0 &&
+      Object.keys(punctuality).some((key) => !Number.isFinite(snapshot.dailyIndicators?.punctualityTargets?.[key])),
+    );
     const snapshotNeedsRefresh =
       snapshot.kpiDictionaryVersion !== KPI_DICTIONARY_VERSION ||
       !Array.isArray(snapshot.hourlyPerformance) ||
@@ -582,7 +589,8 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
       snapshot.unloadingQuality.offTargetPercent === undefined ||
       !snapshot.unloadingDuelQuality ||
       !snapshot.duelQuality ||
-      operationalScoreNeedsRefresh;
+      operationalScoreNeedsRefresh ||
+      dailyIndicatorTargetsNeedRefresh;
 
     const storedCriteriaMatchesRequest = requestedCriteria
       ? Object.entries(requestedCriteria).every(([key, value]) => snapshot.performanceCriteria?.[key] === value)
@@ -590,7 +598,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
     if (requestedCriteria && (!storedCriteriaMatchesRequest || snapshotNeedsRefresh)) {
       try {
         const workbook = await readWorkbookForBuild(agencyDir);
-        const dailyIndicators = await readLatestPdfIndicators(agencyDir);
+        const dailyIndicators = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;
         const period = normalizeTimeRange(snapshot.match?.periodStart, snapshot.match?.periodEnd);
         const rebuilt = buildSnapshotFromWorkbook(
           workbook,
@@ -615,7 +623,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
     if (!requestedCriteria && snapshotNeedsRefresh) {
       try {
         const workbook = await readWorkbookForBuild(agencyDir);
-        const dailyIndicators = await readLatestPdfIndicators(agencyDir);
+        const dailyIndicators = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;
         const storedCriteria = normalizePerformanceCriteria(snapshot.performanceCriteria);
         const period = normalizeTimeRange(snapshot.match?.periodStart, snapshot.match?.periodEnd);
         const rebuilt = buildSnapshotFromWorkbook(
@@ -734,6 +742,7 @@ function normalizeCauseriePlan(plan) {
       defense: normalizeAttachments(input.attachments?.defense),
     },
     mercato: limitText(input.mercato, 240),
+    redCards: limitMultilineText(input.redCards, 1000),
     coach: {
       tactic: limitText(input.coach?.tactic, 120),
       priority: limitText(input.coach?.priority, 120),

@@ -122,10 +122,10 @@ erreur Excel.
 - Le score et les duels utilisent ces mêmes lignes en excluant aussi les lignes où `Poz non zonées` est marqué.
 - Le taux de duels gagnés est calculé avec `Duels gagnés / lignes éligibles au score`.
 - La possession Zody compte les positions RECEPTION uniques qui ont aussi une opération ZONAGE, divisées par les positions RECEPTION uniques du même périmètre filtré ; elle reste donc entre `0 %` et `100 %`, y compris sur une plage personnalisée.
-- Le score opérationnel affiché au format football compte, sur 4, les indicateurs qui atteignent l'objectif de la ligue active : taux de duels gagnés, chargements cadrés, déchargements dans la cible et possession Zody. Le format est `indicateurs atteints - indicateurs sous l'objectif`.
+- Le score opérationnel affiché au format football compte, sur 3, les indicateurs qui dépassent strictement l'objectif de la ligue active : taux de duels gagnés, chargements cadrés et possession Zody. Le format est `indicateurs atteints - indicateurs sous l'objectif`.
 - Les objectifs par défaut sont : Bronze `45 min / 00:03:15 / 00:01:15 / 45%`, Argent `30 min / 00:02:45 / 00:01:00 / 50%`, Or `25 min / 00:02:30 / 00:00:55 / 60%`, Platine `20 min / 00:02:15 / 00:00:50 / 70%` pour zonage, chargement, déchargement et objectif du score.
 - Le temps de déchargement est calculé sur les lignes `DECHG` de la plage active, par voyage : `(dernière opération - première opération) / nombre de positions`. Un voyage est dans la cible si ce temps moyen par position est inférieur ou égal au seuil de la ligue. Les voyages sans durée positive ne sont pas comptabilisés.
-- Le seuil de déchargement est configurable et affiché dans les ligues. Le pourcentage de voyages dans la cible entre dans le score opérationnel à 4 indicateurs, avec la même cible de réussite que les autres indicateurs.
+- Le calcul du déchargement est conservé pour les contrôles de données et les imports historiques, mais il n'est plus une catégorie de ligue ni un indicateur du score opérationnel.
 - Le KPI chargement lit le bloc `Chargement` de `TCD PPT` : `TC / Nombre de N° Position` dans la colonne `U` (valeur brute `T/S`), uniquement pour les voyages d'au moins 15 positions et dans la plage active. La colonne `V` est une formule de présentation et n'est pas utilisée pour le calcul.
 - Le détail chargement reprend le lexique de frappe `TCD PPT!X:Y` via le commentaire du TCD.
 - La composition utilise le champ Excel `Poste`.
