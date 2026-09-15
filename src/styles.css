@@ -12202,7 +12202,7 @@ body.causerie-brief-active .causerie-stadium.is-brief .field-zone li {
   transform: translateX(-118%) skewX(-12deg);
 }
 
-.match-score-bubble.duel-score-bubble {
+.match-score-bubble.pass-score-bubble {
   border-color: rgba(137, 198, 255, 0.48);
   box-shadow: inset 0 3px 0 rgba(137, 198, 255, 0.8);
 }

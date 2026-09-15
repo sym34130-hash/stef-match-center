@@ -172,7 +172,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       expect(matchBubbleLayout.sameHeight).toBe(true);
       expect(matchBubbleLayout.overflow).toBe(false);
       await expect(page.locator(".match-score-bubbles").getByText("% passes réussies", { exact: true })).toBeVisible();
-      await expect(page.locator(".match-score-bubble.duel-score-bubble strong")).toHaveText("69,2%");
+      await expect(page.locator(".match-score-bubble.pass-score-bubble strong")).toHaveText("69,2%");
       await expect(page.locator(".match-score-bubbles").getByText("% tirs cadrés", { exact: true })).toBeVisible();
       await expect(page.locator(".loading-score-bubble")).toContainText("inférieure ou égale à 2 min 45 s/poz");
       await expect(page.locator(".loading-score-bubble strong")).toHaveText("94,3%");

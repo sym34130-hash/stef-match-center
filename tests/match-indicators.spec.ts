@@ -43,7 +43,7 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   await expect(page.locator(".match-score-bubbles").getByText("% centres réussis", { exact: true })).toBeVisible();
   await expect(page.locator(".match-score-bubble.centers-score-bubble strong")).toHaveText("62%");
   await expect(page.locator(".match-score-bubbles").getByText("% passes réussies", { exact: true })).toBeVisible();
-  await expect(page.locator(".match-score-bubble.duel-score-bubble strong")).toHaveText("69,2%");
+  await expect(page.locator(".match-score-bubble.pass-score-bubble strong")).toHaveText("69,2%");
   await expect(value("temperature")).toHaveText("92,19%");
   await expect(carousel.locator('[data-indicator="arrival"] .match-indicator-card')).toHaveClass(/is-below-target/);
   await expect(carousel.locator('[data-indicator="temperature"] .match-indicator-card')).toHaveClass(/is-below-target/);

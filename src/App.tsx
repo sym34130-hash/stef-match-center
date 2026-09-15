@@ -1179,7 +1179,7 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
             <span>STEF MATCH CENTER</span>
             <strong>{outcome.verdict}</strong>
             <div className="match-score-bubbles" aria-label="Scores du match">
-              <div className="match-score-bubble duel-score-bubble">
+              <div className="match-score-bubble pass-score-bubble">
                 <span>% passes réussies</span>
                 <strong>{formatPercent(snapshot.summary.passRate)}</strong>
                 <small>Passes réussies ÷ passes contrôlées<br />sur la plage active</small>
