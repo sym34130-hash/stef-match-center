@@ -1851,7 +1851,8 @@ function buildHourlyPassPerformance(workbook, period) {
   if (!sheet) return empty;
 
   // The Excel curve is chart1.xml: categories X!FD:FF and values X!FG.
-  // X!EZ contains the same row-level formula, EX / (EW + EX).
+  // Keep the chart's valid rows, but calculate each displayed rate from the
+  // row counters EW/EX so cached chart values cannot shift between hours.
   const header = Object.entries(sheet).find(([address, cell]) => !address.startsWith("!") && normalizeKey(cell?.v) === "somme de passes reussies");
   if (!header) return empty;
   const headerCell = XLSX.utils.decode_cell(header[0]);
@@ -1875,8 +1876,8 @@ function buildHourlyPassPerformance(workbook, period) {
   const lastRow = sheetEndRow(sheet, headerRow + 1);
   for (let row = headerRow + 1; row <= lastRow; row += 1) {
     const hour = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: hourColumn })]?.v);
-    const rateFraction = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: rateColumn })]?.v);
-    if (!Number.isFinite(hour) || !Number.isFinite(rateFraction) || rateFraction < 0 || rateFraction > 1) continue;
+    const chartRateFraction = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: rateColumn })]?.v);
+    if (!Number.isFinite(hour) || !Number.isFinite(chartRateFraction) || chartRateFraction < 0 || chartRateFraction > 1) continue;
     const hourMinutes = hour * 60;
     const inRange = period.isOvernight || period.endMinutes < period.startMinutes
       ? hourMinutes >= period.startMinutes || hourMinutes <= period.endMinutes
@@ -1885,6 +1886,7 @@ function buildHourlyPassPerformance(workbook, period) {
     const lost = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: lostColumn })]?.v);
     const won = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: wonColumn })]?.v);
     const total = Number.isFinite(lost) && Number.isFinite(won) ? lost + won : null;
+    const rateFraction = Number.isFinite(total) && total > 0 ? won / total : chartRateFraction;
     values.push({
       label: `${String(hour).padStart(2, "0")}h`,
       hour,

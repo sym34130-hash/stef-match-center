@@ -56,6 +56,11 @@ assert.deepEqual(
   ["13h", "14h", "16h", "17h", "18h", "19h", "20h", "21h", "22h"],
   "Heures du graphique % passes réussies reprises de X!FF/X!FG",
 );
+assert.equal(
+  snapshot.hourlyPerformance.every((item) => item.total > 0 && item.rate === Math.round((item.won / item.total) * 1000) / 10),
+  true,
+  "Chaque taux horaire doit correspondre aux compteurs de la ligne",
+);
 assert.equal(snapshot.summary.possessionPercent, 55.7, "Possession Zody sur la plage active");
 assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 856, reception: 1432, matched: 797 }, "Positions possession sur le même périmètre filtré");
 assert.equal(snapshot.match.score, 72, "Score arrondi");
