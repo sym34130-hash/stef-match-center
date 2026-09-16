@@ -138,6 +138,17 @@ try {
 
   const storedLatestPath = path.join(dataDir, sanitizeSegment(agencyCode), "latest.json");
   const validLatestText = await fs.readFile(storedLatestPath, "utf8");
+  const inconsistentSnapshot = JSON.parse(validLatestText);
+  inconsistentSnapshot.operationalScore.goalsFor = 0;
+  await fs.writeFile(storedLatestPath, JSON.stringify(inconsistentSnapshot, null, 2), "utf8");
+  const repairedSnapshotResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot`, {
+    headers: { "x-access-code": accessCode },
+  });
+  const repairedSnapshotPayload = await repairedSnapshotResponse.json();
+  assert.equal(repairedSnapshotResponse.status, 200, JSON.stringify(repairedSnapshotPayload));
+  assert.equal(repairedSnapshotPayload.snapshot.operationalScore.goalsFor, 4, "Un score incohérent doit être reconstruit depuis le workbook");
+  assert.equal(repairedSnapshotPayload.snapshot.operationalScore.goalsAgainst, 0, "Le score reconstruit doit conserver les quatre indicateurs");
+
   await fs.writeFile(storedLatestPath, "{ invalid snapshot", "utf8");
   const malformedSnapshotResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot`, {
     headers: { "x-access-code": accessCode },
@@ -320,6 +331,11 @@ try {
   assert.equal(causeriePayload.plan.attachments.attack.length, 2, "Les captures multiples de la zone attaque doivent être conservées");
   assert.equal(causeriePayload.plan.attachments.midfield.length, 1, "La capture de la zone milieu doit être conservée");
   assert.equal(causeriePayload.plan.attachments.defense.length, 0, "Une zone sans capture doit rester vide");
+  const causerieReadResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/causerie?matchDate=${encodeURIComponent(snapshot.match.date)}`, {
+    headers: { "x-access-code": accessCode },
+  });
+  assert.equal(causerieReadResponse.status, 200, await safeText(causerieReadResponse));
+  assert.equal(causerieReadResponse.headers.get("cache-control"), "no-store, max-age=0", "La causerie ne doit pas rester en cache entre deux écrans");
 
   const expectedLatestPath = path.join(dataDir, sanitizeSegment(agencyCode), "latest.json");
   const expectedCauseriePath = path.join(

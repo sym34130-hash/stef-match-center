@@ -2,7 +2,7 @@
 
 Statut : `READY_FOR_REVIEW`
 
-Source de verification : Excel actuellement importé `HM 058 A V10 (3).xlsx`.
+Source de verification : Excel actuellement importé `HM 058 A V11.xlsx`.
 
 ## Regle generale
 
@@ -26,7 +26,7 @@ Il lit l'onglet `Donnees` complet et reprend les colonnes Excel calculees :
 | --- | --- | --- |
 | Source | Lignes A:G exploitables | Controle import |
 | Match filtre | `Filtre operateur` vide + heure de début comprise dans la plage active, fin incluse | Volumes, joueurs, positions, composition, highlights |
-| Score officiel | Match filtre + `Poz non zonees` vide | Score, duels gagnes, duels a reprendre |
+| Score officiel | Match filtre + `Poz non zonees` vide | Score, duels gagnes, lignes hors cible |
 
 ## KPI
 
@@ -40,10 +40,10 @@ Il lit l'onglet `Donnees` complet et reprend les colonnes Excel calculees :
 | Passes réussies par heure | Reprise des lignes valides de la table graphique Excel `X!FG8:FG18`, dont les heures viennent de `X!FF8:FF18` ; taux affiché recalculé par ligne avec `EX / (EW + EX)` pour aligner le pourcentage sur ses compteurs | Lignes horaires présentes dans la table Excel et comprises dans la plage active | Courbe horaire `% passes réussies` |
 | Tonnage Expédition 106J | Valeur de la ligne `Expédition > Tonnage` du dernier PDF SIE.106J importé | Rapport PDF 106J associé à l’agence | Tonnage importé en tonnes |
 | Ponctualité 106J | Valeur `Site` de la ligne correspondante du PDF SIE.106J | Dernier PDF 106J importé | Carrousel des indicateurs journaliers |
-| Chargements cadres | Pour chaque ligne du bloc `Chargement` de `TCD PPT`, `TC / Nombre de N° Position` lu en colonne `U` ; résultat `<=` à la cible de la ligue | Voyages avec au moins 15 positions, durée brute positive et début dans la plage active | Pourcentage charge dans le delai |
+| Tirs cadres | Pour chaque ligne du bloc `Chargement` de `TCD PPT`, `TC / Nombre de N° Position` lu en colonne `U` ; résultat `<=` à la cible de la ligue | Voyages avec au moins 15 positions, durée brute positive et début dans la plage active | Pourcentage de tirs cadres dans le delai |
 | Temps de reception | Pour chaque voyage `DECHG`, `(derniere operation - premiere operation) / nombre de positions`; dans la cible si `<=` au seuil de la ligue | Voyages `DECHG` avec au moins une position et une duree strictement positive, sur la plage active | Pourcentage de voyages dans la cible et moyenne par position |
 | Possession Zody | Positions RECEPTION uniques ayant aussi un ZONAGE / positions RECEPTION uniques, dans le meme perimetre actif | Positions RECEPTION distinctes du match filtre ; indisponible si le denominateur manque | Part des receptions associees a un zonage, bornee entre 0 et 100 % |
-| Score operationnel | Nombre des 3 indicateurs dont le pourcentage depasse strictement l'objectif de la ligue active | Passes reussies, chargements cadres et temps de reception dans la cible, tous disponibles | Score au format football `atteints - sous objectif` |
+| Score operationnel | Nombre des 4 indicateurs dont le pourcentage depasse strictement l'objectif de la ligue active | Passes reussies, tirs cadres, temps de reception dans la cible et possession Zody, tous disponibles | Score au format football `atteints - sous objectif` |
 | Indice volume | Operations joueur / meilleur volume joueur | Plus gros volume joueur du match filtre | Fiche joueur |
 | Polyvalence | `0` si une seule activite ; sinon moyenne des volumes CHG, ZONAGE et DECHG rapportes au meilleur volume de chaque activite | Meilleur volume observe dans chaque activite du match filtre | Diversite et volume multi-activite |
 | Contribution equipe | Operations joueur / operations du match filtre | Operations du match filtre | Detail fiche joueur |
@@ -84,13 +84,13 @@ recalculable par plage et toujours compris entre `0 %` et `100 %`.
 
 ## Controle de reconciliation actuel
 
-Pour le fichier importe `HM 058 A V10 (3).xlsx`, sur la plage `13:00-22:30` et la ligue Argent, les valeurs attendues sont :
+Pour le fichier importe `HM 058 A V11.xlsx`, sur la plage `13:00-22:30` et la ligue Argent, les valeurs attendues sont :
 
 - Source : 6 395 lignes A:G ; 247 exclues par plage, 795 par filtre opérateur.
 - Match filtre : 5 498 lignes ; score officiel : 3 517 lignes.
 - Duels gagnes : 2 528 ; taux : 71,9 % ; score duel affiché : 72 / 100.
 - Possession Zody : 55,7 % (797 positions RECEPTION associees a un ZONAGE / 1 432 positions RECEPTION).
-- Score operationnel Argent : 3 - 0, avec un objectif de 50 % par indicateur.
+- Score operationnel Argent : 4 - 0, avec un objectif de 50 % par indicateur.
 - Chargement : 33 voyages dans la cible, 2 hors cible, source brute `TCD PPT!U`.
 - Dechargement : 39 voyages dans la cible, 30 hors cible, moyenne 182 secondes par position.
 - Joueurs : 17 ; composition : 8 Attaquants, 3 Milieux, 6 Defenseurs.

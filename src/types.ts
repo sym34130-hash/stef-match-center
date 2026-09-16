@@ -93,6 +93,7 @@ export type Snapshot = {
       passRate: number | null;
       loadingPercent: number | null;
       unloadingPercent: number | null;
+      possessionPercent: number | null;
     };
     loading: {
       status: "available" | "unavailable";

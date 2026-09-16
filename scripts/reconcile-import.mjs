@@ -71,9 +71,11 @@ assert.equal(snapshot.operationalScore.goalsAgainst, 0, "Buts opérationnels enc
 assert.equal(snapshot.loadingQuality.targeted, 33, "Chargements cadrés issus de TCD PPT!U");
 assert.equal(snapshot.loadingQuality.offTarget, 2, "Chargements non cadrés recalculés depuis TCD PPT!U");
 const nonTargetedX47890 = snapshot.loadingQuality.nonTargetedShots.find((shot) => shot.travelCode === "X47890");
+const nonTargetedX47660 = snapshot.loadingQuality.nonTargetedShots.find((shot) => shot.travelCode === "X47660");
 assert.equal(nonTargetedX47890?.time, "15:27:02", "Heure complète du chargement non cadré");
 assert.equal(nonTargetedX47890?.timePerPosition, "02:47", "Temps brut par position du chargement TCD PPT");
 assert.equal(nonTargetedX47890?.where, "Poteau!", "Lexique de frappe repris depuis TCD PPT");
+assert.equal(nonTargetedX47660?.where, "3ème poteau", "Détail de frappe recroisé avec la feuille de match");
 assert.equal(snapshot.unloadingQuality.targeted, 39, "Déchargements dans la cible Argent");
 assert.equal(snapshot.unloadingQuality.offTarget, 30, "Déchargements hors cible Argent");
 assert.equal(snapshot.unloadingQuality.targetedPercent, 56.5, "Pourcentage de déchargements dans la cible Argent");
@@ -135,12 +137,15 @@ const rawLoadingDataRows = Array.from({ length: 15 }, (_, index) => [
 const rawLoadingTcdRows = [
   ["Chargement"],
   ["Code Voyage", "Min. de Date/Heure de début d'opération", "Max. de Date/Heure de début d'opération", "Nombre de N° Position", "TC", "", "TC/poz", "Commentaire"],
-  ["RAW-001", new Date(Date.UTC(2026, 8, 11, 14, 0)), new Date(Date.UTC(2026, 8, 11, 14, 1)), 15, 0.015, 0.001, 0.5, "Poteau!"],
+  ["RAW-001", new Date(Date.UTC(2026, 8, 11, 14, 0)), new Date(Date.UTC(2026, 8, 11, 14, 1)), 15, 0.015, 0.001, 0.5, 2],
   ["RAW-002", new Date(Date.UTC(2026, 8, 11, 14, 2)), new Date(Date.UTC(2026, 8, 11, 14, 3)), 14, 0.015, 0.001, 0.001, "Orbite lunaire"],
 ];
 const rawLoadingWorkbook = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(rawLoadingWorkbook, XLSX.utils.aoa_to_sheet([rawLoadingDataHeaders, ...rawLoadingDataRows]), "Données");
-XLSX.utils.book_append_sheet(rawLoadingWorkbook, XLSX.utils.aoa_to_sheet(rawLoadingTcdRows), "TCD PPT");
+const rawLoadingTcdSheet = XLSX.utils.aoa_to_sheet(rawLoadingTcdRows);
+// TCD PPT!X:Y is the code-to-label lexicon used by the comment column.
+XLSX.utils.sheet_add_aoa(rawLoadingTcdSheet, [[2, "Poteau!"], [3, "3ème poteau"]], { origin: "X2" });
+XLSX.utils.book_append_sheet(rawLoadingWorkbook, rawLoadingTcdSheet, "TCD PPT");
 const rawLoadingResult = buildSnapshotFromWorkbook(
   XLSX.write(rawLoadingWorkbook, { type: "buffer", bookType: "xlsx" }),
   "raw-loading.xlsx",

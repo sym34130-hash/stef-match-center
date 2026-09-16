@@ -18,6 +18,7 @@ const agenciesPath = path.join(__dirname, "agencies.json");
 const port = Number(process.env.PORT ?? 4174);
 const uploadLimitMb = readEnvNumber("STEF_UPLOAD_LIMIT_MB", 20);
 const compositionRangeCache = new Map();
+const compositionRangeCacheLimit = 64;
 const workbookReadPromises = new Map();
 const agencyOperationQueues = new Map();
 
@@ -38,7 +39,9 @@ app.get("/api/health", (_req, res) => {
     ok: true,
     service: "STEF Match Center",
     agencies: agencies.length,
-    storage: process.env.STEF_DATA_DIR ? "persistent-configured" : "local-default",
+    // The application can report its configured path, but cannot prove that
+    // the hosting provider mounted it on persistent storage.
+    storage: process.env.STEF_DATA_DIR ? "configured-path" : "local-default",
     uploadLimitMb,
   });
 });
@@ -105,6 +108,7 @@ app.get("/api/agencies/:agencyCode/snapshot", requireAgency, async (req, res) =>
 });
 
 app.get("/api/agencies/:agencyCode/causerie", requireAgency, async (req, res) => {
+  res.set("Cache-Control", "no-store, max-age=0");
   const matchDate = sanitizeDate(req.query.matchDate);
   if (!matchDate) {
     res.status(400).json({
@@ -239,6 +243,11 @@ app.post("/api/agencies/:agencyCode/composition-range", requireAgency, async (re
           throw error;
         });
         compositionRangeCache.set(cacheKey, calculation);
+        while (compositionRangeCache.size > compositionRangeCacheLimit) {
+          const oldestKey = compositionRangeCache.keys().next().value;
+          if (oldestKey === undefined) break;
+          compositionRangeCache.delete(oldestKey);
+        }
       }
       const result = await calculation;
       if (!result.ok || result.players.length === 0) {
@@ -555,6 +564,54 @@ async function readLatestPdfIndicators(agencyDir) {
   }
 }
 
+const OPERATIONAL_SCORE_INDICATOR_KEYS = ["passRate", "loadingPercent", "unloadingPercent", "possessionPercent"];
+
+function sameNullableNumber(left, right) {
+  if (left === null || left === undefined || right === null || right === undefined) return left == null && right == null;
+  return Number.isFinite(left) && Number.isFinite(right) && left === right;
+}
+
+function operationalScoreContractNeedsRefresh(snapshot) {
+  const score = snapshot?.operationalScore;
+  const criteria = normalizePerformanceCriteria(snapshot?.performanceCriteria);
+  if (!score || !["available", "unavailable"].includes(score.status)) return true;
+  if (!Number.isFinite(score.targetPercent) || score.targetPercent !== criteria.scoreTargetPercent) return true;
+
+  const indicators = score.indicators;
+  if (!indicators || Object.keys(indicators).length !== OPERATIONAL_SCORE_INDICATOR_KEYS.length) return true;
+  if (OPERATIONAL_SCORE_INDICATOR_KEYS.some((key) => !Object.hasOwn(indicators, key))) return true;
+  if (Object.hasOwn(indicators, "duelRate")) return true;
+
+  const expectedIndicators = {
+    passRate: snapshot.summary?.passRate ?? null,
+    loadingPercent: snapshot.loadingQuality?.targetedPercent ?? null,
+    unloadingPercent: snapshot.unloadingQuality?.targetedPercent ?? null,
+    possessionPercent: snapshot.summary?.possessionPercent ?? null,
+  };
+  if (OPERATIONAL_SCORE_INDICATOR_KEYS.some((key) => !sameNullableNumber(indicators[key], expectedIndicators[key]))) return true;
+
+  const values = OPERATIONAL_SCORE_INDICATOR_KEYS.map((key) => indicators[key]);
+  const expectedAvailable = values.every((value) => Number.isFinite(value));
+  if (score.status !== (expectedAvailable ? "available" : "unavailable")) return true;
+  if (expectedAvailable) {
+    const expectedGoalsFor = values.filter((value) => value > score.targetPercent).length;
+    if (!Number.isInteger(score.goalsFor) || score.goalsFor !== expectedGoalsFor) return true;
+    if (!Number.isInteger(score.goalsAgainst) || score.goalsAgainst !== values.length - expectedGoalsFor) return true;
+  } else if (score.goalsFor !== null || score.goalsAgainst !== null) {
+    return true;
+  }
+
+  const loading = score.loading;
+  const loadingQuality = snapshot.loadingQuality;
+  const expectedScored = Number.isFinite(loadingQuality?.targeted) ? Math.round(loadingQuality.targeted) : null;
+  const expectedConceded = Number.isFinite(loadingQuality?.offTarget) ? Math.round(loadingQuality.offTarget) : null;
+  if (!loading || !["available", "unavailable"].includes(loading.status)) return true;
+  if (!Number.isFinite(loading.targetSeconds) || loading.targetSeconds !== criteria.loadingSeconds) return true;
+  if (loading.scored !== expectedScored || loading.conceded !== expectedConceded) return true;
+  const expectedLoadingAvailable = expectedScored !== null && expectedConceded !== null && expectedScored + expectedConceded > 0;
+  return loading.status !== (expectedLoadingAvailable ? "available" : "unavailable");
+}
+
 async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
   const agencyDir = path.join(dataDir, sanitizeSegment(agencyCode));
   const latestPath = path.join(agencyDir, "latest.json");
@@ -562,20 +619,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
     let snapshot = normalizeSnapshotContract(JSON.parse(await fs.readFile(latestPath, "utf8")));
     const agency = agencies.find((item) => String(item.code).toUpperCase() === String(agencyCode).toUpperCase());
     let shouldPersistRebuiltSnapshot = false;
-    const operationalScoreNeedsRefresh =
-      !snapshot.operationalScore ||
-      !["available", "unavailable"].includes(snapshot.operationalScore.status) ||
-      snapshot.operationalScore.targetPercent === undefined ||
-      !snapshot.operationalScore.indicators ||
-      Object.keys(snapshot.operationalScore.indicators).length !== 4 ||
-      !Object.hasOwn(snapshot.operationalScore.indicators, "passRate") ||
-      !Object.hasOwn(snapshot.operationalScore.indicators, "loadingPercent") ||
-      !Object.hasOwn(snapshot.operationalScore.indicators, "unloadingPercent") ||
-      !Object.hasOwn(snapshot.operationalScore.indicators, "possessionPercent") ||
-      Object.hasOwn(snapshot.operationalScore.indicators, "duelRate") ||
-      (!["available", "unavailable"].includes(snapshot.operationalScore.loading?.status) ||
-        snapshot.operationalScore.loading?.scored === undefined ||
-        snapshot.operationalScore.loading?.conceded === undefined);
+    const operationalScoreNeedsRefresh = operationalScoreContractNeedsRefresh(snapshot);
     const punctuality = snapshot.dailyIndicators?.punctuality;
     const dailyIndicatorTargetsNeedRefresh = Boolean(
       punctuality &&

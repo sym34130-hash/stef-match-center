@@ -202,6 +202,8 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator('[data-indicator="tonnage"] .match-indicator-value')).toHaveText("PDF à importer");
       await expect(page.locator(".category-awards .award-card:not(.polyvalent) .award-copy > b")).toHaveCount(0);
       await expect(page.locator(".category-awards .award-card.polyvalent .award-copy > b")).toHaveCount(0);
+      await expect(page.locator(".category-awards .award-copy > small")).toHaveCount(0);
+      await expect(page.locator(".category-awards")).not.toContainText("Meilleur(e)");
       const awardOrder = await page.locator(".category-awards .award-card").evaluateAll((cards) => cards.map((card) => card.classList.contains("polyvalent") ? "polyvalent" : ["attack", "defense", "midfield"].find((kind) => card.classList.contains(kind))));
       expect(awardOrder).toEqual(["attack", "defense", "midfield", "polyvalent"]);
       await expect(page.locator(".category-awards .award-leader-score")).toHaveCount(4);
@@ -211,6 +213,8 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".award-card.midfield:not(.polyvalent) .award-leader-score small")).toHaveText("positions ZONAGE");
       await expect(page.locator(".award-card.polyvalent .award-leader-score b")).toHaveText(/\d+%/);
       await expect(page.locator(".award-card.polyvalent .award-leader-score small")).toHaveText("polyvalence");
+      await expect(page.locator(".award-card.polyvalent .award-copy strong")).toHaveText("MORGAN JOUY");
+      await expect(page.locator(".award-card.polyvalent .award-leader-score b")).toHaveText("39%");
       await expect(page.locator(".award-card.polyvalent .award-challenger")).toHaveCount(2);
       await expect(page.locator(".award-card.midfield .award-challenger").first()).toContainText("227 poz · -9 avec le premier");
       await expect(page.locator(".award-card.polyvalent .award-challenger").first()).toContainText("% polyvalence");
@@ -487,6 +491,38 @@ test("le guide et le retour du brief équipe restent accessibles avant le premie
   await expect(page.getByRole("heading", { name: "Aucun match importé", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Retour au coup d'envoi", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Le stade est prêt", exact: true })).toBeVisible();
+});
+
+test("la feuille de match affiche le score et les KPI du snapshot canonique", async ({ page }) => {
+  await page.route("**/api/agencies/058/snapshot**", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    const canonical = body.snapshot.operationalScore;
+    body.snapshot.summary.passRate = 10;
+    body.snapshot.loadingQuality.targetedPercent = 10;
+    body.snapshot.unloadingQuality.targetedPercent = 10;
+    body.snapshot.summary.possessionPercent = 10;
+    body.snapshot.operationalScore = {
+      ...canonical,
+      status: "available",
+      targetPercent: 50,
+      goalsFor: 4,
+      goalsAgainst: 0,
+      indicators: { passRate: 99, loadingPercent: 98, unloadingPercent: 97, possessionPercent: 96 },
+    };
+    await route.fulfill({ response, json: body });
+  });
+  await page.goto("/");
+  await page.getByLabel("Code agence").selectOption("058");
+  await page.getByLabel("Code d'accès").fill("STEF-058");
+  await page.getByRole("button", { name: "Accéder au match" }).click();
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  await expect(page.locator(".football-score-side-for strong")).toHaveText("4");
+  await expect(page.locator(".football-score-side-against strong")).toHaveText("0");
+  await expect(page.locator(".pass-score-bubble strong")).toHaveText("99%");
+  await expect(page.locator(".loading-score-bubble strong")).toHaveText("98%");
+  await expect(page.locator(".reception-score-bubble strong")).toHaveText("97%");
+  await expect(page.locator(".possession-score-bubble strong")).toHaveText("96%");
 });
 
 test("une ligue reste sélectionnable avant le premier import", async ({ page }) => {

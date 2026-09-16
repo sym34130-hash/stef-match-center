@@ -72,8 +72,6 @@ type CauseriePlan = {
 type MatchKpiCopy = {
   injuriesValue: string;
   expectedPlayersValue: string;
-  tonnageValue: string;
-  positionsValue: string;
 };
 
 type CauserieToast = {
@@ -189,7 +187,6 @@ type MatchAwardKind = "attack" | "midfield" | "defense" | "polyvalent";
 type MatchAward = {
   kind: MatchAwardKind;
   label: string;
-  detail: string;
   symbol: string;
   podiumLabel: string;
   highlight: NonNullable<Highlight>;
@@ -254,6 +251,20 @@ export default function App() {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const snapshotRequestRef = useRef(0);
   const backgroundRefreshRef = useRef(0);
+  const leagueConfigSaveQueueRef = useRef(Promise.resolve());
+
+  function queueLeagueConfigSave(next: LeagueConfig[]) {
+    const currentSession = session;
+    if (!currentSession) return Promise.reject(new Error("Session absente."));
+    const save = leagueConfigSaveQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const saved = await saveSharedLeagueConfigs(currentSession, next);
+        setLeagueConfigs(saved);
+      });
+    leagueConfigSaveQueueRef.current = save.then(() => undefined, () => undefined);
+    return save;
+  }
 
   useEffect(() => {
     const saved = sessionStorage.getItem("stef-match-session");
@@ -486,6 +497,9 @@ export default function App() {
           onTimeRangeChange={async (start, end) => {
             if (snapshot?.match.periodStart === start && snapshot.match.periodEnd === end) return;
             const requestId = ++snapshotRequestRef.current;
+            // Invalidate an automatic refresh already in flight so it cannot
+            // overwrite the newly calculated active range with an old snapshot.
+            backgroundRefreshRef.current += 1;
             setSnapshotLoading(true);
             try {
               const nextSnapshot = await updateTimeRange(session, start, end, activeLeagueConfig);
@@ -540,7 +554,7 @@ export default function App() {
             )}
             {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
             {screen === "guide" && <GuideView snapshot={snapshot} leagueConfigs={leagueConfigs} onNavigate={setScreen} />}
-            {screen === "admin" && <AdministratorView agencyCode={session.agency.code} activeLeague={activeLeague} leagueConfigs={leagueConfigs} onLeagueConfigsChange={async (next) => { const saved = await saveSharedLeagueConfigs(session, next); setLeagueConfigs(saved); }} onActiveLeagueChange={applyLeague} />}
+            {screen === "admin" && <AdministratorView agencyCode={session.agency.code} activeLeague={activeLeague} leagueConfigs={leagueConfigs} onLeagueConfigsChange={queueLeagueConfigSave} onActiveLeagueChange={applyLeague} />}
             {screen === "import" && (
               <ImportView
                 session={session}
@@ -649,15 +663,19 @@ async function fetchCompositionRange(session: Session, start: string, end: strin
 }
 
 async function fetchCauseriePlan(session: Session, snapshot: Snapshot): Promise<CauseriePlan | null> {
-  const response = await fetch(
-    `/api/agencies/${encodeURIComponent(session.agency.code)}/causerie?matchDate=${encodeURIComponent(snapshot.match.date)}`,
-    { headers: { "x-access-code": session.accessCode } }
-  );
-  if (!response.ok) throw new Error("Causerie non disponible.");
-  const payload = await response.json();
-  if (payload.plan) return payload.plan;
-  const localPlan = localStorage.getItem(causerieStorageKey(snapshot));
-  return localPlan ? JSON.parse(localPlan) as CauseriePlan : null;
+  const localPlan = readLocalCauseriePlan(snapshot);
+  try {
+    const response = await fetch(
+      `/api/agencies/${encodeURIComponent(session.agency.code)}/causerie?matchDate=${encodeURIComponent(snapshot.match.date)}`,
+      { headers: { "x-access-code": session.accessCode }, cache: "no-store" }
+    );
+    if (!response.ok) throw new Error("Causerie non disponible.");
+    const payload = await response.json();
+    return payload.plan ?? localPlan;
+  } catch (error) {
+    if (localPlan) return localPlan;
+    throw error;
+  }
 }
 
 async function saveCauseriePlan(session: Session, snapshot: Snapshot, plan: CauseriePlan): Promise<CauseriePlan> {
@@ -674,6 +692,7 @@ async function saveCauseriePlan(session: Session, snapshot: Snapshot, plan: Caus
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message ?? "Causerie non enregistrée.");
+  writeLocalCauseriePlan(snapshot, payload.plan);
   return payload.plan;
 }
 
@@ -1109,6 +1128,7 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
   const [savedKpiCopy, setSavedKpiCopy] = useState<MatchKpiCopy>(kpiCopy);
   const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
   const loadingTarget = formatReadableDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
+  const scoreIndicators = operationalScoreIndicators(snapshot);
   const footballScore = buildFootballScore(snapshot, snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent);
   const thresholdReached = footballScore.available && footballScore.goalsFor > footballScore.goalsAgainst;
   const outcome = matchCeremonyOutcome(footballScore);
@@ -1180,24 +1200,24 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
             <span>STEF MATCH CENTER</span>
             <strong>{outcome.verdict}</strong>
             <div className="match-score-bubbles" aria-label="Scores du match">
-              <div className={`match-score-bubble pass-score-bubble ${Number.isFinite(snapshot.summary.passRate) ? "" : "is-data-unavailable"}`}>
+              <div className={`match-score-bubble pass-score-bubble ${Number.isFinite(scoreIndicators.passRate) ? "" : "is-data-unavailable"}`}>
                 <span>% passes réussies</span>
-                <strong>{formatPercent(snapshot.summary.passRate)}</strong>
+                <strong>{formatPercent(scoreIndicators.passRate)}</strong>
                 <small>Part des passes réussies parmi toutes les passes contrôlées<br />pendant la période sélectionnée</small>
               </div>
-              <div className={`match-score-bubble loading-score-bubble ${Number.isFinite(snapshot.loadingQuality?.targetedPercent) ? "" : "is-data-unavailable"}`}>
+              <div className={`match-score-bubble loading-score-bubble ${Number.isFinite(scoreIndicators.loadingPercent) ? "" : "is-data-unavailable"}`}>
                 <span>% tirs cadrés</span>
-                <strong>{formatPercent(snapshot.loadingQuality?.targetedPercent)}</strong>
+                <strong>{formatPercent(scoreIndicators.loadingPercent)}</strong>
                 <small>Chargement avec une moyenne<br />inférieure ou égale à {loadingTarget}/poz</small>
               </div>
-              <div className={`match-score-bubble reception-score-bubble ${Number.isFinite(snapshot.unloadingQuality?.targetedPercent) ? "" : "is-data-unavailable"}`}>
+              <div className={`match-score-bubble reception-score-bubble ${Number.isFinite(scoreIndicators.unloadingPercent) ? "" : "is-data-unavailable"}`}>
                 <span>% temps réception</span>
-                <strong>{formatPercent(snapshot.unloadingQuality?.targetedPercent)}</strong>
+                <strong>{formatPercent(scoreIndicators.unloadingPercent)}</strong>
                 <small>Voyages dans la cible selon le temps maximum par position</small>
               </div>
-              <div className={`match-score-bubble possession-score-bubble ${Number.isFinite(snapshot.summary.possessionPercent) ? "" : "is-data-unavailable"}`}>
+              <div className={`match-score-bubble possession-score-bubble ${Number.isFinite(scoreIndicators.possessionPercent) ? "" : "is-data-unavailable"}`}>
                 <span>% possession Zody</span>
-                <strong>{snapshot.summary.possessionPercent === null ? "À renseigner" : `${formatNumber(snapshot.summary.possessionPercent)}%`}</strong>
+                <strong>{formatPercent(scoreIndicators.possessionPercent)}</strong>
                 <small>Zonage dynamique</small>
               </div>
             </div>
@@ -1282,7 +1302,6 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
                     <span className="award-copy">
                       <i>{award.label}</i>
                       <strong>{award.highlight.name}</strong>
-                      <small>{award.detail}</small>
                       <span className="award-leader-score" aria-label={`Score du premier : ${formatNumber(leaderScore.value)}${leaderScore.suffix} ${leaderScore.label}`}>
                         <b>{formatNumber(leaderScore.value)}{leaderScore.suffix}</b>
                         <small>{leaderScore.label}</small>
@@ -1466,7 +1485,7 @@ function CentersQualityCard({ snapshot }: { snapshot: Snapshot }) {
         <div>
           <span>Centres</span>
           <strong>% centres réussis</strong>
-          <p className="loading-quality-explanation">Positions zonées dans la travée de chargement à temps, selon la ponctualité destination.</p>
+          <p className="loading-quality-explanation">Ponctualité destination issue du PDF 106J.</p>
         </div>
         {hasData && <b>{formatPercent(percent)}</b>}
       </div>
@@ -1619,6 +1638,9 @@ function ReceptionQualityCard({ snapshot }: { snapshot: Snapshot }) {
 
 function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const data = snapshot.hourlyPerformance ?? [];
+  // The chart total is scoped to the displayed hourly series. The operational
+  // score is a separate four-indicator contract and must not replace it.
+  const totalPassRate = snapshot.summary.passRate ?? null;
   const width = 960;
   const height = 660;
   const left = 64;
@@ -1647,7 +1669,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
         </div>
         <div className="performance-chart-total">
           <small>Total</small>
-          <b>{formatPercent(snapshot.summary.passRate ?? null)}</b>
+          <b>{formatPercent(totalPassRate)}</b>
         </div>
       </div>
       {data.length > 0 ? (
@@ -1684,6 +1706,7 @@ function Composition({ snapshot, session, onPlayer }: { snapshot: Snapshot; sess
   const [customComposition, setCustomComposition] = useState<{ label: string; players: Player[] } | null>(null);
   const [customLoading, setCustomLoading] = useState(false);
   const [customError, setCustomError] = useState("");
+  const customRequestRef = useRef(0);
   const activePeriodOvernight = Boolean(snapshot.match.periodStart && snapshot.match.periodEnd && snapshot.match.periodEnd < snapshot.match.periodStart);
   const selectedPeriod = compositionView === "first" || compositionView === "second"
     ? snapshot.compositionPeriods?.[compositionView]
@@ -1723,6 +1746,7 @@ function Composition({ snapshot, session, onPlayer }: { snapshot: Snapshot; sess
   }, [fieldMode]);
 
   useEffect(() => {
+    customRequestRef.current += 1;
     setCompositionView("full");
     setCustomStart(snapshot.match.periodStart ?? "13:00");
     setCustomEnd(snapshot.match.periodEnd ?? "22:30");
@@ -1735,6 +1759,7 @@ function Composition({ snapshot, session, onPlayer }: { snapshot: Snapshot; sess
   }, [compositionView, customComposition, selectedName, periodPlayers]);
 
   function selectCompositionView(next: CompositionViewId) {
+    customRequestRef.current += 1;
     setCompositionView(next);
     setCustomError("");
     if (next !== "custom") setCustomComposition(null);
@@ -1742,16 +1767,19 @@ function Composition({ snapshot, session, onPlayer }: { snapshot: Snapshot; sess
 
   async function applyCustomComposition(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const requestId = ++customRequestRef.current;
     setCustomLoading(true);
     setCustomError("");
     try {
       const result = await fetchCompositionRange(session, customStart, customEnd);
+      if (requestId !== customRequestRef.current) return;
       setCustomComposition(result);
       setCompositionView("custom");
     } catch (error) {
+      if (requestId !== customRequestRef.current) return;
       setCustomError(error instanceof Error ? error.message : "La sous-plage n'a pas pu être chargée.");
     } finally {
-      setCustomLoading(false);
+      if (requestId === customRequestRef.current) setCustomLoading(false);
     }
   }
 
@@ -2147,7 +2175,7 @@ function Coach({
       setCoachPlan(nextPlan);
       setCoachDraft(nextPlan);
       setCoachBoardMode("view");
-      localStorage.setItem(causerieStorageKey(snapshot), JSON.stringify(nextPlan));
+      writeLocalCauseriePlan(snapshot, nextPlan);
       setCoachBoardFeedback({
         title: "Sauvegarde locale uniquement",
         detail: "Le texte est conservé sur ce poste, mais il n'est pas encore partagé.",
@@ -2179,7 +2207,7 @@ function Coach({
       setCoachDraft(nextPlan);
       setRedCardsDraft(nextPlan.redCards);
       setRedCardsMode("view");
-      localStorage.setItem(causerieStorageKey(snapshot), JSON.stringify(nextPlan));
+      writeLocalCauseriePlan(snapshot, nextPlan);
       setCoachBoardFeedback({
         title: "Sauvegarde locale uniquement",
         detail: "Les cartons rouges sont conservés sur ce poste, mais ne sont pas partagés.",
@@ -2523,7 +2551,7 @@ function Causerie({ snapshot, session }: { snapshot: Snapshot; session: Session 
       });
     } catch {
       setPlan(nextPlan);
-      localStorage.setItem(causerieStorageKey(snapshot), JSON.stringify(nextPlan));
+      writeLocalCauseriePlan(snapshot, nextPlan);
       setToast({
         title: "Sauvegarde locale uniquement",
         detail: "La page reste utilisable sur ce poste, mais le plan n'est pas partagé.",
@@ -2906,7 +2934,7 @@ function TvMode({ snapshot, session, onExit }: { snapshot: Snapshot; session: Se
       setPlan(nextPlan);
       setPlanDraft(nextPlan);
       setPlanMode("view");
-      localStorage.setItem(causerieStorageKey(snapshot), JSON.stringify(nextPlan));
+      writeLocalCauseriePlan(snapshot, nextPlan);
       setFeedback({ title: "Sauvegarde locale uniquement", detail: "Le plan est conservé sur ce poste.", tone: "warning" });
     } finally {
       setSavingPlan(false);
@@ -3098,9 +3126,14 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
   const [leagueConfigs, setLeagueConfigs] = useState(initialLeagueConfigs);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const [configSaveError, setConfigSaveError] = useState("");
+  const leagueConfigsRef = useRef(initialLeagueConfigs);
+  const configSaveQueueRef = useRef(Promise.resolve());
   const selectedLeague = leagueConfigs.find((league) => league.id === activeLeague) ?? leagueConfigs[1];
 
-  useEffect(() => setLeagueConfigs(initialLeagueConfigs), [initialLeagueConfigs]);
+  useEffect(() => {
+    setLeagueConfigs(initialLeagueConfigs);
+    leagueConfigsRef.current = initialLeagueConfigs;
+  }, [initialLeagueConfigs]);
 
   function selectLeague(id: LeagueId) {
     const selected = leagueConfigs.find((league) => league.id === id);
@@ -3129,11 +3162,16 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
       return;
     }
     const normalizedValue = field === "scoreTargetPercent" ? Math.min(100, Math.max(1, Math.round(numericValue))) : Math.round(numericValue);
-    const next = leagueConfigs.map((league) => league.id === id ? { ...league, [field]: normalizedValue } : league);
+    const next = leagueConfigsRef.current.map((league) => league.id === id ? { ...league, [field]: normalizedValue } : league);
+    leagueConfigsRef.current = next;
     setLeagueConfigs(next);
     localStorage.setItem(leagueConfigStorageKey, JSON.stringify(next));
     setConfigSaveError("");
-    void onLeagueConfigsChange(next).catch((error) => {
+    const save = configSaveQueueRef.current
+      .catch(() => undefined)
+      .then(() => onLeagueConfigsChange(next));
+    configSaveQueueRef.current = save.then(() => undefined, () => undefined);
+    void save.catch((error) => {
       setConfigSaveError(error instanceof Error ? error.message : "Les paramètres de la ligue n'ont pas pu être partagés.");
     });
     if (activeLeague === id) {
@@ -3702,19 +3740,36 @@ type FootballScore = {
   available: boolean;
 };
 
+type OperationalScoreIndicators = NonNullable<Snapshot["operationalScore"]>["indicators"];
+
+function operationalScoreIndicators(snapshot: Snapshot): OperationalScoreIndicators {
+  const canonical = snapshot.operationalScore?.indicators;
+  if (canonical && Object.hasOwn(canonical, "possessionPercent")) return canonical;
+  return {
+    passRate: snapshot.summary.passRate ?? null,
+    loadingPercent: snapshot.loadingQuality?.targetedPercent ?? null,
+    unloadingPercent: snapshot.unloadingQuality?.targetedPercent ?? null,
+    possessionPercent: snapshot.summary.possessionPercent ?? null,
+  };
+}
+
 function buildFootballScore(snapshot: Snapshot, targetPercent: number): FootballScore {
-  const indicators = [
-    snapshot.summary.passRate ?? null,
-    snapshot.loadingQuality?.targetedPercent ?? null,
-    snapshot.unloadingQuality?.targetedPercent ?? null,
-    snapshot.summary.possessionPercent ?? null,
-  ];
-  const available = indicators.every((value) => Number.isFinite(value));
-  const reachedIndicators = available ? indicators.filter((value) => (value as number) > targetPercent).length : 0;
+  const indicators = operationalScoreIndicators(snapshot);
+  const values = [indicators.passRate, indicators.loadingPercent, indicators.unloadingPercent, indicators.possessionPercent];
+  const canonical = snapshot.operationalScore;
+  const hasCanonicalScore = Boolean(canonical && canonical.indicators && Object.hasOwn(canonical.indicators, "possessionPercent"));
+  const available = hasCanonicalScore
+    ? canonical?.status === "available" && values.every((value) => Number.isFinite(value)) && Number.isFinite(canonical.goalsFor) && Number.isFinite(canonical.goalsAgainst)
+    : values.every((value) => Number.isFinite(value));
+  const reachedIndicators = available
+    ? hasCanonicalScore
+      ? Number(canonical?.goalsFor)
+      : values.filter((value) => (value as number) > targetPercent).length
+    : 0;
   return {
     goalsFor: reachedIndicators,
-    goalsAgainst: available ? indicators.length - reachedIndicators : 0,
-    targetPercent,
+    goalsAgainst: available ? (hasCanonicalScore ? Number(canonical?.goalsAgainst) : values.length - reachedIndicators) : 0,
+    targetPercent: hasCanonicalScore && Number.isFinite(canonical?.targetPercent) ? Number(canonical?.targetPercent) : targetPercent,
     reachedIndicators,
     available,
   };
@@ -3863,7 +3918,6 @@ function buildAwardItems(snapshot: Snapshot): MatchAward[] {
     {
       kind: "attack",
       label: "Meilleur buteur",
-      detail: "Meilleur(e) buteur(se)",
       symbol: "ATQ",
       podiumLabel: "Attaque",
       highlight: snapshot.highlights.bestScorer,
@@ -3871,7 +3925,6 @@ function buildAwardItems(snapshot: Snapshot): MatchAward[] {
     {
       kind: "midfield",
       label: "Meilleur joueur",
-      detail: "Meilleur(e) passeur(se)",
       symbol: "MIL",
       podiumLabel: "Milieu",
       highlight: snapshot.highlights.bestPasser,
@@ -3879,7 +3932,6 @@ function buildAwardItems(snapshot: Snapshot): MatchAward[] {
     {
       kind: "defense",
       label: "Meilleur passeur",
-      detail: "Meilleur(e) joueur(se)",
       symbol: "DEF",
       podiumLabel: "Défense",
       highlight: snapshot.highlights.defensiveWall,
@@ -3887,7 +3939,6 @@ function buildAwardItems(snapshot: Snapshot): MatchAward[] {
     {
       kind: "polyvalent",
       label: "Couteau suisse",
-      detail: "Joueur le plus polyvalent",
       symbol: "ALL",
       podiumLabel: "Polyvalence",
       highlight: playerHighlight(snapshot.coach.polyvalents[0], "Polyvalence", "Joueur le plus polyvalent"),
@@ -4015,6 +4066,23 @@ function causerieStorageKey(snapshot: Snapshot) {
   return `stef-causerie:${snapshot.agency.code}:${snapshot.match.date}`;
 }
 
+function readLocalCauseriePlan(snapshot: Snapshot): CauseriePlan | null {
+  try {
+    const saved = localStorage.getItem(causerieStorageKey(snapshot));
+    return saved ? JSON.parse(saved) as CauseriePlan : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalCauseriePlan(snapshot: Snapshot, plan: CauseriePlan) {
+  try {
+    localStorage.setItem(causerieStorageKey(snapshot), JSON.stringify(plan));
+  } catch {
+    // The remote API remains the source of truth when local storage is unavailable.
+  }
+}
+
 function matchKpiStorageKey(snapshot: Snapshot) {
   return `stef-match-kpis-v3:${snapshot.agency.code}:${snapshot.match.date}`;
 }
@@ -4032,8 +4100,6 @@ function loadMatchKpiCopy(snapshot: Snapshot): MatchKpiCopy {
     return normalizeMatchKpiCopy({
       injuriesValue: parsed.injuriesValue ?? defaults.injuriesValue,
       expectedPlayersValue: parsed.expectedPlayersValue ?? defaults.expectedPlayersValue,
-      tonnageValue: parsed.tonnageValue ?? defaults.tonnageValue,
-      positionsValue: parsed.positionsValue ?? defaults.positionsValue,
     }, snapshot);
   } catch {
     return defaults;
@@ -4044,8 +4110,6 @@ function defaultMatchKpiCopy(snapshot: Snapshot): MatchKpiCopy {
   return {
     injuriesValue: "",
     expectedPlayersValue: "",
-    tonnageValue: "",
-    positionsValue: String(snapshot.summary.positions),
   };
 }
 
@@ -4053,8 +4117,6 @@ function normalizeMatchKpiCopy(copy: MatchKpiCopy, snapshot: Snapshot): MatchKpi
   return {
     injuriesValue: copy.injuriesValue.trim() === "" ? "" : String(clampEditableKpi(copy.injuriesValue, 0, 0, 99)),
     expectedPlayersValue: copy.expectedPlayersValue.trim() === "" ? "" : String(clampEditableKpi(copy.expectedPlayersValue, 1, 1)),
-    tonnageValue: copy.tonnageValue.trim() === "" ? "" : String(clampEditableKpi(copy.tonnageValue, 0, 0)),
-    positionsValue: String(clampEditableKpi(copy.positionsValue, snapshot.summary.positions, 0)),
   };
 }
 
@@ -4063,19 +4125,6 @@ function clampEditableKpi(value: string, fallback: number, min: number, max?: nu
   if (!Number.isFinite(parsed)) return fallback;
   const bounded = Math.max(min, parsed);
   return max === undefined ? bounded : Math.min(max, bounded);
-}
-
-function formatEditableKpiValue(value: string, fallback?: number, suffix = "") {
-  const parsed = Number(value);
-  const display = Number.isFinite(parsed) ? formatNumber(parsed) : fallback === undefined ? "—" : formatNumber(fallback);
-  return `${display}${suffix}`;
-}
-
-function formatManualKpiValue(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return "À renseigner";
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? formatNumber(parsed) : "À renseigner";
 }
 
 function formatRealStaffPercent(snapshot: Snapshot, expectedValue: string) {
@@ -4119,7 +4168,7 @@ function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
     ]),
     defense: padPlanLines([
       risk,
-      late > 0 ? `${late} duel(s) à sécuriser.` : "Risque principal maîtrisé sur le dernier import.",
+      late > 0 ? `${late} position(s) à sécuriser.` : "Risque principal maîtrisé sur le dernier import.",
       snapshot.summary.operationCounts.DECHG ? `${formatNumber(snapshot.summary.operationCounts.DECHG)} opérations de réception.` : "",
     ]),
     attachments: {
@@ -4247,15 +4296,15 @@ function matchAction(snapshot: Snapshot) {
   if (late > 0) {
     const risk = snapshot.coach.travelRisks[0];
     return {
-      title: "Reprendre les duels ouverts",
+      title: "Sécuriser les positions prioritaires",
       detail: risk
-        ? `${late} duel(s) hors délai dans le score Excel. Zone prioritaire : ${travelRiskTitle(risk.travelCode)} (${formatNumber(risk.delayedPositions)} duel(s)).`
-        : `${late} duel(s) hors délai dans le score Excel.`,
+        ? `${late} position(s) hors délai dans le score Excel. Zone prioritaire : ${travelRiskTitle(risk.travelCode)} (${formatNumber(risk.delayedPositions)} position(s)).`
+        : `${late} position(s) hors délai dans le score Excel.`,
     };
   }
   return {
     title: "Maintenir le rythme",
-    detail: "Aucun duel à reprendre sur le dernier import. Conserver le délai cible au prochain contrôle.",
+    detail: "Aucune position à sécuriser sur le dernier import. Conserver le délai cible au prochain contrôle.",
   };
 }
 

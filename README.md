@@ -36,7 +36,8 @@ par l'API du serveur.
 
 Configuration importante pour un hébergement :
 
-- `STEF_DATA_DIR` : dossier persistant des agences, imports et causeries.
+- `STEF_DATA_DIR` : dossier de stockage des agences, imports et causeries ; la
+  persistance depend du support de stockage configure par l'hebergeur.
 - `STEF_AGENCIES_JSON` : liste des agences et codes d'accès.
 - `STEF_UPLOAD_LIMIT_MB` : limite de taille des fichiers Excel importés.
 
@@ -120,10 +121,10 @@ erreur Excel.
 
 - Les volumes, joueurs, positions, compositions et highlights utilisent les lignes avec `Filtre opérateur` vide et heure de début dans la plage active.
 - Les duels utilisent ces mêmes lignes en excluant aussi les lignes où `Poz non zonées` est marqué.
-- Le score opérationnel utilise le taux global de passes réussies issu de la table horaire Excel, le taux de chargements cadrés issu de `TCD PPT!U`, et le taux de voyages dans la cible pour le temps de réception.
+- Le score opérationnel utilise le taux global de passes réussies issu de la table horaire Excel, le taux de tirs cadrés calculé depuis la valeur brute de `TCD PPT!U` dans le bloc `Chargement`, le taux de voyages dans la cible pour le temps de réception et la possession Zody.
 - Le taux de duels gagnés est calculé avec `Duels gagnés / lignes éligibles au score`.
 - La possession Zody compte les positions RECEPTION uniques qui ont aussi une opération ZONAGE, divisées par les positions RECEPTION uniques du même périmètre filtré ; elle reste donc entre `0 %` et `100 %`, y compris sur une plage personnalisée.
-- Le score opérationnel affiché au format football compte, sur 3, les indicateurs qui dépassent strictement l'objectif de la ligue active : passes réussies, chargements cadrés et temps de réception dans la cible. Le format est `indicateurs atteints - indicateurs sous l'objectif`.
+- Le score opérationnel affiché au format football compte, sur 4, les indicateurs qui dépassent strictement l'objectif de la ligue active : passes réussies, tirs cadrés, temps de réception dans la cible et possession Zody. Le format est `indicateurs atteints - indicateurs sous l'objectif`.
 - Les objectifs par défaut sont : Bronze `45 min / 00:03:15 / 00:01:15 / 45%`, Argent `30 min / 00:02:45 / 00:01:00 / 50%`, Or `25 min / 00:02:30 / 00:00:55 / 60%`, Platine `20 min / 00:02:15 / 00:00:50 / 70%` pour zonage, chargement, déchargement et objectif du score.
 - Le temps de réception est calculé sur les lignes `DECHG` de la plage active, par voyage : `(dernière opération - première opération) / nombre de positions`. Un voyage est dans la cible si ce temps moyen par position est inférieur ou égal au seuil de la ligue. Les voyages sans durée positive ne sont pas comptabilisés ; le score opérationnel utilise le pourcentage de voyages dans la cible.
 - Le KPI chargement lit le bloc `Chargement` de `TCD PPT` : `TC / Nombre de N° Position` dans la colonne `U` (valeur brute `T/S`), uniquement pour les voyages d'au moins 15 positions et dans la plage active. La colonne `V` est une formule de présentation et n'est pas utilisée pour le calcul.
@@ -137,10 +138,10 @@ erreur Excel.
 
 Le dictionnaire KPI complet est disponible dans `docs/kpi-dictionary.md`.
 
-Sur le classeur actuellement importé (`HM 058 A V10 (3).xlsx`), la réconciliation
+Sur le classeur actuellement importé (`HM 058 A V11.xlsx`), la réconciliation
 de référence donne : 6 395 lignes source A:G, 5 498 lignes match, 3 517 lignes
 de score, 2 528 duels gagnés (71,9 %), 1 708 positions, 17 joueurs, 55,7 % de
-possession, 33 chargements cadrés / 2 hors cible, et 39 déchargements dans la
+possession, 33 tirs cadrés / 2 hors cible, et 39 déchargements dans la
 cible / 30 hors cible. Ces chiffres dépendent de la plage et de la ligue
 active.
 

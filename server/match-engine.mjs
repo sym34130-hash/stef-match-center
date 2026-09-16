@@ -34,7 +34,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 17;
+export const KPI_DICTIONARY_VERSION = 18;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -141,11 +141,11 @@ export const KPI_DICTIONARY = [
   },
   {
     id: "score.loading",
-    label: "Chargements cadrés",
+    label: "Tirs cadrés",
     source: "TCD PPT!U",
     formula: "COUNT des voyages éligibles dont le temps moyen par position est <= au seuil de chargement actif",
     denominator: "Voyages CHG avec au moins 15 positions et une durée positive dans la plage active",
-    display: "Part des chargements dans le délai cible",
+    display: "Part des tirs cadrés dans le délai cible",
   },
   {
     id: "score.possession",
@@ -792,10 +792,18 @@ function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds) {
   // formula and must not be used as the source for the KPI.
   const timePerPositionColumn = totalTimeColumn === undefined ? undefined : totalTimeColumn + 1;
   const commentColumn = findColumn((value) => value === "commentaire");
+  const loadingDetailsByTravel = readLoadingDetails(workbook);
   const strikeLexicon = new Map();
   for (let row = 1; row <= 8; row += 1) {
+    // SheetJS columns are zero-indexed: Excel X:Y are c:23 and c:24.
+    const rawCode = sheet[XLSX.utils.encode_cell({ r: row, c: 23 })]?.v;
     const label = cleanText(sheet[XLSX.utils.encode_cell({ r: row, c: 24 })]?.v);
-    if (label) strikeLexicon.set(normalizeKey(label), label);
+    const numericCode = parseNumber(rawCode);
+    if (Number.isInteger(numericCode) && numericCode >= 0 && label) {
+      const code = String(numericCode);
+      strikeLexicon.set(normalizeKey(code), label);
+      strikeLexicon.set(normalizeKey(label), label);
+    }
   }
   if ([travelColumn, startColumn, positionsColumn, totalTimeColumn, timePerPositionColumn].some((value) => value === undefined)) return empty;
 
@@ -812,12 +820,14 @@ function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds) {
     if (!isInActiveTimeRange(start, period)) continue;
     const result = timePerPositionSeconds <= targetSeconds ? "cadré" : "non cadré";
     const rawWhere = commentColumn === undefined ? "" : cleanText(sheet[XLSX.utils.encode_cell({ r: row, c: commentColumn })]?.v);
+    const sourceDetail = loadingDetailsByTravel.get(travel);
+    const where = strikeLexicon.get(normalizeKey(rawWhere)) ?? (rawWhere || sourceDetail?.where || "");
     loadingDetails.push({
       travelCode: travel,
       time: formatDateClock(start),
       positions: cleanText(sheet[XLSX.utils.encode_cell({ r: row, c: positionsColumn })]?.v),
       timePerPosition: formatDuration(timePerPositionSeconds),
-      where: strikeLexicon.get(normalizeKey(rawWhere)) ?? rawWhere,
+      where,
       result,
     });
     loadingDurations.push(timePerPositionSeconds);
@@ -1389,8 +1399,8 @@ function buildAlerts({ validation, openDuelRows, duelTotal, weakRole }) {
   if (openDuelRows.length > 0) {
     alerts.push({
       level: openDuelRows.length / Math.max(duelTotal, 1) > 0.3 ? "ACTION NÉCESSAIRE" : "À SURVEILLER",
-      title: "Duels à reprendre",
-      detail: `${openDuelRows.length} duel(s) hors délai cible dans le score Excel filtré.`,
+      title: "Positions à sécuriser",
+      detail: `${openDuelRows.length} position(s) hors délai cible dans le score Excel filtré.`,
     });
   }
   if (weakRole) {
@@ -1428,13 +1438,13 @@ function buildCauserie({ passRate, loadingPercent, unloadingPercent, possessionP
       : "Reprendre les indicateurs sous l'objectif de la ligue.";
   const risk =
     openDuelRows.length > 0
-      ? `${openDuelRows.length} duel(s) à reprendre dans le plan de jeu.`
+      ? `${openDuelRows.length} position(s) à sécuriser dans le plan de jeu.`
       : "Risque principal maîtrisé sur le dernier import.";
 
   return [
     { label: "Priorité", value: priority },
     { label: "Risque principal", value: risk },
-    { label: "Objectif", value: `Tenir le délai cible de ${zonageMinutes} minutes sur les duels.` },
+    { label: "Objectif", value: `Maintenir le zonage dans le délai cible de ${zonageMinutes} minutes.` },
     { label: "Arbitrage", value: weakRole ? `Surveiller l'équilibre ${weakRole.role.toLowerCase()}.` : "Aucun arbitrage critique." },
     {
       label: "Heure de revue",
