@@ -1,5 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
+process.env.PLAYWRIGHT_API_PORT ??= "4187";
+process.env.PLAYWRIGHT_WEB_PORT ??= "5187";
+const apiPort = process.env.PLAYWRIGHT_API_PORT;
+const webPort = process.env.PLAYWRIGHT_WEB_PORT;
+const baseURL = `http://127.0.0.1:${webPort}`;
+
 export default defineConfig({
   testDir: "./tests",
   timeout: 30_000,
@@ -10,7 +16,7 @@ export default defineConfig({
   workers: 1,
   reporter: "line",
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL,
     trace: "retain-on-failure",
     video: "retain-on-failure",
   },
@@ -20,9 +26,9 @@ export default defineConfig({
     { name: "mobile", use: { ...devices["iPhone 13"], browserName: "chromium", viewport: { width: 390, height: 844 } } },
   ],
   webServer: {
-    command: "pnpm dev",
-    url: "http://localhost:5173",
-    reuseExistingServer: true,
+    command: `STEF_BIND_HOST=127.0.0.1 PORT=${apiPort} VITE_PORT=${webPort} pnpm dev`,
+    url: baseURL,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

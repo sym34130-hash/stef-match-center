@@ -27,12 +27,14 @@ Causerie passent par l'API serveur.
 Avant toute publication, lancer :
 
 ```bash
+pnpm lint
 pnpm build
 pnpm test
 pnpm test:deploy
 ```
 
-Le contrôle `test:deploy` démarre le serveur en mode production temporaire,
+Le lint vérifie le code JavaScript, TypeScript, React, serveur et tests sans
+avertissement toléré. Le contrôle `test:deploy` démarre le serveur en mode production temporaire,
 importe réellement le classeur Excel via l'API et vérifie les KPI principaux.
 
 ## Paquet de déploiement
@@ -51,6 +53,9 @@ Le paquet exclut volontairement :
 - `.git` ;
 - `.deploy` ;
 - `data/agencies/*`.
+- `server/agencies.json` (codes locaux uniquement ; la production doit fournir
+  `STEF_AGENCIES_JSON`).
+- `output`, `tmp`, `audits`, `.agents`, `.codex`, `.codex-work` et `coverage`.
 
 Les fichiers Excel importés ne doivent pas être emballés dans l'application.
 Ils doivent être déposés depuis le site après mise en ligne, dans le stockage

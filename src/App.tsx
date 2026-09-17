@@ -4,7 +4,6 @@ import {
   Award,
   ArrowLeft,
   ArrowRight,
-  BarChart3,
   BookOpen,
   CheckCircle2,
   ChevronLeft,
@@ -39,16 +38,18 @@ import {
   XCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { Agency, Alert, Highlight, Player, Snapshot } from "./types";
+import type { Agency, Highlight, Player, Snapshot } from "./types";
 import { MatchIndicatorsCarousel } from "./MatchIndicatorsCarousel";
+import { KickoffMusicControl } from "./KickoffMusicControl";
+import { MercatoCarouselSection } from "./MercatoCarousel";
+import { parseMercatoEntrants, type MercatoProfile, type MercatoProfiles } from "./mercato";
 
 type Session = {
   agency: Agency;
   accessCode: string;
 };
 
-type CauserieZoneId = "attack" | "midfield" | "defense" | "coach";
-type CauserieContentZone = Exclude<CauserieZoneId, "coach">;
+type CauserieContentZone = "attack" | "midfield" | "defense";
 type CauserieAttachments = Record<CauserieContentZone, string[]>;
 
 type CauseriePlan = {
@@ -60,6 +61,7 @@ type CauseriePlan = {
   defense: string[];
   attachments: CauserieAttachments;
   mercato: string;
+  mercatoProfiles: MercatoProfiles;
   redCards: string;
   coach: {
     tactic: string;
@@ -129,8 +131,37 @@ const zonageMinuteOptions = Array.from({ length: 120 }, (_, index) => index + 1)
 const loadingTimeOptions = [105, 120, 135, 150, 165, 180, 195, 210, 225, 240, 255, 270, 300];
 const unloadingTimeOptions = [30, 40, 45, 50, 55, 60, 75, 90, 105, 120];
 
+type StorageKind = "local" | "session";
+
+function readStorageValue(kind: StorageKind, key: string) {
+  try {
+    const storage = kind === "local" ? window.localStorage : window.sessionStorage;
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStorageValue(kind: StorageKind, key: string, value: string) {
+  try {
+    const storage = kind === "local" ? window.localStorage : window.sessionStorage;
+    storage.setItem(key, value);
+  } catch {
+    // The remote API remains the source of truth when browser storage is unavailable.
+  }
+}
+
+function removeStorageValue(kind: StorageKind, key: string) {
+  try {
+    const storage = kind === "local" ? window.localStorage : window.sessionStorage;
+    storage.removeItem(key);
+  } catch {
+    // There is nothing else to do when browser storage is unavailable.
+  }
+}
+
 function readLeagueConfigs(agencyCode: string): LeagueConfig[] {
-  const saved = localStorage.getItem(`stef-match-league-configs-${agencyCode}`);
+  const saved = readStorageValue("local", `stef-match-league-configs-${agencyCode}`);
   if (!saved) return leagueOptions;
   try {
     const parsed = JSON.parse(saved) as Array<Partial<LeagueConfig>>;
@@ -176,7 +207,7 @@ function configForLeague(configs: LeagueConfig[], leagueId: LeagueId): LeagueCon
 }
 
 function readActiveLeague(agencyCode: string): LeagueId {
-  const saved = localStorage.getItem(`stef-match-active-league-${agencyCode}`);
+  const saved = readStorageValue("local", `stef-match-active-league-${agencyCode}`);
   return leagueOptions.some((league) => league.id === saved) ? saved as LeagueId : "argent";
 }
 
@@ -267,7 +298,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    const saved = sessionStorage.getItem("stef-match-session");
+    const saved = readStorageValue("session", "stef-match-session");
     if (!saved) return;
     try {
       const nextSession = JSON.parse(saved) as Session;
@@ -297,7 +328,7 @@ export default function App() {
           if (requestId === snapshotRequestRef.current) setSnapshotLoading(false);
         });
     } catch {
-      sessionStorage.removeItem("stef-match-session");
+      removeStorageValue("session", "stef-match-session");
     }
   }, []);
 
@@ -318,7 +349,7 @@ export default function App() {
       const requestVersion = snapshotRequestRef.current;
       const refreshId = ++backgroundRefreshRef.current;
       try {
-        const nextConfigs = await fetchSharedLeagueConfigs(session).catch(() => leagueConfigs);
+        const nextConfigs = await fetchSharedLeagueConfigs(session).catch(() => readLeagueConfigs(session.agency.code));
         if (disposed || refreshId !== backgroundRefreshRef.current || requestVersion !== snapshotRequestRef.current) return;
         setLeagueConfigs(nextConfigs);
         const nextSnapshot = await fetchSnapshot(session, configForLeague(nextConfigs, activeLeague));
@@ -341,7 +372,7 @@ export default function App() {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [session?.agency.code, session?.accessCode, activeLeague, screen]);
+  }, [session, activeLeague, screen]);
 
   async function handleLogin(agencyCode: string, accessCode: string) {
     const requestId = ++snapshotRequestRef.current;
@@ -368,7 +399,7 @@ export default function App() {
       setSession(nextSession);
       setLeagueConfigs(nextConfigs);
       setActiveLeague(nextLeague);
-      sessionStorage.setItem("stef-match-session", JSON.stringify(nextSession));
+      writeStorageValue("session", "stef-match-session", JSON.stringify(nextSession));
       setSnapshot(nextSnapshot);
       setScreen("kickoff");
     } catch (error) {
@@ -382,7 +413,7 @@ export default function App() {
 
   async function handleLogout() {
     snapshotRequestRef.current += 1;
-    sessionStorage.removeItem("stef-match-session");
+    removeStorageValue("session", "stef-match-session");
     setSession(null);
     setActiveLeague("argent");
     setSnapshot(null);
@@ -411,7 +442,7 @@ export default function App() {
 
   async function applyLeague(id: LeagueId, config = configForLeague(leagueConfigs, id)) {
     setActiveLeague(id);
-    if (session) localStorage.setItem(`stef-match-active-league-${session.agency.code}`, id);
+    if (session) writeStorageValue("local", `stef-match-active-league-${session.agency.code}`, id);
     if (!session) return;
     const requestId = ++snapshotRequestRef.current;
     setSnapshotLoading(true);
@@ -518,6 +549,7 @@ export default function App() {
           }}
           loading={snapshotLoading}
         />
+        <KickoffMusicControl active={screen === "kickoff" || screen === "match"} />
         {snapshotLoading && !snapshot ? (
           <LoadingView />
         ) : !snapshot && screen !== "import" && screen !== "kickoff" && screen !== "guide" && screen !== "tv" && screen !== "admin" ? (
@@ -534,6 +566,7 @@ export default function App() {
             {screen === "match" && snapshot && (
               <MatchSheet
                 snapshot={snapshot}
+                session={session}
                 activeLeague={activeLeague}
                 onPlayer={openPlayer}
                 onCoach={() => setScreen("coach")}
@@ -692,8 +725,17 @@ async function saveCauseriePlan(session: Session, snapshot: Snapshot, plan: Caus
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message ?? "Causerie non enregistrée.");
-  writeLocalCauseriePlan(snapshot, payload.plan);
-  return payload.plan;
+  const savedPlan = payload.plan as CauseriePlan;
+  if (!savedPlan || typeof savedPlan !== "object") {
+    throw new Error("Le serveur a renvoyé une causerie invalide. Réessaie après actualisation.");
+  }
+  const savedProfiles = savedPlan?.mercatoProfiles ?? {};
+  const profileWasDropped = Object.entries(plan.mercatoProfiles ?? {}).some(([key, profile]) => savedProfiles[key] !== profile);
+  if (profileWasDropped) {
+    throw new Error("Le serveur n'a pas conservé les choix Femme/Homme. Tes choix restent dans le formulaire ; actualise le service puis réessaie.");
+  }
+  writeLocalCauseriePlan(snapshot, savedPlan);
+  return savedPlan;
 }
 
 async function prepareCauserieImage(file: File): Promise<string> {
@@ -886,26 +928,6 @@ function ActivePeriodBadge({ snapshot, className = "" }: { snapshot: Snapshot; c
       Plage {snapshot.match.timeRangeLabel}
     </span>
   );
-}
-
-function AnimatedNumber({ value, suffix = "" }: { value: number; suffix?: string }) {
-  const [displayValue, setDisplayValue] = useState(0);
-
-  useEffect(() => {
-    const start = performance.now();
-    const duration = 720;
-    let frame = 0;
-    const animate = (now: number) => {
-      const progress = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setDisplayValue(value * eased);
-      if (progress < 1) frame = window.requestAnimationFrame(animate);
-    };
-    frame = window.requestAnimationFrame(animate);
-    return () => window.cancelAnimationFrame(frame);
-  }, [value]);
-
-  return <>{formatNumber(Math.round(displayValue))}{suffix}</>;
 }
 
 function NoDataView({ onImport, onBack }: { onImport: () => void; onBack?: () => void }) {
@@ -1120,12 +1142,16 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
   );
 }
 
-function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }: { snapshot: Snapshot; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void }) {
+function MatchSheet({ snapshot, session, activeLeague, onPlayer, onCoach, onComposition }: { snapshot: Snapshot; session: Session; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void }) {
   const [celebrationMode, setCelebrationMode] = useState(false);
   const [thresholdPulse, setThresholdPulse] = useState(false);
   const [editingKpis, setEditingKpis] = useState(false);
   const [kpiCopy, setKpiCopy] = useState<MatchKpiCopy>(() => loadMatchKpiCopy(snapshot));
   const [savedKpiCopy, setSavedKpiCopy] = useState<MatchKpiCopy>(kpiCopy);
+  const [mercatoPlan, setMercatoPlan] = useState<{ key: string; plan: CauseriePlan | null } | null>(null);
+  const mercatoPlanKey = `${session.agency.code}:${snapshot.match.date}:${snapshot.importedAt}`;
+  const mercatoText = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.mercato ?? "" : null;
+  const mercatoProfiles = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.mercatoProfiles ?? {} : {};
   const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
   const loadingTarget = formatReadableDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
   const scoreIndicators = operationalScoreIndicators(snapshot);
@@ -1141,6 +1167,20 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
     document.body.classList.toggle("match-celebration-active", celebrationMode);
     return () => document.body.classList.remove("match-celebration-active");
   }, [celebrationMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchCauseriePlan(session, snapshot)
+      .then((plan) => {
+        if (!cancelled) setMercatoPlan({ key: mercatoPlanKey, plan: plan ? normalizeCauseriePlan(plan) : null });
+      })
+      .catch(() => {
+        if (!cancelled) setMercatoPlan({ key: mercatoPlanKey, plan: null });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mercatoPlanKey, session, snapshot]);
 
   useEffect(() => {
     if (!thresholdReached) return;
@@ -1234,6 +1274,7 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
             staffPercent={formatRealStaffPercent(snapshot, kpiCopy.expectedPlayersValue)}
             staffDetail={formatRealStaffDetail(snapshot, kpiCopy.expectedPlayersValue)}
           />
+          <MercatoCarouselSection mercato={mercatoText} profiles={mercatoProfiles} />
           <div className="match-kpi-wrap">
             {editingKpis && (
               <div className="match-indicators-editor">
@@ -1254,8 +1295,8 @@ function MatchSheet({ snapshot, activeLeague, onPlayer, onCoach, onComposition }
               {editingKpis ? (
                 <>
                   <button className="secondary-button compact" type="button" onClick={() => { setKpiCopy(savedKpiCopy); setEditingKpis(false); }}>Annuler</button>
-                  <button className="secondary-button compact" type="button" onClick={() => setKpiCopy(defaultMatchKpiCopy(snapshot))}>Réinitialiser les chiffres</button>
-                  <button className="primary-button compact" type="button" onClick={() => { const next = normalizeMatchKpiCopy(kpiCopy, snapshot); localStorage.setItem(matchKpiStorageKey(snapshot), JSON.stringify(next)); setKpiCopy(next); setSavedKpiCopy(next); setEditingKpis(false); }}>Enregistrer les chiffres</button>
+                  <button className="secondary-button compact" type="button" onClick={() => setKpiCopy(defaultMatchKpiCopy())}>Réinitialiser les chiffres</button>
+                  <button className="primary-button compact" type="button" onClick={() => { const next = normalizeMatchKpiCopy(kpiCopy); writeStorageValue("local", matchKpiStorageKey(snapshot), JSON.stringify(next)); setKpiCopy(next); setSavedKpiCopy(next); setEditingKpis(false); }}>Enregistrer les chiffres</button>
                 </>
               ) : (
                 <button className="secondary-button compact" type="button" onClick={() => setEditingKpis(true)}><Edit3 size={15} />Modifier les chiffres</button>
@@ -2038,13 +2079,18 @@ function Coach({
 }) {
   const [coachMode, setCoachMode] = useState(false);
   const [coachBoardMode, setCoachBoardMode] = useState<"view" | "edit">("view");
+  const [mercatoMode, setMercatoMode] = useState<"view" | "edit">("view");
   const [redCardsMode, setRedCardsMode] = useState<"view" | "edit">("view");
   const [coachPlan, setCoachPlan] = useState<CauseriePlan>(() => buildEmptyCauseriePlan());
   const [coachDraft, setCoachDraft] = useState<CauseriePlan>(() => buildEmptyCauseriePlan());
+  const [mercatoDraft, setMercatoDraft] = useState("");
+  const [mercatoProfilesDraft, setMercatoProfilesDraft] = useState<MercatoProfiles>({});
   const [redCardsDraft, setRedCardsDraft] = useState("");
   const [savingCoachPlan, setSavingCoachPlan] = useState(false);
+  const [savingMercato, setSavingMercato] = useState(false);
   const [savingRedCards, setSavingRedCards] = useState(false);
   const [coachBoardFeedback, setCoachBoardFeedback] = useState<CauserieToast>(null);
+  const [mercatoProfileFeedback, setMercatoProfileFeedback] = useState<{ tone: "success" | "error"; detail: string } | null>(null);
   const actions = coachDecisionActions(snapshot);
   const targetPercent = snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent;
   const footballScore = buildFootballScore(snapshot, targetPercent);
@@ -2060,6 +2106,10 @@ function Coach({
   const decisionLabel = !footballScore.available ? "Données à compléter" : footballScore.goalsFor > footballScore.goalsAgainst ? "Collectif sous contrôle" : "Point d'attention prioritaire";
   const primaryAction = actions[0];
   const activeCoachPlan = coachBoardMode === "edit" ? coachDraft : coachPlan;
+  const activeMercatoText = mercatoMode === "edit" ? mercatoDraft : coachPlan.mercato;
+  const activeMercatoProfiles = mercatoMode === "edit" ? mercatoProfilesDraft : coachPlan.mercatoProfiles;
+  const activeMercatoEntrants = parseMercatoEntrants(activeMercatoText);
+  const missingMercatoProfiles = activeMercatoEntrants.filter((entrant) => !activeMercatoProfiles[entrant.key]);
   const coachActionFields = [
     { field: "tactic" as const, label: "Priorité terrain", placeholder: "Ex. Sécuriser les positions prioritaires avant le prochain départ." },
     { field: "priority" as const, label: "Zone à surveiller", placeholder: "Ex. Contrôler la zone ou le voyage à suivre en priorité." },
@@ -2077,16 +2127,22 @@ function Coach({
     setCoachPlan(emptyPlan);
     setCoachDraft(emptyPlan);
     setCoachBoardMode("view");
+    setMercatoMode("view");
+    setMercatoDraft("");
+    setMercatoProfilesDraft({});
     setRedCardsMode("view");
     setRedCardsDraft("");
     setCoachBoardFeedback(null);
+    setMercatoProfileFeedback(null);
     fetchCauseriePlan(session, snapshot)
       .then((remotePlan) => {
         if (cancelled) return;
-        const nextPlan = remotePlan ? normalizeCauseriePlan(remotePlan, snapshot) : emptyPlan;
+        const nextPlan = remotePlan ? normalizeCauseriePlan(remotePlan) : emptyPlan;
         const visiblePlan = hasManualCauserieContent(nextPlan, snapshot) ? nextPlan : emptyPlan;
         setCoachPlan(visiblePlan);
         setCoachDraft(visiblePlan);
+        setMercatoDraft(visiblePlan.mercato);
+        setMercatoProfilesDraft(visiblePlan.mercatoProfiles);
         setRedCardsDraft(visiblePlan.redCards);
       })
       .catch(() => {
@@ -2101,7 +2157,7 @@ function Coach({
     return () => {
       cancelled = true;
     };
-  }, [session.accessCode, session.agency.code, snapshot.agency.code, snapshot.match.date, snapshot.importedAt]);
+  }, [session, snapshot]);
 
   function startCoachBoardEdit() {
     setCoachDraft(coachPlan);
@@ -2139,17 +2195,82 @@ function Coach({
   }
 
   function updateMercato(value: string) {
-    setCoachDraft((current) => ({ ...current, mercato: value.slice(0, 240) }));
+    setMercatoProfileFeedback(null);
+    setMercatoDraft(value.slice(0, 240));
+  }
+
+  function startMercatoEdit() {
+    setMercatoDraft(coachPlan.mercato);
+    setMercatoProfilesDraft(coachPlan.mercatoProfiles);
+    setMercatoMode("edit");
+    setMercatoProfileFeedback(null);
+  }
+
+  function cancelMercatoEdit() {
+    setMercatoDraft(coachPlan.mercato);
+    setMercatoProfilesDraft(coachPlan.mercatoProfiles);
+    setMercatoMode("view");
+    setMercatoProfileFeedback(null);
+  }
+
+  function updateMercatoProfile(key: string, profile: MercatoProfile) {
+    if (savingMercato || savingCoachPlan) return;
+    setMercatoProfilesDraft((current) => {
+      return normalizeMercatoProfiles({ ...current, [key]: profile }, mercatoDraft);
+    });
+    setMercatoProfileFeedback(null);
+  }
+
+  async function saveMercato() {
+    if (savingMercato || savingCoachPlan) return;
+    const mercato = mercatoDraft.trim();
+    const missingProfile = parseMercatoEntrants(mercato).find((entrant) => !mercatoProfilesDraft[entrant.key]);
+    if (missingProfile) {
+      const remaining = parseMercatoEntrants(mercato).filter((entrant) => !mercatoProfilesDraft[entrant.key]).length;
+      setMercatoProfileFeedback({
+        tone: "error",
+        detail: `${remaining} profil${remaining > 1 ? "s" : ""} à choisir. Sélectionne Femme ou Homme pour chaque arrivant avant l'enregistrement.`,
+      });
+      return;
+    }
+    const nextPlan = normalizeCauseriePlan({
+      ...coachPlan,
+      mercato,
+      mercatoProfiles: normalizeMercatoProfiles(mercatoProfilesDraft, mercato),
+      updatedAt: new Date().toISOString(),
+    });
+
+    setSavingMercato(true);
+    setMercatoProfileFeedback(null);
+    try {
+      const savedPlan = await saveCauseriePlan(session, snapshot, nextPlan);
+      const normalizedPlan = normalizeCauseriePlan(savedPlan);
+      setCoachPlan(normalizedPlan);
+      setCoachDraft((current) => ({ ...current, mercato: normalizedPlan.mercato, mercatoProfiles: normalizedPlan.mercatoProfiles }));
+      setMercatoDraft(normalizedPlan.mercato);
+      setMercatoProfilesDraft(normalizedPlan.mercatoProfiles);
+      setMercatoMode("view");
+      setMercatoProfileFeedback({ tone: "success", detail: "Mercato enregistré et synchronisé avec la Feuille de match." });
+    } catch (error) {
+      setMercatoProfileFeedback({
+        tone: "error",
+        detail: error instanceof Error ? `Mercato non enregistré : ${error.message}` : "Mercato non enregistré. Vérifie la connexion puis réessaie.",
+      });
+    } finally {
+      setSavingMercato(false);
+    }
   }
 
   async function saveCoachBoard() {
+    if (savingCoachPlan || savingMercato) return;
     const nextPlan = {
       ...coachDraft,
       redCards: redCardsDraft.trim(),
       attack: padPlanLines(coachDraft.attack),
       midfield: padPlanLines(coachDraft.midfield),
       defense: padPlanLines(coachDraft.defense),
-      mercato: coachDraft.mercato.trim(),
+      mercato: coachPlan.mercato,
+      mercatoProfiles: coachPlan.mercatoProfiles,
       coach: {
         tactic: coachDraft.coach.tactic.trim(),
         priority: coachDraft.coach.priority.trim(),
@@ -2162,7 +2283,7 @@ function Coach({
     setSavingCoachPlan(true);
     try {
       const savedPlan = await saveCauseriePlan(session, snapshot, nextPlan);
-      const normalizedPlan = normalizeCauseriePlan(savedPlan, snapshot);
+      const normalizedPlan = normalizeCauseriePlan(savedPlan);
       setCoachPlan(normalizedPlan);
       setCoachDraft(normalizedPlan);
       setCoachBoardMode("view");
@@ -2188,11 +2309,11 @@ function Coach({
   }
 
   async function saveRedCards() {
-    const nextPlan = normalizeCauseriePlan({ ...coachPlan, redCards: redCardsDraft.trim() }, snapshot);
+    const nextPlan = normalizeCauseriePlan({ ...coachPlan, redCards: redCardsDraft.trim() });
     setSavingRedCards(true);
     try {
       const savedPlan = await saveCauseriePlan(session, snapshot, nextPlan);
-      const normalizedPlan = normalizeCauseriePlan(savedPlan, snapshot);
+      const normalizedPlan = normalizeCauseriePlan(savedPlan);
       setCoachPlan(normalizedPlan);
       setCoachDraft(normalizedPlan);
       setRedCardsDraft(normalizedPlan.redCards);
@@ -2324,15 +2445,58 @@ function Coach({
           </article>
 
           <article className="coach-panel coach-mercato-panel">
-            <div className="coach-panel-heading"><div><span>Mercato</span><h3>Nouvel arrivant</h3></div><Users size={21} /></div>
-            <p className="coach-mercato-note">Présenter la nouvelle arrivée à l'équipe.</p>
-            {coachBoardMode === "edit" ? (
-              <label className="coach-mercato-input">
-                <span className="sr-only">Nouvel arrivant du mercato</span>
-                <textarea aria-label="Nouvel arrivant du mercato" value={activeCoachPlan.mercato} onChange={(event) => updateMercato(event.target.value)} placeholder="Ex. Accueillir Prénom NOM, nouveau renfort de l'équipe." rows={5} />
-              </label>
+            <div className="coach-panel-heading">
+              <div><span>Mercato</span><h3>Nouvel arrivant</h3></div>
+              {mercatoMode === "view" ? (
+                <button className="secondary-button compact" type="button" aria-label="Écrire le Mercato" onClick={startMercatoEdit}><Edit3 size={15} /> Écrire le Mercato</button>
+              ) : (
+                <div className="coach-mercato-heading-actions">
+                  <button className="secondary-button compact" type="button" aria-label="Annuler la modification du Mercato" onClick={cancelMercatoEdit} disabled={savingMercato}><XCircle size={15} /> Annuler</button>
+                  <button className="primary-button compact" type="button" aria-label="Enregistrer le Mercato" onClick={() => void saveMercato()} disabled={savingMercato || savingCoachPlan}><Save size={15} /> {savingMercato ? "Enregistrement..." : "Enregistrer le Mercato"}</button>
+                </div>
+              )}
+              <Users size={21} />
+            </div>
+            <p className="coach-mercato-note">Un joueur par ligne, ou plusieurs noms complets séparés par « et », « / » ou une virgule. Choisis Femme ou Homme pour chaque arrivant ; les photos du carrousel se mettent à jour après enregistrement.</p>
+            {mercatoMode === "edit" ? (
+              <>
+                <label className="coach-mercato-input">
+                  <span className="sr-only">Nouvel arrivant du mercato</span>
+                  <textarea aria-label="Nouvel arrivant du mercato" value={mercatoDraft} onChange={(event) => updateMercato(event.target.value)} placeholder="Ex. Accueillir Prénom NOM, nouveau renfort de l'équipe.\nOu : Prénom NOM, Prénom NOM" rows={5} disabled={savingMercato || savingCoachPlan} />
+                </label>
+                {activeMercatoEntrants.length > 0 && (
+                  <div className="coach-mercato-profiles" aria-label="Profil des joueurs pour le carrousel">
+                    <span className="coach-mercato-profiles-heading">Profil du joueur pour sa photo</span>
+                    {activeMercatoEntrants.map((entrant) => (
+                      <div className="coach-mercato-profile-row" key={entrant.id}>
+                        <strong>{entrant.name}</strong>
+                        <div role="group" aria-label={`Profil de ${entrant.name}`}>
+                          <button type="button" className={activeMercatoProfiles[entrant.key] === "female" ? "is-selected" : ""} aria-label={`Femme pour ${entrant.name}`} aria-pressed={activeMercatoProfiles[entrant.key] === "female"} onClick={() => updateMercatoProfile(entrant.key, "female")} disabled={savingMercato || savingCoachPlan}>Femme</button>
+                          <button type="button" className={activeMercatoProfiles[entrant.key] === "male" ? "is-selected" : ""} aria-label={`Homme pour ${entrant.name}`} aria-pressed={activeMercatoProfiles[entrant.key] === "male"} onClick={() => updateMercatoProfile(entrant.key, "male")} disabled={savingMercato || savingCoachPlan}>Homme</button>
+                        </div>
+                      </div>
+                    ))}
+                    <p className={`coach-mercato-profile-feedback${mercatoProfileFeedback ? ` is-${mercatoProfileFeedback.tone}` : missingMercatoProfiles.length ? " is-required" : " is-ready"}`} role="status" aria-live="polite">
+                      {savingMercato
+                        ? "Enregistrement du Mercato…"
+                        : mercatoProfileFeedback?.detail
+                          ?? (missingMercatoProfiles.length
+                            ? `Choisis Femme ou Homme pour ${missingMercatoProfiles.length === 1 ? "cet arrivant" : `${missingMercatoProfiles.length} arrivants`}, puis enregistre pour mettre à jour les photos.`
+                            : "Tous les profils sont choisis. Enregistre pour actualiser les photos du carrousel.")}
+                    </p>
+                  </div>
+                )}
+              </>
             ) : (
-              <p className={`coach-mercato-entry ${activeCoachPlan.mercato.trim() ? "" : "is-empty"}`}>{activeCoachPlan.mercato.trim() || "À renseigner par le coach"}</p>
+              <p className={`coach-mercato-entry ${coachPlan.mercato.trim() ? "" : "is-empty"}`}>{coachPlan.mercato.trim() || "À renseigner par le coach"}</p>
+            )}
+            {mercatoMode === "view" && missingMercatoProfiles.length > 0 && (
+              <p className="coach-mercato-profile-feedback is-required" role="status">
+                {`Choix Femme/Homme manquant pour ${missingMercatoProfiles.map((entrant) => entrant.name).join(", ")}. Modifie le Mercato pour afficher les photos adaptées.`}
+              </p>
+            )}
+            {mercatoMode === "view" && mercatoProfileFeedback && (
+              <p className={`coach-mercato-profile-feedback is-${mercatoProfileFeedback.tone}`} role="status" aria-live="polite">{mercatoProfileFeedback.detail}</p>
             )}
           </article>
         </section>
@@ -2343,7 +2507,7 @@ function Coach({
             {coachBoardMode === "view" ? (
               <button className="secondary-button compact" type="button" onClick={startCoachBoardEdit}><Edit3 size={15} /> Écrire</button>
             ) : (
-              <div className="coach-writing-actions"><button className="secondary-button compact" type="button" onClick={cancelCoachBoardEdit} disabled={savingCoachPlan}><XCircle size={15} /> Annuler</button><button className="primary-button compact" type="button" onClick={saveCoachBoard} disabled={savingCoachPlan}><Save size={15} /> {savingCoachPlan ? "Enregistrement..." : "Enregistrer"}</button></div>
+              <div className="coach-writing-actions"><button className="secondary-button compact" type="button" onClick={cancelCoachBoardEdit} disabled={savingCoachPlan}><XCircle size={15} /> Annuler</button><button className="primary-button compact" type="button" onClick={saveCoachBoard} disabled={savingCoachPlan || savingMercato}><Save size={15} /> {savingCoachPlan ? "Enregistrement..." : "Enregistrer"}</button></div>
             )}
           </div>
           {coachBoardFeedback && <div className={`coach-board-feedback ${coachBoardFeedback.tone}`}><strong>{coachBoardFeedback.title}</strong><span>{coachBoardFeedback.detail}</span></div>}
@@ -2455,387 +2619,6 @@ function PlayerSheet({ snapshot, player, onBack, onSelect }: { snapshot: Snapsho
   );
 }
 
-function Causerie({ snapshot, session }: { snapshot: Snapshot; session: Session }) {
-  const [plan, setPlan] = useState<CauseriePlan>(() => buildEmptyCauseriePlan());
-  const [activeZone, setActiveZone] = useState<CauserieZoneId>("attack");
-  const [mode, setMode] = useState<"view" | "edit">("view");
-  const [briefMode, setBriefMode] = useState(false);
-  const [toast, setToast] = useState<CauserieToast>(null);
-  const [loadingPlan, setLoadingPlan] = useState(false);
-  const [savingPlan, setSavingPlan] = useState(false);
-  const hasContent = hasCauserieContent(plan);
-
-  useEffect(() => {
-    document.body.classList.toggle("causerie-brief-active", briefMode);
-    return () => document.body.classList.remove("causerie-brief-active");
-  }, [briefMode]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const emptyPlan = buildEmptyCauseriePlan();
-    setPlan(emptyPlan);
-    setMode("view");
-    setActiveZone("attack");
-    setToast(null);
-    setLoadingPlan(true);
-    fetchCauseriePlan(session, snapshot)
-      .then((remotePlan) => {
-        if (cancelled) return;
-        const nextPlan = remotePlan ? normalizeCauseriePlan(remotePlan, snapshot) : emptyPlan;
-        setPlan(hasManualCauserieContent(nextPlan, snapshot) ? nextPlan : emptyPlan);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setToast({
-            title: "Causerie non synchronisée",
-            detail: "Le brief reste vide jusqu'à sa saisie.",
-            tone: "warning",
-          });
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingPlan(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [session.accessCode, session.agency.code, snapshot.agency.code, snapshot.match.date, snapshot.importedAt]);
-
-  function updateZoneLine(zone: Exclude<CauserieZoneId, "coach">, index: number, value: string) {
-    setPlan((current) => ({
-      ...current,
-      [zone]: current[zone].map((line, lineIndex) => lineIndex === index ? value.slice(0, 96) : line),
-    }));
-  }
-
-  function updateCoach(field: keyof CauseriePlan["coach"], value: string) {
-    setPlan((current) => ({
-      ...current,
-      coach: {
-        ...current.coach,
-        [field]: value.slice(0, 120),
-      },
-    }));
-  }
-
-  function updateMeta(field: "team" | "manager", value: string) {
-    setPlan((current) => ({
-      ...current,
-      [field]: value.slice(0, 48),
-    }));
-  }
-
-  async function savePlan() {
-    const nextPlan = {
-      ...plan,
-      attack: padPlanLines(plan.attack),
-      midfield: padPlanLines(plan.midfield),
-      defense: padPlanLines(plan.defense),
-      coach: {
-        tactic: plan.coach.tactic.trim(),
-        priority: plan.coach.priority.trim(),
-        arbitration: plan.coach.arbitration.trim(),
-        review: plan.coach.review.trim(),
-      },
-      updatedAt: new Date().toISOString(),
-    };
-    setSavingPlan(true);
-    try {
-      const savedPlan = await saveCauseriePlan(session, snapshot, nextPlan);
-      setPlan(normalizeCauseriePlan(savedPlan, snapshot));
-      setMode("view");
-      setToast({
-        title: "Plan de jeu validé",
-        detail: "Le brief équipe est prêt.",
-        tone: "success",
-      });
-    } catch {
-      setPlan(nextPlan);
-      writeLocalCauseriePlan(snapshot, nextPlan);
-      setToast({
-        title: "Sauvegarde locale uniquement",
-        detail: "La page reste utilisable sur ce poste, mais le plan n'est pas partagé.",
-        tone: "warning",
-      });
-    } finally {
-      setSavingPlan(false);
-      window.setTimeout(() => setToast(null), 3200);
-    }
-  }
-
-  function preparePlan() {
-    setMode("edit");
-    setActiveZone("attack");
-  }
-
-  return (
-    <section className={briefMode ? "causerie-stadium is-brief" : "causerie-stadium"}>
-      <div className="stadium-stands top" aria-hidden="true">
-        {Array.from({ length: 42 }).map((_, index) => <span key={index} />)}
-      </div>
-      <div className="stadium-stands bottom" aria-hidden="true">
-        {Array.from({ length: 42 }).map((_, index) => <span key={index} />)}
-      </div>
-
-      <header className="causerie-stadium-header">
-        <div>
-          <p className="eyebrow">STEF Match Center</p>
-          <h2>Causerie</h2>
-          <span>
-            Match du {formatDate(snapshot.match.lastOperation ?? snapshot.match.date)} · Équipe {plan.team || "à renseigner"} · Mise à jour {plan.updatedAt ? formatDateTime(plan.updatedAt) : "à préparer"}
-          </span>
-          <ActivePeriodBadge snapshot={snapshot} />
-        </div>
-        <div className="causerie-header-actions">
-          <button className={briefMode ? "secondary-on-dark brief-exit" : "secondary-on-dark"} type="button" onClick={() => setBriefMode((current) => !current)}>
-            {briefMode ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
-            {briefMode ? "Quitter brief" : "Mode brief"}
-          </button>
-          {mode === "view" ? (
-            <button className="primary-button compact" type="button" onClick={preparePlan}>
-              <Edit3 size={16} />
-              Modifier le plan de jeu
-            </button>
-          ) : (
-            <button className="primary-button compact" type="button" onClick={savePlan} disabled={savingPlan}>
-              <Save size={16} />
-              {savingPlan ? "Enregistrement..." : "Enregistrer la causerie"}
-            </button>
-          )}
-        </div>
-      </header>
-
-      {loadingPlan && <CauserieToastView toast={{ title: "Chargement causerie", detail: "Récupération du plan de jeu partagé.", tone: "loading" }} />}
-      {toast && <CauserieToastView toast={toast} />}
-
-      {!hasContent && mode === "view" ? (
-        <div className="causerie-empty">
-          <strong>Le vestiaire est prêt</strong>
-          <p>Il reste à préparer le plan de jeu du jour.</p>
-          <button className="primary-button" type="button" onClick={preparePlan}>
-            Préparer la causerie
-            <ArrowRight size={18} />
-          </button>
-        </div>
-      ) : (
-        <div className="stadium-layout">
-          <div className="stadium-led left">STEF MATCH CENTER</div>
-          <div className="stadium-led right">CAUSERIE DU JOUR</div>
-
-          <div className="stadium-main">
-            <div className="stadium-screen">
-              <span>Scoreboard</span>
-              <strong>{plan.updatedAt ? "Plan de jeu prêt" : "Causerie à préparer"}</strong>
-              <small>{plan.coach.priority || snapshot.match.objective}</small>
-            </div>
-
-            <div className="stadium-field" aria-label="Terrain de causerie">
-              <div className="goal goal-left" aria-hidden="true" />
-              <div className="goal goal-right" aria-hidden="true" />
-              <div className="penalty-box left" aria-hidden="true" />
-              <div className="penalty-box right" aria-hidden="true" />
-              <div className="center-circle" aria-hidden="true" />
-              <div className="half-line" aria-hidden="true" />
-
-              <CauserieFieldZone
-                id="attack"
-                code="CHG"
-                Icon={Target}
-                title="Attaque"
-                subtitle="Ce que nous devons faire avancer aujourd'hui"
-                lines={plan.attack}
-                active={activeZone === "attack"}
-                editing={mode === "edit"}
-                onActivate={setActiveZone}
-                onChange={updateZoneLine}
-              />
-              <CauserieFieldZone
-                id="midfield"
-                code="ZONAGE"
-                Icon={RefreshCw}
-                title="Milieu"
-                subtitle="Ce qui doit rester fluide et coordonné"
-                lines={plan.midfield}
-                active={activeZone === "midfield"}
-                editing={mode === "edit"}
-                onActivate={setActiveZone}
-                onChange={updateZoneLine}
-              />
-              <CauserieFieldZone
-                id="defense"
-                code="Réception"
-                Icon={Shield}
-                title="Défense"
-                subtitle="Réception des palettes"
-                lines={plan.defense}
-                active={activeZone === "defense"}
-                editing={mode === "edit"}
-                onActivate={setActiveZone}
-                onChange={updateZoneLine}
-              />
-            </div>
-          </div>
-
-          <aside
-            className={activeZone === "coach" ? "coach-bench active" : "coach-bench"}
-            onClick={() => setActiveZone("coach")}
-          >
-            <div className="bench-rail" aria-hidden="true">
-              <span /><span /><span /><span />
-            </div>
-            <div className="coach-board">
-              <div className="coach-board-head">
-                <span>Coach / Staff</span>
-                <h3>Tactique du jour</h3>
-              </div>
-              <div className="coach-tactic-field" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </div>
-              {mode === "edit" ? (
-                <div className="coach-edit-grid">
-                  <div className="coach-meta-edit">
-                    <label>
-                      Équipe
-                      <input value={plan.team} onChange={(event) => updateMeta("team", event.target.value)} placeholder="Ex. Nuit" />
-                    </label>
-                    <label>
-                      Manager
-                      <input value={plan.manager} onChange={(event) => updateMeta("manager", event.target.value)} placeholder="À renseigner" />
-                    </label>
-                  </div>
-                  <label>
-                    Tactique
-                    <textarea value={plan.coach.tactic} onChange={(event) => updateCoach("tactic", event.target.value)} rows={2} />
-                  </label>
-                  <label>
-                    Priorité absolue
-                    <textarea value={plan.coach.priority} onChange={(event) => updateCoach("priority", event.target.value)} rows={2} />
-                  </label>
-                  <label>
-                    Arbitrage
-                    <textarea value={plan.coach.arbitration} onChange={(event) => updateCoach("arbitration", event.target.value)} rows={2} />
-                  </label>
-                  <label>
-                    Prochaine revue
-                    <input value={plan.coach.review} onChange={(event) => updateCoach("review", event.target.value)} />
-                  </label>
-                </div>
-              ) : (
-                <div className="coach-lines">
-                  <p>{plan.coach.tactic || "Tactique à renseigner."}</p>
-                  <dl>
-                    <div className="coach-line-item manager-line">
-                      <dt>Manager</dt>
-                      <dd>{plan.manager || "À renseigner"}</dd>
-                    </div>
-                    <div className="coach-line-item priority-line">
-                      <dt>Priorité</dt>
-                      <dd>{plan.coach.priority || "À préparer"}</dd>
-                    </div>
-                    <div className="coach-line-item arbitration-line">
-                      <dt>Arbitrage</dt>
-                      <dd>{plan.coach.arbitration || "À préparer"}</dd>
-                    </div>
-                    <div className="coach-line-item review-line">
-                      <dt>Revue</dt>
-                      <dd>{plan.coach.review || "À planifier"}</dd>
-                    </div>
-                  </dl>
-                </div>
-              )}
-            </div>
-          </aside>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function CauserieFieldZone({
-  id,
-  code,
-  Icon,
-  title,
-  subtitle,
-  lines,
-  active,
-  editing,
-  onActivate,
-  onChange,
-}: {
-  id: Exclude<CauserieZoneId, "coach">;
-  code: string;
-  Icon: LucideIcon;
-  title: string;
-  subtitle: string;
-  lines: string[];
-  active: boolean;
-  editing: boolean;
-  onActivate: (zone: CauserieZoneId) => void;
-  onChange: (zone: Exclude<CauserieZoneId, "coach">, index: number, value: string) => void;
-}) {
-  return (
-    <section
-      className={active ? `field-zone ${id} active` : `field-zone ${id}`}
-      role="button"
-      tabIndex={0}
-      onClick={() => onActivate(id)}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onActivate(id);
-        }
-      }}
-    >
-      <div className="zone-marker">
-        <Icon size={22} />
-        <span>{code}</span>
-      </div>
-      <div className="zone-copy">
-        <span>{title}</span>
-        <strong>{subtitle}</strong>
-      </div>
-      <div className="tactical-dots" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </div>
-      {editing ? (
-        <div className="zone-edit-list">
-          {lines.map((line, index) => (
-            <input
-              key={`${id}-${index}`}
-              value={line}
-              maxLength={96}
-              onChange={(event) => onChange(id, index, event.target.value)}
-              placeholder={`Consigne ${index + 1}`}
-            />
-          ))}
-        </div>
-      ) : (
-        <ul>
-          {cleanPlanLines(lines).map((line) => <li key={line}>{line}</li>)}
-          {cleanPlanLines(lines).length === 0 && <li>À préparer pendant la causerie.</li>}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function CauserieToastView({ toast }: { toast: NonNullable<CauserieToast> }) {
-  const Icon = toast.tone === "success" ? CheckCircle2 : toast.tone === "error" ? XCircle : toast.tone === "loading" ? RefreshCw : AlertTriangle;
-  return (
-    <div className={`save-toast ${toast.tone}`}>
-      <Icon size={20} />
-      <strong>{toast.title}</strong>
-      <span>{toast.detail}</span>
-    </div>
-  );
-}
-
 function TvMode({ snapshot, session, onExit }: { snapshot: Snapshot; session: Session; onExit: () => void }) {
   const [focusMode, setFocusMode] = useState(false);
   const [planMode, setPlanMode] = useState<"view" | "edit">("view");
@@ -2895,7 +2678,7 @@ function TvMode({ snapshot, session, onExit }: { snapshot: Snapshot; session: Se
     fetchCauseriePlan(session, snapshot)
       .then((remotePlan) => {
         if (cancelled) return;
-        const nextPlan = remotePlan ? normalizeCauseriePlan(remotePlan, snapshot) : emptyPlan;
+        const nextPlan = remotePlan ? normalizeCauseriePlan(remotePlan) : emptyPlan;
         const visiblePlan = hasManualCauserieContent(nextPlan, snapshot) ? nextPlan : emptyPlan;
         setPlan(visiblePlan);
         setPlanDraft(visiblePlan);
@@ -2906,7 +2689,7 @@ function TvMode({ snapshot, session, onExit }: { snapshot: Snapshot; session: Se
     return () => {
       cancelled = true;
     };
-  }, [session.accessCode, session.agency.code, snapshot.agency.code, snapshot.match.date, snapshot.importedAt]);
+  }, [session, snapshot]);
 
   function startPlanEdit() {
     setPlanDraft(plan);
@@ -2925,7 +2708,7 @@ function TvMode({ snapshot, session, onExit }: { snapshot: Snapshot; session: Se
     setSavingPlan(true);
     try {
       const savedPlan = await saveCauseriePlan(session, snapshot, nextPlan);
-      const normalizedPlan = normalizeCauseriePlan(savedPlan, snapshot);
+      const normalizedPlan = normalizeCauseriePlan(savedPlan);
       setPlan(normalizedPlan);
       setPlanDraft(normalizedPlan);
       setPlanMode("view");
@@ -3138,7 +2921,7 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
   function selectLeague(id: LeagueId) {
     const selected = leagueConfigs.find((league) => league.id === id);
     onActiveLeagueChange(id, selected);
-    localStorage.setItem(activeLeagueStorageKey, id);
+    writeStorageValue("local", activeLeagueStorageKey, id);
   }
 
   type LeagueEditableField = "zonageMinutes" | "loadingSeconds" | "unloadingSeconds" | "scoreTargetPercent";
@@ -3165,7 +2948,7 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
     const next = leagueConfigsRef.current.map((league) => league.id === id ? { ...league, [field]: normalizedValue } : league);
     leagueConfigsRef.current = next;
     setLeagueConfigs(next);
-    localStorage.setItem(leagueConfigStorageKey, JSON.stringify(next));
+    writeStorageValue("local", leagueConfigStorageKey, JSON.stringify(next));
     setConfigSaveError("");
     const save = configSaveQueueRef.current
       .catch(() => undefined)
@@ -3354,7 +3137,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                 <GuideFlowStep number="4" title="Agir" detail="Utiliser Coach puis le brief équipe pour préparer et afficher les consignes avec la plage horaire choisie." tone="red" />
               </div>
               <div className="guide-callout success"><CheckCircle2 size={20} /><span><strong>Règle simple :</strong> chaque fois que la base Excel change, il faut refaire un import. Le bouton Actualiser sert ensuite à relire le dernier import enregistré.</span></div>
-              <div className="guide-callout info"><Shield size={20} /><span><strong>Un espace séparé par agence :</strong> Agen - 058 utilise <code>STEF-058</code>, Montpellier <code>STEF-01K</code>, Toulouse <code>STEF-05R</code> et Bordeaux <code>STEF-04P</code>. L’import est rattaché à l’agence connectée et ne se mélange pas avec les trois autres.</span></div>
+              <div className="guide-callout info"><Shield size={20} /><span><strong>Un espace séparé par agence :</strong> les imports et les causeries sont isolés par agence. Utilisez uniquement le code d’accès qui vous a été transmis séparément ; il n’est jamais affiché dans le guide.</span></div>
               <div className="guide-actions">
                 <button className="primary-button" type="button" onClick={() => onNavigate("import")}><Upload size={17} /> Ouvrir l’import</button>
                 <button className="secondary-button" type="button" onClick={() => setSection("excel")}><ArrowRight size={17} /> Préparer Excel</button>
@@ -3687,30 +3470,6 @@ function SectionTitle({ title, subtitle }: { title: string; subtitle: string }) 
       <h3>{title}</h3>
       <p>{subtitle}</p>
     </div>
-  );
-}
-
-function RoleLine({ role, percent, count }: { role: string; percent: number; count: number }) {
-  return (
-    <div className={`role-line ${roleClass(role)}`}>
-      <div>
-        <span>{displayRole(role)}</span>
-        <small>{operationLabel(roleCode(role))} · {formatNumber(count)} joueur(s)</small>
-      </div>
-      <div className="bar-track">
-        <div className={`bar-fill ${roleClass(role)}`} style={{ width: `${Math.min(100, percent)}%` }} />
-      </div>
-      <b>{Math.round(percent)}%</b>
-    </div>
-  );
-}
-
-function AlertCard({ alert }: { alert: Alert }) {
-  return (
-    <article className="alert-card">
-      <strong>{alert.title}</strong>
-      <p>{alert.detail}</p>
-    </article>
   );
 }
 
@@ -4068,19 +3827,15 @@ function causerieStorageKey(snapshot: Snapshot) {
 
 function readLocalCauseriePlan(snapshot: Snapshot): CauseriePlan | null {
   try {
-    const saved = localStorage.getItem(causerieStorageKey(snapshot));
-    return saved ? JSON.parse(saved) as CauseriePlan : null;
+    const saved = readStorageValue("local", causerieStorageKey(snapshot));
+    return saved ? normalizeCauseriePlan(JSON.parse(saved)) : null;
   } catch {
     return null;
   }
 }
 
 function writeLocalCauseriePlan(snapshot: Snapshot, plan: CauseriePlan) {
-  try {
-    localStorage.setItem(causerieStorageKey(snapshot), JSON.stringify(plan));
-  } catch {
-    // The remote API remains the source of truth when local storage is unavailable.
-  }
+  writeStorageValue("local", causerieStorageKey(snapshot), JSON.stringify(plan));
 }
 
 function matchKpiStorageKey(snapshot: Snapshot) {
@@ -4092,31 +3847,33 @@ function legacyMatchKpiStorageKey(snapshot: Snapshot) {
 }
 
 function loadMatchKpiCopy(snapshot: Snapshot): MatchKpiCopy {
-  const defaults = defaultMatchKpiCopy(snapshot);
-  const saved = localStorage.getItem(matchKpiStorageKey(snapshot)) ?? localStorage.getItem(legacyMatchKpiStorageKey(snapshot));
+  const defaults = defaultMatchKpiCopy();
+  const saved = readStorageValue("local", matchKpiStorageKey(snapshot)) ?? readStorageValue("local", legacyMatchKpiStorageKey(snapshot));
   if (!saved) return defaults;
   try {
     const parsed = JSON.parse(saved) as Partial<MatchKpiCopy>;
     return normalizeMatchKpiCopy({
       injuriesValue: parsed.injuriesValue ?? defaults.injuriesValue,
       expectedPlayersValue: parsed.expectedPlayersValue ?? defaults.expectedPlayersValue,
-    }, snapshot);
+    });
   } catch {
     return defaults;
   }
 }
 
-function defaultMatchKpiCopy(snapshot: Snapshot): MatchKpiCopy {
+function defaultMatchKpiCopy(): MatchKpiCopy {
   return {
     injuriesValue: "",
     expectedPlayersValue: "",
   };
 }
 
-function normalizeMatchKpiCopy(copy: MatchKpiCopy, snapshot: Snapshot): MatchKpiCopy {
+function normalizeMatchKpiCopy(copy: Partial<MatchKpiCopy> | null | undefined): MatchKpiCopy {
+  const injuriesValue = typeof copy?.injuriesValue === "string" ? copy.injuriesValue : "";
+  const expectedPlayersValue = typeof copy?.expectedPlayersValue === "string" ? copy.expectedPlayersValue : "";
   return {
-    injuriesValue: copy.injuriesValue.trim() === "" ? "" : String(clampEditableKpi(copy.injuriesValue, 0, 0, 99)),
-    expectedPlayersValue: copy.expectedPlayersValue.trim() === "" ? "" : String(clampEditableKpi(copy.expectedPlayersValue, 1, 1)),
+    injuriesValue: injuriesValue.trim() === "" ? "" : String(clampEditableKpi(injuriesValue, 0, 0, 99)),
+    expectedPlayersValue: expectedPlayersValue.trim() === "" ? "" : String(clampEditableKpi(expectedPlayersValue, 1, 1)),
   };
 }
 
@@ -4177,6 +3934,7 @@ function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
       defense: [],
     },
     mercato: "",
+    mercatoProfiles: {},
     redCards: "",
     coach: {
       tactic: action.title,
@@ -4201,6 +3959,7 @@ function buildEmptyCauseriePlan(): CauseriePlan {
       defense: [],
     },
     mercato: "",
+    mercatoProfiles: {},
     redCards: "",
     coach: {
       tactic: "",
@@ -4211,29 +3970,47 @@ function buildEmptyCauseriePlan(): CauseriePlan {
   };
 }
 
-function normalizeCauseriePlan(plan: CauseriePlan, snapshot: Snapshot): CauseriePlan {
+function normalizeCauseriePlan(plan: Partial<CauseriePlan> | null | undefined): CauseriePlan {
   const fallback = buildEmptyCauseriePlan();
+  const input = plan && typeof plan === "object" ? plan : fallback;
+  const text = (value: unknown, fallbackValue = "") => typeof value === "string" ? value : fallbackValue;
+  const planLines = (value: unknown) => padPlanLines(Array.isArray(value) ? value.filter((line): line is string => typeof line === "string") : []);
+  const updatedAt = typeof input.updatedAt === "string" ? input.updatedAt : null;
+  const mercato = text(input.mercato);
   return {
-    team: plan.team ?? fallback.team,
-    manager: plan.manager ?? fallback.manager,
-    updatedAt: plan.updatedAt ?? null,
-    attack: padPlanLines(plan.attack ?? fallback.attack),
-    midfield: padPlanLines(plan.midfield ?? fallback.midfield),
-    defense: padPlanLines(plan.defense ?? fallback.defense),
+    team: text(input.team, fallback.team),
+    manager: text(input.manager, fallback.manager),
+    updatedAt,
+    attack: planLines(input.attack),
+    midfield: planLines(input.midfield),
+    defense: planLines(input.defense),
     attachments: {
-      attack: normalizeCauserieAttachments(plan.attachments?.attack, fallback.attachments.attack),
-      midfield: normalizeCauserieAttachments(plan.attachments?.midfield, fallback.attachments.midfield),
-      defense: normalizeCauserieAttachments(plan.attachments?.defense, fallback.attachments.defense),
+      attack: normalizeCauserieAttachments(input.attachments?.attack, fallback.attachments.attack),
+      midfield: normalizeCauserieAttachments(input.attachments?.midfield, fallback.attachments.midfield),
+      defense: normalizeCauserieAttachments(input.attachments?.defense, fallback.attachments.defense),
     },
-    mercato: plan.mercato ?? fallback.mercato,
-    redCards: plan.redCards ?? fallback.redCards,
+    mercato,
+    mercatoProfiles: normalizeMercatoProfiles(input.mercatoProfiles, mercato),
+    redCards: text(input.redCards),
     coach: {
-      tactic: plan.coach?.tactic ?? fallback.coach.tactic,
-      priority: plan.coach?.priority ?? fallback.coach.priority,
-      arbitration: plan.coach?.arbitration ?? fallback.coach.arbitration,
-      review: plan.coach?.review ?? fallback.coach.review,
+      tactic: text(input.coach?.tactic),
+      priority: text(input.coach?.priority),
+      arbitration: text(input.coach?.arbitration),
+      review: text(input.coach?.review),
     },
   };
+}
+
+function normalizeMercatoProfiles(value: unknown, mercato: string): MercatoProfiles {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const entrantKeys = new Set(parseMercatoEntrants(mercato).map((entrant) => entrant.key));
+  const profiles: MercatoProfiles = {};
+  for (const [rawKey, rawProfile] of Object.entries(value)) {
+    const key = rawKey.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("fr-FR").slice(0, 240);
+    if (!entrantKeys.has(key)) continue;
+    if (rawProfile === "female" || rawProfile === "male") profiles[key] = rawProfile;
+  }
+  return profiles;
 }
 
 function hasManualCauserieContent(plan: CauseriePlan, snapshot: Snapshot) {
@@ -4276,19 +4053,6 @@ function padPlanLines(lines: string[]) {
   const cleaned = cleanPlanLines(lines);
   while (cleaned.length < 3) cleaned.push("");
   return cleaned.slice(0, 3);
-}
-
-function hasCauserieContent(plan: CauseriePlan) {
-  return [
-    ...plan.attack,
-    ...plan.midfield,
-    ...plan.defense,
-    plan.coach.tactic,
-    plan.coach.priority,
-    plan.coach.arbitration,
-    plan.coach.review,
-    plan.mercato,
-  ].some((item) => item.trim().length > 0);
 }
 
 function matchAction(snapshot: Snapshot) {
@@ -4415,14 +4179,6 @@ function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" }).format(new Date(value));
 }
 
-function formatDuration(milliseconds: number) {
-  const totalMinutes = Math.max(0, Math.floor(milliseconds / 60000));
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours === 0) return `${minutes} min`;
-  return `${hours}h${String(minutes).padStart(2, "0")}`;
-}
-
 function initials(name: string) {
   return name
     .split(/\s+/)
@@ -4451,10 +4207,4 @@ function roleCode(role: string) {
 
 function operationLabel(code: string) {
   return code === "DECHG" ? "Réception" : code;
-}
-
-function roleHelp(role: string) {
-  if (role === "Attaquant") return "Chargement";
-  if (role === "Milieu") return "Zonage";
-  return "Réception";
 }

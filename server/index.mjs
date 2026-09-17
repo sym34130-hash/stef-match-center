@@ -420,10 +420,14 @@ app.use((error, _req, res, next) => {
   });
 });
 
-app.listen(port, () => {
+const onListening = () => {
   console.log(`STEF Match Center API ready on http://localhost:${port}`);
   console.log(`STEF Match Center data directory: ${dataDir}`);
-});
+};
+
+const bindHost = process.env.STEF_BIND_HOST?.trim();
+if (bindHost) app.listen(port, bindHost, onListening);
+else app.listen(port, onListening);
 
 async function loadAgencies() {
   if (process.env.STEF_AGENCIES_JSON) {
@@ -660,8 +664,9 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
         } else if (!storedCriteriaMatchesRequest || snapshotNeedsRefresh) {
           return null;
         }
-      } catch {
+      } catch (error) {
         // Never show a snapshot calculated with another league's criteria.
+        if (!isMissingSourceError(error)) throw error;
         if (!storedCriteriaMatchesRequest || snapshotNeedsRefresh) return null;
       }
     }
@@ -684,8 +689,9 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
           snapshot = rebuilt.snapshot;
           await writeJsonAtomic(latestPath, snapshot);
         }
-      } catch {
+      } catch (error) {
         // Keep serving the existing snapshot if its source workbook is absent.
+        if (!isMissingSourceError(error)) throw error;
       }
     }
 
@@ -742,7 +748,8 @@ function readRequestedPerformanceCriteria(value) {
 async function readLatestWorkbook(agencyDir) {
   try {
     return await fs.readFile(path.join(agencyDir, "latest.xlsx"));
-  } catch {
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
     const uploadsDir = path.join(agencyDir, "uploads");
     const entries = await fs.readdir(uploadsDir, { withFileTypes: true });
     const candidates = await Promise.all(
@@ -755,7 +762,7 @@ async function readLatestWorkbook(agencyDir) {
         })
     );
     candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
-    if (!candidates[0]) throw new Error("Aucun Excel disponible.");
+    if (!candidates[0]) throw new Error("Aucun Excel disponible.", { cause: error });
     return fs.readFile(candidates[0].filePath);
   }
 }
@@ -764,7 +771,8 @@ async function readCauseriePlan(agencyCode, matchDate) {
   const causeriePath = path.join(dataDir, sanitizeSegment(agencyCode), "causeries", `${sanitizeSegment(matchDate)}.json`);
   try {
     return JSON.parse(await fs.readFile(causeriePath, "utf8"));
-  } catch {
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
     return null;
   }
 }
@@ -789,7 +797,8 @@ function normalizeCauseriePlan(plan) {
       midfield: normalizeAttachments(input.attachments?.midfield),
       defense: normalizeAttachments(input.attachments?.defense),
     },
-    mercato: limitText(input.mercato, 240),
+    mercato: limitMultilineText(input.mercato, 240),
+    mercatoProfiles: normalizeMercatoProfiles(input.mercatoProfiles),
     redCards: limitMultilineText(input.redCards, 1000),
     coach: {
       tactic: limitText(input.coach?.tactic, 120),
@@ -798,6 +807,16 @@ function normalizeCauseriePlan(plan) {
       review: limitText(input.coach?.review, 80),
     },
   };
+}
+
+function normalizeMercatoProfiles(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value)
+    .map(([key, profile]) => [
+      key.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("fr-FR").slice(0, 240),
+      profile,
+    ])
+    .filter(([key, profile]) => key && (profile === "female" || profile === "male")));
 }
 
 function normalizeLines(lines) {
@@ -818,7 +837,7 @@ function normalizeAttachments(value) {
 }
 
 function limitMultilineText(value, maxLength) {
-  return String(value ?? "").trim().replace(/[^\S\r\n]+/g, " ").slice(0, maxLength);
+  return String(value ?? "").replace(/\r\n?/g, "\n").trim().replace(/[^\S\n]+/g, " ").slice(0, maxLength);
 }
 
 function limitText(value, maxLength) {

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
+const apiBaseUrl = `http://127.0.0.1:${process.env.PLAYWRIGHT_API_PORT ?? "4187"}`;
 const snapshotPath = path.join(rootDir, "data", "agencies", "058", "latest.json");
 const backupPath = path.join(rootDir, "tmp", "ui-smoke-latest.json");
 const leagueConfigPath = path.join(rootDir, "data", "agencies", "058", "league-configs.json");
@@ -24,7 +25,7 @@ export default async function globalSetup() {
   let apiReady = false;
   for (let attempt = 0; attempt < 60; attempt += 1) {
     try {
-      const response = await fetch("http://localhost:4174/api/health");
+      const response = await fetch(`${apiBaseUrl}/api/health`);
       if (response.ok) {
         apiReady = true;
         break;
@@ -37,11 +38,11 @@ export default async function globalSetup() {
 
   if (!apiReady) throw new Error("API STEF Match Center indisponible pour le smoke test UI.");
 
-  const leagueResponse = await fetch("http://localhost:4174/api/agencies/058/league-configs", {
+  const leagueResponse = await fetch(`${apiBaseUrl}/api/agencies/058/league-configs`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
-      "x-access-code": "STEF-058",
+      "x-access-code": "LOCAL-058-DEV",
     },
     body: JSON.stringify({ configs: defaultLeagueConfigs }),
   });
@@ -49,11 +50,11 @@ export default async function globalSetup() {
     throw new Error(`Impossible de préparer les règles de ligue UI (${leagueResponse.status}).`);
   }
 
-  const response = await fetch("http://localhost:4174/api/agencies/058/time-range", {
+  const response = await fetch(`${apiBaseUrl}/api/agencies/058/time-range`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-access-code": "STEF-058",
+      "x-access-code": "LOCAL-058-DEV",
     },
     body: JSON.stringify({
       start: "13:00",

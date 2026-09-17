@@ -34,7 +34,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 18;
+export const KPI_DICTIONARY_VERSION = 19;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -127,7 +127,7 @@ export const KPI_DICTIONARY = [
     id: "score.passesHourly",
     label: "Passes réussies par heure",
     source: "X!FD:FG (source chart1)",
-    formula: "Reprise de X!FG par heure X!FF ; taux Excel EX / (EW + EX)",
+    formula: "Reprise de X!FG par heure X!FF ; contrôle de cohérence EX / (EW + EX) via le bloc horaire X!EV:EZ",
     denominator: "Lignes horaires présentes dans la table graphique Excel",
     display: "Courbe horaire % passes réussies",
   },
@@ -196,7 +196,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   const parsed = parseWorkbookSource(buffer);
   if (!parsed.ok) return parsed;
 
-  const { workbook, matrix, columnMap, isDerivedTemplate, rows, sourceValidation, missingColumns, rawWorkbook, rawMatrix } = parsed;
+  const { isDerivedTemplate, rows, sourceValidation, missingColumns, rawWorkbook } = parsed;
   // The cached Excel "Filtre heure" is not authoritative in the current
   // workbook: Feuille de match contains an error in the lookup that feeds it.
   // Always apply the selected clock window to the parsed start date instead.
@@ -859,72 +859,6 @@ function sheetEndRow(sheet, fallbackRow) {
   }
 }
 
-function buildLoadingQuality(workbook, matchRows, period, configuredTargetSeconds) {
-  const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.loadingSeconds);
-  const empty = {
-    targeted: 0,
-    offTarget: 0,
-    targetedPercent: null,
-    offTargetPercent: null,
-    targetTimePerPosition: formatDuration(targetSeconds),
-    averageTimePerPositionSeconds: null,
-    nonTargetedShots: [],
-  };
-  if (!workbook || !Array.isArray(matchRows)) return empty;
-  const loadingDetailsByTravel = readLoadingDetails(workbook);
-  const groups = new Map();
-  for (const row of matchRows) {
-    if (row.operationType !== "CHG" || !row.travelCode) continue;
-    if (!groups.has(row.travelCode)) groups.set(row.travelCode, []);
-    groups.get(row.travelCode).push(row);
-  }
-
-  const loadingRows = Array.from(groups.entries()).map(([travelCode, rows]) => {
-    const firstOperation = minDate(rows.map((row) => row.startedAt));
-    const lastOperation = maxDate(rows.map((row) => row.startedAt));
-    const elapsedSeconds = firstOperation && lastOperation
-      ? Math.max(0, Math.round((lastOperation.getTime() - firstOperation.getTime()) / 1000))
-      : 0;
-    const timePerPositionSeconds = rows.length > 0 ? elapsedSeconds / rows.length : 0;
-    return {
-      travelCode,
-      rows,
-      firstOperation,
-      positions: rows.length,
-      elapsedSeconds,
-      timePerPositionSeconds,
-      eligible: rows.length >= 15 && elapsedSeconds > 0,
-    };
-  }).filter((row) => row.eligible);
-
-  const targeted = loadingRows.filter((row) => row.timePerPositionSeconds <= targetSeconds).length;
-  const total = loadingRows.length;
-  const offTarget = Math.max(0, total - targeted);
-  const averageTimePerPositionSeconds = total > 0
-    ? Math.round(loadingRows.reduce((sum, row) => sum + row.timePerPositionSeconds, 0) / total)
-    : null;
-  const nonTargetedShots = loadingRows
-    .filter((row) => row.timePerPositionSeconds > targetSeconds)
-    .sort((left, right) => right.timePerPositionSeconds - left.timePerPositionSeconds || left.travelCode.localeCompare(right.travelCode, "fr"))
-    .slice(0, 14)
-    .map((row) => ({
-      travelCode: row.travelCode,
-      time: loadingDetailsByTravel.get(row.travelCode)?.time ?? formatDateClock(row.firstOperation),
-      positions: loadingDetailsByTravel.get(row.travelCode)?.positions ?? String(row.positions),
-      timePerPosition: loadingDetailsByTravel.get(row.travelCode)?.timePerPosition ?? formatDuration(row.timePerPositionSeconds),
-      where: loadingDetailsByTravel.get(row.travelCode)?.where ?? "",
-    }));
-  return {
-    targeted,
-    offTarget,
-    targetedPercent: total > 0 ? percent(targeted, total) : null,
-    offTargetPercent: total > 0 ? percent(offTarget, total) : null,
-    targetTimePerPosition: formatDuration(targetSeconds),
-    averageTimePerPositionSeconds,
-    nonTargetedShots,
-  };
-}
-
 function buildUnloadingDuelQuality(workbook, period, agencyCode) {
   const empty = { won: 0, lost: 0, wonPercent: null, lostPercent: null, duels: [], lostDuels: [] };
   const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "tcd ppt");
@@ -955,7 +889,6 @@ function buildUnloadingDuelQuality(workbook, period, agencyCode) {
   const travelColumn = findColumn((value) => value === "code voyage");
   const wonColumn = findColumn((value) => value === "duels gagnes");
   const totalColumn = findColumn((value) => value === "duels");
-  const lostColumn = findColumn((value) => value === "duels perdus");
   const positionsColumn = findColumn((value) => value === "nombre de n position");
   const endColumn = findColumn((value) => value.startsWith("max de date heure de debut d operation"));
   const startColumn = findColumn((value) => value.startsWith("min de date heure de debut d operation"));
@@ -1080,7 +1013,12 @@ function buildYellowCards(workbook, period) {
       };
     })
     .filter((card) => card.playerName && (period.useExcelPeriod || isClockSecondsInPeriod(card.clockSeconds, period)))
-    .map(({ clockSeconds, ...card }) => card);
+    .map((card) => ({
+      playerName: card.playerName,
+      time: card.time,
+      reason: card.reason,
+      travelCode: card.travelCode,
+    }));
 }
 
 function readLoadingDetails(workbook) {
@@ -1686,7 +1624,7 @@ function parseExcelDate(value) {
   const text = String(value).trim();
   // Do not let the runtime interpret a French date such as 11/09/2026 as
   // November 9. Treat the wall clock as Europe/Paris, like Excel serials.
-  const frenchMatch = text.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2,4})(?:[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i);
+  const frenchMatch = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})(?:[\sT]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?$/i);
   if (frenchMatch) {
     const [, day, month, year, rawHour = "0", rawMinute = "0", rawSecond = "0", meridiem] = frenchMatch;
     const fullYear = Number(year) < 100 ? 2000 + Number(year) : Number(year);
@@ -1853,11 +1791,17 @@ function polyvalenceScore(byType, topByType) {
   if (activeTypes < 2) return 0;
 
   const normalizedScores = [
-    (byType.CHG ?? 0) / topByType.CHG,
-    (byType.ZONAGE ?? 0) / topByType.ZONAGE,
-    (byType.DECHG ?? 0) / topByType.DECHG,
+    normalizedVolume(byType.CHG, topByType.CHG),
+    normalizedVolume(byType.ZONAGE, topByType.ZONAGE),
+    normalizedVolume(byType.DECHG, topByType.DECHG),
   ];
   return Math.round(clamp(normalizedScores.reduce((sum, score) => sum + score, 0) / 3, 0, 1) * 100);
+}
+
+function normalizedVolume(value, topValue) {
+  const volume = Number(value) || 0;
+  const top = Number(topValue) || 0;
+  return top > 0 ? volume / top : 0;
 }
 
 function buildHourlyPassPerformance(workbook, period) {
@@ -1866,13 +1810,13 @@ function buildHourlyPassPerformance(workbook, period) {
   const sheet = sheetName ? workbook.Sheets[sheetName] : null;
   if (!sheet) return empty;
 
-  // The Excel curve is chart1.xml: categories X!FD:FF and values X!FG.
-  // Keep the chart's valid rows, but calculate each displayed rate from the
-  // row counters EW/EX so cached chart values cannot shift between hours.
-  const header = Object.entries(sheet).find(([address, cell]) => !address.startsWith("!") && normalizeKey(cell?.v) === "somme de passes reussies");
-  if (!header) return empty;
-  const headerCell = XLSX.utils.decode_cell(header[0]);
-  const headerRow = headerCell.r;
+  // Excel's chart1 source is X!FD:FG. The chart block can be reordered
+  // independently from the hourly summary block, so match both blocks by
+  // hour instead of assuming that equal row numbers mean equal hours.
+  const chartHeader = Object.entries(sheet).find(([address, cell]) => !address.startsWith("!") && normalizeKey(cell?.v) === "somme de passes reussies");
+  if (!chartHeader) return empty;
+  const chartHeaderCell = XLSX.utils.decode_cell(chartHeader[0]);
+  const headerRow = chartHeaderCell.r;
   const findHeaderColumn = (value) => {
     for (let col = 0; col < XLSX.utils.decode_range(sheet["!ref"] ?? "A1:A1").e.c + 1; col += 1) {
       const cell = sheet[XLSX.utils.encode_cell({ r: headerRow, c: col })];
@@ -1880,34 +1824,53 @@ function buildHourlyPassPerformance(workbook, period) {
     }
     return undefined;
   };
-  const hourColumn = findHeaderColumn("heure op");
-  const rateColumn = headerCell.c;
-  if (hourColumn === undefined) return empty;
+  const hourColumns = [];
+  for (let col = 0; col <= XLSX.utils.decode_range(sheet["!ref"] ?? "A1:A1").e.c; col += 1) {
+    const cell = sheet[XLSX.utils.encode_cell({ r: headerRow, c: col })];
+    if (normalizeKey(cell?.v) === "heure op") hourColumns.push(col);
+  }
+  const chartHourColumn = Math.max(...hourColumns.filter((col) => col < chartHeaderCell.c), -1);
+  const summaryHourColumn = Math.max(...hourColumns.filter((col) => col < chartHourColumn), -1);
+  const summaryRateColumn = findHeaderColumn("passes reussies");
+  if (chartHourColumn < 0 || summaryHourColumn < 0 || summaryRateColumn === undefined) return empty;
 
-  // In the chart's source table, EW is the denominator's lost count and EX
-  // is the won count immediately before the EZ/FG rate columns.
-  const lostColumn = rateColumn - 10;
-  const wonColumn = rateColumn - 9;
-  const values = [];
   const lastRow = sheetEndRow(sheet, headerRow + 1);
+  const summaryByHour = new Map();
   for (let row = headerRow + 1; row <= lastRow; row += 1) {
-    const hour = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: hourColumn })]?.v);
-    const chartRateFraction = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: rateColumn })]?.v);
-    if (!Number.isFinite(hour) || !Number.isFinite(chartRateFraction) || chartRateFraction < 0 || chartRateFraction > 1) continue;
+    const hour = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: summaryHourColumn })]?.v);
+    if (!Number.isFinite(hour)) continue;
+    // The summary block is EW/EX/EY/EZ: EY is a control marker between the
+    // two counters and the percentage column.
+    const lost = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: summaryRateColumn - 3 })]?.v);
+    const won = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: summaryRateColumn - 2 })]?.v);
+    const total = Number.isFinite(lost) && Number.isFinite(won) ? lost + won : null;
+    const summaryRate = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: summaryRateColumn })]?.v);
+    summaryByHour.set(hour, {
+      won: Number.isFinite(won) ? won : null,
+      total: Number.isFinite(total) && total > 0 ? total : null,
+      rate: Number.isFinite(summaryRate) && summaryRate >= 0 && summaryRate <= 1 ? summaryRate : null,
+    });
+  }
+
+  const values = [];
+  for (let row = headerRow + 1; row <= lastRow; row += 1) {
+    const hour = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: chartHourColumn })]?.v);
+    const chartRateFraction = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: chartHeaderCell.c })]?.v);
+    const summary = summaryByHour.get(hour);
+    const rateFraction = Number.isFinite(chartRateFraction) && chartRateFraction >= 0 && chartRateFraction <= 1
+      ? chartRateFraction
+      : summary?.rate;
+    if (!Number.isFinite(hour) || !Number.isFinite(rateFraction)) continue;
     const hourMinutes = hour * 60;
     const inRange = period.isOvernight || period.endMinutes < period.startMinutes
       ? hourMinutes >= period.startMinutes || hourMinutes <= period.endMinutes
       : hourMinutes >= period.startMinutes && hourMinutes <= period.endMinutes;
     if (!inRange) continue;
-    const lost = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: lostColumn })]?.v);
-    const won = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: wonColumn })]?.v);
-    const total = Number.isFinite(lost) && Number.isFinite(won) ? lost + won : null;
-    const rateFraction = Number.isFinite(total) && total > 0 ? won / total : chartRateFraction;
     values.push({
       label: `${String(hour).padStart(2, "0")}h`,
       hour,
-      won: Number.isFinite(won) ? won : null,
-      total: Number.isFinite(total) && total > 0 ? total : null,
+      won: summary?.won ?? null,
+      total: summary?.total ?? null,
       rate: Math.round(rateFraction * 1000) / 10,
     });
   }
@@ -1926,16 +1889,6 @@ function buildHourlyPassPerformance(workbook, period) {
   };
 }
 
-function parisHour(date) {
-  if (!date) return null;
-  if (Number.isFinite(date.__parisMinutes)) return Math.floor(date.__parisMinutes / 60);
-  const value = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", hour12: false })
-    .formatToParts(date)
-    .find((part) => part.type === "hour")?.value;
-  const hour = Number(value);
-  return Number.isFinite(hour) ? (hour === 24 ? 0 : hour) : null;
-}
-
 function statusFromScore(score) {
   if (score >= 85) return "MAÎTRISÉ";
   if (score >= 70) return "À SURVEILLER";
@@ -1947,15 +1900,6 @@ function statusFromOperationalScore(operationalScore) {
   if ((operationalScore.goalsFor ?? 0) > (operationalScore.goalsAgainst ?? 0)) return "MAÎTRISÉ";
   if (operationalScore.goalsFor === operationalScore.goalsAgainst) return "À SURVEILLER";
   return "ACTION NÉCESSAIRE";
-}
-
-function formatRange(start, end) {
-  if (!start || !end) return "Plage non disponible";
-  return `${formatTime(start)} - ${formatTime(end)}`;
-}
-
-function formatTime(date) {
-  return date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Paris" });
 }
 
 function userError(title, message) {

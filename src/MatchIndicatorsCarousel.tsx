@@ -45,7 +45,6 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     { id: "destination", label: "Ponctualité destination", value: metric(punctuality?.destinationPunctuality, "%"), detail: pdfMetricDetail("destinationPunctuality"), icon: Flag, accent: "#a4d5c8", percent: punctuality?.destinationPunctuality, targetKey: "destinationPunctuality" },
     { id: "temperature", label: "Température retour ramasse", value: metric(punctuality?.temperatureReturn, "%"), detail: pdfMetricDetail("temperatureReturn"), icon: Thermometer, accent: "#dcc0d7", percent: punctuality?.temperatureReturn, targetKey: "temperatureReturn" },
   ];
-
   useEffect(() => {
     const viewport = viewportRef.current;
     const track = trackRef.current;
@@ -102,6 +101,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      if (event.target instanceof Element && event.target.closest(".mercato-kpi-viewport")) return;
       event.preventDefault();
       const maxFirst = Math.max(0, slides.length - geometry.current.centers);
       const current = geometry.current.first;
@@ -159,10 +159,10 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       clearTimeout(settleTimer);
       settleRef.current = () => {};
     };
-  }, []);
+  }, [cards.length]);
 
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    if (event.pointerType !== "mouse" || event.button !== 0 || (event.target as Element).closest(".mercato-kpi-viewport")) return;
     manualScroll.current = true;
     drag.current = { id: event.pointerId, x: event.clientX, scroll: event.currentTarget.scrollLeft, moved: false };
   };
@@ -184,7 +184,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     if (moved) goRef.current(Math.round(event.currentTarget.scrollLeft / geometry.current.pitch));
   };
-  const last = cards.length - position.centers;
+  const last = Math.max(0, cards.length - position.centers);
   return (
     <section className="match-indicators" aria-label="Indicateurs du match" aria-roledescription="carrousel">
       <header className="match-indicators-heading">
@@ -197,15 +197,15 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       </header>
       <div ref={viewportRef} className="match-indicators-viewport" tabIndex={0} role="group" aria-label="Défilement des indicateurs du match"
         onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
-        onTouchStart={() => { manualScroll.current = true; touching.current = true; }}
-        onTouchEnd={(event) => { touching.current = event.touches.length > 0; settleRef.current(); }}
-        onTouchCancel={() => { touching.current = false; settleRef.current(); }}
+        onTouchStart={(event) => { if (event.target instanceof Element && event.target.closest(".mercato-kpi-viewport")) return; manualScroll.current = true; touching.current = true; }}
+        onTouchEnd={(event) => { if (event.target instanceof Element && event.target.closest(".mercato-kpi-viewport")) return; touching.current = event.touches.length > 0; settleRef.current(); }}
+        onTouchCancel={(event) => { if (event.target instanceof Element && event.target.closest(".mercato-kpi-viewport")) return; touching.current = false; settleRef.current(); }}
         onPointerLeave={() => { if (!drag.current?.moved) drag.current = null; }}
         >
         <div className="match-indicators-track" ref={trackRef}>
           {cards.map(({ id, label, value, detail, icon: Icon, accent, percent, targetKey }, index) => (
             <div className="match-indicator-slide" key={id} data-indicator={id} data-featured={index >= position.first && index < position.first + position.centers ? "" : undefined} role="group" aria-roledescription="diapositive" aria-label={`${label}, ${index + 1} sur ${cards.length}`}>
-              <article className={`match-indicator-card ${id === "performance" ? "is-performance" : ""} ${typeof percent === "number" ? (percent >= (targetKey ? punctualityTargets?.[targetKey] ?? 100 : 100) ? "is-at-target" : "is-below-target") : ""}`} style={{ "--indicator-accent": accent } as CSSProperties}>
+              <article className={`match-indicator-card ${id === "performance" ? "is-performance" : ""} ${typeof percent === "number" ? (percent > (targetKey ? punctualityTargets?.[targetKey] ?? 100 : 100) ? "is-at-target" : "is-below-target") : ""}`} style={{ "--indicator-accent": accent } as CSSProperties}>
                 <div className="match-indicator-title"><Icon size={21} /><h3>{label}</h3></div>
                 <div className="match-indicator-body">
                   <strong className={`match-indicator-value ${value === null ? "is-empty" : ""}`}>{value ?? (id === "injuries" ? "À renseigner" : pdf ? "Indisponible" : "PDF à importer")}</strong>

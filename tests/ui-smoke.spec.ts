@@ -1,4 +1,5 @@
 import { expect, Page, test } from "@playwright/test";
+import type { Snapshot } from "../src/types";
 
 const screens = [
   { name: "01-coup-envoi", button: "01 Coup d'envoi", marker: "01 - Coup d'envoi" },
@@ -13,7 +14,7 @@ test.afterEach(async ({ page }, testInfo) => {
   const response = await page.evaluate(async () => {
     const result = await fetch("/api/agencies/058/league-configs", {
       method: "PUT",
-      headers: { "Content-Type": "application/json", "x-access-code": "STEF-058" },
+      headers: { "Content-Type": "application/json", "x-access-code": "LOCAL-058-DEV" },
       body: JSON.stringify({ configs: [
         { id: "bronze", zonageMinutes: 45, loadingSeconds: 195, unloadingSeconds: 75, scoreTargetPercent: 45 },
         { id: "argent", zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 },
@@ -29,6 +30,26 @@ test.afterEach(async ({ page }, testInfo) => {
 test("les vues principales restent lisibles sur desktop, tablette et mobile", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
   let savedCauseriePlan: Record<string, unknown> | null = null;
+  let stripMercatoProfilesOnNextSave = false;
+  const consoleErrors: string[] = [];
+  const reactWarnings: string[] = [];
+  const pageErrors: string[] = [];
+  const mercatoNetworkErrors: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+    if (message.type() === "warning" && /react|each child|unique.*key|hydration/i.test(message.text())) reactWarnings.push(message.text());
+  });
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("requestfailed", (request) => {
+    if (/\/api\/agencies\/058\/causerie|\/assets\/mercato-player-/.test(request.url())) {
+      mercatoNetworkErrors.push(`${request.url()}: ${request.failure()?.errorText ?? "requête échouée"}`);
+    }
+  });
+  page.on("response", (response) => {
+    if (/\/api\/agencies\/058\/causerie|\/assets\/mercato-player-/.test(response.url()) && !response.ok()) {
+      mercatoNetworkErrors.push(`${response.status()} ${response.url()}`);
+    }
+  });
   await page.route("**/api/agencies/058/snapshot**", async (route) => {
     const response = await route.fetch();
     const body = await response.json();
@@ -48,11 +69,16 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       return;
     }
     const body = route.request().postDataJSON() as { plan?: Record<string, unknown> };
-    savedCauseriePlan = body.plan ?? null;
+    const requestPlan = body.plan ?? null;
+    const responsePlan = stripMercatoProfilesOnNextSave && requestPlan
+      ? { ...requestPlan, mercatoProfiles: {} }
+      : requestPlan;
+    stripMercatoProfilesOnNextSave = false;
+    savedCauseriePlan = responsePlan;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ message: "PLAN DE JEU TEST", plan: body.plan }),
+      body: JSON.stringify({ message: "PLAN DE JEU TEST", plan: responsePlan }),
     });
   });
   await page.addInitScript(() => {
@@ -60,7 +86,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
   });
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("058");
-  await page.getByLabel("Code d'accès").fill("STEF-058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await expect(page.getByRole("heading", { name: "Agen - 058", exact: true })).toBeVisible();
 
@@ -79,6 +105,31 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.getByRole("heading", { name: screen.heading, exact: true })).toBeVisible();
     } else {
       await expect(page.getByRole("main").getByText(screen.marker, { exact: true })).toBeVisible();
+    }
+    if (screen.name === "01-coup-envoi") {
+      const playButton = page.getByRole("button", { name: "Écouter la musique sur YouTube", exact: true });
+      await expect(playButton).toHaveAttribute("aria-expanded", "false");
+      await playButton.click();
+      const player = page.locator(".kickoff-music-player iframe");
+      await expect(player).toBeVisible();
+      await expect(player).toHaveAttribute("src", /youtube-nocookie\.com\/embed\/ttjGFkand7s/);
+      const playerSize = await player.evaluate((iframe) => {
+        const { width, height } = iframe.getBoundingClientRect();
+        return { width, height };
+      });
+      expect(playerSize.width).toBeGreaterThanOrEqual(200);
+      expect(playerSize.height).toBeGreaterThanOrEqual(200);
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.getByRole("main").getByText("02 - Feuille de match", { exact: true })).toBeVisible();
+      await expect(player).toBeVisible();
+    }
+    if (screen.name === "02-feuille-match") {
+      const player = page.locator(".kickoff-music-player iframe");
+      await expect(player).toBeVisible();
+      const closeButton = page.getByRole("button", { name: "Fermer le lecteur YouTube", exact: true });
+      await expect(closeButton).toHaveAttribute("aria-expanded", "true");
+      await closeButton.click();
+      await expect(player).toHaveCount(0);
     }
     if (screen.name === "03-composition") {
       const compositionViewport = await page.evaluate(() => {
@@ -112,23 +163,43 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.getByText("À planifier", { exact: true })).toHaveCount(1);
       await page.getByRole("button", { name: "Écrire", exact: true }).click();
       await expect(page.locator(".coach-action-input textarea")).toHaveCount(3);
+      await expect(page.getByLabel("Nouvel arrivant du mercato")).toHaveCount(0);
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
       await expect(page.getByLabel("Nouvel arrivant du mercato")).toBeVisible();
       await expect(page.getByLabel("Priorité terrain, consigne du chef de quai")).toBeVisible();
       await page.getByLabel("Priorité terrain, consigne du chef de quai").fill("Sécuriser les positions prioritaires.");
       await page.getByLabel("Zone à surveiller, consigne du chef de quai").fill("Suivre le voyage critique.");
       await page.getByLabel("Équilibre d'équipe, consigne du chef de quai").fill("Renforcer la ligne en tension.");
       await page.getByLabel("Nouvel arrivant du mercato").fill("Accueillir Camille Martin, nouveau renfort de l'équipe.");
+      await expect(page.getByRole("button", { name: "Femme pour Camille Martin" })).toHaveAttribute("aria-pressed", "false");
+      await page.getByRole("button", { name: "Femme pour Camille Martin" }).click();
+      await expect(page.getByRole("button", { name: "Femme pour Camille Martin" })).toHaveAttribute("aria-pressed", "true");
+      await page.getByRole("button", { name: "Femme pour Camille Martin" }).click();
+      await expect(page.getByRole("button", { name: "Femme pour Camille Martin" })).toHaveAttribute("aria-pressed", "true");
+      expect(savedCauseriePlan).toBeNull();
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await expect.poll(() => savedCauseriePlan?.mercatoProfiles).toEqual({ "camille martin": "female" });
+      await expect(page.getByRole("status")).toContainText("Mercato enregistré");
       await page.getByLabel("Prochaine revue du plan").fill("18:30");
       await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
       await expect(page.locator(".coach-action-entry").nth(0)).toHaveText("Sécuriser les positions prioritaires.");
       await expect(page.locator(".coach-action-entry").nth(1)).toHaveText("Suivre le voyage critique.");
       await expect(page.locator(".coach-action-entry").nth(2)).toHaveText("Renforcer la ligne en tension.");
       await expect(page.locator(".coach-mercato-entry")).toHaveText("Accueillir Camille Martin, nouveau renfort de l'équipe.");
+      expect(savedCauseriePlan?.mercatoProfiles).toEqual({ "camille martin": "female" });
       await expect(page.locator(".coach-review-line strong")).toHaveText("18:30");
       await page.getByRole("button", { name: "Saisir", exact: true }).click();
       await page.getByLabel("Cartons rouges manuels").fill("Camille Martin · 18:42 · règle SST");
       await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
       await expect(page.locator(".coach-red-list")).toContainText("Camille Martin · 18:42 · règle SST");
+      const coachFieldsBeforeProfileUpdate = {
+        attack: savedCauseriePlan?.attack,
+        midfield: savedCauseriePlan?.midfield,
+        defense: savedCauseriePlan?.defense,
+        attachments: savedCauseriePlan?.attachments,
+        coach: savedCauseriePlan?.coach,
+        redCards: savedCauseriePlan?.redCards,
+      };
       const coachLayout = await page.evaluate(() => {
         const pageElement = document.querySelector<HTMLElement>(".coach-decision-page");
         const contextRows = Array.from(document.querySelectorAll<HTMLElement>(".coach-context-list div"));
@@ -144,8 +215,305 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.getByLabel("Nouvel arrivant du mercato")).toHaveCount(0);
       await expect(page.locator(".coach-mercato-entry")).toHaveText("Accueillir Camille Martin, nouveau renfort de l'équipe.");
       await expect(page.locator(".coach-red-list")).toContainText("Camille Martin · 18:42 · règle SST");
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await expect(page.getByRole("button", { name: "Femme pour Camille Martin" })).toHaveAttribute("aria-pressed", "true");
+      await page.getByRole("button", { name: "Homme pour Camille Martin" }).click();
+      await expect(page.getByRole("button", { name: "Homme pour Camille Martin" })).toHaveAttribute("aria-pressed", "true");
+      await page.getByRole("button", { name: "Annuler la modification du Mercato" }).click();
+      expect(savedCauseriePlan?.mercatoProfiles).toEqual({ "camille martin": "female" });
+
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-carousel-section")).toHaveCount(1);
+      await expect(page.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(8);
+      await expect(page.locator(".match-indicators-track > .match-indicator-slide").first()).toHaveAttribute("data-indicator", "performance");
+      await expect(page.locator(".match-indicators-navigation > span")).toHaveText(/\/ 8$/);
+      await expect(page.locator(".mercato-kpi-slide")).toHaveCount(1);
+      await expect(page.locator(".mercato-kpi-subtitle")).toHaveText("Nouveau joueur");
+      await expect(page.locator(".mercato-kpi-navigation")).toHaveCount(0);
+      await expect(page.locator(".mercato-kpi-flocage-index")).toHaveCount(0);
+      await expect(page.locator(".mercato-kpi-flocage")).toHaveText("CAMILLE MARTIN");
+      await expect(page.locator(".mercato-kpi-flocage")).toHaveAttribute("aria-label", "Flocage : Camille Martin");
+      await expect(page.locator(".mercato-kpi-photo")).toHaveAttribute("data-profile", "female");
+      await expect(page.locator(".mercato-kpi-photo")).toHaveAttribute("src", "/assets/mercato-player-female.jpg");
+      await expect(page.locator(".mercato-kpi-slide")).not.toContainText("Accueillir Camille Martin");
+      await expect.poll(() => page.locator(".mercato-kpi-photo").evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+      const outerCounter = page.locator(".match-indicators-navigation > span");
+      const outerCounterBefore = await outerCounter.innerText();
+      await page.getByRole("button", { name: "Indicateurs suivants" }).click();
+      await expect(outerCounter).not.toHaveText(outerCounterBefore);
+      await expect(page.locator(".mercato-carousel-section")).toBeVisible();
+      await page.locator(".mercato-carousel-section .match-indicator-card").screenshot({ path: testInfo.outputPath("mercato-un-joueur.png"), animations: "disabled" });
+
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByRole("button", { name: "Homme pour Camille Martin" }).click();
+      stripMercatoProfilesOnNextSave = true;
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await expect(page.locator(".coach-mercato-profile-feedback")).toContainText("Le serveur n'a pas conservé les choix Femme/Homme");
+      expect(savedCauseriePlan?.mercatoProfiles).toEqual({});
+      await expect(page.getByRole("button", { name: "Homme pour Camille Martin" })).toHaveAttribute("aria-pressed", "true");
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await expect.poll(() => savedCauseriePlan?.mercatoProfiles).toEqual({ "camille martin": "male" });
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-photo")).toHaveAttribute("data-profile", "male");
+      await expect(page.locator(".mercato-kpi-photo")).toHaveAttribute("src", "/assets/mercato-player-male.jpg");
+      await page.reload();
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-photo")).toHaveAttribute("data-profile", "male");
+      await expect(page.locator(".mercato-kpi-photo")).toHaveAttribute("src", "/assets/mercato-player-male.jpg");
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByRole("button", { name: "Femme pour Camille Martin" }).click();
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await expect.poll(() => savedCauseriePlan?.mercatoProfiles).toEqual({ "camille martin": "female" });
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-photo")).toHaveAttribute("data-profile", "female");
+      await expect(page.locator(".mercato-kpi-photo")).toHaveAttribute("src", "/assets/mercato-player-female.jpg");
+
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByLabel("Nouvel arrivant du mercato").fill("Accueillir Camille Martin, nouveau renfort de l'équipe.\nAccueillir Julien Thomas, nouveau joueur de l'équipe.");
+      await expect(page.getByRole("button", { name: "Femme pour Camille Martin" })).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByRole("button", { name: "Homme pour Julien Thomas" })).toHaveAttribute("aria-pressed", "false");
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await expect(page.locator(".coach-mercato-profile-feedback")).toContainText("1 profil à choisir");
+      expect(savedCauseriePlan?.mercato).toBe("Accueillir Camille Martin, nouveau renfort de l'équipe.");
+      await page.getByRole("button", { name: "Homme pour Julien Thomas" }).click();
+      await expect(page.getByRole("button", { name: "Homme pour Julien Thomas" })).toHaveAttribute("aria-pressed", "true");
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-slide")).toHaveCount(2);
+      await expect(page.locator(".mercato-kpi-subtitle")).toHaveText(["Nouveaux joueurs", "Nouveaux joueurs"]);
+      await expect(page.locator(".mercato-kpi-navigation button")).toHaveCount(2);
+      await page.locator(".mercato-kpi-viewport").focus();
+      const outerPositionBeforeKeyboard = await page.locator(".match-indicators-viewport").evaluate((element: HTMLElement) => element.scrollLeft);
+      await page.keyboard.press("ArrowRight");
+      await expect(page.locator(".mercato-kpi-navigation > span")).toHaveText("2 / 2");
+      await page.keyboard.press("ArrowLeft");
+      await expect(page.locator(".mercato-kpi-navigation > span")).toHaveText("1 / 2");
+      const outerPositionAfterKeyboard = await page.locator(".match-indicators-viewport").evaluate((element: HTMLElement) => element.scrollLeft);
+      expect(Math.abs(outerPositionAfterKeyboard - outerPositionBeforeKeyboard)).toBeLessThanOrEqual(2);
+      await expect(page.locator(".mercato-kpi-photo").nth(0)).toHaveAttribute("data-profile", "female");
+      await expect(page.locator(".mercato-kpi-photo").nth(0)).toHaveAttribute("src", "/assets/mercato-player-female.jpg");
+      await page.getByRole("button", { name: "Joueur suivant dans le Mercato", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-navigation > span")).toHaveText("2 / 2");
+      await expect(page.locator(".mercato-kpi-slide").nth(1)).toHaveAttribute("aria-hidden", "false");
+      await expect(page.locator(".mercato-kpi-photo").nth(1)).toHaveAttribute("data-profile", "male");
+      await expect(page.locator(".mercato-kpi-photo").nth(1)).toHaveAttribute("src", "/assets/mercato-player-male.jpg");
+      await expect.poll(() => page.locator(".mercato-kpi-photo").nth(1).evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByRole("button", { name: "Homme pour Camille Martin" }).click();
+      await page.getByRole("button", { name: "Homme pour Julien Thomas" }).click();
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await expect.poll(() => savedCauseriePlan?.mercatoProfiles).toEqual({ "camille martin": "male", "julien thomas": "male" });
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-photo").evaluateAll((images) => images.map((image) => image.getAttribute("data-profile")))).resolves.toEqual(["male", "male"]);
+      await expect(page.locator(".mercato-kpi-photo").evaluateAll((images) => images.map((image) => new URL((image as HTMLImageElement).src).pathname))).resolves.toEqual(["/assets/mercato-player-male.jpg", "/assets/mercato-player-male.jpg"]);
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByRole("button", { name: "Femme pour Camille Martin" }).click();
+      await page.getByRole("button", { name: "Femme pour Julien Thomas" }).click();
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await expect.poll(() => savedCauseriePlan?.mercatoProfiles).toEqual({ "camille martin": "female", "julien thomas": "female" });
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-photo").evaluateAll((images) => images.map((image) => image.getAttribute("data-profile")))).resolves.toEqual(["female", "female"]);
+      await expect(page.locator(".mercato-kpi-photo").evaluateAll((images) => images.map((image) => new URL((image as HTMLImageElement).src).pathname))).resolves.toEqual(["/assets/mercato-player-female.jpg", "/assets/mercato-player-female.jpg"]);
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByRole("button", { name: "Femme pour Camille Martin" }).click();
+      await page.getByRole("button", { name: "Homme pour Julien Thomas" }).click();
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await expect.poll(() => savedCauseriePlan?.mercatoProfiles).toEqual({ "camille martin": "female", "julien thomas": "male" });
+      expect(savedCauseriePlan?.mercatoProfiles).toEqual({ "camille martin": "female", "julien thomas": "male" });
+      expect(savedCauseriePlan?.redCards).toBe("Camille Martin · 18:42 · règle SST");
+      expect(savedCauseriePlan?.coach).toEqual(expect.objectContaining({ tactic: expect.any(String) }));
+
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await page.getByRole("button", { name: "Joueur suivant dans le Mercato", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-photo").nth(1)).toHaveAttribute("data-profile", "male");
+      await expect(page.locator(".mercato-kpi-photo").nth(1)).toHaveAttribute("src", "/assets/mercato-player-male.jpg");
+      await expect.poll(() => page.locator(".mercato-kpi-photo").nth(1).evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+      expect(savedCauseriePlan).toEqual(expect.objectContaining(coachFieldsBeforeProfileUpdate));
+      await page.waitForFunction(() => {
+        const viewport = document.querySelector<HTMLElement>(".mercato-kpi-viewport");
+        return Boolean(viewport && viewport.scrollLeft >= viewport.clientWidth - 2);
+      });
+      const mercatoLayout = await page.evaluate(() => ({
+        noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
+        cardContained: (() => {
+          const card = document.querySelector<HTMLElement>(".mercato-carousel-section .match-indicator-card");
+          return Boolean(card && card.scrollWidth <= card.clientWidth + 1 && card.scrollHeight <= card.clientHeight + 1);
+        })(),
+      }));
+      expect(mercatoLayout).toEqual({ noHorizontalOverflow: true, cardContained: true });
+      await page.locator(".mercato-carousel-section .match-indicator-card").screenshot({ path: testInfo.outputPath("mercato-plusieurs-joueurs.png"), animations: "disabled" });
+
+      savedCauseriePlan = { ...savedCauseriePlan!, mercatoProfiles: {} };
+      await page.reload();
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-profile-needed")).toHaveCount(2);
+      await expect(page.locator(".mercato-kpi-photo, .mercato-kpi-flocage")).toHaveCount(0);
+      await expect(page.getByText("Choisir Femme ou Homme dans Coach pour afficher la photo.", { exact: true })).toHaveCount(2);
+
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await expect(page.locator(".coach-mercato-profile-feedback")).toContainText("Camille Martin, Julien Thomas");
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByLabel("Nouvel arrivant du mercato").fill("Jean Dupont et Marie Martin rejoignent l'équipe.");
+      await page.getByRole("button", { name: "Homme pour Jean Dupont" }).click();
+      await page.getByRole("button", { name: "Femme pour Marie Martin" }).click();
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-slide")).toHaveCount(2);
+      await expect(page.locator(".mercato-kpi-flocage").allTextContents()).resolves.toEqual(["JEAN DUPONT", "MARIE MARTIN"]);
+      await expect(page.locator(".mercato-carousel-section h3")).toHaveCount(0);
+
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByLabel("Nouvel arrivant du mercato").fill("Jean Dupont, Marie Martin, Alex Renaud\nJean Dupont");
+      await page.getByRole("button", { name: "Homme pour Jean Dupont" }).click();
+      await page.getByRole("button", { name: "Femme pour Marie Martin" }).click();
+      await page.getByRole("button", { name: "Homme pour Alex Renaud" }).click();
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-slide")).toHaveCount(3);
+      await expect(page.locator(".mercato-kpi-subtitle")).toHaveText(["Nouveaux joueurs", "Nouveaux joueurs", "Nouveaux joueurs"]);
+      await expect(page.locator(".mercato-kpi-flocage").allTextContents()).resolves.toEqual(["JEAN DUPONT", "MARIE MARTIN", "ALEX RENAUD"]);
+      await page.getByRole("button", { name: "Joueur suivant dans le Mercato", exact: true }).click();
+      await page.getByRole("button", { name: "Joueur suivant dans le Mercato", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-navigation > span")).toHaveText("3 / 3");
+      await expect(page.locator(".mercato-kpi-slide").nth(2)).toHaveAttribute("aria-hidden", "false");
+
+      const longNames = "Jean-Baptiste Martin, Marie-Anne O'Connor, Alexandre Jean-Pierre de la Fontaine";
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByLabel("Nouvel arrivant du mercato").fill(longNames);
+      await page.getByRole("button", { name: "Homme pour Jean-Baptiste Martin" }).click();
+      await page.getByRole("button", { name: "Femme pour Marie-Anne O'Connor" }).click();
+      await page.getByRole("button", { name: "Homme pour Alexandre Jean-Pierre de la Fontaine" }).click();
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-slide")).toHaveCount(3);
+      await expect(page.locator(".mercato-kpi-flocage").allTextContents()).resolves.toEqual([
+        "JEAN-BAPTISTE MARTIN",
+        "MARIE-ANNE O'CONNOR",
+        "ALEXANDRE JEAN-PIERRE DE LA FONTAINE",
+      ]);
+      const flocageFontSizes = await page.locator(".mercato-kpi-flocage > text").evaluateAll((nodes) => nodes.map((node) => Number(node.getAttribute("font-size"))));
+      expect(flocageFontSizes.every((size) => Number.isFinite(size) && size >= 6)).toBe(true);
+      expect(flocageFontSizes[2]).toBeLessThan(flocageFontSizes[0]);
+      const longNameLayout = await page.locator(".mercato-carousel-section .match-indicator-card").evaluateAll((cards) => cards.every((card) => {
+        const element = card as HTMLElement;
+        return element.scrollWidth <= element.clientWidth + 1 && element.scrollHeight <= element.clientHeight + 1;
+      }));
+      expect(longNameLayout).toBe(true);
+
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByLabel("Nouvel arrivant du mercato").fill("Zoé Martin");
+      await page.getByRole("button", { name: "Femme pour Zoé Martin" }).click();
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-slide")).toHaveCount(1);
+      await expect(page.locator(".mercato-kpi-flocage")).toHaveText("ZOÉ MARTIN");
+      await expect(page.locator(".mercato-kpi-navigation")).toHaveCount(0);
+
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByLabel("Nouvel arrivant du mercato").fill("Zoé Durand");
+      await page.getByRole("button", { name: "Femme pour Zoé Durand" }).click();
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-flocage")).toHaveText("ZOÉ DURAND");
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByLabel("Nouvel arrivant du mercato").fill("Emma Durand");
+      await page.getByRole("button", { name: "Femme pour Emma Durand" }).click();
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-flocage")).toHaveText("EMMA DURAND");
+
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByLabel("Nouvel arrivant du mercato").fill("");
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-carousel-section")).toHaveCount(0);
+      await expect(page.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(8);
+      await expect(page.locator(".match-kpi-wrap")).toBeVisible();
+
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Écrire le Mercato" }).click();
+      await page.getByLabel("Nouvel arrivant du mercato").fill("Manon Petit\nSamuel Leclerc");
+      await page.getByRole("button", { name: "Femme pour Manon Petit" }).click();
+      await page.getByRole("button", { name: "Homme pour Samuel Leclerc" }).click();
+      await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-slide")).toHaveCount(2);
+      await page.reload();
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".mercato-kpi-slide")).toHaveCount(2);
+      await expect(page.locator(".mercato-kpi-flocage").allTextContents()).resolves.toEqual(["MANON PETIT", "SAMUEL LECLERC"]);
+      await expect(page.locator(".mercato-kpi-photo").evaluateAll((images) => images.map((image) => image.getAttribute("data-profile")))).resolves.toEqual(["female", "male"]);
+
+      if (testInfo.project.name === "mobile") {
+        await page.locator(".mercato-kpi-viewport").scrollIntoViewIfNeeded();
+        const outerScrollBefore = await page.locator(".match-indicators-viewport").evaluate((element: HTMLElement) => element.scrollLeft);
+        const bounds = await page.locator(".mercato-kpi-viewport").boundingBox();
+        expect(bounds).not.toBeNull();
+        const client = await page.context().newCDPSession(page);
+        const startX = Math.round(bounds!.x + bounds!.width * 0.86);
+        const endX = Math.round(bounds!.x + bounds!.width * 0.14);
+        const y = Math.round(bounds!.y + bounds!.height * 0.5);
+        await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ id: 1, x: startX, y }] });
+        await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ id: 1, x: Math.round((startX + endX) / 2), y }] });
+        await client.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ id: 1, x: endX, y }] });
+        await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+        await expect(page.locator(".mercato-kpi-navigation > span")).toHaveText("2 / 2");
+        const outerScrollAfter = await page.locator(".match-indicators-viewport").evaluate((element: HTMLElement) => element.scrollLeft);
+        expect(Math.abs(outerScrollAfter - outerScrollBefore)).toBeLessThanOrEqual(2);
+        await client.detach();
+      }
+
+      if (testInfo.project.name === "desktop") {
+        for (const viewport of [
+          { width: 1920, height: 1080 },
+          { width: 1366, height: 768 },
+          { width: 1024, height: 768 },
+          { width: 390, height: 844 },
+        ]) {
+          await page.setViewportSize(viewport);
+          const responsiveLayout = await page.evaluate(() => {
+            const card = document.querySelector<HTMLElement>(".mercato-carousel-section .match-indicator-card");
+            const viewportElement = document.querySelector<HTMLElement>(".mercato-kpi-viewport");
+            return {
+              documentFits: document.documentElement.scrollWidth <= window.innerWidth + 1,
+              cardFits: Boolean(card && card.scrollWidth <= card.clientWidth + 1 && card.scrollHeight <= card.clientHeight + 1),
+              carouselFits: Boolean(viewportElement && viewportElement.clientWidth > 0),
+              cardFitsSection: Boolean(card && card.parentElement && Math.abs(card.getBoundingClientRect().width - card.parentElement.getBoundingClientRect().width) < 1),
+            };
+          });
+          expect(responsiveLayout).toEqual({ documentFits: true, cardFits: true, carouselFits: true, cardFitsSection: true });
+        }
+      }
+
+      const projectViewport = testInfo.project.name === "desktop"
+        ? { width: 1536, height: 1024 }
+        : testInfo.project.name === "tablet"
+          ? { width: 1024, height: 768 }
+          : { width: 390, height: 844 };
+      await page.setViewportSize(projectViewport);
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "Plan d'action du jour", exact: true })).toBeVisible();
+
+      expect(consoleErrors).toEqual([]);
+      expect(reactWarnings).toEqual([]);
+      expect(pageErrors).toEqual([]);
+      expect(mercatoNetworkErrors).toEqual([]);
     }
     if (screen.name === "02-feuille-match") {
+      await expect(page.locator(".mercato-carousel-section")).toHaveCount(0);
       await expect(page.locator(".match-page.is-threshold-reached")).toHaveCount(1);
       await expect(page.getByText("Célébration activée", { exact: true })).toBeVisible();
       await expect(page.locator(".match-score-bubble")).toHaveCount(4);
@@ -387,9 +755,49 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
   await assertNoHorizontalOverflow(page);
 });
 
+test("les huit onglets restent sans débordement aux largeurs intermédiaires et mobiles", async ({ page }) => {
+  test.setTimeout(180_000);
+  const viewports = [
+    { width: 1366, height: 768 },
+    { width: 820, height: 1180 },
+    { width: 768, height: 1024 },
+    { width: 360, height: 800 },
+    { width: 320, height: 740 },
+  ];
+  const viewButtons = [
+    "01 Coup d'envoi",
+    "02 Feuille de match",
+    "03 Composition",
+    "04 Coach",
+    "05 BRIEF ÉQUIPE",
+    "MAJ Import",
+    "? Guide",
+    "ADM Administrateur",
+  ];
+
+  await page.goto("/");
+  await page.getByLabel("Code agence").selectOption("058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
+  await page.getByRole("button", { name: "Accéder au match" }).click();
+  await expect(page.locator(".agency-pill")).toContainText("Agen - 058");
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    for (const buttonName of viewButtons) {
+      await page.getByRole("button", { name: buttonName, exact: true }).click();
+      await expect(page.locator(".nav-item.active")).toHaveAttribute("aria-label", buttonName);
+      await assertNoHorizontalOverflow(page);
+      if (buttonName === "05 BRIEF ÉQUIPE") {
+        await page.getByRole("button", { name: "Quitter le brief équipe", exact: true }).click();
+        await assertNoHorizontalOverflow(page);
+      }
+    }
+  }
+});
+
 test("la plage horaire et le graphique horaire restent explicites", async ({ page }) => {
   test.setTimeout(120_000);
-  let baseSnapshot: Record<string, any> | null = null;
+  let baseSnapshot: Snapshot | null = null;
   await page.route(/\/api\/agencies\/058\/snapshot(?:\?.*)?$/, async (route) => {
     const response = await route.fetch();
     const payload = await response.json();
@@ -399,7 +807,7 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   await page.route("**/api/agencies/058/time-range", async (route) => {
     const request = route.request().postDataJSON() as { start: string; end: string };
     if (!baseSnapshot) throw new Error("Le snapshot de test n'est pas disponible.");
-    const snapshot = JSON.parse(JSON.stringify(baseSnapshot)) as Record<string, any>;
+    const snapshot = JSON.parse(JSON.stringify(baseSnapshot)) as Snapshot;
     const rangeLabel = `${request.start} - ${request.end}`;
     snapshot.match = {
       ...snapshot.match,
@@ -438,7 +846,7 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   });
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("058");
-  await page.getByLabel("Code d'accès").fill("STEF-058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await expect(page.getByText("pas de 30 min · fin incluse")).toBeVisible();
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
@@ -476,12 +884,14 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
 test("le guide et le retour du brief équipe restent accessibles avant le premier import", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("05R");
-  await page.getByLabel("Code d'accès").fill("STEF-05R");
+  await page.getByLabel("Code d'accès").fill("LOCAL-05R-DEV");
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await expect(page.getByRole("heading", { name: "Le stade est prêt", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "? Guide", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Utiliser STEF Match Center de A à Z", exact: true })).toBeVisible();
+  await expect(page.locator(".guide-page")).not.toContainText(/STEF-(?:058|01K|05R|04P)/);
+  await expect(page.locator(".guide-page")).toContainText("code d’accès qui vous a été transmis séparément");
   await page.locator(".guide-nav-item").filter({ hasText: "Administrateur" }).click();
   await expect(page.getByRole("heading", { name: "Régler les ligues et leurs standards", exact: true })).toBeVisible();
   await expect(page.locator(".guide-league-card")).toHaveCount(4);
@@ -514,7 +924,7 @@ test("la feuille de match affiche le score et les KPI du snapshot canonique", as
   });
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("058");
-  await page.getByLabel("Code d'accès").fill("STEF-058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
   await expect(page.locator(".football-score-side-for strong")).toHaveText("4");
@@ -535,7 +945,7 @@ test("une ligue reste sélectionnable avant le premier import", async ({ page })
   });
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("058");
-  await page.getByLabel("Code d'accès").fill("STEF-058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await page.getByRole("button", { name: "ADM Administrateur", exact: true }).click();
   await page.getByRole("button", { name: "Activer", exact: true }).last().click();
@@ -548,7 +958,7 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
   test.setTimeout(120_000);
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("058");
-  await page.getByLabel("Code d'accès").fill("STEF-058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await page.getByRole("button", { name: "ADM Administrateur", exact: true }).click();
 
@@ -609,10 +1019,10 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
 test("le nom de l'agence connectée reste correct dans tous les onglets", async ({ page }) => {
   test.setTimeout(120_000);
   const agencies = [
-    { code: "058", accessCode: "STEF-058", name: "Agen - 058" },
-    { code: "01K", accessCode: "STEF-01K", name: "Montpellier" },
-    { code: "05R", accessCode: "STEF-05R", name: "Toulouse" },
-    { code: "04P", accessCode: "STEF-04P", name: "Bordeaux" },
+    { code: "058", accessCode: "LOCAL-058-DEV", name: "Agen - 058" },
+    { code: "01K", accessCode: "LOCAL-01K-DEV", name: "Montpellier" },
+    { code: "05R", accessCode: "LOCAL-05R-DEV", name: "Toulouse" },
+    { code: "04P", accessCode: "LOCAL-04P-DEV", name: "Bordeaux" },
   ];
 
   for (const agency of agencies) {
@@ -645,7 +1055,7 @@ test("le nom de l'agence connectée reste correct dans tous les onglets", async 
 test("le brief équipe porte ses zones et son mode plein écran", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("058");
-  await page.getByLabel("Code d'accès").fill("STEF-058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await page.getByRole("button", { name: "05 BRIEF ÉQUIPE", exact: true }).click();
   await expect(page.locator(".tv-mode")).toHaveCount(1);

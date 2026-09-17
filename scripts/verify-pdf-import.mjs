@@ -15,7 +15,9 @@ const workbook = await fs.readFile(workbookPath);
 const pdf = await fs.readFile(pdfPath);
 const temporary = await fs.mkdtemp(path.join(os.tmpdir(), "stef-pdf-audit-"));
 const dataDir = path.join(temporary, "agencies");
-const outputDir = path.join(root, "output", "pdf-import-validation");
+const outputDir = process.env.PDF_IMPORT_OUTPUT_DIR
+  ? path.resolve(process.env.PDF_IMPORT_OUTPUT_DIR)
+  : path.join(root, "output", "pdf-import-validation");
 await fs.mkdir(outputDir, { recursive: true });
 const port = await freePort();
 const base = `http://127.0.0.1:${port}`;

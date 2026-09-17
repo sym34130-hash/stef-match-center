@@ -11,10 +11,21 @@ const dailyIndicators = {
 async function login(page: Page) {
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("058");
-  await page.getByLabel("Code d'accès").fill("STEF-058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
   await page.locator(".match-indicators").scrollIntoViewIfNeeded();
+}
+
+async function useEmptyMercatoFixture(page: Page) {
+  await page.route("**/api/agencies/058/causerie**", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ plan: { mercato: "", mercatoProfiles: {} } }),
+    });
+  });
 }
 
 test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", async ({ page }, testInfo) => {
@@ -31,6 +42,7 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
     body.snapshot.summary.tonnage = 12;
     await route.fulfill({ response, json: body });
   });
+  await useEmptyMercatoFixture(page);
   await login(page);
   const viewport = page.locator(".match-indicators-viewport");
   const carousel = page.locator(".match-indicators");
@@ -151,6 +163,7 @@ test("le carrousel distingue un PDF absent, une valeur nulle et un indicateur ab
     body.snapshot.dailyIndicators = pdf;
     await route.fulfill({ response, json: body });
   });
+  await useEmptyMercatoFixture(page);
   await login(page);
   const value = (id: string) => page.locator(`[data-indicator="${id}"] .match-indicator-value`);
   await expect(value("arrival")).toHaveText("PDF à importer");
@@ -173,6 +186,7 @@ test("le carrousel reste cadré du petit mobile au grand écran et dans chaque l
     body.snapshot.dailyIndicators = dailyIndicators;
     await route.fulfill({ response, json: body });
   });
+  await useEmptyMercatoFixture(page);
   await login(page);
   for (const width of [2560, 1920, 1280, 768, 360, 320]) {
     await page.setViewportSize({ width, height: 1000 });

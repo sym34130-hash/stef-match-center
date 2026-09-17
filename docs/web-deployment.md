@@ -39,8 +39,12 @@ Stockage persistant agences
 PORT=4174
 STEF_DATA_DIR=/var/lib/stef-match-center/agencies
 STEF_UPLOAD_LIMIT_MB=20
-STEF_AGENCIES_JSON='[{"code":"058","name":"Agen - 058","accessCode":"STEF-058","canImport":true},{"code":"01K","name":"Montpellier","accessCode":"STEF-01K","canImport":true},{"code":"05R","name":"Toulouse","accessCode":"STEF-05R","canImport":true},{"code":"04P","name":"Bordeaux","accessCode":"STEF-04P","canImport":true}]'
+STEF_AGENCIES_JSON='[{"code":"058","name":"Agen - 058","accessCode":"REMPLACER_PAR_SECRET_ALEATOIRE_058","canImport":true},{"code":"01K","name":"Montpellier","accessCode":"REMPLACER_PAR_SECRET_ALEATOIRE_01K","canImport":true},{"code":"05R","name":"Toulouse","accessCode":"REMPLACER_PAR_SECRET_ALEATOIRE_05R","canImport":true},{"code":"04P","name":"Bordeaux","accessCode":"REMPLACER_PAR_SECRET_ALEATOIRE_04P","canImport":true}]'
 ```
+
+Remplacer chaque valeur d'exemple par un secret unique d'au moins 32 caractères,
+généré aléatoirement. Ne jamais réutiliser les codes locaux, les publier dans le
+guide ou le dépôt, ni partager le même secret entre plusieurs agences.
 
 `STEF_DATA_DIR` doit pointer vers un disque persistant. Sans disque persistant,
 les fichiers Excel importés et les Causeries peuvent disparaître lors d'un
@@ -50,6 +54,7 @@ redémarrage de l'hébergeur.
 
 ```bash
 pnpm install
+pnpm lint
 pnpm build
 pnpm start
 ```
@@ -91,6 +96,12 @@ Causerie ne fonctionneraient pas.
 ## Contrôles avant partage
 
 - Remplacer les codes d'accès de démonstration présents dans `STEF_AGENCIES_JSON` par des codes forts avant partage.
+- Vérifier le code avant partage :
+
+```bash
+pnpm lint
+```
+
 - Vérifier que l'URL est en HTTPS.
 - Vérifier que `STEF_DATA_DIR` est réellement persistant.
 - Importer le dernier classeur Excel et contrôler le score.
@@ -129,10 +140,11 @@ Créer une archive contrôlée :
 pnpm deploy:package
 ```
 
-Cette commande lance d'abord `pnpm build`, `pnpm test` et `pnpm test:deploy`.
+Cette commande lance d'abord `pnpm lint`, `pnpm build`, `pnpm test` et `pnpm test:deploy`.
 Elle produit ensuite une archive dans `.deploy/` et exclut les données sensibles
 ou locales : `node_modules`, `dist`, `.env`, `.git`, `.deploy` et
-`data/agencies/*`.
+`data/agencies/*`, `server/agencies.json` et les répertoires locaux de contrôle
+(`output`, `tmp`, `audits`, `.agents`, `.codex`, `.codex-work`, `coverage`).
 
 Le détail AppDeploy est documenté dans `docs/appdeploy-readiness.md`.
 

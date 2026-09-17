@@ -44,15 +44,60 @@
 .match-indicators-index button::before { content: ""; display: block; width: 6px; height: 6px; margin: auto; border-radius: 4px; background: #aac7df66; transition: width 160ms, background 160ms; }
 .match-indicators-index button.is-current::before { width: 18px; background: #cfebf4; }
 .match-indicators-area .match-kpi-actions { margin-top: 8px; }
+.mercato-carousel-section { width: 100%; min-width: 0; margin-top: 20px; color: #fff; }
+.mercato-carousel-section *, .mercato-carousel-section { box-sizing: border-box; }
+.mercato-carousel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 6px 8px; }
+.mercato-carousel-heading > span { display: inline-flex; align-items: center; gap: 8px; color: #d8bcf6; font-size: 14px; font-weight: 850; letter-spacing: .2px; text-transform: uppercase; }
+.mercato-carousel-heading > span svg { color: #cba6f4; }
+.mercato-carousel-heading > strong { color: #fff; font-size: 12px; font-weight: 800; }
+.match-indicator-card.mercato-carousel-card { height: 360px; min-height: 300px; }
 .match-indicators-editor { display: flex; flex-wrap: wrap; gap: 18px; padding: 16px 0; margin-top: 12px; border-top: 1px solid #ffffff26; }
 .match-indicators-editor label { display: grid; gap: 8px; flex: 1 1 220px; max-width: 340px; color: #d9e9ff; font-size: 13px; font-weight: 750; }
 .match-indicators-editor input, .match-indicators-editor select { width: 100%; min-height: 44px; padding: 8px 12px; color: #fff; background: #13304d; border: 1px solid #91b9d57a; border-radius: 6px; font: inherit; }
 .match-indicators-editor input:focus-visible, .match-indicators-editor select:focus-visible { outline: 2px solid #c4e5ff; outline-offset: 2px; }
+
+.match-indicator-card.is-mercato { position: relative; display: block; overflow: hidden; isolation: isolate; padding: 0; border-color: color-mix(in srgb, var(--indicator-accent) 38%, #c6e0f23d); background: #0b1a31; }
+.match-indicator-card.is-mercato::before { position: absolute; z-index: 1; inset: 0; content: ""; pointer-events: none; background: linear-gradient(180deg, rgba(5, 17, 34, .62), rgba(5, 17, 34, .03) 31%, rgba(5, 17, 34, .03) 65%, rgba(5, 17, 34, .56)); }
+.match-indicator-card.is-mercato::after { position: absolute; z-index: 2; inset: auto 0 0; height: 2px; content: ""; background: linear-gradient(90deg, var(--indicator-accent), color-mix(in srgb, var(--indicator-accent) 30%, transparent) 68%, transparent); pointer-events: none; }
+.mercato-kpi { position: absolute; inset: 0; overflow: hidden; color: #fff; }
+.mercato-kpi-viewport { position: absolute; inset: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.mercato-kpi-viewport::-webkit-scrollbar { display: none; }
+.mercato-kpi-viewport:focus-visible { outline: 2px solid #eadcff; outline-offset: -4px; }
+.mercato-kpi-track { display: flex; width: 100%; height: 100%; }
+.mercato-kpi-slide { position: relative; flex: 0 0 100%; width: 100%; height: 100%; min-width: 0; overflow: hidden; isolation: isolate; scroll-snap-align: start; scroll-snap-stop: always; }
+.mercato-kpi-photo { position: absolute; inset: 0; z-index: -2; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center 34%; filter: saturate(.86) contrast(1.04); user-select: none; }
+.mercato-kpi-slide::before { position: absolute; z-index: -1; inset: 0; content: ""; background: linear-gradient(180deg, rgba(4, 14, 29, .22), transparent 26%, transparent 68%, rgba(4, 14, 29, .5)); pointer-events: none; }
+.mercato-kpi-kind { position: absolute; top: 13px; left: 13px; z-index: 3; display: inline-flex; align-items: center; gap: 5px; padding: 5px 7px; border: 1px solid color-mix(in srgb, var(--indicator-accent) 42%, transparent); border-radius: 5px; color: #f3e9ff; background: rgba(7, 20, 39, .62); backdrop-filter: blur(6px); font-size: 9px; font-weight: 850; letter-spacing: .6px; text-transform: uppercase; }
+.mercato-kpi-kind svg { color: var(--indicator-accent); }
+.mercato-kpi-subtitle { position: absolute; top: 43px; left: 13px; z-index: 3; max-width: calc(100% - 26px); padding: 2px 4px; border: 1px solid color-mix(in srgb, var(--indicator-accent) 30%, transparent); border-radius: 4px; color: #f5efff; background: rgba(7, 20, 39, .58); backdrop-filter: blur(5px); font-size: 7px; font-weight: 800; letter-spacing: .15px; line-height: 1.2; text-transform: uppercase; }
+.mercato-kpi-flocage { position: absolute; top: 40%; left: 50%; z-index: 2; width: 78%; height: 34px; overflow: visible; opacity: .96; pointer-events: none; mix-blend-mode: screen; transform: translate(-50%, -50%) perspective(72px) rotateX(-2deg) scaleX(.98); }
+.mercato-kpi-flocage-index { position: absolute; right: 12px; bottom: 10px; z-index: 3; color: #ffffffc2; font-size: 10px; font-weight: 850; font-variant-numeric: tabular-nums; text-shadow: 0 1px 6px #061221; }
+.mercato-kpi-profile-needed { position: absolute; z-index: 2; inset: 50% 14px auto; display: grid; justify-items: center; gap: 8px; max-width: 230px; margin: auto; padding: 14px 12px; transform: translateY(-50%); border: 1px solid color-mix(in srgb, var(--indicator-accent) 42%, #ffffff20); border-radius: 8px; color: #e0eaf5; background: rgba(5, 18, 37, .82); text-align: center; backdrop-filter: blur(8px); }
+.mercato-kpi-profile-needed svg { color: var(--indicator-accent); }
+.mercato-kpi-profile-needed strong { color: #fff; font-size: 13px; }
+.mercato-kpi-profile-needed span { max-width: 26ch; font-size: 11px; line-height: 1.35; }
+.mercato-kpi-navigation { position: absolute; top: 11px; right: 11px; z-index: 4; display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid #ffffff2c; border-radius: 7px; background: rgba(7, 20, 39, .7); backdrop-filter: blur(7px); }
+.mercato-kpi-navigation button { display: grid; place-items: center; width: 25px; height: 25px; padding: 0; border: 0; border-radius: 4px; color: #fff; background: transparent; cursor: pointer; }
+.mercato-kpi-navigation button:hover:not(:disabled) { background: #ffffff1e; }
+.mercato-kpi-navigation button:disabled { opacity: .35; cursor: default; }
+.mercato-kpi-navigation span { min-width: 29px; color: #fff; font-size: 10px; text-align: center; font-variant-numeric: tabular-nums; }
+.match-indicator-card.is-mercato button:focus-visible { outline: 2px solid #eadcff; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .mercato-kpi-navigation button { transition: none; }
+}
+@media (max-width: 600px) {
+  .mercato-kpi-kind { top: 10px; left: 10px; }
+  .mercato-kpi-subtitle { top: 39px; left: 10px; }
+  .mercato-kpi-navigation { top: 8px; right: 8px; }
+  .mercato-kpi-flocage { top: 40%; width: 78%; height: 30px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .match-indicator-card { transform: none; }
   .match-indicators-index button::before { transition: none; }
 }
 @media (max-width: 600px) {
+  .mercato-carousel-heading { margin-inline: 0; }
+  .match-indicator-card.mercato-carousel-card { height: 330px; }
   .match-indicator-card { padding: 16px; }
   .match-indicators-heading { padding-inline: 0; }
   .match-indicators-heading > span { font-size: 12px; }
@@ -61,6 +106,7 @@
   .match-indicators-navigation button { width: 32px; height: 32px; }
 }
 @media (max-width: 380px) {
+  .match-indicator-card.mercato-carousel-card { height: 310px; }
   .match-indicator-card { height: 400px; }
   .match-indicator-value { font-size: 40px; }
   .match-indicator-card.is-performance .match-indicator-value { font-size: 20px; }

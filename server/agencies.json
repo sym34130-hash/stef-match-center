@@ -2,25 +2,25 @@
   {
     "code": "058",
     "name": "Agen - 058",
-    "accessCode": "STEF-058",
+    "accessCode": "LOCAL-058-DEV",
     "canImport": true
   },
   {
     "code": "01K",
     "name": "Montpellier",
-    "accessCode": "STEF-01K",
+    "accessCode": "LOCAL-01K-DEV",
     "canImport": true
   },
   {
     "code": "05R",
     "name": "Toulouse",
-    "accessCode": "STEF-05R",
+    "accessCode": "LOCAL-05R-DEV",
     "canImport": true
   },
   {
     "code": "04P",
     "name": "Bordeaux",
-    "accessCode": "STEF-04P",
+    "accessCode": "LOCAL-04P-DEV",
     "canImport": true
   }
 ]

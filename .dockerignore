@@ -9,3 +9,9 @@ playwright-report
 test-results
 output
 tmp
+audits
+.agents
+.codex
+.codex-work
+coverage
+server/agencies.json

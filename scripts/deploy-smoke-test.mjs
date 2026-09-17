@@ -11,11 +11,14 @@ const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
 const agencyCode = process.env.DEPLOY_SMOKE_AGENCY ?? "058";
 const accessCode = process.env.DEPLOY_SMOKE_ACCESS_CODE ?? "smoke-access";
+const readOnlyCode = "READONLY";
+const readOnlyAccessCode = "read-only-smoke";
 const workbookPath = process.env.DEPLOY_SMOKE_WORKBOOK
   ? path.resolve(process.env.DEPLOY_SMOKE_WORKBOOK)
   : await findLatestWorkbook(agencyCode);
 
 const port = await getFreePort();
+const baseUrl = `http://127.0.0.1:${port}`;
 const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "stef-match-center-deploy-"));
 const dataDir = path.join(tempRoot, "agencies");
 const serverLogs = [];
@@ -29,10 +32,12 @@ try {
       ...process.env,
       NODE_ENV: "production",
       PORT: String(port),
+      STEF_BIND_HOST: "127.0.0.1",
       STEF_DATA_DIR: dataDir,
       STEF_UPLOAD_LIMIT_MB: "20",
       STEF_AGENCIES_JSON: JSON.stringify([
         { code: agencyCode, name: `Agence ${agencyCode}`, accessCode, canImport: true },
+        { code: readOnlyCode, name: "Agence lecture seule", accessCode: readOnlyAccessCode, canImport: false },
       ]),
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -43,7 +48,56 @@ try {
 
   await waitForHealth(port);
 
-  const sessionResponse = await fetch(`http://localhost:${port}/api/session`, {
+  const publicAgenciesResponse = await fetch(`${baseUrl}/api/agencies`);
+  assert.equal(publicAgenciesResponse.status, 200);
+  const publicAgenciesPayload = await publicAgenciesResponse.json();
+  assert.equal(JSON.stringify(publicAgenciesPayload).includes(accessCode), false, "L'API publique ne doit jamais révéler les codes d'accès");
+  assert.equal(JSON.stringify(publicAgenciesPayload).includes(readOnlyAccessCode), false, "L'API publique ne doit jamais révéler les codes d'accès");
+
+  const rejectedSessionResponse = await fetch(`${baseUrl}/api/session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agencyCode, accessCode: "incorrect" }),
+  });
+  assert.equal(rejectedSessionResponse.status, 401, "Un code d'accès invalide doit être rejeté");
+  const rejectedSnapshotResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/snapshot`);
+  assert.equal(rejectedSnapshotResponse.status, 401, "Les snapshots ne doivent pas être accessibles sans authentification");
+
+  const readOnlySessionResponse = await fetch(`${baseUrl}/api/session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agencyCode: readOnlyCode, accessCode: readOnlyAccessCode }),
+  });
+  assert.equal(readOnlySessionResponse.status, 200, "Le compte lecture seule doit pouvoir s'authentifier");
+  assert.equal((await readOnlySessionResponse.json()).agency.canImport, false, "Le compte lecture seule doit conserver ses droits restreints");
+  const readOnlyHeaders = { "x-access-code": readOnlyAccessCode };
+  const readOnlyImport = await fetch(`${baseUrl}/api/agencies/${readOnlyCode}/import`, {
+    method: "POST",
+    headers: readOnlyHeaders,
+    body: new FormData(),
+  });
+  assert.equal(readOnlyImport.status, 403, "Le compte lecture seule ne doit pas importer");
+  const readOnlyConfig = await fetch(`${baseUrl}/api/agencies/${readOnlyCode}/league-configs`, {
+    method: "PUT",
+    headers: { ...readOnlyHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({ configs: [] }),
+  });
+  assert.equal(readOnlyConfig.status, 403, "Le compte lecture seule ne doit pas modifier les ligues");
+  const readOnlyRange = await fetch(`${baseUrl}/api/agencies/${readOnlyCode}/time-range`, {
+    method: "POST",
+    headers: { ...readOnlyHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({ start: "13:00", end: "22:30" }),
+  });
+  assert.equal(readOnlyRange.status, 403, "Le compte lecture seule ne doit pas modifier la plage");
+  const readOnlyCauserie = await fetch(`${baseUrl}/api/agencies/${readOnlyCode}/causerie`, {
+    method: "POST",
+    headers: { ...readOnlyHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({ matchDate: "2026-09-09", plan: {} }),
+  });
+  assert.equal(readOnlyCauserie.status, 403, "Le compte lecture seule ne doit pas modifier la causerie");
+  assert.equal(await fileExists(path.join(dataDir, readOnlyCode)), false, "Un appel refusé ne doit pas créer de données agence");
+
+  const sessionResponse = await fetch(`${baseUrl}/api/session`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ agencyCode, accessCode }),
@@ -51,28 +105,28 @@ try {
   assert.equal(sessionResponse.status, 200, await safeText(sessionResponse));
 
   const leagueConfigHeaders = { "x-access-code": accessCode };
-  const leagueConfigResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/league-configs`, { headers: leagueConfigHeaders });
+  const leagueConfigResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/league-configs`, { headers: leagueConfigHeaders });
   const leagueConfigPayload = await leagueConfigResponse.json();
   assert.equal(leagueConfigResponse.status, 200, JSON.stringify(leagueConfigPayload));
   assert.equal(leagueConfigPayload.configs.length, 4, "Les quatre ligues doivent être partagées par l'agence");
   const originalLeagueConfigs = leagueConfigPayload.configs;
   const sharedLeagueConfigs = originalLeagueConfigs.map((config) => config.id === "bronze" ? { ...config, zonageMinutes: config.zonageMinutes + 1 } : config);
-  const saveLeagueConfigResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/league-configs`, {
+  const saveLeagueConfigResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/league-configs`, {
     method: "PUT",
     headers: { ...leagueConfigHeaders, "Content-Type": "application/json" },
     body: JSON.stringify({ configs: sharedLeagueConfigs }),
   });
   assert.equal(saveLeagueConfigResponse.status, 200, await safeText(saveLeagueConfigResponse));
-  const secondLeagueConfigResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/league-configs`, { headers: leagueConfigHeaders });
+  const secondLeagueConfigResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/league-configs`, { headers: leagueConfigHeaders });
   const secondLeagueConfigPayload = await secondLeagueConfigResponse.json();
   assert.deepEqual(secondLeagueConfigPayload.configs, sharedLeagueConfigs, "Les paramètres modifiés doivent être visibles par une seconde session");
-  await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/league-configs`, {
+  await fetch(`${baseUrl}/api/agencies/${agencyCode}/league-configs`, {
     method: "PUT",
     headers: { ...leagueConfigHeaders, "Content-Type": "application/json" },
     body: JSON.stringify({ configs: originalLeagueConfigs }),
   });
 
-  const oversizedPlanResponse = await fetch(`http://localhost:${port}/api/session`, {
+  const oversizedPlanResponse = await fetch(`${baseUrl}/api/session`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ payload: "x".repeat(10 * 1024 * 1024) }),
@@ -83,7 +137,7 @@ try {
 
   const invalidWorkbookForm = new FormData();
   invalidWorkbookForm.append("file", new Blob(["not an xlsx workbook"]), "invalid.xlsx");
-  const invalidImportResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/import`, {
+  const invalidImportResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/import`, {
     method: "POST",
     headers: { "x-access-code": accessCode },
     body: invalidWorkbookForm,
@@ -102,7 +156,7 @@ try {
     path.basename(workbookPath)
   );
 
-  const importResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/import`, {
+  const importResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/import`, {
     method: "POST",
     headers: { "x-access-code": accessCode },
     body: formData,
@@ -128,7 +182,7 @@ try {
   assert.equal(snapshot.loadingQuality.offTarget, 2, "Chargements non cadrés après import API");
   assert.equal(snapshot.loadingQuality.nonTargetedShots.find((shot) => shot.travelCode === "X47890")?.timePerPosition, "02:47", "Tir non cadré après import API");
 
-  const latestResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot`, {
+  const latestResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/snapshot`, {
     headers: { "x-access-code": accessCode },
   });
   const latestPayload = await latestResponse.json();
@@ -141,7 +195,7 @@ try {
   const inconsistentSnapshot = JSON.parse(validLatestText);
   inconsistentSnapshot.operationalScore.goalsFor = 0;
   await fs.writeFile(storedLatestPath, JSON.stringify(inconsistentSnapshot, null, 2), "utf8");
-  const repairedSnapshotResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot`, {
+  const repairedSnapshotResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/snapshot`, {
     headers: { "x-access-code": accessCode },
   });
   const repairedSnapshotPayload = await repairedSnapshotResponse.json();
@@ -150,7 +204,7 @@ try {
   assert.equal(repairedSnapshotPayload.snapshot.operationalScore.goalsAgainst, 0, "Le score reconstruit doit conserver les quatre indicateurs");
 
   await fs.writeFile(storedLatestPath, "{ invalid snapshot", "utf8");
-  const malformedSnapshotResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot`, {
+  const malformedSnapshotResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/snapshot`, {
     headers: { "x-access-code": accessCode },
   });
   const malformedSnapshotPayload = await malformedSnapshotResponse.json();
@@ -165,7 +219,7 @@ try {
   ];
   for (const expected of leagueApiExpectations) {
     const query = new URLSearchParams(Object.fromEntries(Object.entries(expected.criteria).map(([key, value]) => [key, String(value)])));
-    const leagueResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot?${query}`, {
+    const leagueResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/snapshot?${query}`, {
       headers: { "x-access-code": accessCode },
     });
     const leaguePayload = await leagueResponse.json();
@@ -190,7 +244,7 @@ try {
   staleSnapshot.kpiDictionaryVersion = 11;
   delete staleSnapshot.hourlyPerformance;
   await fs.writeFile(storedLatestPath, JSON.stringify(staleSnapshot, null, 2), "utf8");
-  const refreshedLatestResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot`, {
+  const refreshedLatestResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/snapshot`, {
     headers: { "x-access-code": accessCode },
   });
   const refreshedLatestPayload = await refreshedLatestResponse.json();
@@ -199,7 +253,7 @@ try {
   assert.equal(refreshedLatestPayload.snapshot.operationalScore.goalsFor, 1, "Le rafraîchissement sans query conserve le score Platine");
   assertFiniteJson(refreshedLatestPayload.snapshot);
 
-  const timeRangeResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/time-range`, {
+  const timeRangeResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/time-range`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -223,7 +277,7 @@ try {
   assert.equal(timeRangePayload.snapshot.compositionPeriods.first.label, "13:00 - 17:45", "Première mi-temps alignée sur la plage active");
   assert.equal(timeRangePayload.snapshot.compositionPeriods.second.label, "17:45 - 22:30", "Deuxième mi-temps alignée sur la plage active");
 
-  const narrowTimeRangeResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/time-range`, {
+  const narrowTimeRangeResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/time-range`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -243,7 +297,7 @@ try {
     "Graphique horaire recalculé après réduction de la plage",
   );
 
-  const wideTimeRangeResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/time-range`, {
+  const wideTimeRangeResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/time-range`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -279,7 +333,7 @@ try {
     criteria: leagueApiExpectations[0].criteria,
   });
   assert.deepEqual(finalRangePayload.snapshot.performanceCriteria, leagueApiExpectations[0].criteria, "La dernière écriture complète reste cohérente");
-  const finalSnapshotResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/snapshot`, {
+  const finalSnapshotResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/snapshot`, {
     headers: { "x-access-code": accessCode },
   });
   const finalSnapshotPayload = await finalSnapshotResponse.json();
@@ -287,7 +341,7 @@ try {
   assert.deepEqual(finalSnapshotPayload.snapshot.performanceCriteria, leagueApiExpectations[0].criteria, "Snapshot final après écritures concurrentes");
   assertFiniteJson(finalSnapshotPayload.snapshot);
 
-  const invalidTimeRangeResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/time-range`, {
+  const invalidTimeRangeResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/time-range`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -298,7 +352,10 @@ try {
   assert.equal(invalidTimeRangeResponse.status, 400, "Une plage qui n'est pas sur 00/30 doit être refusée");
 
   const tinyAttachment = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
-  const causerieResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/causerie`, {
+  const longMercatoName = "alexandrine marie-claire de la fontaine de montmorency saint-germain de la rochefoucauld de la tour";
+  assert.ok(longMercatoName.length > 80, "Le cas de profil Mercato long doit dépasser l'ancienne limite de clé");
+  const mercatoText = `Accueillir Camille Martin et Julien Thomas, nouveaux renforts.\n${longMercatoName}`;
+  const causerieResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/causerie`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -317,6 +374,13 @@ try {
           midfield: [tinyAttachment],
           defense: [],
         },
+        mercato: mercatoText,
+        mercatoProfiles: {
+          "camille martin": "female",
+          "julien thomas": "male",
+          [longMercatoName]: "female",
+          "nom invalide": "neutral",
+        },
         coach: {
           tactic: "Valider le déploiement",
           priority: "Ne pas dégrader l'import Excel",
@@ -328,14 +392,20 @@ try {
   });
   const causeriePayload = await causerieResponse.json();
   assert.equal(causerieResponse.status, 200, JSON.stringify(causeriePayload));
+  assert.equal(causeriePayload.plan.mercato, mercatoText, "Le texte Mercato doit être conservé par l'API");
   assert.equal(causeriePayload.plan.attachments.attack.length, 2, "Les captures multiples de la zone attaque doivent être conservées");
   assert.equal(causeriePayload.plan.attachments.midfield.length, 1, "La capture de la zone milieu doit être conservée");
   assert.equal(causeriePayload.plan.attachments.defense.length, 0, "Une zone sans capture doit rester vide");
-  const causerieReadResponse = await fetch(`http://localhost:${port}/api/agencies/${agencyCode}/causerie?matchDate=${encodeURIComponent(snapshot.match.date)}`, {
+  assert.deepEqual(causeriePayload.plan.mercatoProfiles, { "camille martin": "female", "julien thomas": "male", [longMercatoName]: "female" }, "Les profils Femme/Homme, y compris les noms longs, doivent être conservés par l'API");
+  const causerieReadResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/causerie?matchDate=${encodeURIComponent(snapshot.match.date)}`, {
     headers: { "x-access-code": accessCode },
   });
-  assert.equal(causerieReadResponse.status, 200, await safeText(causerieReadResponse));
+  const causerieReadText = await causerieReadResponse.text();
+  assert.equal(causerieReadResponse.status, 200, causerieReadText);
   assert.equal(causerieReadResponse.headers.get("cache-control"), "no-store, max-age=0", "La causerie ne doit pas rester en cache entre deux écrans");
+  const causerieReadPayload = JSON.parse(causerieReadText);
+  assert.equal(causerieReadPayload.plan.mercato, mercatoText, "Le même texte Mercato doit être disponible après relecture du plan");
+  assert.deepEqual(causerieReadPayload.plan.mercatoProfiles, { "camille martin": "female", "julien thomas": "male", [longMercatoName]: "female" }, "Les choix de silhouette doivent rester enregistrés après relecture du plan");
 
   const expectedLatestPath = path.join(dataDir, sanitizeSegment(agencyCode), "latest.json");
   const expectedCauseriePath = path.join(
@@ -348,6 +418,14 @@ try {
   assert.equal(await fileExists(expectedCauseriePath), true, "La causerie doit être écrite dans STEF_DATA_DIR");
   const savedCauserie = JSON.parse(await fs.readFile(expectedCauseriePath, "utf8"));
   assert.equal(savedCauserie.attachments.attack.length, 2, "Les captures multiples doivent être persistées dans STEF_DATA_DIR");
+
+  await fs.writeFile(expectedCauseriePath, "{ invalid causerie", "utf8");
+  const malformedCauserieResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/causerie?matchDate=${encodeURIComponent(snapshot.match.date)}`, {
+    headers: { "x-access-code": accessCode },
+  });
+  const malformedCauseriePayload = await malformedCauserieResponse.json();
+  assert.equal(malformedCauserieResponse.status, 500, JSON.stringify(malformedCauseriePayload));
+  assert.equal(malformedCauseriePayload.title, "SERVICE INDISPONIBLE", "Une causerie corrompue ne doit pas être assimilée à une causerie vide");
 
   console.log(`Déploiement smoke test OK - ${path.basename(workbookPath)}`);
   console.log(`Serveur production: port ${port}, stockage temporaire ${dataDir}`);
@@ -362,7 +440,7 @@ async function waitForHealth(targetPort) {
   let lastError;
   while (Date.now() < deadline) {
     try {
-      const response = await fetch(`http://localhost:${targetPort}/api/health`);
+      const response = await fetch(`http://127.0.0.1:${targetPort}/api/health`);
       if (response.ok) return;
     } catch (error) {
       lastError = error;
@@ -377,7 +455,7 @@ async function getFreePort() {
     const probe = net.createServer();
     probe.unref();
     probe.on("error", reject);
-    probe.listen(0, () => {
+    probe.listen(0, "127.0.0.1", () => {
       const address = probe.address();
       probe.close(() => {
         if (address && typeof address === "object") resolve(address.port);
@@ -422,7 +500,7 @@ async function safeText(response) {
 }
 
 async function postTimeRangeResponse(targetPort, code, access, body) {
-  const response = await fetch(`http://localhost:${targetPort}/api/agencies/${code}/time-range`, {
+  const response = await fetch(`http://127.0.0.1:${targetPort}/api/agencies/${code}/time-range`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

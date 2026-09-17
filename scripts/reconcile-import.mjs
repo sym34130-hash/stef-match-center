@@ -23,6 +23,25 @@ assert.equal(result.ok, true, result.ok ? "" : JSON.stringify(result.error));
 
 const snapshot = result.snapshot;
 const roles = Object.fromEntries(snapshot.summary.roleDistribution.map((item) => [item.role, item]));
+const sourceWorkbook = XLSX.read(buffer, { cellFormula: true });
+const sourceXName = sourceWorkbook.SheetNames.find((name) => normalizeHeader(name) === "x");
+const sourceX = sourceXName ? sourceWorkbook.Sheets[sourceXName] : null;
+const sourceChartHeader = Object.entries(sourceX ?? {}).find(([, cell]) => normalizeHeader(cell?.v) === "somme de % passes reussies");
+assert.ok(sourceChartHeader, "La source X!FD:FG du graphique doit être présente");
+const sourceChartRateCell = XLSX.utils.decode_cell(sourceChartHeader[0]);
+const sourceChartHourColumn = sourceChartRateCell.c - 1;
+assert.equal(
+  normalizeHeader(sourceX[XLSX.utils.encode_cell({ r: sourceChartRateCell.r, c: sourceChartHourColumn })]?.v),
+  "heure op",
+  "Le graphique doit utiliser X!FF comme catégorie horaire",
+);
+const sourceChartRates = new Map();
+const sourceRange = XLSX.utils.decode_range(sourceX["!ref"] ?? "A1:A1");
+for (let row = sourceChartRateCell.r + 1; row <= sourceRange.e.r; row += 1) {
+  const hour = Number(sourceX[XLSX.utils.encode_cell({ r: row, c: sourceChartHourColumn })]?.v);
+  const rate = Number(sourceX[XLSX.utils.encode_cell({ r: row, c: sourceChartRateCell.c })]?.v);
+  if (Number.isFinite(hour) && Number.isFinite(rate) && rate >= 0 && rate <= 1) sourceChartRates.set(hour, Math.round(rate * 1000) / 10);
+}
 
 const overnightPeriod = normalizeTimeRange("22:30", "06:00");
 assert.equal(overnightPeriod.isOvernight, true, "Une plage qui traverse minuit doit être reconnue");
@@ -60,6 +79,11 @@ assert.equal(
   snapshot.hourlyPerformance.every((item) => item.total > 0 && item.rate === Math.round((item.won / item.total) * 1000) / 10),
   true,
   "Chaque taux horaire doit correspondre aux compteurs de la ligne",
+);
+assert.equal(
+  snapshot.hourlyPerformance.every((item) => sourceChartRates.get(item.hour) === item.rate),
+  true,
+  "Chaque point affiché doit correspondre à la source graphique X!FF/X!FG de la feuille Excel",
 );
 assert.equal(snapshot.summary.possessionPercent, 55.7, "Possession Zody sur la plage active");
 assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 856, reception: 1432, matched: 797 }, "Positions possession sur le même périmètre filtré");
@@ -356,6 +380,15 @@ async function findLatestWorkbook(code) {
   files.sort((a, b) => b.mtimeMs - a.mtimeMs);
   assert.ok(files[0], `Aucun classeur importé trouvé pour l'agence ${code}.`);
   return files[0].filePath;
+}
+
+function normalizeHeader(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
 function sanitizeSegment(value) {

@@ -12,6 +12,7 @@ const archivePath = path.join(deployDir, `stef-match-center-v1-${stamp}.tar.gz`)
 const manifestPath = path.join(deployDir, `stef-match-center-v1-${stamp}.manifest.json`);
 
 const checks = [
+  { name: "lint", args: ["run", "lint"] },
   { name: "build", args: ["run", "build"] },
   { name: "test", args: ["run", "test"] },
   { name: "test:deploy", args: ["run", "test:deploy"] },
@@ -36,6 +37,14 @@ await run("tar", [
   "--exclude=./.DS_Store",
   "--exclude=./playwright-report",
   "--exclude=./test-results",
+  "--exclude=./output",
+  "--exclude=./tmp",
+  "--exclude=./audits",
+  "--exclude=./.agents",
+  "--exclude=./.codex",
+  "--exclude=./.codex-work",
+  "--exclude=./coverage",
+  "--exclude=./server/agencies.json",
   ".",
 ]);
 
@@ -65,6 +74,14 @@ const manifest = {
     ".env",
     ".git",
     ".deploy",
+    "output",
+    "tmp",
+    "audits",
+    ".agents",
+    ".codex",
+    ".codex-work",
+    "coverage",
+    "server/agencies.json",
   ],
   validatedChecks: checks.map((check) => check.name),
 };
