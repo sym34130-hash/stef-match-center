@@ -1250,12 +1250,12 @@ function MatchSheet({ snapshot, session, activeLeague, onPlayer, onCoach, onComp
                 <small>Chargement avec une moyenne<br />inférieure ou égale à {loadingTarget}/poz</small>
               </div>
               <div className={`match-score-bubble reception-score-bubble ${Number.isFinite(scoreIndicators.unloadingPercent) ? "" : "is-data-unavailable"}`}>
-                <span>% temps réception</span>
+                <span>% duels gagnés</span>
                 <strong>{formatPercent(scoreIndicators.unloadingPercent)}</strong>
                 <small>Voyages dans la cible selon le temps maximum par position</small>
               </div>
               <div className={`match-score-bubble possession-score-bubble ${Number.isFinite(scoreIndicators.possessionPercent) ? "" : "is-data-unavailable"}`}>
-                <span>% possession Zody</span>
+                <span>% possession</span>
                 <strong>{formatPercent(scoreIndicators.possessionPercent)}</strong>
                 <small>Zonage dynamique</small>
               </div>
@@ -1407,7 +1407,7 @@ function OperationalChartsCarousel({ snapshot }: { snapshot: Snapshot }) {
     },
     {
       id: "reception-time",
-      label: "Temps de réception",
+      label: "% duels gagnés",
       content: <ReceptionQualityCard snapshot={snapshot} />,
     },
     {
@@ -1628,11 +1628,11 @@ function ReceptionQualityCard({ snapshot }: { snapshot: Snapshot }) {
     ? null
     : formatReadableDuration(quality.averageTimePerPositionSeconds);
   return (
-    <section className="loading-duel-quality-card reception-quality-card" aria-label="Temps de réception">
+    <section className="loading-duel-quality-card reception-quality-card" aria-label="% Duels gagnés">
       <div className="loading-quality-heading">
         <div>
           <span>Déchargement</span>
-          <strong>Temps de réception</strong>
+          <strong>% Duels gagnés</strong>
           <p className="loading-quality-explanation">Voyages dans la cible : temps moyen inférieur ou égal à {target}/poz.</p>
         </div>
         <b>{formatNumber(total)} voyages</b>
@@ -3211,7 +3211,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
             <GuidePanel eyebrow="04 · Lire les écrans" title="Quel écran utiliser, et pour quoi faire ?" icon={LayoutDashboard}>
               <div className="guide-screen-grid">
                 <GuideScreenCard step="01" title="Coup d’envoi" detail="Vue d’ouverture du match. Elle confirme que les données sont prêtes et donne accès au brief équipe." />
-                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score opérationnel au format football, quatre indicateurs, opérations, positions, joueurs clés par catégorie, challengers et contrôles d’import. Le score compare les pourcentages de passes réussies, de tirs cadrés, de temps de réception dans la cible et de possession Zody à l’objectif de la ligue." />
+                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score opérationnel au format football, quatre indicateurs, opérations, positions, joueurs clés par catégorie, challengers et contrôles d’import. Le score compare les pourcentages de passes réussies, de tirs cadrés, de duels gagnés et de possession à l’objectif de la ligue." />
               <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. Compare le match complet, les deux mi-temps ou les quatre quarts calculés depuis la plage active. Une vue personnalisée permet aussi d’isoler une sous-plage, par exemple 1 heure, sans modifier les indicateurs du match. L’activité Réception correspond au scan de la palette." />
                 <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, titres par catégorie, polyvalence, sujets à travailler et prochaines actions." />
                 <GuideScreenCard step="05" title="Brief équipe" detail="Vue dédiée aux consignes : trois grandes zones visibles, empilées verticalement : SAV, Expédition, Ramasse & emballage. Chaque zone accepte du texte et plusieurs captures d’écran, avec affichage plein écran." />
@@ -3630,8 +3630,8 @@ function FootballScoreDisplay({ footballScore }: { footballScore: FootballScore 
         <span>Intègre :</span>
         <b>% passes réussies</b>
         <b>% tirs cadrés</b>
-        <b>% temps réception</b>
-        <b>% possession Zody</b>
+        <b>% duels gagnés</b>
+        <b>% possession</b>
       </div>
     </div>
   );
@@ -3646,14 +3646,17 @@ function YellowCardsPanel({ snapshot }: { snapshot: Snapshot }) {
         <strong>{cards.length}</strong>
       </div>
       {cards.length > 0 ? (
-        <ul>
-          {cards.map((card, index) => (
-            <li key={`${card.playerName}-${card.time}-${index}`}>
-              <b>{card.playerName}</b>
-              <small>{card.time}{card.reason ? ` · ${card.reason}` : ""}{card.travelCode ? ` · ${card.travelCode}` : ""}</small>
-            </li>
-          ))}
-        </ul>
+        <details className="yellow-cards-disclosure">
+          <summary>Afficher le détail</summary>
+          <ul>
+            {cards.map((card, index) => (
+              <li key={`${card.playerName}-${card.time}-${index}`}>
+                <b>{card.playerName}</b>
+                <small>{card.time}{card.reason ? ` · ${card.reason}` : ""}{card.travelCode ? ` · ${card.travelCode}` : ""}</small>
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : (
         <p>Aucun carton jaune dans la plage active.</p>
       )}
@@ -3683,14 +3686,14 @@ function buildAwardItems(snapshot: Snapshot): MatchAward[] {
     },
     {
       kind: "midfield",
-      label: "Meilleur joueur",
+      label: "Meilleur passeur",
       symbol: "MIL",
       podiumLabel: "Milieu",
       highlight: snapshot.highlights.bestPasser,
     },
     {
       kind: "defense",
-      label: "Meilleur passeur",
+      label: "Meilleur joueur",
       symbol: "DEF",
       podiumLabel: "Défense",
       highlight: snapshot.highlights.defensiveWall,

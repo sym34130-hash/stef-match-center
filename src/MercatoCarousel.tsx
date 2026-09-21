@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { ChevronLeft, ChevronRight, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Mars, Users, Venus } from "lucide-react";
 import { parseMercatoEntrants, type MercatoEntrant, type MercatoProfiles } from "./mercato";
 
 type Props = {
@@ -146,6 +146,12 @@ export function MercatoKpiCard({ entrants, profiles }: Props) {
                 )}
                 <span className="mercato-kpi-kind"><Users size={14} aria-hidden="true" /> Mercato</span>
                 <span className="mercato-kpi-subtitle">{entrants.length === 1 ? "Nouveau joueur" : "Nouveaux joueurs"}</span>
+                {profile && (
+                  <span className="mercato-kpi-profile" data-profile={profile}>
+                    {profile === "female" ? <Venus size={13} aria-hidden="true" /> : <Mars size={13} aria-hidden="true" />}
+                    {profile === "female" ? "Femme" : "Homme"}
+                  </span>
+                )}
                 {entrants.length > 1 && <span className="mercato-kpi-flocage-index" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>}
               </div>
             );
@@ -173,20 +179,13 @@ export function MercatoCarouselSection({ mercato, profiles }: MercatoCarouselSec
   const entrants = useMemo(() => parseMercatoEntrants(mercato ?? ""), [mercato]);
   if (entrants.length === 0) return null;
 
-  const label = entrants.length === 1 ? "Nouveau joueur" : "Nouveaux joueurs";
   return (
-    <section className="mercato-carousel-section" aria-label={`Carrousel ${label.toLocaleLowerCase("fr-FR")}`}>
-      <header className="mercato-carousel-heading">
-        <span><Users size={17} aria-hidden="true" /> Mercato</span>
-        <strong>{label}</strong>
-      </header>
-      <article
-        className="match-indicator-card is-mercato mercato-carousel-card"
-        style={{ "--indicator-accent": "#cba6f4" } as CSSProperties}
-        aria-label={`${label} : ${entrants.map((entrant) => entrant.name).join(", ")}`}
-      >
-        <MercatoKpiCard entrants={entrants} profiles={profiles} />
-      </article>
-    </section>
+    <article
+      className="match-indicator-card is-mercato mercato-carousel-card"
+      style={{ "--indicator-accent": "#cba6f4" } as CSSProperties}
+      aria-label={`${entrants.length === 1 ? "Nouveau joueur" : "Nouveaux joueurs"} : ${entrants.map((entrant) => entrant.name).join(", ")}`}
+    >
+      <MercatoKpiCard entrants={entrants} profiles={profiles} />
+    </article>
   );
 }

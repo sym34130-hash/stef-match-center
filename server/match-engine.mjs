@@ -136,7 +136,7 @@ export const KPI_DICTIONARY = [
     label: "Score opérationnel",
     source: "Données!R:T + TCD PPT!U + Données filtrées DECHG/ZONAGE",
     formula: "Nombre des 4 indicateurs dont le pourcentage dépasse strictement l'objectif de la ligue - indicateurs atteints / indicateurs sous objectif",
-    denominator: "4 indicateurs disponibles : passes réussies, tirs cadrés, temps de réception dans la cible et possession Zody",
+    denominator: "4 indicateurs disponibles : passes réussies, tirs cadrés, duels gagnés et possession",
     display: "Score au format football",
   },
   {
@@ -149,7 +149,7 @@ export const KPI_DICTIONARY = [
   },
   {
     id: "score.possession",
-    label: "Possession Zody",
+    label: "Possession",
     source: "Données filtrées",
     formula: "Positions RECEPTION uniques ayant aussi un ZONAGE / positions RECEPTION uniques, dans le même périmètre actif",
     denominator: "Positions distinctes de réception (DECHG) du match filtré",
@@ -268,7 +268,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     zonageTarget: `${criteria.zonageMinutes} minutes`,
     loadingTarget: formatDuration(criteria.loadingSeconds),
     unloadingTarget: formatDuration(criteria.unloadingSeconds),
-    scoreIndicators: "4 indicateurs : passes réussies, tirs cadrés, temps de réception dans la cible et possession Zody",
+    scoreIndicators: "4 indicateurs : passes réussies, tirs cadrés, duels gagnés et possession",
     scoreTarget: `${criteria.scoreTargetPercent}% par indicateur`,
     period: period.label,
   };

@@ -126,6 +126,11 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
     if (screen.name === "02-feuille-match") {
       const player = page.locator(".kickoff-music-player iframe");
       await expect(player).toBeVisible();
+      await expect(page.locator(".yellow-cards-panel .yellow-cards-heading strong")).toHaveText("1");
+      await expect(page.locator(".yellow-cards-disclosure")).not.toHaveAttribute("open", "");
+      await page.locator(".yellow-cards-disclosure summary").click();
+      await expect(page.locator(".yellow-cards-disclosure")).toHaveAttribute("open", "");
+      await expect(page.locator(".yellow-cards-disclosure")).toContainText("Camille Martin");
       const closeButton = page.getByRole("button", { name: "Fermer le lecteur YouTube", exact: true });
       await expect(closeButton).toHaveAttribute("aria-expanded", "true");
       await closeButton.click();
@@ -223,9 +228,9 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       expect(savedCauseriePlan?.mercatoProfiles).toEqual({ "camille martin": "female" });
 
       await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
-      await expect(page.locator(".mercato-carousel-section")).toHaveCount(1);
+      await expect(page.locator(".mercato-carousel-card")).toHaveCount(1);
       await expect(page.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(9);
-      await expect(page.locator(".match-indicators-track > .match-indicator-slide").first()).toHaveAttribute("data-indicator", "performance");
+      await expect(page.locator(".match-indicators-track > .match-indicator-slide").first()).toHaveAttribute("data-indicator", "mercato");
       await expect(page.locator(".match-indicators-navigation > span")).toHaveText(/\/ 9$/);
       await expect(page.locator(".mercato-kpi-slide")).toHaveCount(1);
       await expect(page.locator(".mercato-kpi-subtitle")).toHaveText("Nouveau joueur");
@@ -237,12 +242,11 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".mercato-kpi-photo")).toHaveAttribute("src", "/assets/mercato-player-female.jpg");
       await expect(page.locator(".mercato-kpi-slide")).not.toContainText("Accueillir Camille Martin");
       await expect.poll(() => page.locator(".mercato-kpi-photo").evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+      await page.locator(".mercato-carousel-card").screenshot({ path: testInfo.outputPath("mercato-un-joueur.png"), animations: "disabled" });
       const outerCounter = page.locator(".match-indicators-navigation > span");
       const outerCounterBefore = await outerCounter.innerText();
       await page.getByRole("button", { name: "Indicateurs suivants" }).click();
       await expect(outerCounter).not.toHaveText(outerCounterBefore);
-      await expect(page.locator(".mercato-carousel-section")).toBeVisible();
-      await page.locator(".mercato-carousel-section .match-indicator-card").screenshot({ path: testInfo.outputPath("mercato-un-joueur.png"), animations: "disabled" });
 
       await page.getByRole("button", { name: "04 Coach", exact: true }).click();
       await page.getByRole("button", { name: "Écrire le Mercato" }).click();
@@ -343,12 +347,12 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       const mercatoLayout = await page.evaluate(() => ({
         noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
         cardContained: (() => {
-          const card = document.querySelector<HTMLElement>(".mercato-carousel-section .match-indicator-card");
+          const card = document.querySelector<HTMLElement>(".mercato-carousel-card");
           return Boolean(card && card.scrollWidth <= card.clientWidth + 1 && card.scrollHeight <= card.clientHeight + 1);
         })(),
       }));
       expect(mercatoLayout).toEqual({ noHorizontalOverflow: true, cardContained: true });
-      await page.locator(".mercato-carousel-section .match-indicator-card").screenshot({ path: testInfo.outputPath("mercato-plusieurs-joueurs.png"), animations: "disabled" });
+      await page.locator(".mercato-carousel-card").screenshot({ path: testInfo.outputPath("mercato-plusieurs-joueurs.png"), animations: "disabled" });
 
       savedCauseriePlan = { ...savedCauseriePlan!, mercatoProfiles: {} };
       await page.reload();
@@ -367,7 +371,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
       await expect(page.locator(".mercato-kpi-slide")).toHaveCount(2);
       await expect(page.locator(".mercato-kpi-flocage").allTextContents()).resolves.toEqual(["JEAN DUPONT", "MARIE MARTIN"]);
-      await expect(page.locator(".mercato-carousel-section h3")).toHaveCount(0);
+      await expect(page.locator(".mercato-carousel-card h3")).toHaveCount(0);
 
       await page.getByRole("button", { name: "04 Coach", exact: true }).click();
       await page.getByRole("button", { name: "Écrire le Mercato" }).click();
@@ -403,7 +407,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       const flocageFontSizes = await page.locator(".mercato-kpi-flocage > text").evaluateAll((nodes) => nodes.map((node) => Number(node.getAttribute("font-size"))));
       expect(flocageFontSizes.every((size) => Number.isFinite(size) && size >= 6)).toBe(true);
       expect(flocageFontSizes[2]).toBeLessThan(flocageFontSizes[0]);
-      const longNameLayout = await page.locator(".mercato-carousel-section .match-indicator-card").evaluateAll((cards) => cards.every((card) => {
+      const longNameLayout = await page.locator(".mercato-carousel-card").evaluateAll((cards) => cards.every((card) => {
         const element = card as HTMLElement;
         return element.scrollWidth <= element.clientWidth + 1 && element.scrollHeight <= element.clientHeight + 1;
       }));
@@ -439,7 +443,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await page.getByLabel("Nouvel arrivant du mercato").fill("");
       await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
       await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
-      await expect(page.locator(".mercato-carousel-section")).toHaveCount(0);
+      await expect(page.locator('[data-indicator="mercato"]')).toHaveCount(0);
       await expect(page.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(8);
       await expect(page.locator(".match-kpi-wrap")).toBeVisible();
 
@@ -485,7 +489,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
         ]) {
           await page.setViewportSize(viewport);
           const responsiveLayout = await page.evaluate(() => {
-            const card = document.querySelector<HTMLElement>(".mercato-carousel-section .match-indicator-card");
+            const card = document.querySelector<HTMLElement>(".mercato-carousel-card");
             const viewportElement = document.querySelector<HTMLElement>(".mercato-kpi-viewport");
             return {
               documentFits: document.documentElement.scrollWidth <= window.innerWidth + 1,
@@ -513,7 +517,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       expect(mercatoNetworkErrors).toEqual([]);
     }
     if (screen.name === "02-feuille-match") {
-      await expect(page.locator(".mercato-carousel-section")).toHaveCount(0);
+      await expect(page.locator('[data-indicator="mercato"]')).toHaveCount(0);
       await expect(page.locator(".match-page.is-threshold-reached")).toHaveCount(1);
       await expect(page.getByText("Célébration activée", { exact: true })).toBeVisible();
       await expect(page.locator(".match-score-bubble")).toHaveCount(4);
@@ -547,12 +551,12 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".football-score-panel")).toHaveCount(1);
       await expect(page.locator(".football-score-side-for strong")).toHaveText("4");
       await expect(page.locator(".football-score-side-against strong")).toHaveText("0");
-      await expect(page.getByLabel("KPI intégrés au score")).toContainText("% temps réception");
+      await expect(page.getByLabel("KPI intégrés au score")).toContainText("% duels gagnés");
       await expect(page.getByText("Indicateurs atteints", { exact: true })).toBeVisible();
       await expect(page.getByText("Indicateurs sous l'objectif", { exact: true })).toBeVisible();
-      await expect(page.locator(".match-score-bubbles").getByText("% possession Zody", { exact: true })).toBeVisible();
-      await expect(page.locator(".match-score-bubbles").getByText("% temps réception", { exact: true })).toBeVisible();
-      await expect(page.locator(".operational-charts-carousel").getByText("Temps de réception", { exact: true })).toBeVisible();
+      await expect(page.locator(".match-score-bubbles").getByText("% possession", { exact: true })).toBeVisible();
+      await expect(page.locator(".match-score-bubbles").getByText("% duels gagnés", { exact: true })).toBeVisible();
+      await expect(page.locator(".operational-charts-carousel").getByText("% Duels gagnés", { exact: true })).toBeVisible();
       await expect(page.locator(".team-motivation-message")).toHaveText("Excellente dynamique. On garde l'intensité jusqu'au bout.");
       await expect(page.locator(".match-result-actions")).toHaveCount(0);
       await expect(page.locator(".match-indicators").getByText("NB DE BLESSURES (A.T)", { exact: true })).toBeVisible();
@@ -577,8 +581,14 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".category-awards .award-leader-score")).toHaveCount(4);
       await expect(page.locator(".award-card.attack .award-leader-score b")).toHaveText("239");
       await expect(page.locator(".award-card.attack .award-leader-score small")).toHaveText("positions CHG");
+      await expect(page.locator(".award-card.attack .award-copy > i")).toHaveText("Meilleur buteur");
+      await expect(page.locator(".award-card.attack .award-copy > strong")).toHaveText("JEAN LUC LASSORT");
       await expect(page.locator(".award-card.midfield:not(.polyvalent) .award-leader-score b")).toHaveText("236");
       await expect(page.locator(".award-card.midfield:not(.polyvalent) .award-leader-score small")).toHaveText("positions ZONAGE");
+      await expect(page.locator(".award-card.midfield:not(.polyvalent) .award-copy > i")).toHaveText("Meilleur passeur");
+      await expect(page.locator(".award-card.midfield:not(.polyvalent) .award-copy > strong")).toHaveText("MORGAN JOUY");
+      await expect(page.locator(".award-card.defense .award-copy > i")).toHaveText("Meilleur joueur");
+      await expect(page.locator(".award-card.defense .award-copy > strong")).toHaveText("SYLVIE JACQUIER");
       await expect(page.locator(".award-card.polyvalent .award-leader-score b")).toHaveText(/\d+%/);
       await expect(page.locator(".award-card.polyvalent .award-leader-score small")).toHaveText("polyvalence");
       await expect(page.locator(".award-card.polyvalent .award-copy strong")).toHaveText("MORGAN JOUY");

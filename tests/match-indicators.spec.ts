@@ -52,9 +52,9 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   await expect(value("positions")).toHaveText(new Intl.NumberFormat("fr-FR").format(excelPositions));
   await expect(value("arrival")).toHaveText("80%");
   await expect(value("departure")).toHaveText("64,1%");
-  await expect(page.locator(".match-score-bubbles").getByText("% temps réception", { exact: true })).toBeVisible();
+  await expect(page.locator(".match-score-bubbles").getByText("% duels gagnés", { exact: true })).toBeVisible();
   await expect(page.locator(".match-score-bubble.reception-score-bubble strong")).toHaveText("56,5%");
-  await expect(page.getByLabel("KPI intégrés au score")).toContainText("% possession Zody");
+  await expect(page.getByLabel("KPI intégrés au score")).toContainText("% possession");
   await expect(page.locator(".match-score-bubbles").getByText("% passes réussies", { exact: true })).toBeVisible();
   await expect(page.locator(".match-score-bubble.pass-score-bubble strong")).toHaveText("69,2%");
   await expect(value("temperature")).toHaveText("92,19%");
@@ -66,7 +66,7 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   await expect(carousel.locator('[data-indicator="arrival"] .match-indicator-source')).toContainText("objectif 85%");
   await expect(page.locator(".operational-chart-slide")).toHaveCount(4);
   await expect(page.locator(".operational-charts-carousel").getByText("% centres réussis", { exact: true })).toBeVisible();
-  await expect(page.locator(".operational-charts-carousel").getByText("Temps de réception", { exact: true })).toBeVisible();
+  await expect(page.locator(".operational-charts-carousel").getByText("% Duels gagnés", { exact: true })).toBeVisible();
   await expect(page.locator(".centers-quality-pie span")).toHaveText("62%");
   await page.locator(".centers-quality-details summary").click();
   await expect(page.locator(".centers-quality-details")).toContainText("taux consolidé de ponctualité destination");
@@ -177,13 +177,13 @@ test("le carrousel distingue un PDF absent, une valeur nulle et un indicateur ab
   await expect(page.locator(".match-indicator-card")).toHaveCount(8);
 });
 
-test("le Mercato est la dernière vue pleine largeur du carrousel KPI", async ({ page }, testInfo) => {
+test("le Mercato occupe la première vignette KPI et affiche le profil sélectionné", async ({ page }, testInfo) => {
   await page.route("**/api/agencies/058/causerie**", async (route) => {
     if (route.request().method() !== "GET") return route.fallback();
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ plan: { mercato: "Camille Martin", mercatoProfiles: { "camille martin": "female" } } }),
+      body: JSON.stringify({ plan: { mercato: "Camille Martin, Julien Thomas", mercatoProfiles: { "camille martin": "female", "julien thomas": "male" } } }),
     });
   });
   await login(page);
@@ -191,21 +191,35 @@ test("le Mercato est la dernière vue pleine largeur du carrousel KPI", async ({
   const viewport = page.locator(".match-indicators-viewport");
   await expect(carousel.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(9);
   await page.getByRole("button", { name: "Afficher le Mercato", exact: true }).click();
-  await expect(page.locator(".mercato-carousel-section")).toBeVisible();
-  await expect(page.locator(".match-indicators-navigation > span")).toHaveText("9 / 9");
-  await expect(page.locator(".mercato-kpi-flocage")).toHaveText("CAMILLE MARTIN");
-  await expect(page.locator(".mercato-kpi-photo")).toHaveAttribute("data-profile", "female");
-  const fullWidth = await page.locator(".mercato-carousel-card").evaluate((card) => {
-    const cardRect = card.getBoundingClientRect();
-    const viewportRect = document.querySelector(".match-indicators-viewport")!.getBoundingClientRect();
-    return { card: cardRect.width, viewport: viewportRect.width, pageOverflow: document.documentElement.scrollWidth > window.innerWidth + 1 };
+  await expect(page.locator(".mercato-carousel-card")).toBeVisible();
+  await expect(page.locator(".match-indicators-navigation > span")).toHaveText(testInfo.project.name === "desktop" || testInfo.project.name === "tablet" ? "1–2 / 9" : "1 / 9");
+  await expect(viewport.locator(".match-indicators-track > .match-indicator-slide").first()).toHaveAttribute("data-indicator", "mercato");
+  const activeMercatoSlide = page.locator('.mercato-kpi-slide:not([aria-hidden="true"])');
+  await expect(activeMercatoSlide.locator(".mercato-kpi-flocage")).toHaveText("CAMILLE MARTIN");
+  await expect(activeMercatoSlide.locator(".mercato-kpi-photo")).toHaveAttribute("data-profile", "female");
+  await expect(activeMercatoSlide.locator(".mercato-kpi-profile")).toHaveText("Femme");
+  await expect(page.locator(".mercato-kpi-navigation > span")).toHaveText("1 / 2");
+  const matchingTile = await page.locator(".mercato-carousel-card").evaluate((card) => {
+    const reference = document.querySelector('[data-indicator="performance"] .match-indicator-card') as HTMLElement;
+    return {
+      width: (card as HTMLElement).offsetWidth,
+      height: (card as HTMLElement).offsetHeight,
+      referenceWidth: reference.offsetWidth,
+      referenceHeight: reference.offsetHeight,
+      pageOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+    };
   });
-  expect(fullWidth.card).toBeGreaterThanOrEqual(fullWidth.viewport - 2);
-  expect(fullWidth.pageOverflow).toBe(false);
+  expect(Math.abs(matchingTile.width - matchingTile.referenceWidth)).toBeLessThanOrEqual(1);
+  expect(Math.abs(matchingTile.height - matchingTile.referenceHeight)).toBeLessThanOrEqual(1);
+  expect(matchingTile.pageOverflow).toBe(false);
   await page.locator(".mercato-carousel-card").screenshot({ path: testInfo.outputPath("mercato-dans-carrousel-kpi.png"), animations: "disabled" });
-  await page.getByRole("button", { name: "Indicateurs précédents", exact: true }).click();
-  await expect(page.locator(".match-indicators-navigation > span")).toHaveText(testInfo.project.name === "mobile" ? "8 / 9" : "7–8 / 9");
-  await expect(viewport.locator('[data-indicator="temperature"]')).toHaveAttribute("data-featured", "");
+  await page.getByRole("button", { name: "Joueur suivant dans le Mercato" }).click();
+  const nextMercatoSlide = page.locator('.mercato-kpi-slide:not([aria-hidden="true"])');
+  await expect(nextMercatoSlide.locator(".mercato-kpi-profile")).toHaveText("Homme");
+  await expect(nextMercatoSlide.locator(".mercato-kpi-photo")).toHaveAttribute("data-profile", "male");
+  await page.getByRole("button", { name: "Indicateurs suivants", exact: true }).click();
+  await expect(page.locator(".match-indicators-navigation > span")).toHaveText(testInfo.project.name === "desktop" || testInfo.project.name === "tablet" ? "2–3 / 9" : "2 / 9");
+  await expect(viewport.locator('[data-indicator="performance"]')).toHaveAttribute("data-featured", "");
 });
 
 test("le carrousel reste cadré du petit mobile au grand écran et dans chaque ligue", async ({ page }, testInfo) => {

@@ -17091,6 +17091,32 @@ body.tv-screen-active .app-shell.league-platine {
   list-style: none;
 }
 
+.yellow-cards-disclosure {
+  margin-top: 9px;
+}
+
+.yellow-cards-disclosure summary {
+  width: fit-content;
+  color: rgba(229, 242, 255, 0.82);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.yellow-cards-disclosure summary:hover {
+  color: #ffffff;
+}
+
+.yellow-cards-disclosure summary:focus-visible {
+  outline: 2px solid #ffe18a;
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.yellow-cards-disclosure[open] summary {
+  margin-bottom: 8px;
+}
+
 .yellow-cards-panel li {
   display: grid;
   gap: 2px;
