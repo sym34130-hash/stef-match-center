@@ -177,6 +177,37 @@ test("le carrousel distingue un PDF absent, une valeur nulle et un indicateur ab
   await expect(page.locator(".match-indicator-card")).toHaveCount(8);
 });
 
+test("le Mercato est la dernière vue pleine largeur du carrousel KPI", async ({ page }, testInfo) => {
+  await page.route("**/api/agencies/058/causerie**", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ plan: { mercato: "Camille Martin", mercatoProfiles: { "camille martin": "female" } } }),
+    });
+  });
+  await login(page);
+  const carousel = page.locator(".match-indicators");
+  const viewport = page.locator(".match-indicators-viewport");
+  await expect(carousel.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(9);
+  await page.getByRole("button", { name: "Afficher le Mercato", exact: true }).click();
+  await expect(page.locator(".mercato-carousel-section")).toBeVisible();
+  await expect(page.locator(".match-indicators-navigation > span")).toHaveText("9 / 9");
+  await expect(page.locator(".mercato-kpi-flocage")).toHaveText("CAMILLE MARTIN");
+  await expect(page.locator(".mercato-kpi-photo")).toHaveAttribute("data-profile", "female");
+  const fullWidth = await page.locator(".mercato-carousel-card").evaluate((card) => {
+    const cardRect = card.getBoundingClientRect();
+    const viewportRect = document.querySelector(".match-indicators-viewport")!.getBoundingClientRect();
+    return { card: cardRect.width, viewport: viewportRect.width, pageOverflow: document.documentElement.scrollWidth > window.innerWidth + 1 };
+  });
+  expect(fullWidth.card).toBeGreaterThanOrEqual(fullWidth.viewport - 2);
+  expect(fullWidth.pageOverflow).toBe(false);
+  await page.locator(".mercato-carousel-card").screenshot({ path: testInfo.outputPath("mercato-dans-carrousel-kpi.png"), animations: "disabled" });
+  await page.getByRole("button", { name: "Indicateurs précédents", exact: true }).click();
+  await expect(page.locator(".match-indicators-navigation > span")).toHaveText(testInfo.project.name === "mobile" ? "8 / 9" : "7–8 / 9");
+  await expect(viewport.locator('[data-indicator="temperature"]')).toHaveAttribute("data-featured", "");
+});
+
 test("le carrousel reste cadré du petit mobile au grand écran et dans chaque ligue", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "Le redimensionnement est vérifié sur un seul navigateur.");
   test.setTimeout(90_000);

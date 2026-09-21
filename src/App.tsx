@@ -41,7 +41,6 @@ import type { LucideIcon } from "lucide-react";
 import type { Agency, Highlight, Player, Snapshot } from "./types";
 import { MatchIndicatorsCarousel } from "./MatchIndicatorsCarousel";
 import { KickoffMusicControl } from "./KickoffMusicControl";
-import { MercatoCarouselSection } from "./MercatoCarousel";
 import { parseMercatoEntrants, type MercatoProfile, type MercatoProfiles } from "./mercato";
 
 type Session = {
@@ -1273,8 +1272,9 @@ function MatchSheet({ snapshot, session, activeLeague, onPlayer, onCoach, onComp
             injuries={kpiCopy.injuriesValue}
             staffPercent={formatRealStaffPercent(snapshot, kpiCopy.expectedPlayersValue)}
             staffDetail={formatRealStaffDetail(snapshot, kpiCopy.expectedPlayersValue)}
+            mercato={mercatoText}
+            mercatoProfiles={mercatoProfiles}
           />
-          <MercatoCarouselSection mercato={mercatoText} profiles={mercatoProfiles} />
           <div className="match-kpi-wrap">
             {editingKpis && (
               <div className="match-indicators-editor">

@@ -12,10 +12,13 @@
 .match-indicators-navigation button:disabled { opacity: .3; cursor: default; }
 .match-indicators button:focus-visible, .match-indicators-viewport:focus-visible { outline: 2px solid #d6efff; outline-offset: 3px; }
 .match-indicators-viewport { --indicator-width: 280px; --indicator-padding: 20px; position: relative; width: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; scroll-padding-inline: var(--indicator-padding); cursor: grab; border-radius: 8px; mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent); }
+.match-indicators-viewport.is-mercato-active { overflow-x: hidden; mask-image: none; cursor: default; }
 .match-indicators-viewport::-webkit-scrollbar { display: none; }
 .match-indicators-viewport.is-dragging { cursor: grabbing; user-select: none; scroll-behavior: auto; }
 .match-indicators-track { display: flex; gap: 16px; width: max-content; padding: 18px var(--indicator-padding) 24px; }
 .match-indicator-slide { position: relative; flex: 0 0 var(--indicator-width); width: var(--indicator-width); min-width: 0; }
+.match-indicator-slide.mercato-indicator-slide { flex: 0 0 auto; min-width: 0; }
+.mercato-indicator-slide .mercato-carousel-section { margin-top: 0; }
 .match-indicator-card { display: grid; grid-template-rows: 48px minmax(0, 1fr) 94px; gap: 14px; height: 352px; width: 100%; padding: 20px; border: 1px solid #c6e0f23d; border-top: 2px solid var(--indicator-accent); border-radius: 8px; color: #fff; background: linear-gradient(150deg, #3e6380, #264762); box-shadow: 0 12px 24px -14px #061826a8, inset 0 1px 0 #ffffff12; opacity: var(--indicator-opacity, 1); transform: translateY(var(--indicator-lift, 0px)) scale(var(--indicator-scale, 1)); transform-origin: center; }
 .match-indicator-card.is-at-target,
 .match-indicator-card.is-below-target { border-color: #c6e0f23d; box-shadow: 0 12px 24px -14px #061826a8, inset 0 1px 0 #ffffff12; }

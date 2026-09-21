@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { Activity, ArrowDownToLine, ArrowUpFromLine, ChevronLeft, ChevronRight, Flag, Package, ShieldPlus, Thermometer, Users, Weight, type LucideIcon } from "lucide-react";
+import { MercatoCarouselSection } from "./MercatoCarousel";
+import { parseMercatoEntrants, type MercatoProfiles } from "./mercato";
 import type { Snapshot } from "./types";
 import "./match-indicators.css";
 
@@ -10,13 +12,15 @@ type Props = {
   injuries: string;
   staffPercent: string;
   staffDetail: string;
+  mercato: string | null;
+  mercatoProfiles: MercatoProfiles;
 };
 
 const number = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 type PunctualityKey = "arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn";
 
-export function MatchIndicatorsCarousel({ snapshot, performance, motivation, injuries, staffPercent, staffDetail }: Props) {
+export function MatchIndicatorsCarousel({ snapshot, performance, motivation, injuries, staffPercent, staffDetail, mercato, mercatoProfiles }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const geometry = useRef({ pitch: 296, width: 280, centers: 2, first: 0 });
@@ -26,6 +30,8 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   const goRef = useRef<(index: number, instant?: boolean) => void>(() => {});
   const settleRef = useRef<() => void>(() => {});
   const [position, setPosition] = useState({ first: 0, centers: 2 });
+  const mercatoEntrants = useMemo(() => parseMercatoEntrants(mercato ?? ""), [mercato]);
+  const hasMercato = mercatoEntrants.length > 0;
   const pdf = snapshot.dailyIndicators;
   const punctuality = pdf?.punctuality;
   const punctualityTargets = pdf?.punctualityTargets;
@@ -50,29 +56,66 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     const track = trackRef.current;
     if (!viewport || !track) return;
     const slides = Array.from(track.children) as HTMLElement[];
+    const normalCount = cards.length;
+    const mercatoIndex = hasMercato ? normalCount : -1;
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0;
     let settleTimer = 0;
     let disposed = false;
     let navigationTarget: number | null = null;
+    const slideStart = (index: number) => {
+      const slide = slides[index];
+      if (!slide) return 0;
+      return slide.getBoundingClientRect().left - viewport.getBoundingClientRect().left + viewport.scrollLeft;
+    };
+    const isMercatoPosition = () => mercatoIndex >= 0 && viewport.scrollLeft >= slideStart(mercatoIndex) - 2;
+    const targetLeft = (index: number, centers: number) => {
+      if (index === mercatoIndex && mercatoIndex >= 0) return slideStart(mercatoIndex);
+      const maxNormalFirst = Math.max(0, normalCount - centers);
+      return !hasMercato && index === maxNormalFirst
+        ? Math.max(0, viewport.scrollWidth - viewport.clientWidth)
+        : index * geometry.current.pitch;
+    };
 
     // Depth follows the actual scroll position; React only tracks the settled group.
     const paint = () => {
       frame = 0;
       const { pitch, width, centers } = geometry.current;
-      const maxFirst = Math.max(0, slides.length - centers);
+      const maxFirst = Math.max(0, normalCount - centers);
       const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
       const atStart = viewport.scrollLeft <= 2;
       const atEnd = viewport.scrollLeft >= maxScrollLeft - 2;
-      const first = atStart
+      const inMercato = isMercatoPosition();
+      viewport.classList.toggle("is-mercato-active", inMercato);
+      const first = inMercato
+        ? mercatoIndex
+        : atStart
         ? 0
         : atEnd
           ? maxFirst
           : Math.max(0, Math.min(maxFirst, Math.round(viewport.scrollLeft / pitch)));
+      const visibleCenters = inMercato ? 1 : centers;
       geometry.current.first = first;
-      setPosition((current) => current.first === first && current.centers === centers ? current : { first, centers });
+      setPosition((current) => current.first === first && current.centers === visibleCenters ? current : { first, centers: visibleCenters });
       const core = (centers - 1) * pitch / 2;
       slides.forEach((slide, index) => {
+        if (index === mercatoIndex) {
+          const active = inMercato;
+          slide.style.setProperty("--indicator-scale", "1");
+          slide.style.setProperty("--indicator-opacity", active ? "1" : "0.12");
+          slide.style.setProperty("--indicator-lift", "0px");
+          slide.style.zIndex = active ? "100" : "0";
+          slide.toggleAttribute("data-featured", active);
+          return;
+        }
+        if (inMercato) {
+          slide.style.setProperty("--indicator-scale", "1");
+          slide.style.setProperty("--indicator-opacity", "0");
+          slide.style.setProperty("--indicator-lift", "0px");
+          slide.style.zIndex = "0";
+          slide.removeAttribute("data-featured");
+          return;
+        }
         const distance = Math.abs((index - viewport.scrollLeft / pitch) * pitch - core);
         const depth = Math.max(0, (distance - core) / pitch);
         const edge = smooth((distance - (viewport.clientWidth / 2 - width / 2)) / width);
@@ -88,23 +131,33 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     const schedulePaint = () => { if (!frame) frame = requestAnimationFrame(paint); };
     const go = (requested: number, instant = false) => {
       if (disposed) return;
-      const { pitch, centers } = geometry.current;
-      const maxFirst = Math.max(0, slides.length - centers);
-      const next = Math.max(0, Math.min(maxFirst, requested));
+      const { centers } = geometry.current;
+      const maxFirst = Math.max(0, normalCount - centers);
+      const next = hasMercato && requested >= mercatoIndex
+        ? mercatoIndex
+        : Math.max(0, Math.min(maxFirst, requested));
       geometry.current.first = next;
       manualScroll.current = false;
       navigationTarget = next;
-      setPosition((current) => current.first === next && current.centers === centers ? current : { first: next, centers });
-      const target = next === maxFirst ? Math.max(0, viewport.scrollWidth - viewport.clientWidth) : next * pitch;
-      viewport.scrollTo({ left: target, behavior: instant || motion.matches ? "instant" : "smooth" });
+      const visibleCenters = next === mercatoIndex ? 1 : centers;
+      setPosition((current) => current.first === next && current.centers === visibleCenters ? current : { first: next, centers: visibleCenters });
+      viewport.scrollTo({ left: targetLeft(next, centers), behavior: instant || motion.matches ? "instant" : "smooth" });
       schedulePaint();
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
       if (event.target instanceof Element && event.target.closest(".mercato-kpi-viewport")) return;
       event.preventDefault();
-      const maxFirst = Math.max(0, slides.length - geometry.current.centers);
+      const maxFirst = Math.max(0, normalCount - geometry.current.centers);
       const current = geometry.current.first;
+      if (event.key === "ArrowLeft" && current === mercatoIndex) {
+        go(maxFirst);
+        return;
+      }
+      if ((event.key === "ArrowRight" && current === maxFirst || event.key === "End") && hasMercato) {
+        go(mercatoIndex);
+        return;
+      }
       go(event.key === "Home" ? 0 : event.key === "End" ? maxFirst : current + (event.key === "ArrowRight" ? 1 : -1));
     };
     goRef.current = go;
@@ -113,7 +166,14 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       const centers = available >= 640 ? 2 : 1;
       const width = centers === 2 ? (available >= 1500 ? 260 : 280) : Math.min(320, available - 72);
       const padding = (available - centers * width - (centers - 1) * 16) / 2;
-      const first = Math.min(geometry.current.first, slides.length - centers);
+      const special = slides[mercatoIndex];
+      if (special) {
+        special.style.width = `${available}px`;
+        special.style.flexBasis = `${available}px`;
+        special.style.marginRight = `${-Math.max(0, padding)}px`;
+      }
+      const wasMercato = geometry.current.first === mercatoIndex && hasMercato;
+      const first = wasMercato ? mercatoIndex : Math.min(geometry.current.first, normalCount - centers);
       geometry.current = { width, pitch: width + 16, centers, first };
       viewport.style.setProperty("--indicator-width", `${width}px`);
       viewport.style.setProperty("--indicator-padding", `${Math.max(0, padding)}px`);
@@ -125,16 +185,16 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       if (manualScroll.current) navigationTarget = null;
       const target = navigationTarget;
       if (target !== null) {
-        const maxFirst = Math.max(0, slides.length - geometry.current.centers);
-        const targetLeft = target === maxFirst ? Math.max(0, viewport.scrollWidth - viewport.clientWidth) : target * geometry.current.pitch;
-        if (Math.abs(viewport.scrollLeft - targetLeft) > 2) {
+        const expectedLeft = targetLeft(target, geometry.current.centers);
+        if (Math.abs(viewport.scrollLeft - expectedLeft) > 2) {
           queueSettle();
           return;
         }
       }
       manualScroll.current = false;
       navigationTarget = null;
-      go(Math.round(viewport.scrollLeft / geometry.current.pitch), true);
+      if (isMercatoPosition()) go(mercatoIndex, true);
+      else go(Math.round(viewport.scrollLeft / geometry.current.pitch), true);
     };
     const queueSettle = () => {
       clearTimeout(settleTimer);
@@ -159,7 +219,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       clearTimeout(settleTimer);
       settleRef.current = () => {};
     };
-  }, [cards.length]);
+  }, [cards.length, hasMercato]);
 
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== "mouse" || event.button !== 0 || (event.target as Element).closest(".mercato-kpi-viewport")) return;
@@ -182,17 +242,18 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     drag.current = null;
     event.currentTarget.classList.remove("is-dragging");
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-    if (moved) goRef.current(Math.round(event.currentTarget.scrollLeft / geometry.current.pitch));
+    if (moved) settleRef.current();
   };
-  const last = Math.max(0, cards.length - position.centers);
+  const lastNormal = Math.max(0, cards.length - geometry.current.centers);
+  const lastView = hasMercato ? cards.length : lastNormal;
   return (
     <section className="match-indicators" aria-label="Indicateurs du match" aria-roledescription="carrousel">
       <header className="match-indicators-heading">
         <span><Activity size={17} /> Le collectif en chiffres</span>
         <div className="match-indicators-navigation">
-          <span aria-live="polite" aria-atomic="true">{position.first + 1}{position.centers === 2 ? `–${position.first + 2}` : ""} / {cards.length}</span>
+          <span aria-live="polite" aria-atomic="true">{position.first === cards.length ? `${cards.length + 1} / ${cards.length + 1}` : `${position.first + 1}${position.centers === 2 ? `–${position.first + 2}` : ""} / ${cards.length + (hasMercato ? 1 : 0)}`}</span>
           <button type="button" disabled={position.first === 0} aria-label="Indicateurs précédents" title="Indicateurs précédents" onClick={() => goRef.current(position.first - 1)}><ChevronLeft size={19} /></button>
-          <button type="button" disabled={position.first === last} aria-label="Indicateurs suivants" title="Indicateurs suivants" onClick={() => goRef.current(position.first + 1)}><ChevronRight size={19} /></button>
+          <button type="button" disabled={position.first === lastView} aria-label="Indicateurs suivants" title="Indicateurs suivants" onClick={() => goRef.current(position.first === lastNormal && hasMercato ? cards.length : position.first + 1)}><ChevronRight size={19} /></button>
         </div>
       </header>
       <div ref={viewportRef} className="match-indicators-viewport" tabIndex={0} role="group" aria-label="Défilement des indicateurs du match"
@@ -227,10 +288,16 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
               </article>
             </div>
           ))}
+          {hasMercato && (
+            <div className="match-indicator-slide mercato-indicator-slide" data-indicator="mercato" data-featured={position.first === cards.length ? "" : undefined} role="group" aria-roledescription="diapositive" aria-label={`Mercato, ${cards.length + 1} sur ${cards.length + 1}`}>
+              <MercatoCarouselSection mercato={mercato} profiles={mercatoProfiles} />
+            </div>
+          )}
         </div>
       </div>
       <div className="match-indicators-index" aria-label="Accès aux indicateurs">
-        {cards.map((card, index) => <button key={card.id} type="button" className={index >= position.first && index < position.first + position.centers ? "is-current" : ""} aria-label={`Afficher ${card.label}`} aria-current={index >= position.first && index < position.first + position.centers ? "true" : undefined} title={card.label} onClick={() => goRef.current(Math.min(index, last))} />)}
+        {cards.map((card, index) => <button key={card.id} type="button" className={index >= position.first && index < position.first + position.centers ? "is-current" : ""} aria-label={`Afficher ${card.label}`} aria-current={index >= position.first && index < position.first + position.centers ? "true" : undefined} title={card.label} onClick={() => goRef.current(Math.min(index, lastNormal))} />)}
+        {hasMercato && <button type="button" className={position.first === cards.length ? "is-current" : ""} aria-label="Afficher le Mercato" aria-current={position.first === cards.length ? "true" : undefined} title="Mercato" onClick={() => goRef.current(cards.length)} />}
       </div>
     </section>
   );

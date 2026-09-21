@@ -224,9 +224,9 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
 
       await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
       await expect(page.locator(".mercato-carousel-section")).toHaveCount(1);
-      await expect(page.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(8);
+      await expect(page.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(9);
       await expect(page.locator(".match-indicators-track > .match-indicator-slide").first()).toHaveAttribute("data-indicator", "performance");
-      await expect(page.locator(".match-indicators-navigation > span")).toHaveText(/\/ 8$/);
+      await expect(page.locator(".match-indicators-navigation > span")).toHaveText(/\/ 9$/);
       await expect(page.locator(".mercato-kpi-slide")).toHaveCount(1);
       await expect(page.locator(".mercato-kpi-subtitle")).toHaveText("Nouveau joueur");
       await expect(page.locator(".mercato-kpi-navigation")).toHaveCount(0);
