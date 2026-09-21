@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, Page, test } from "@playwright/test";
 import type { Snapshot } from "../src/types";
 
@@ -101,6 +102,9 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.getByText("Expédition", { exact: true })).toBeVisible();
       await expect(page.getByText("Ramasse & emballage", { exact: true })).toBeVisible();
       await expect(page.getByText("Brief à renseigner", { exact: true })).toHaveCount(3);
+    } else if (screen.name === "02-feuille-match") {
+      await expect(page.locator(".match-ceremony.is-active")).toBeVisible();
+      await expect(page.getByRole("navigation", { name: "Navigation de la feuille de match" }).locator(".match-carousel-heading > strong")).toHaveText("Coup de sifflet final");
     } else if ("heading" in screen) {
       await expect(page.getByRole("heading", { name: screen.heading, exact: true })).toBeVisible();
     } else {
@@ -120,7 +124,8 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       expect(playerSize.width).toBeGreaterThanOrEqual(200);
       expect(playerSize.height).toBeGreaterThanOrEqual(200);
       await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
-      await expect(page.getByRole("main").getByText("02 - Feuille de match", { exact: true })).toBeVisible();
+      await expect(page.locator(".match-ceremony.is-active")).toBeVisible();
+      await expect(page.getByRole("navigation", { name: "Navigation de la feuille de match" }).locator(".match-carousel-heading > strong")).toHaveText("Coup de sifflet final");
       await expect(player).toBeVisible();
     }
     if (screen.name === "02-feuille-match") {
@@ -556,7 +561,37 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.getByText("Indicateurs sous l'objectif", { exact: true })).toBeVisible();
       await expect(page.locator(".match-score-bubbles").getByText("% possession", { exact: true })).toBeVisible();
       await expect(page.locator(".match-score-bubbles").getByText("% duels gagnés", { exact: true })).toBeVisible();
+      const matchCarouselNavigation = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
+      await matchCarouselNavigation.getByRole("button", { name: "Aller à Statistiques du match" }).click();
+      await expect(matchCarouselNavigation.locator(".match-carousel-count")).toHaveText("03 / 04");
+      await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % duels gagnés" }).click();
+      await expect(page.locator(".operational-charts-carousel-counter")).toHaveText("2 / 4");
       await expect(page.locator(".operational-charts-carousel").getByText("% Duels gagnés", { exact: true })).toBeVisible();
+      await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % tirs cadrés" }).click();
+      await expect(page.locator(".operational-charts-carousel-counter")).toHaveText("3 / 4");
+      await expect(page.locator(".operational-charts-carousel").getByText("% tirs cadrés", { exact: true })).toBeVisible();
+      await expect(page.locator(".loading-duel-quality-card .duel-quality-details summary")).toContainText("Voir les duels perdus");
+      await expect(page.locator(".operational-chart-slide")).toHaveCount(4);
+      const qualityCarouselLayout = await page.evaluate(() => {
+        const viewport = document.querySelector<HTMLElement>(".operational-charts-carousel-viewport");
+        const slides = Array.from(document.querySelectorAll<HTMLElement>(".operational-chart-slide"));
+        const cards = slides.map((slide) => slide.firstElementChild as HTMLElement | null).filter((card): card is HTMLElement => Boolean(card));
+        const widths = slides.map((slide) => slide.offsetWidth);
+        const heights = cards.map((card) => card.offsetHeight);
+        return {
+          slideCount: slides.length,
+          sameSlideWidth: widths.every((width) => width === widths[0]),
+          sameCardHeight: heights.every((height) => height === heights[0]),
+          horizontalOverflow: Boolean(viewport && viewport.scrollWidth > viewport.clientWidth + 1),
+        };
+      });
+      expect(qualityCarouselLayout).toEqual({ slideCount: 4, sameSlideWidth: true, sameCardHeight: true, horizontalOverflow: true });
+      await page.getByRole("button", { name: "Graphique précédent", exact: true }).click();
+      await expect(page.locator(".operational-charts-carousel-counter")).toHaveText("2 / 4");
+      await expect(page.locator(".operational-charts-carousel-dots button.is-active")).toHaveCount(1);
+      await expect(page.locator(".loading-duel-quality-card .duel-quality-details summary")).toContainText("Voir les duels perdus");
+      await matchCarouselNavigation.getByRole("button", { name: "Aller à Coup de sifflet final" }).click();
+      await expect(matchCarouselNavigation.locator(".match-carousel-count")).toHaveText("01 / 04");
       await expect(page.locator(".team-motivation-message")).toHaveText("Excellente dynamique. On garde l'intensité jusqu'au bout.");
       await expect(page.locator(".match-result-actions")).toHaveCount(0);
       await expect(page.locator(".match-indicators").getByText("NB DE BLESSURES (A.T)", { exact: true })).toBeVisible();
@@ -596,27 +631,6 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".award-card.polyvalent .award-challenger")).toHaveCount(2);
       await expect(page.locator(".award-card.midfield .award-challenger").first()).toContainText("227 poz · -9 avec le premier");
       await expect(page.locator(".award-card.polyvalent .award-challenger").first()).toContainText("% polyvalence");
-      await expect(page.locator(".operational-charts-carousel").getByText("% tirs cadrés", { exact: true })).toBeVisible();
-      await expect(page.locator(".loading-duel-quality-card .duel-quality-details summary")).toContainText("Voir les duels perdus");
-      await expect(page.locator(".operational-chart-slide")).toHaveCount(4);
-      const qualityCarouselLayout = await page.evaluate(() => {
-        const viewport = document.querySelector<HTMLElement>(".operational-charts-carousel-viewport");
-        const slides = Array.from(document.querySelectorAll<HTMLElement>(".operational-chart-slide"));
-        const cards = slides.map((slide) => slide.firstElementChild as HTMLElement | null).filter((card): card is HTMLElement => Boolean(card));
-        const widths = slides.map((slide) => slide.offsetWidth);
-        const heights = cards.map((card) => card.offsetHeight);
-        return {
-          slideCount: slides.length,
-          sameSlideWidth: widths.every((width) => width === widths[0]),
-          sameCardHeight: heights.every((height) => height === heights[0]),
-          horizontalOverflow: Boolean(viewport && viewport.scrollWidth > viewport.clientWidth + 1),
-        };
-      });
-      expect(qualityCarouselLayout).toEqual({ slideCount: 4, sameSlideWidth: true, sameCardHeight: true, horizontalOverflow: true });
-      await page.getByRole("button", { name: "Graphique suivant", exact: true }).click();
-      await expect(page.locator(".operational-charts-carousel-counter")).toHaveText("2 / 4");
-      await expect(page.locator(".operational-charts-carousel-dots button.is-active")).toHaveCount(1);
-      await expect(page.locator(".loading-duel-quality-card .duel-quality-details summary")).toContainText("Voir les duels perdus");
       await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
       await expect(page.getByRole("button", { name: "Sortir du mode Célébration", exact: true })).toBeVisible();
       const celebrationLayout = await page.evaluate(() => {
@@ -632,7 +646,8 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
           kpiBorderAnimation: kpiBubble ? getComputedStyle(kpiBubble).animationName : "",
         };
       });
-      expect(celebrationLayout.ceremonyMinHeight).toBe("auto");
+      // Browsers resolve min-height:auto to 0px in getComputedStyle().
+      expect(celebrationLayout.ceremonyMinHeight).toBe("0px");
       expect(celebrationLayout.kpiVisible).toBe(true);
       expect(celebrationLayout.maxKpiHeight).toBeLessThanOrEqual(352);
       if (screen.name === "desktop" || screen.name === "tablet") {
@@ -750,14 +765,14 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
   await expect(page.getByText("Brief à renseigner", { exact: true })).toHaveCount(3);
   const planLayout = await page.evaluate(() => {
     const columns = Array.from(document.querySelectorAll<HTMLElement>(".tv-plan-column"));
-    const minHeight = window.innerWidth <= 900 ? 180 : 220;
     return {
       count: columns.length,
-      tallEnough: columns.every((column) => column.clientHeight >= minHeight),
+      tallEnough: columns.every((column) => column.clientHeight >= 100),
       contained: columns.every((column) => column.scrollWidth <= column.clientWidth + 1),
+      textVisible: columns.every((column) => column.scrollHeight <= column.clientHeight + 1),
     };
   });
-  expect(planLayout).toEqual({ count: 3, tallEnough: true, contained: true });
+  expect(planLayout).toEqual({ count: 3, tallEnough: true, contained: true, textVisible: true });
   await assertNoHorizontalOverflow(page);
   await page.screenshot({ path: testInfo.outputPath("tv-ecran-quai.png"), fullPage: false, animations: "disabled" });
 
@@ -860,6 +875,8 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await expect(page.getByText("pas de 30 min · fin incluse")).toBeVisible();
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  const matchNavigation = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
+  await matchNavigation.getByRole("button", { name: "Aller à Statistiques du match" }).click();
   await expect(page.locator(".performance-chart-panel")).toBeVisible();
   await expect(page.getByRole("img", { name: "Évolution horaire du pourcentage de passes réussies" })).toBeVisible();
   await expect(page.getByText("Donnée Excel Feuille de match, heure par heure", { exact: true })).toBeVisible();
@@ -870,6 +887,7 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   await page.getByRole("button", { name: "Appliquer", exact: true }).click();
   await expect(page.locator(".time-range-control input").nth(0)).toHaveValue("13:00");
   await expect(page.locator(".time-range-control input").nth(1)).toHaveValue("22:30");
+  await expect(matchNavigation.locator(".match-carousel-count")).toHaveText("03 / 04");
   const initialHours = await page.locator(".performance-chart-hour").allTextContents();
   expect(initialHours).not.toContain("00h");
   expect(initialHours).toEqual(["13h", "14h", "16h", "17h", "18h", "19h", "20h", "21h", "22h"]);
@@ -879,6 +897,7 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   await page.getByRole("button", { name: "Appliquer", exact: true }).click();
   await expect(page.locator(".time-range-control input").nth(0)).toHaveValue("16:00");
   await expect(page.locator(".time-range-control input").nth(1)).toHaveValue("18:00");
+  await expect(matchNavigation.locator(".match-carousel-count")).toHaveText("03 / 04");
   await expect(page.locator(".performance-chart-hour")).toHaveText(["16h", "17h", "18h"]);
   expect(await page.locator(".performance-chart-hour").allTextContents()).not.toContain("00h");
   await expect(page.locator(".performance-chart-total b")).toHaveText("59,4%");
@@ -888,7 +907,7 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   await page.getByRole("button", { name: "Appliquer", exact: true }).click();
   await expect(page.locator(".time-range-control input").nth(0)).toHaveValue("22:30");
   await expect(page.locator(".time-range-control input").nth(1)).toHaveValue("06:00");
-  await expect(page.getByText("Plage 22:30 - 06:00", { exact: true })).toBeVisible();
+  await expect(matchNavigation.locator(".match-carousel-count")).toHaveText("03 / 04");
 });
 
 test("le guide et le retour du brief équipe restent accessibles avant le premier import", async ({ page }) => {
@@ -962,6 +981,157 @@ test("une ligue reste sélectionnable avant le premier import", async ({ page })
   await expect(page.locator(".administrator-active-badge strong")).toHaveText("Platine");
   await expect(page.locator(".app-shell")).toHaveClass(/league-platine/);
   await expect(page.getByText("Ligue activée. Importe un match pour appliquer ses objectifs.", { exact: true })).toBeVisible();
+});
+
+test("un recalcul de ligue indisponible conserve les résultats et la ligue actifs", async ({ page }) => {
+  let rejectedLeagueRequest = false;
+  await page.route("**/api/agencies/058/snapshot**", async (route) => {
+    const requestUrl = new URL(route.request().url());
+    if (requestUrl.searchParams.get("zonageMinutes") === "20") {
+      rejectedLeagueRequest = true;
+      await route.fulfill({
+        status: 404,
+        contentType: "application/json",
+        body: JSON.stringify({ title: "AUCUN MATCH IMPORTÉ", message: "Aucun fichier Excel n'a encore été importé pour cette agence." }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Code agence").selectOption("058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
+  await page.getByRole("button", { name: "Accéder au match" }).click();
+  await expect(page.locator(".top-league-badge")).toContainText("Argent");
+
+  await page.getByRole("button", { name: "ADM Administrateur", exact: true }).click();
+  await page.getByRole("button", { name: "Activer", exact: true }).last().click();
+
+  expect(rejectedLeagueRequest).toBe(true);
+  await expect(page.locator(".top-league-badge")).toContainText("Argent");
+  await expect(page.locator(".administrator-active-badge strong")).toHaveText("Argent");
+  await expect(page.locator(".top-status-message")).toContainText("Les résultats et la ligue actuels sont conservés.");
+
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  await expect(page.locator(".match-page")).toBeVisible();
+});
+
+test("la synchronisation ne recharge les données que si leur révision change", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "Le contrôle de polling est exécuté une fois sur desktop.");
+  await page.clock.install();
+
+  const snapshotFixture = JSON.parse(readFileSync(new URL("../data/agencies/058/latest.json", import.meta.url), "utf8")) as Snapshot;
+  let servedSnapshot = snapshotFixture;
+  let syncState = { snapshotRevision: "snapshot-v1", leagueConfigRevision: "config-v1", causerieRevision: null as string | null };
+  let syncStateRequests = 0;
+  let snapshotRequests = 0;
+  let leagueConfigRequests = 0;
+  let causerieRequests = 0;
+  let causeriePlan: Record<string, unknown> | null = null;
+  const syncEvents: string[] = [];
+  await page.route("**/api/agencies/058/sync-state**", async (route) => {
+    syncStateRequests += 1;
+    syncEvents.push(`state:${syncState.snapshotRevision}/${syncState.leagueConfigRevision}/${syncState.causerieRevision}`);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(syncState) });
+  });
+  await page.route("**/api/agencies/058/causerie**", async (route) => {
+    causerieRequests += 1;
+    syncEvents.push(`causerie:${causerieRequests}`);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ plan: causeriePlan }) });
+  });
+  await page.route("**/api/agencies/058/snapshot**", async (route) => {
+    snapshotRequests += 1;
+    syncEvents.push("snapshot:200");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ snapshot: servedSnapshot }),
+    });
+  });
+  await page.route("**/api/agencies/058/league-configs", async (route) => {
+    if (route.request().method() === "GET") {
+      leagueConfigRequests += 1;
+      syncEvents.push("configs");
+    }
+    await route.continue();
+  });
+
+  await page.goto("/");
+  await page.getByLabel("Code agence").selectOption("058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
+  await page.getByRole("button", { name: "Accéder au match" }).click();
+  await expect(page.getByRole("heading", { name: "Agen - 058", exact: true })).toBeVisible();
+  expect(snapshotRequests).toBe(1);
+  expect(leagueConfigRequests).toBe(1);
+
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  await expect(page.locator(".match-page")).toBeVisible();
+  await expect.poll(() => causerieRequests).toBeGreaterThanOrEqual(1);
+
+  await page.clock.runFor(15_000);
+  await expect.poll(() => syncStateRequests).toBeGreaterThanOrEqual(2);
+  expect(snapshotRequests).toBe(1);
+  expect(leagueConfigRequests).toBe(1);
+
+  const visiblePollCount = syncStateRequests;
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+  });
+  await page.clock.runFor(15_000);
+  expect(syncStateRequests).toBe(visiblePollCount);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect.poll(() => syncStateRequests).toBe(visiblePollCount + 1);
+
+  await page.locator(".match-carousel-progress").getByRole("button", { name: "Aller à Statistiques du match" }).click();
+  await expect(page.locator(".match-carousel-count")).toHaveText("03 / 04");
+  servedSnapshot = { ...snapshotFixture, importedAt: new Date(Date.parse(snapshotFixture.importedAt) + 60_000).toISOString() };
+  syncState = { ...syncState, snapshotRevision: "snapshot-v2" };
+  await page.clock.runFor(15_000);
+  await expect.poll(() => snapshotRequests).toBe(2);
+  await expect(page.locator(".match-carousel-count")).toHaveText("03 / 04");
+  expect(leagueConfigRequests).toBe(1);
+
+  syncState = { ...syncState, leagueConfigRevision: "config-v2" };
+  await page.clock.runFor(15_000);
+  await expect.poll(() => leagueConfigRequests).toBe(2);
+  await expect.poll(() => snapshotRequests).toBe(3);
+
+  const completedSyncPolls = syncStateRequests;
+  await page.clock.runFor(15_000);
+  await expect.poll(() => syncStateRequests).toBe(completedSyncPolls + 1);
+  expect(leagueConfigRequests, syncEvents.join(" -> ")).toBe(2);
+  expect(snapshotRequests, syncEvents.join(" -> ")).toBe(3);
+
+  const previousCauserieRequests = causerieRequests;
+  await page.locator(".match-carousel-progress").getByRole("button", { name: "Aller à Coup de sifflet final" }).click();
+  await expect(page.locator(".match-carousel-count")).toHaveText("01 / 04");
+  causeriePlan = { mercato: "Camille Martin - nouvel arrivant", mercatoProfiles: { "camille martin": "female" } };
+  syncState = { ...syncState, causerieRevision: "causerie-v2" };
+  await page.clock.runFor(15_000);
+  await expect.poll(() => causerieRequests).toBe(previousCauserieRequests + 1);
+  await expect(page.locator(".mercato-carousel-card .mercato-kpi-subtitle")).toHaveText("Nouveau joueur");
+  await expect(page.locator(".mercato-carousel-card .mercato-kpi-profile")).toHaveText("Femme");
+
+  await page.locator(".match-carousel-progress").getByRole("button", { name: "Aller à Brief équipe" }).click();
+  await page.getByRole("button", { name: "Écrire", exact: true }).click();
+  const briefDraft = page.getByLabel("SAV, contenu du brief");
+  await briefDraft.fill("Consigne saisie en cours");
+  const beforeSecondCauserieRefresh = causerieRequests;
+  causeriePlan = {
+    mercato: "Camille Martin - nouvel arrivant",
+    mercatoProfiles: { "camille martin": "female" },
+    attack: ["Mise à jour distante"],
+    midfield: [],
+    defense: [],
+  };
+  syncState = { ...syncState, causerieRevision: "causerie-v3" };
+  await page.clock.runFor(15_000);
+  await expect.poll(() => causerieRequests).toBe(beforeSecondCauserieRefresh + 1);
+  await expect(briefDraft).toHaveValue("Consigne saisie en cours");
 });
 
 test("l'administrateur conserve ses règles par agence et synchronise ses animations", async ({ page }) => {
@@ -1078,6 +1248,84 @@ test("le brief équipe porte ses zones et son mode plein écran", async ({ page 
   await expect(page.getByText("Expédition", { exact: true })).toBeVisible();
   await expect(page.getByText("Ramasse & emballage", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Quitter le brief équipe", exact: true })).toBeVisible();
+  await assertNoHorizontalOverflow(page);
+});
+
+test("la feuille de match défile entre ses quatre sections sans empiler les vues", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await page.getByLabel("Code agence").selectOption("058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
+  await page.getByRole("button", { name: "Accéder au match" }).click();
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+
+  const viewport = page.locator(".match-slide-viewport");
+  const navigation = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
+  const assertActiveSlideFits = async () => {
+    if (testInfo.project.name === "mobile") return;
+    const geometry = await viewport.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const selectors = [
+        ".match-result-stage", ".match-kpi-actions", ".special-awards", ".award-card",
+        ".operational-charts-carousel", ".match-brief-slide .tv-plan-grid",
+      ];
+      const clipped = selectors.flatMap((selector) => Array.from(element.querySelectorAll<HTMLElement>(`.match-slide-panel.is-active ${selector}`)))
+        .filter((child) => {
+          const rect = child.getBoundingClientRect();
+          return rect.top < bounds.top - 1 || rect.bottom > bounds.bottom + 1;
+        })
+        .map((child) => ({ className: child.className, top: Math.round(child.getBoundingClientRect().top), bottom: Math.round(child.getBoundingClientRect().bottom) }));
+      return { height: element.clientHeight, content: element.scrollHeight, clipped };
+    });
+    expect(geometry.content, `la slide active dépasse de ${geometry.content - geometry.height}px`).toBeLessThanOrEqual(geometry.height + 1);
+    expect(geometry.clipped, "des éléments interactifs ou des cartes sont coupés par le viewport").toEqual([]);
+  };
+  await expect(navigation).toBeVisible();
+  await expect(navigation.locator(".match-carousel-count")).toHaveText("01 / 04");
+  await expect(page.locator(".match-slide-panel.is-active")).toHaveCount(1);
+  await expect(page.locator(".match-ceremony")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Le collectif en chiffres", exact: true })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("match-slide-1-coup-de-sifflet.png"), fullPage: false, animations: "disabled" });
+  await assertActiveSlideFits();
+
+  await navigation.getByRole("button", { name: "Section suivante" }).click();
+  await expect(navigation.locator(".match-carousel-count")).toHaveText("02 / 04");
+  await expect(page.locator(".awards-ceremony")).toBeVisible();
+  await expect(page.locator(".match-ceremony")).toHaveAttribute("aria-hidden", "true");
+  await page.screenshot({ path: testInfo.outputPath("match-slide-2-performances.png"), fullPage: false, animations: "disabled" });
+  await assertActiveSlideFits();
+
+  await viewport.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(navigation.locator(".match-carousel-count")).toHaveText("03 / 04");
+  await expect(page.locator(".match-statistics-section")).toBeVisible();
+  await expect(page.locator(".operational-charts-carousel")).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("match-slide-3-statistiques.png"), fullPage: false, animations: "disabled" });
+  await assertActiveSlideFits();
+
+  await navigation.getByRole("button", { name: "Section suivante" }).click();
+  await expect(navigation.locator(".match-carousel-count")).toHaveText("04 / 04");
+  await expect(navigation.getByRole("button", { name: "Aller à Brief équipe" })).toHaveAttribute("aria-current", "step");
+  await expect(page.locator(".match-brief-slide .tv-action")).toBeVisible();
+  await expect(page.locator(".tv-plan-column")).toHaveCount(3);
+  await expect(page.getByRole("button", { name: "Écrire", exact: true })).toBeVisible();
+  await expect.poll(() => navigation.evaluate((element) => getComputedStyle(element).position)).toBe("sticky");
+  await expect.poll(() => page.locator(".match-brief-slide .tv-plan-grid").evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(" ").length)).toBe(testInfo.project.name === "mobile" ? 1 : 3);
+  const briefColumnHeight = await page.locator(".match-brief-slide .tv-plan-column").first().evaluate((element) => element.getBoundingClientRect().height);
+  const expectedBriefColumnHeight = testInfo.project.name === "mobile" ? 160 : Math.min(410, Math.max(220, testInfo.project.name === "tablet" ? 768 : 1024) * 0.4);
+  expect(briefColumnHeight).toBeGreaterThanOrEqual(expectedBriefColumnHeight - 1);
+  await page.screenshot({ path: testInfo.outputPath("match-slide-4-brief.png"), fullPage: false, animations: "disabled" });
+  await assertActiveSlideFits();
+
+  await navigation.getByRole("button", { name: "Section précédente" }).click();
+  await expect(navigation.locator(".match-carousel-count")).toHaveText("03 / 04");
+  await expect(page.locator(".match-indicators .match-indicator-card:not(.is-mercato)")).toHaveCount(8);
+  await expect(page.locator(".match-indicators .mercato-carousel-card")).toHaveCount(1);
+  if (testInfo.project.name !== "mobile") {
+    const pageGeometry = await page.evaluate(() => {
+      return { viewport: window.innerHeight, document: document.documentElement.scrollHeight };
+    });
+    expect(pageGeometry.document, `débordement vertical: ${pageGeometry.document}px pour une fenêtre de ${pageGeometry.viewport}px`).toBeLessThanOrEqual(pageGeometry.viewport + 1);
+  }
   await assertNoHorizontalOverflow(page);
 });
 

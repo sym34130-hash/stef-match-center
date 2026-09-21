@@ -74,6 +74,24 @@ app.get("/api/agencies/:agencyCode/league-configs", requireAgency, async (req, r
   }
 });
 
+app.get("/api/agencies/:agencyCode/sync-state", requireAgency, async (req, res) => {
+  try {
+    const agencyDir = path.join(dataDir, sanitizeSegment(req.agency.code));
+    const matchDate = sanitizeDate(req.query.matchDate);
+    const causeriePath = matchDate
+      ? path.join(agencyDir, "causeries", `${sanitizeSegment(matchDate)}.json`)
+      : null;
+    const [snapshotRevision, leagueConfigRevision, causerieRevision] = await Promise.all([
+      readFileRevision(path.join(agencyDir, "latest.json")),
+      readFileRevision(path.join(agencyDir, "league-configs.json")),
+      causeriePath ? readFileRevision(causeriePath) : null,
+    ]);
+    res.set("Cache-Control", "no-store, max-age=0").json({ snapshotRevision, leagueConfigRevision, causerieRevision });
+  } catch (error) {
+    respondInternalError(res, `sync-state:${req.agency.code}`, error);
+  }
+});
+
 app.put("/api/agencies/:agencyCode/league-configs", requireAgency, async (req, res) => {
   if (!req.agency.canImport) {
     res.status(403).json({ title: "PARAMÈTRES NON MODIFIÉS", message: "Ce code d'accès permet uniquement de consulter les résultats." });
@@ -499,6 +517,16 @@ async function readLeagueConfigs(agencyCode) {
     return normalizeLeagueConfigs(JSON.parse(await fs.readFile(configPath, "utf8")));
   } catch (error) {
     if (error?.code === "ENOENT") return DEFAULT_LEAGUE_CONFIGS.map((config) => ({ ...config }));
+    throw error;
+  }
+}
+
+async function readFileRevision(filePath) {
+  try {
+    const stats = await fs.stat(filePath, { bigint: true });
+    return `${stats.ino}:${stats.size}:${stats.mtimeNs}`;
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
     throw error;
   }
 }

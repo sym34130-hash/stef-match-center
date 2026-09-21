@@ -15,6 +15,7 @@ export default tseslint.config(
       "tmp/**",
       ".deploy/**",
       "coverage/**",
+      ".codex-work/**",
     ],
   },
   js.configs.recommended,

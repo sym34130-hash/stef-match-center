@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 import {
   AlertTriangle,
   Award,
@@ -108,6 +108,11 @@ type LeagueConfig = {
   scoreTargetPercent: number;
 };
 type PerformanceCriteria = Pick<LeagueConfig, "zonageMinutes" | "loadingSeconds" | "unloadingSeconds" | "scoreTargetPercent">;
+type AgencySyncState = {
+  snapshotRevision: string | null;
+  leagueConfigRevision: string | null;
+  causerieRevision: string | null;
+};
 
 class ApiError extends Error {
   status: number;
@@ -273,6 +278,8 @@ export default function App() {
   const [leagueConfigs, setLeagueConfigs] = useState<LeagueConfig[]>(leagueOptions);
   const [activeLeague, setActiveLeague] = useState<LeagueId>("argent");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [snapshotViewRevision, setSnapshotViewRevision] = useState(0);
+  const [causerieRevision, setCauserieRevision] = useState<string | null>(null);
   const [screen, setScreen] = useState<Screen>("kickoff");
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [playerReturnScreen, setPlayerReturnScreen] = useState<Screen>("composition");
@@ -281,7 +288,22 @@ export default function App() {
   const [snapshotLoading, setSnapshotLoading] = useState(false);
   const snapshotRequestRef = useRef(0);
   const backgroundRefreshRef = useRef(0);
+  const agencySyncStateRef = useRef<{ agencyCode: string; state: AgencySyncState } | null>(null);
   const leagueConfigSaveQueueRef = useRef(Promise.resolve());
+  const leagueConfigsRef = useRef(leagueConfigs);
+  const snapshotRef = useRef(snapshot);
+  leagueConfigsRef.current = leagueConfigs;
+  snapshotRef.current = snapshot;
+
+  const publishSnapshot = useCallback((nextSnapshot: Snapshot | null) => {
+    const current = snapshotRef.current;
+    const sameData = nextSnapshot === null
+      ? current === null
+      : snapshotsHaveSameData(current, nextSnapshot);
+    snapshotRef.current = nextSnapshot;
+    if (!sameData) setSnapshotViewRevision((revision) => revision + 1);
+    setSnapshot(nextSnapshot);
+  }, []);
 
   function queueLeagueConfigSave(next: LeagueConfig[]) {
     const currentSession = session;
@@ -306,21 +328,34 @@ export default function App() {
       setActiveLeague(nextLeague);
       setSnapshotLoading(true);
       const requestId = ++snapshotRequestRef.current;
-      Promise.all([
-        fetchSharedLeagueConfigs(nextSession).catch(() => readLeagueConfigs(nextSession.agency.code)),
-      ])
+      let initialSyncState: AgencySyncState | null = null;
+      fetchAgencySyncState(nextSession)
+        .then((state) => {
+          initialSyncState = state;
+        })
+        .catch(() => undefined)
+        .then(() => Promise.all([
+          fetchSharedLeagueConfigs(nextSession).catch(() => readLeagueConfigs(nextSession.agency.code)),
+        ]))
         .then(([nextConfigs]) => {
+          if (requestId !== snapshotRequestRef.current) return null;
           setLeagueConfigs(nextConfigs);
           return fetchSnapshot(nextSession, configForLeague(nextConfigs, nextLeague));
         })
         .then((nextSnapshot) => {
-          if (requestId !== snapshotRequestRef.current) return;
-          setSnapshot(nextSnapshot);
+          if (!nextSnapshot || requestId !== snapshotRequestRef.current) return;
+          publishSnapshot(nextSnapshot);
+          if (initialSyncState) {
+            agencySyncStateRef.current = { agencyCode: nextSession.agency.code, state: initialSyncState };
+          }
           setStatusMessage("");
         })
         .catch((error) => {
           if (requestId !== snapshotRequestRef.current) return;
-          setSnapshot(null);
+          publishSnapshot(null);
+          if (error instanceof ApiError && error.status === 404 && initialSyncState) {
+            agencySyncStateRef.current = { agencyCode: nextSession.agency.code, state: initialSyncState };
+          }
           setStatusMessage(error instanceof Error ? error.message : "Le match n'a pas pu être chargé.");
         })
         .finally(() => {
@@ -329,7 +364,7 @@ export default function App() {
     } catch {
       removeStorageValue("session", "stef-match-session");
     }
-  }, []);
+  }, [publishSnapshot]);
 
   useEffect(() => {
     document.body.classList.toggle("tv-screen-active", screen === "tv");
@@ -343,19 +378,55 @@ export default function App() {
   useEffect(() => {
     if (!session || screen === "import") return;
     let disposed = false;
+    let syncInProgress = false;
 
     const syncSharedSnapshot = async () => {
+      if (syncInProgress) return;
+      syncInProgress = true;
       const requestVersion = snapshotRequestRef.current;
       const refreshId = ++backgroundRefreshRef.current;
       try {
-        const nextConfigs = await fetchSharedLeagueConfigs(session).catch(() => readLeagueConfigs(session.agency.code));
+        const nextSyncState = await fetchAgencySyncState(session, snapshotRef.current?.match.date);
         if (disposed || refreshId !== backgroundRefreshRef.current || requestVersion !== snapshotRequestRef.current) return;
-        setLeagueConfigs(nextConfigs);
-        const nextSnapshot = await fetchSnapshot(session, configForLeague(nextConfigs, activeLeague));
-        if (disposed || refreshId !== backgroundRefreshRef.current || requestVersion !== snapshotRequestRef.current) return;
-        setSnapshot((current) => snapshotsHaveSameData(current, nextSnapshot) ? current : nextSnapshot);
+
+        const previous = agencySyncStateRef.current?.agencyCode === session.agency.code
+          ? agencySyncStateRef.current.state
+          : null;
+        const configsChanged = !previous || previous.leagueConfigRevision !== nextSyncState.leagueConfigRevision;
+        const snapshotChanged = !previous || previous.snapshotRevision !== nextSyncState.snapshotRevision;
+        const causerieChanged = !previous || previous.causerieRevision !== nextSyncState.causerieRevision;
+        if (!configsChanged && !snapshotChanged && !causerieChanged) return;
+
+        let nextConfigs = leagueConfigsRef.current;
+        if (configsChanged) {
+          nextConfigs = await fetchSharedLeagueConfigs(session);
+          if (disposed || refreshId !== backgroundRefreshRef.current || requestVersion !== snapshotRequestRef.current) return;
+          leagueConfigsRef.current = nextConfigs;
+          setLeagueConfigs(nextConfigs);
+        }
+
+        if (nextSyncState.snapshotRevision === null) {
+          if (previous?.snapshotRevision || snapshotRef.current) {
+            publishSnapshot(null);
+            setStatusMessage("Le snapshot de cette agence n'est plus présent sur le serveur. Les données source doivent être réimportées.");
+          }
+          if (causerieChanged) setCauserieRevision(nextSyncState.causerieRevision);
+          agencySyncStateRef.current = { agencyCode: session.agency.code, state: nextSyncState };
+          return;
+        }
+
+        if (snapshotChanged || configsChanged) {
+          const nextSnapshot = await fetchSnapshot(session, configForLeague(nextConfigs, activeLeague));
+          if (disposed || refreshId !== backgroundRefreshRef.current || requestVersion !== snapshotRequestRef.current) return;
+          publishSnapshot(nextSnapshot);
+          setStatusMessage("");
+        }
+        if (causerieChanged) setCauserieRevision(nextSyncState.causerieRevision);
+        agencySyncStateRef.current = { agencyCode: session.agency.code, state: nextSyncState };
       } catch {
         // A transient refresh failure must not blank a valid operational view.
+      } finally {
+        syncInProgress = false;
       }
     };
 
@@ -363,7 +434,9 @@ export default function App() {
       if (document.visibilityState === "visible") void syncSharedSnapshot();
     };
 
-    const intervalId = window.setInterval(() => void syncSharedSnapshot(), 15000);
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "visible") void syncSharedSnapshot();
+    }, 15000);
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       disposed = true;
@@ -371,7 +444,7 @@ export default function App() {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [session, activeLeague, screen]);
+  }, [session, activeLeague, screen, publishSnapshot]);
 
   async function handleLogin(agencyCode: string, accessCode: string) {
     const requestId = ++snapshotRequestRef.current;
@@ -387,6 +460,7 @@ export default function App() {
       if (!response.ok) throw new Error(payload.message ?? "Accès refusé.");
       const nextSession = { agency: payload.agency, accessCode };
       const nextLeague = readActiveLeague(agencyCode);
+      const nextSyncState = await fetchAgencySyncState(nextSession).catch(() => null);
       const nextConfigs = await fetchSharedLeagueConfigs(nextSession).catch(() => readLeagueConfigs(agencyCode));
       let nextSnapshot: Snapshot | null = null;
       try {
@@ -398,8 +472,12 @@ export default function App() {
       setSession(nextSession);
       setLeagueConfigs(nextConfigs);
       setActiveLeague(nextLeague);
+      setCauserieRevision(null);
+      agencySyncStateRef.current = nextSyncState
+        ? { agencyCode: nextSession.agency.code, state: nextSyncState }
+        : null;
       writeStorageValue("session", "stef-match-session", JSON.stringify(nextSession));
-      setSnapshot(nextSnapshot);
+      publishSnapshot(nextSnapshot);
       setScreen("kickoff");
     } catch (error) {
       if (requestId === snapshotRequestRef.current) {
@@ -412,10 +490,12 @@ export default function App() {
 
   async function handleLogout() {
     snapshotRequestRef.current += 1;
+    agencySyncStateRef.current = null;
     removeStorageValue("session", "stef-match-session");
     setSession(null);
     setActiveLeague("argent");
-    setSnapshot(null);
+    setCauserieRevision(null);
+    publishSnapshot(null);
     setSelectedPlayer(null);
     setScreen("kickoff");
   }
@@ -427,7 +507,7 @@ export default function App() {
     try {
       const nextSnapshot = await fetchSnapshot(session, configForLeague(leagueConfigs, activeLeague));
       if (requestId !== snapshotRequestRef.current) return;
-      setSnapshot(nextSnapshot);
+      publishSnapshot(nextSnapshot);
       setStatusMessage("");
     } catch (error) {
       // Keep the last valid snapshot visible when a refresh is temporarily unavailable.
@@ -440,25 +520,34 @@ export default function App() {
   }
 
   async function applyLeague(id: LeagueId, config = configForLeague(leagueConfigs, id)) {
-    setActiveLeague(id);
-    if (session) writeStorageValue("local", `stef-match-active-league-${session.agency.code}`, id);
-    if (!session) return;
+    if (!session) {
+      setActiveLeague(id);
+      return;
+    }
     const requestId = ++snapshotRequestRef.current;
+    backgroundRefreshRef.current += 1;
     setSnapshotLoading(true);
+    setStatusMessage("");
     try {
       const nextSnapshot = await fetchSnapshot(session, config);
       if (requestId !== snapshotRequestRef.current) return;
-      setSnapshot(nextSnapshot);
+      setActiveLeague(id);
+      writeStorageValue("local", `stef-match-active-league-${session.agency.code}`, id);
+      publishSnapshot(nextSnapshot);
       setStatusMessage("");
     } catch (error) {
       if (requestId === snapshotRequestRef.current) {
         if (error instanceof ApiError && error.status === 404) {
-          setSnapshot(null);
-          setStatusMessage("Ligue activée. Importe un match pour appliquer ses objectifs.");
+          if (!snapshot) {
+            setActiveLeague(id);
+            writeStorageValue("local", `stef-match-active-league-${session.agency.code}`, id);
+            setStatusMessage("Ligue activée. Importe un match pour appliquer ses objectifs.");
+          } else {
+            setStatusMessage("Ligue non modifiée : le serveur ne retrouve pas l’Excel source pour recalculer. Les résultats et la ligue actuels sont conservés. Réimporte l’Excel uniquement si la source a été perdue.");
+          }
           return;
         }
-        setSnapshot(null);
-        setStatusMessage(error instanceof Error ? error.message : "La ligue n'a pas pu être appliquée.");
+        setStatusMessage(error instanceof Error ? `Ligue non modifiée : ${error.message}` : "Ligue non modifiée : le recalcul n'a pas abouti. Les résultats actuels sont conservés.");
       }
     } finally {
       if (requestId === snapshotRequestRef.current) setSnapshotLoading(false);
@@ -534,7 +623,7 @@ export default function App() {
             try {
               const nextSnapshot = await updateTimeRange(session, start, end, activeLeagueConfig);
               if (requestId === snapshotRequestRef.current) {
-                setSnapshot(nextSnapshot);
+                publishSnapshot(nextSnapshot);
                 setStatusMessage("");
               }
             } catch (error) {
@@ -554,7 +643,7 @@ export default function App() {
         ) : !snapshot && screen !== "import" && screen !== "kickoff" && screen !== "guide" && screen !== "tv" && screen !== "admin" ? (
           <NoDataView onImport={() => setScreen("import")} />
         ) : (
-          <div className="screen-transition" key={screen === "import" ? `import-${session.agency.code}` : `${screen}-${snapshot?.importedAt ?? "empty"}`}>
+          <div className="screen-transition" key={screen === "import" ? `import-${session.agency.code}` : screen === "match" ? `match-${session.agency.code}` : `${screen}-${snapshotViewRevision}`}>
             {screen === "kickoff" && (
               <Kickoff
                 snapshot={snapshot}
@@ -566,6 +655,7 @@ export default function App() {
               <MatchSheet
                 snapshot={snapshot}
                 session={session}
+                causerieRevision={causerieRevision}
                 activeLeague={activeLeague}
                 onPlayer={openPlayer}
                 onCoach={() => setScreen("coach")}
@@ -584,7 +674,7 @@ export default function App() {
             {screen === "coach" && snapshot && (
               <Coach snapshot={snapshot} session={session} leagueConfig={activeLeagueConfig} onPlayer={openPlayer} onComposition={() => setScreen("composition")} />
             )}
-            {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
+            {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} causerieRevision={causerieRevision} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
             {screen === "guide" && <GuideView snapshot={snapshot} leagueConfigs={leagueConfigs} onNavigate={setScreen} />}
             {screen === "admin" && <AdministratorView agencyCode={session.agency.code} activeLeague={activeLeague} leagueConfigs={leagueConfigs} onLeagueConfigsChange={queueLeagueConfigSave} onActiveLeagueChange={applyLeague} />}
             {screen === "import" && (
@@ -593,16 +683,16 @@ export default function App() {
                 onImported={(next) => {
                   const requestId = ++snapshotRequestRef.current;
                   setStatusMessage("");
-                  setSnapshot(next);
+                  publishSnapshot(next);
                   setSelectedPlayer(next.players[0] ?? null);
                   setSnapshotLoading(true);
                   fetchSnapshot(session, activeLeagueConfig)
                     .then((activeLeagueSnapshot) => {
-                      if (requestId === snapshotRequestRef.current) setSnapshot(activeLeagueSnapshot);
+                      if (requestId === snapshotRequestRef.current) publishSnapshot(activeLeagueSnapshot);
                     })
                     .catch(() => {
                       // Keep the imported snapshot visible if the follow-up league rebuild fails.
-                      if (requestId === snapshotRequestRef.current) setSnapshot(next);
+                      if (requestId === snapshotRequestRef.current) publishSnapshot(next);
                     })
                     .finally(() => {
                       if (requestId === snapshotRequestRef.current) setSnapshotLoading(false);
@@ -634,6 +724,25 @@ async function fetchSnapshot(session: Session, criteria?: PerformanceCriteria): 
   const payload = await response.json();
   if (!response.ok) throw new ApiError(response.status, payload.message ?? "Le match n'a pas pu être chargé.");
   return payload.snapshot;
+}
+
+async function fetchAgencySyncState(session: Session, matchDate?: string): Promise<AgencySyncState> {
+  const query = matchDate ? `?matchDate=${encodeURIComponent(matchDate)}` : "";
+  const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/sync-state${query}`, {
+    cache: "no-store",
+    headers: { "x-access-code": session.accessCode },
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new ApiError(response.status, payload.message ?? "L'état de synchronisation n'a pas pu être chargé.");
+  const { snapshotRevision, leagueConfigRevision, causerieRevision = null } = payload as AgencySyncState;
+  if (
+    (snapshotRevision !== null && typeof snapshotRevision !== "string") ||
+    (leagueConfigRevision !== null && typeof leagueConfigRevision !== "string") ||
+    (causerieRevision !== null && typeof causerieRevision !== "string")
+  ) {
+    throw new Error("L'état de synchronisation reçu est invalide.");
+  }
+  return { snapshotRevision, leagueConfigRevision, causerieRevision };
 }
 
 async function fetchSharedLeagueConfigs(session: Session): Promise<LeagueConfig[]> {
@@ -1141,13 +1250,18 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
   );
 }
 
-function MatchSheet({ snapshot, session, activeLeague, onPlayer, onCoach, onComposition }: { snapshot: Snapshot; session: Session; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void }) {
+function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlayer, onCoach, onComposition }: { snapshot: Snapshot; session: Session; causerieRevision: string | null; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void }) {
   const [celebrationMode, setCelebrationMode] = useState(false);
   const [thresholdPulse, setThresholdPulse] = useState(false);
   const [editingKpis, setEditingKpis] = useState(false);
   const [kpiCopy, setKpiCopy] = useState<MatchKpiCopy>(() => loadMatchKpiCopy(snapshot));
   const [savedKpiCopy, setSavedKpiCopy] = useState<MatchKpiCopy>(kpiCopy);
   const [mercatoPlan, setMercatoPlan] = useState<{ key: string; plan: CauseriePlan | null } | null>(null);
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [slideDirection, setSlideDirection] = useState<"next" | "previous">("next");
+  const slideViewportRef = useRef<HTMLDivElement | null>(null);
+  const slideTouchStart = useRef<{ x: number; y: number } | null>(null);
+  const slideLabels = ["Coup de sifflet final", "Cérémonie des performances", "Statistiques du match", "Brief équipe"];
   const mercatoPlanKey = `${session.agency.code}:${snapshot.match.date}:${snapshot.importedAt}`;
   const mercatoText = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.mercato ?? "" : null;
   const mercatoProfiles = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.mercatoProfiles ?? {} : {};
@@ -1179,7 +1293,7 @@ function MatchSheet({ snapshot, session, activeLeague, onPlayer, onCoach, onComp
     return () => {
       cancelled = true;
     };
-  }, [mercatoPlanKey, session, snapshot]);
+  }, [mercatoPlanKey, session, snapshot, causerieRevision]);
 
   useEffect(() => {
     if (!thresholdReached) return;
@@ -1188,10 +1302,76 @@ function MatchSheet({ snapshot, session, activeLeague, onPlayer, onCoach, onComp
     return () => window.clearTimeout(timer);
   }, [footballScore.goalsFor, footballScore.goalsAgainst, footballScore.available, thresholdReached]);
 
+  useEffect(() => {
+    slideViewportRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [activeSlide]);
+
+  function moveSlide(nextIndex: number) {
+    const next = Math.max(0, Math.min(slideLabels.length - 1, nextIndex));
+    if (next !== activeSlide) setSlideDirection(next > activeSlide ? "next" : "previous");
+    setActiveSlide(next);
+  }
+
+  function handleSlideKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!(event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "Home" || event.key === "End")) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest("button, input, textarea, select, [contenteditable='true'], .match-indicators, .operational-charts-carousel")) return;
+    event.preventDefault();
+    moveSlide(event.key === "Home" ? 0 : event.key === "End" ? slideLabels.length - 1 : activeSlide + (event.key === "ArrowRight" ? 1 : -1));
+  }
+
+  function handleSlideTouchStart(event: ReactTouchEvent<HTMLDivElement>) {
+    const target = event.target;
+    if (target instanceof Element && target.closest(".match-indicators, .operational-charts-carousel, input, textarea, select, [contenteditable='true']")) return;
+    const touch = event.touches[0];
+    if (touch) slideTouchStart.current = { x: touch.clientX, y: touch.clientY };
+  }
+
+  function handleSlideTouchEnd(event: ReactTouchEvent<HTMLDivElement>) {
+    const start = slideTouchStart.current;
+    slideTouchStart.current = null;
+    const touch = event.changedTouches[0];
+    if (!start || !touch) return;
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (Math.abs(deltaX) < 56 || Math.abs(deltaX) < Math.abs(deltaY) * 1.25) return;
+    moveSlide(activeSlide + (deltaX < 0 ? 1 : -1));
+  }
+
+  const slideClass = (index: number) => `match-slide-panel ${activeSlide === index ? `is-active is-enter-${slideDirection}` : index < activeSlide ? "is-before" : "is-after"}`;
 
   return (
     <div className={`${celebrationMode ? "match-page is-celebration-mode" : "match-page"} ${outcome.tone} ${thresholdReached ? "is-threshold-reached" : ""} ${thresholdPulse ? "is-threshold-pulse" : ""}`}>
-      <section className={`match-ceremony ${outcome.tone}`}>
+      <nav className="match-carousel-navigation" aria-label="Navigation de la feuille de match">
+        <div className="match-carousel-heading">
+          <span>FEUILLE DE MATCH</span>
+          <strong aria-live="polite">{slideLabels[activeSlide]}</strong>
+        </div>
+        <div className="match-carousel-controls">
+          <span className="match-carousel-count" aria-live="polite">0{activeSlide + 1} / 04</span>
+          <button type="button" className="match-carousel-arrow" onClick={() => moveSlide(activeSlide - 1)} disabled={activeSlide === 0} aria-label="Section précédente" title="Section précédente">
+            <ChevronLeft size={20} />
+          </button>
+          <button type="button" className="match-carousel-arrow" onClick={() => moveSlide(activeSlide + 1)} disabled={activeSlide === slideLabels.length - 1} aria-label="Section suivante" title="Section suivante">
+            <ChevronRight size={20} />
+          </button>
+        </div>
+        <div className="match-carousel-progress" aria-label="Accès direct aux sections">
+          {slideLabels.map((label, index) => (
+            <button
+              type="button"
+              className={index <= activeSlide ? "is-active" : ""}
+              key={label}
+              aria-label={`Aller à ${label}`}
+              aria-current={index === activeSlide ? "step" : undefined}
+              title={`Aller à ${label}`}
+              onClick={() => moveSlide(index)}
+            />
+          ))}
+        </div>
+      </nav>
+      <div ref={slideViewportRef} className="match-slide-viewport" role="group" aria-label="Sections de la feuille de match" tabIndex={0} onKeyDown={handleSlideKeyDown} onTouchStart={handleSlideTouchStart} onTouchEnd={handleSlideTouchEnd}>
+      <section className={`match-ceremony ${outcome.tone} ${slideClass(0)}`} aria-hidden={activeSlide !== 0} inert={activeSlide !== 0} aria-roledescription="diapositive" aria-label="1 sur 4 : Coup de sifflet final">
         <div className="match-stands top" aria-hidden="true">
           {Array.from({ length: 46 }).map((_, index) => <span key={`match-top-${index}`} />)}
         </div>
@@ -1306,7 +1486,7 @@ function MatchSheet({ snapshot, session, activeLeague, onPlayer, onCoach, onComp
         </div>
       </section>
 
-      <section className="awards-ceremony">
+      <section className={`awards-ceremony ${slideClass(1)}`} aria-hidden={activeSlide !== 1} inert={activeSlide !== 1} aria-roledescription="diapositive" aria-label="2 sur 4 : Cérémonie des performances">
         <div className="awards-heading">
           <div>
             <p className="eyebrow">Cérémonie des performances</p>
@@ -1374,7 +1554,7 @@ function MatchSheet({ snapshot, session, activeLeague, onPlayer, onCoach, onComp
         </div>
       </section>
 
-      <section className="match-statistics-section">
+      <section className={`match-statistics-section ${slideClass(2)}`} aria-hidden={activeSlide !== 2} inert={activeSlide !== 2} aria-roledescription="diapositive" aria-label="3 sur 4 : Statistiques du match">
         <div className="match-section-heading">
           <div>
             <p className="eyebrow">Statistiques du match</p>
@@ -1391,6 +1571,15 @@ function MatchSheet({ snapshot, session, activeLeague, onPlayer, onCoach, onComp
           <OperationalChartsCarousel snapshot={snapshot} />
         </div>
       </section>
+      <section className={`match-brief-slide ${slideClass(3)}`} aria-hidden={activeSlide !== 3} inert={activeSlide !== 3} aria-roledescription="diapositive" aria-label="4 sur 4 : Brief équipe">
+        <BriefTeamPlan
+          snapshot={snapshot}
+          session={session}
+          sharedPlan={{ ready: mercatoPlan?.key === mercatoPlanKey, plan: mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan : null }}
+          onPlanSaved={(plan) => setMercatoPlan({ key: mercatoPlanKey, plan })}
+        />
+      </section>
+      </div>
     </div>
   );
 }
@@ -1426,13 +1615,14 @@ function OperationalChartsCarousel({ snapshot }: { snapshot: Snapshot }) {
     const viewport = viewportRef.current;
     if (!viewport) return undefined;
     const handleScroll = () => {
-      const center = viewport.scrollLeft + viewport.clientWidth / 2;
+      const viewportCenter = viewport.getBoundingClientRect().left + viewport.clientWidth / 2;
       let closestIndex = 0;
       let closestDistance = Number.POSITIVE_INFINITY;
       slideRefs.current.forEach((slide, index) => {
         if (!slide) return;
-        const slideCenter = slide.offsetLeft + slide.offsetWidth / 2;
-        const distance = Math.abs(center - slideCenter);
+        const slideRect = slide.getBoundingClientRect();
+        const slideCenter = slideRect.left + slideRect.width / 2;
+        const distance = Math.abs(viewportCenter - slideCenter);
         if (distance < closestDistance) {
           closestDistance = distance;
           closestIndex = index;
@@ -1449,7 +1639,10 @@ function OperationalChartsCarousel({ snapshot }: { snapshot: Snapshot }) {
     const viewport = viewportRef.current;
     const slide = slideRefs.current[nextIndex];
     if (!viewport || !slide) return;
-    slide.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    const viewportRect = viewport.getBoundingClientRect();
+    const slideRect = slide.getBoundingClientRect();
+    const targetLeft = viewport.scrollLeft + slideRect.left + slideRect.width / 2 - (viewportRect.left + viewport.clientWidth / 2);
+    viewport.scrollTo({ left: targetLeft, behavior: "smooth" });
     setActiveIndex(nextIndex);
   };
 
@@ -2619,32 +2812,13 @@ function PlayerSheet({ snapshot, player, onBack, onSelect }: { snapshot: Snapsho
   );
 }
 
-function TvMode({ snapshot, session, onExit }: { snapshot: Snapshot; session: Session; onExit: () => void }) {
+function TvMode({ snapshot, session, causerieRevision, onExit }: { snapshot: Snapshot; session: Session; causerieRevision: string | null; onExit: () => void }) {
   const [focusMode, setFocusMode] = useState(false);
-  const [planMode, setPlanMode] = useState<"view" | "edit">("view");
-  const [plan, setPlan] = useState<CauseriePlan>(() => buildEmptyCauseriePlan());
-  const [planDraft, setPlanDraft] = useState<CauseriePlan>(() => buildEmptyCauseriePlan());
-  const [savingPlan, setSavingPlan] = useState(false);
-  const [feedback, setFeedback] = useState<CauserieToast>(null);
-  const [lightboxImage, setLightboxImage] = useState<{ src: string; label: string } | null>(null);
 
   useEffect(() => {
     document.body.classList.toggle("tv-focus-active", focusMode);
     return () => document.body.classList.remove("tv-focus-active");
   }, [focusMode]);
-
-  useEffect(() => {
-    if (!lightboxImage) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setLightboxImage(null);
-    };
-    document.body.classList.add("tv-lightbox-open");
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.classList.remove("tv-lightbox-open");
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [lightboxImage]);
 
   useEffect(() => {
     function syncFullscreenState() {
@@ -2669,12 +2843,67 @@ function TvMode({ snapshot, session, onExit }: { snapshot: Snapshot; session: Se
     if (request) await request.catch(() => undefined);
   }
 
+  return (
+    <section className={`${focusMode ? "tv-mode is-focus" : "tv-mode"}`}>
+      <div className="tv-header">
+        <div>
+          <p>STEF MATCH CENTER</p>
+          <h2>{snapshot.agency.name}</h2>
+          <ActivePeriodBadge snapshot={snapshot} className="tv-period-badge" />
+        </div>
+        <div className="tv-header-actions">
+          <button className="secondary-on-dark" type="button" onClick={onExit}>
+            <ArrowLeft size={16} />
+            Quitter le brief équipe
+          </button>
+          <button className="secondary-on-dark" type="button" onClick={toggleFocusMode} aria-pressed={focusMode}>
+            {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            {focusMode ? "Quitter le plein écran" : "Mode plein écran"}
+          </button>
+        </div>
+      </div>
+      <BriefTeamPlan snapshot={snapshot} session={session} causerieRevision={causerieRevision} />
+    </section>
+  );
+}
+
+function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlanSaved }: { snapshot: Snapshot; session: Session; sharedPlan?: { ready: boolean; plan: CauseriePlan | null }; causerieRevision?: string | null; onPlanSaved?: (plan: CauseriePlan) => void }) {
+  const [planMode, setPlanMode] = useState<"view" | "edit">("view");
+  const [plan, setPlan] = useState<CauseriePlan>(() => buildEmptyCauseriePlan());
+  const [planDraft, setPlanDraft] = useState<CauseriePlan>(() => buildEmptyCauseriePlan());
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [feedback, setFeedback] = useState<CauserieToast>(null);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; label: string } | null>(null);
+  const planModeRef = useRef(planMode);
+  planModeRef.current = planMode;
+  const sharedPlanReady = sharedPlan?.ready;
+  const sharedPlanValue = sharedPlan?.plan;
+
+  useEffect(() => {
+    if (!lightboxImage) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setLightboxImage(null);
+    };
+    document.body.classList.add("tv-lightbox-open");
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.classList.remove("tv-lightbox-open");
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [lightboxImage]);
+
   useEffect(() => {
     let cancelled = false;
     const emptyPlan = buildEmptyCauseriePlan();
-    setPlan(emptyPlan);
-    setPlanDraft(emptyPlan);
-    setPlanMode("view");
+    if (planModeRef.current === "edit") return () => { cancelled = true; };
+    if (sharedPlanReady === false) return () => { cancelled = true; };
+    if (sharedPlanReady === true) {
+      const nextPlan = sharedPlanValue ? normalizeCauseriePlan(sharedPlanValue) : emptyPlan;
+      const visiblePlan = hasManualCauserieContent(nextPlan, snapshot) ? nextPlan : emptyPlan;
+      setPlan(visiblePlan);
+      setPlanDraft(visiblePlan);
+      return () => { cancelled = true; };
+    }
     fetchCauseriePlan(session, snapshot)
       .then((remotePlan) => {
         if (cancelled) return;
@@ -2689,7 +2918,7 @@ function TvMode({ snapshot, session, onExit }: { snapshot: Snapshot; session: Se
     return () => {
       cancelled = true;
     };
-  }, [session, snapshot]);
+  }, [session, snapshot, sharedPlanReady, sharedPlanValue, causerieRevision, planMode]);
 
   function startPlanEdit() {
     setPlanDraft(plan);
@@ -2712,12 +2941,14 @@ function TvMode({ snapshot, session, onExit }: { snapshot: Snapshot; session: Se
       setPlan(normalizedPlan);
       setPlanDraft(normalizedPlan);
       setPlanMode("view");
+      onPlanSaved?.(normalizedPlan);
       setFeedback({ title: "Brief enregistré", detail: "Les consignes du brief équipe sont à jour.", tone: "success" });
     } catch {
       setPlan(nextPlan);
       setPlanDraft(nextPlan);
       setPlanMode("view");
       writeLocalCauseriePlan(snapshot, nextPlan);
+      onPlanSaved?.(nextPlan);
       setFeedback({ title: "Sauvegarde locale uniquement", detail: "Le plan est conservé sur ce poste.", tone: "warning" });
     } finally {
       setSavingPlan(false);
@@ -2726,24 +2957,7 @@ function TvMode({ snapshot, session, onExit }: { snapshot: Snapshot; session: Se
   }
 
   return (
-    <section className={`${focusMode ? "tv-mode is-focus" : "tv-mode"}`}>
-      <div className="tv-header">
-        <div>
-          <p>STEF MATCH CENTER</p>
-          <h2>{snapshot.agency.name}</h2>
-          <ActivePeriodBadge snapshot={snapshot} className="tv-period-badge" />
-        </div>
-        <div className="tv-header-actions">
-          <button className="secondary-on-dark" type="button" onClick={onExit}>
-            <ArrowLeft size={16} />
-            Quitter le brief équipe
-          </button>
-          <button className="secondary-on-dark" type="button" onClick={toggleFocusMode} aria-pressed={focusMode}>
-            {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            {focusMode ? "Quitter le plein écran" : "Mode plein écran"}
-          </button>
-        </div>
-      </div>
+    <>
       <div className={`tv-action ${planMode === "edit" ? "is-editing" : ""}`}>
         <div className="tv-action-heading">
           <div>
@@ -2899,13 +3113,12 @@ function TvMode({ snapshot, session, onExit }: { snapshot: Snapshot; session: Se
           </div>
         </div>
       )}
-    </section>
+    </>
   );
 }
 
 function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLeagueConfigs, onLeagueConfigsChange, onActiveLeagueChange }: { agencyCode: string; activeLeague: LeagueId; leagueConfigs: LeagueConfig[]; onLeagueConfigsChange: (configs: LeagueConfig[]) => Promise<void>; onActiveLeagueChange: (league: LeagueId, config?: LeagueConfig) => void }) {
   const leagueConfigStorageKey = `stef-match-league-configs-${agencyCode}`;
-  const activeLeagueStorageKey = `stef-match-active-league-${agencyCode}`;
   const [leagueConfigs, setLeagueConfigs] = useState(initialLeagueConfigs);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const [configSaveError, setConfigSaveError] = useState("");
@@ -2921,7 +3134,6 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
   function selectLeague(id: LeagueId) {
     const selected = leagueConfigs.find((league) => league.id === id);
     onActiveLeagueChange(id, selected);
-    writeStorageValue("local", activeLeagueStorageKey, id);
   }
 
   type LeagueEditableField = "zonageMinutes" | "loadingSeconds" | "unloadingSeconds" | "scoreTargetPercent";
@@ -3211,7 +3423,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
             <GuidePanel eyebrow="04 · Lire les écrans" title="Quel écran utiliser, et pour quoi faire ?" icon={LayoutDashboard}>
               <div className="guide-screen-grid">
                 <GuideScreenCard step="01" title="Coup d’envoi" detail="Vue d’ouverture du match. Elle confirme que les données sont prêtes et donne accès au brief équipe." />
-                <GuideScreenCard step="02" title="Feuille de match" detail="Vue de synthèse : score opérationnel au format football, quatre indicateurs, opérations, positions, joueurs clés par catégorie, challengers et contrôles d’import. Le score compare les pourcentages de passes réussies, de tirs cadrés, de duels gagnés et de possession à l’objectif de la ligue." />
+                <GuideScreenCard step="02" title="Feuille de match" detail="La feuille de match se parcourt en quatre slides : Coup de sifflet final et collectif en chiffres, Cérémonie des performances, Statistiques du match, puis Brief équipe. Le score compare les pourcentages de passes réussies, de tirs cadrés, de duels gagnés et de possession à l’objectif de la ligue." />
               <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. Compare le match complet, les deux mi-temps ou les quatre quarts calculés depuis la plage active. Une vue personnalisée permet aussi d’isoler une sous-plage, par exemple 1 heure, sans modifier les indicateurs du match. L’activité Réception correspond au scan de la palette." />
                 <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, titres par catégorie, polyvalence, sujets à travailler et prochaines actions." />
                 <GuideScreenCard step="05" title="Brief équipe" detail="Vue dédiée aux consignes : trois grandes zones visibles, empilées verticalement : SAV, Expédition, Ramasse & emballage. Chaque zone accepte du texte et plusieurs captures d’écran, avec affichage plein écran." />

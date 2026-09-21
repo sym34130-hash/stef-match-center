@@ -65,11 +65,16 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   await expect(carousel.locator('[data-indicator="temperature"] .match-indicator-meter-scale')).toHaveText("0%Objectif 100%100%");
   await expect(carousel.locator('[data-indicator="arrival"] .match-indicator-source')).toContainText("objectif 85%");
   await expect(page.locator(".operational-chart-slide")).toHaveCount(4);
+  const matchNavigation = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
+  await matchNavigation.getByRole("button", { name: "Aller à Statistiques du match" }).click();
+  await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % centres réussis" }).click();
   await expect(page.locator(".operational-charts-carousel").getByText("% centres réussis", { exact: true })).toBeVisible();
-  await expect(page.locator(".operational-charts-carousel").getByText("% Duels gagnés", { exact: true })).toBeVisible();
   await expect(page.locator(".centers-quality-pie span")).toHaveText("62%");
   await page.locator(".centers-quality-details summary").click();
   await expect(page.locator(".centers-quality-details")).toContainText("taux consolidé de ponctualité destination");
+  await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % duels gagnés" }).click();
+  await expect(page.locator(".operational-charts-carousel").getByText("% Duels gagnés", { exact: true })).toBeVisible();
+  await matchNavigation.getByRole("button", { name: "Aller à Coup de sifflet final" }).click();
   const centers = await viewport.evaluate((el) => el.clientWidth >= 640 ? 2 : 1);
   await expect(carousel.locator("[data-featured]")).toHaveCount(centers);
   await carousel.screenshot({ path: testInfo.outputPath("kpi-initial.png") });
@@ -192,7 +197,8 @@ test("le Mercato occupe la première vignette KPI et affiche le profil sélectio
   await expect(carousel.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(9);
   await page.getByRole("button", { name: "Afficher le Mercato", exact: true }).click();
   await expect(page.locator(".mercato-carousel-card")).toBeVisible();
-  await expect(page.locator(".match-indicators-navigation > span")).toHaveText(testInfo.project.name === "desktop" || testInfo.project.name === "tablet" ? "1–2 / 9" : "1 / 9");
+  const visibleIndicators = await viewport.evaluate((el) => el.clientWidth >= 640 ? 2 : 1);
+  await expect(page.locator(".match-indicators-navigation > span")).toHaveText(visibleIndicators === 2 ? "1–2 / 9" : "1 / 9");
   await expect(viewport.locator(".match-indicators-track > .match-indicator-slide").first()).toHaveAttribute("data-indicator", "mercato");
   const activeMercatoSlide = page.locator('.mercato-kpi-slide:not([aria-hidden="true"])');
   await expect(activeMercatoSlide.locator(".mercato-kpi-flocage")).toHaveText("CAMILLE MARTIN");
@@ -218,7 +224,7 @@ test("le Mercato occupe la première vignette KPI et affiche le profil sélectio
   await expect(nextMercatoSlide.locator(".mercato-kpi-profile")).toHaveText("Homme");
   await expect(nextMercatoSlide.locator(".mercato-kpi-photo")).toHaveAttribute("data-profile", "male");
   await page.getByRole("button", { name: "Indicateurs suivants", exact: true }).click();
-  await expect(page.locator(".match-indicators-navigation > span")).toHaveText(testInfo.project.name === "desktop" || testInfo.project.name === "tablet" ? "2–3 / 9" : "2 / 9");
+  await expect(page.locator(".match-indicators-navigation > span")).toHaveText(visibleIndicators === 2 ? "2–3 / 9" : "2 / 9");
   await expect(viewport.locator('[data-indicator="performance"]')).toHaveAttribute("data-featured", "");
 });
 

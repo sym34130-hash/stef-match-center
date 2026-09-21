@@ -104,8 +104,25 @@ try {
   await expect(page.locator(".match-indicator-card")).toHaveCount(8);
   await expect(page.locator('[data-indicator="tonnage"] .match-indicator-value')).toHaveText("478 t");
   await expect(page.locator('[data-indicator="positions"] .match-indicator-value')).toHaveText(new Intl.NumberFormat("fr-FR").format(positions));
+  const kpiViewport = page.locator(".match-indicators-viewport");
+  const visibleKpis = await kpiViewport.evaluate((element) => element.clientWidth >= 640 ? 2 : 1);
   await page.getByRole("button", { name: "Afficher Ponctualité arrivage", exact: true }).click();
+  await expect(page.locator(".match-indicators-navigation > span")).toHaveText(visibleKpis === 2 ? "5–6 / 8" : "5 / 8");
   await expect(page.locator('[data-indicator="arrival"]')).toHaveAttribute("data-featured", "");
+  await expect.poll(() => kpiViewport.evaluate((element, centerCount) => {
+    const viewport = element.getBoundingClientRect();
+    const slides = Array.from(element.querySelectorAll("[data-featured]"));
+    const ids = slides.map((slide) => slide.getAttribute("data-indicator"));
+    const center = slides.reduce((sum, slide) => {
+      const card = slide.querySelector(".match-indicator-card");
+      if (!card) return sum;
+      const rect = card.getBoundingClientRect();
+      return sum + rect.x + rect.width / 2;
+    }, 0) / slides.length;
+    return element.scrollLeft > 0 && ids.length === centerCount && ids[0] === "arrival"
+      && (centerCount === 1 || ids[1] === "departure")
+      && Math.abs(center - viewport.x - viewport.width / 2) < 2;
+  }, visibleKpis)).toBe(true);
   await page.locator(".match-indicators").screenshot({ path: path.join(outputDir, "indicateurs-importes.png") });
   await page.reload();
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();

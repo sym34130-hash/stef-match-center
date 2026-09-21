@@ -62,6 +62,8 @@ try {
   assert.equal(rejectedSessionResponse.status, 401, "Un code d'accès invalide doit être rejeté");
   const rejectedSnapshotResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/snapshot`);
   assert.equal(rejectedSnapshotResponse.status, 401, "Les snapshots ne doivent pas être accessibles sans authentification");
+  const rejectedSyncStateResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/sync-state`);
+  assert.equal(rejectedSyncStateResponse.status, 401, "L'état de synchronisation ne doit pas être accessible sans authentification");
 
   const readOnlySessionResponse = await fetch(`${baseUrl}/api/session`, {
     method: "POST",
@@ -71,6 +73,9 @@ try {
   assert.equal(readOnlySessionResponse.status, 200, "Le compte lecture seule doit pouvoir s'authentifier");
   assert.equal((await readOnlySessionResponse.json()).agency.canImport, false, "Le compte lecture seule doit conserver ses droits restreints");
   const readOnlyHeaders = { "x-access-code": readOnlyAccessCode };
+  const readOnlySyncStateResponse = await fetch(`${baseUrl}/api/agencies/${readOnlyCode}/sync-state`, { headers: readOnlyHeaders });
+  assert.equal(readOnlySyncStateResponse.status, 200);
+  assert.deepEqual(await readOnlySyncStateResponse.json(), { snapshotRevision: null, leagueConfigRevision: null, causerieRevision: null }, "Les révisions doivent rester isolées par agence");
   const readOnlyImport = await fetch(`${baseUrl}/api/agencies/${readOnlyCode}/import`, {
     method: "POST",
     headers: readOnlyHeaders,
@@ -109,6 +114,9 @@ try {
   const leagueConfigPayload = await leagueConfigResponse.json();
   assert.equal(leagueConfigResponse.status, 200, JSON.stringify(leagueConfigPayload));
   assert.equal(leagueConfigPayload.configs.length, 4, "Les quatre ligues doivent être partagées par l'agence");
+  const initialSyncStateResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/sync-state`, { headers: leagueConfigHeaders });
+  const initialSyncState = await initialSyncStateResponse.json();
+  assert.deepEqual(initialSyncState, { snapshotRevision: null, leagueConfigRevision: null, causerieRevision: null }, "Une agence neuve ne doit hériter d'aucun snapshot, brief ou réglage d'une autre agence");
   const originalLeagueConfigs = leagueConfigPayload.configs;
   const sharedLeagueConfigs = originalLeagueConfigs.map((config) => config.id === "bronze" ? { ...config, zonageMinutes: config.zonageMinutes + 1 } : config);
   const saveLeagueConfigResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/league-configs`, {
@@ -117,6 +125,11 @@ try {
     body: JSON.stringify({ configs: sharedLeagueConfigs }),
   });
   assert.equal(saveLeagueConfigResponse.status, 200, await safeText(saveLeagueConfigResponse));
+  const configuredSyncStateResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/sync-state`, { headers: leagueConfigHeaders });
+  const configuredSyncState = await configuredSyncStateResponse.json();
+  assert.equal(configuredSyncState.snapshotRevision, null, "La modification des ligues ne doit pas créer de snapshot");
+  assert.ok(configuredSyncState.leagueConfigRevision, "La modification des ligues doit changer sa révision");
+  assert.notEqual(configuredSyncState.leagueConfigRevision, initialSyncState.leagueConfigRevision);
   const secondLeagueConfigResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/league-configs`, { headers: leagueConfigHeaders });
   const secondLeagueConfigPayload = await secondLeagueConfigResponse.json();
   assert.deepEqual(secondLeagueConfigPayload.configs, sharedLeagueConfigs, "Les paramètres modifiés doivent être visibles par une seconde session");
@@ -125,6 +138,8 @@ try {
     headers: { ...leagueConfigHeaders, "Content-Type": "application/json" },
     body: JSON.stringify({ configs: originalLeagueConfigs }),
   });
+  const restoredConfigSyncStateResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/sync-state`, { headers: leagueConfigHeaders });
+  const restoredConfigSyncState = await restoredConfigSyncStateResponse.json();
 
   const oversizedPlanResponse = await fetch(`${baseUrl}/api/session`, {
     method: "POST",
@@ -164,6 +179,10 @@ try {
   const importPayload = await importResponse.json();
   assert.equal(importResponse.status, 200, JSON.stringify(importPayload));
   assert.equal(importPayload.message, "MATCH ACTUALISÉ");
+  const importedSyncStateResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/sync-state`, { headers: leagueConfigHeaders });
+  const importedSyncState = await importedSyncStateResponse.json();
+  assert.ok(importedSyncState.snapshotRevision, "Un import doit publier une nouvelle révision du snapshot");
+  assert.equal(importedSyncState.leagueConfigRevision, restoredConfigSyncState.leagueConfigRevision, "Un import ne doit pas modifier la révision des ligues");
 
   const snapshot = importPayload.snapshot;
   assert.equal(snapshot.summary.operations, 5498, "Opérations filtrées après import API");
@@ -261,6 +280,9 @@ try {
     },
     body: JSON.stringify({ start: "13:00", end: "22:30" }),
   });
+  const rangeSyncStateResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/sync-state`, { headers: leagueConfigHeaders });
+  const rangeSyncState = await rangeSyncStateResponse.json();
+  assert.notEqual(rangeSyncState.snapshotRevision, importedSyncState.snapshotRevision, "Un recalcul de plage doit publier une nouvelle révision du snapshot");
   const timeRangePayload = await timeRangeResponse.json();
   assert.equal(timeRangeResponse.status, 200, JSON.stringify(timeRangePayload));
   assert.equal(timeRangePayload.snapshot.summary.operations, 5498, "Opérations après changement de plage");
@@ -355,6 +377,8 @@ try {
   const longMercatoName = "alexandrine marie-claire de la fontaine de montmorency saint-germain de la rochefoucauld de la tour";
   assert.ok(longMercatoName.length > 80, "Le cas de profil Mercato long doit dépasser l'ancienne limite de clé");
   const mercatoText = `Accueillir Camille Martin et Julien Thomas, nouveaux renforts.\n${longMercatoName}`;
+  const beforeCauserieSyncResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/sync-state?matchDate=${encodeURIComponent(snapshot.match.date)}`, { headers: leagueConfigHeaders });
+  const beforeCauserieSyncState = await beforeCauserieSyncResponse.json();
   const causerieResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/causerie`, {
     method: "POST",
     headers: {
@@ -397,6 +421,12 @@ try {
   assert.equal(causeriePayload.plan.attachments.midfield.length, 1, "La capture de la zone milieu doit être conservée");
   assert.equal(causeriePayload.plan.attachments.defense.length, 0, "Une zone sans capture doit rester vide");
   assert.deepEqual(causeriePayload.plan.mercatoProfiles, { "camille martin": "female", "julien thomas": "male", [longMercatoName]: "female" }, "Les profils Femme/Homme, y compris les noms longs, doivent être conservés par l'API");
+  const causerieSyncResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/sync-state?matchDate=${encodeURIComponent(snapshot.match.date)}`, { headers: leagueConfigHeaders });
+  const causerieSyncState = await causerieSyncResponse.json();
+  assert.equal(causerieSyncResponse.status, 200);
+  assert.equal(causerieSyncState.snapshotRevision, beforeCauserieSyncState.snapshotRevision, "La sauvegarde du brief ne doit pas modifier la révision du snapshot");
+  assert.equal(causerieSyncState.leagueConfigRevision, beforeCauserieSyncState.leagueConfigRevision, "La sauvegarde du brief ne doit pas modifier la révision des ligues");
+  assert.ok(causerieSyncState.causerieRevision, "Une sauvegarde du brief doit publier une révision synchronisable");
   const causerieReadResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/causerie?matchDate=${encodeURIComponent(snapshot.match.date)}`, {
     headers: { "x-access-code": accessCode },
   });
@@ -420,6 +450,9 @@ try {
   assert.equal(savedCauserie.attachments.attack.length, 2, "Les captures multiples doivent être persistées dans STEF_DATA_DIR");
 
   await fs.writeFile(expectedCauseriePath, "{ invalid causerie", "utf8");
+  const corruptedCauserieSyncResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/sync-state?matchDate=${encodeURIComponent(snapshot.match.date)}`, { headers: leagueConfigHeaders });
+  const corruptedCauserieSyncState = await corruptedCauserieSyncResponse.json();
+  assert.notEqual(corruptedCauserieSyncState.causerieRevision, causerieSyncState.causerieRevision, "Une écriture corrompue doit aussi produire une nouvelle révision visible par les écrans");
   const malformedCauserieResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/causerie?matchDate=${encodeURIComponent(snapshot.match.date)}`, {
     headers: { "x-access-code": accessCode },
   });

@@ -124,9 +124,10 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       const available = viewport.clientWidth;
       const centers = available >= 640 ? 2 : 1;
       const width = centers === 2 ? (available >= 1500 ? 260 : 280) : Math.min(320, available - 72);
-      const padding = (available - centers * width - (centers - 1) * 16) / 2;
+      const gap = Number.parseFloat(getComputedStyle(track).columnGap) || 16;
+      const padding = (available - centers * width - (centers - 1) * gap) / 2;
       const first = Math.max(0, Math.min(totalCount - centers, geometry.current.first));
-      geometry.current = { width, pitch: width + 16, centers, first };
+      geometry.current = { width, pitch: width + gap, centers, first };
       viewport.style.setProperty("--indicator-width", `${width}px`);
       viewport.style.setProperty("--indicator-padding", `${Math.max(0, padding)}px`);
       go(first, true);
@@ -199,7 +200,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   return (
     <section className="match-indicators" aria-label="Indicateurs du match" aria-roledescription="carrousel">
       <header className="match-indicators-heading">
-        <span><Activity size={17} /> Le collectif en chiffres</span>
+        <h2 className="match-indicators-title"><Activity size={17} /> Le collectif en chiffres</h2>
         <div className="match-indicators-navigation">
           <span aria-live="polite" aria-atomic="true">{position.first + 1}{position.centers === 2 ? `–${Math.min(itemCount, position.first + 2)}` : ""} / {itemCount}</span>
           <button type="button" disabled={position.first === 0} aria-label="Indicateurs précédents" title="Indicateurs précédents" onClick={() => goRef.current(position.first - 1)}><ChevronLeft size={19} /></button>
