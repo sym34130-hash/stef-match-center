@@ -16,6 +16,7 @@ import {
   Dumbbell,
   Edit3,
   Eye,
+  EyeOff,
   FileSpreadsheet,
   FileCheck2,
   CircleHelp,
@@ -660,6 +661,16 @@ export default function App() {
                 onPlayer={openPlayer}
                 onCoach={() => setScreen("coach")}
                 onComposition={() => setScreen("composition")}
+                onTravelExclusionChange={async (travelCode, excluded) => {
+                  if (!session) return;
+                  try {
+                    const nextSnapshot = await updateTravelExclusion(session, travelCode, excluded);
+                    publishSnapshot(nextSnapshot);
+                    setStatusMessage("");
+                  } catch (error) {
+                    setStatusMessage(error instanceof Error ? error.message : "Le périmètre des voyages n'a pas pu être actualisé.");
+                  }
+                }}
               />
             )}
             {screen === "composition" && snapshot && <Composition snapshot={snapshot} session={session} onPlayer={openPlayer} />}
@@ -786,6 +797,20 @@ async function updateTimeRange(session: Session, start: string, end: string, cri
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message ?? "La plage horaire n'a pas pu être actualisée.");
+  return payload.snapshot;
+}
+
+async function updateTravelExclusion(session: Session, travelCode: string, excluded: boolean): Promise<Snapshot> {
+  const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/travel-exclusions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-access-code": session.accessCode,
+    },
+    body: JSON.stringify({ travelCode, excluded }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message ?? "Le périmètre d'analyse n'a pas pu être actualisé.");
   return payload.snapshot;
 }
 
@@ -1250,7 +1275,7 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
   );
 }
 
-function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlayer, onCoach, onComposition }: { snapshot: Snapshot; session: Session; causerieRevision: string | null; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void }) {
+function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlayer, onCoach, onComposition, onTravelExclusionChange }: { snapshot: Snapshot; session: Session; causerieRevision: string | null; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void; onTravelExclusionChange: (travelCode: string, excluded: boolean) => Promise<void> }) {
   const [celebrationMode, setCelebrationMode] = useState(false);
   const [thresholdPulse, setThresholdPulse] = useState(false);
   const [editingKpis, setEditingKpis] = useState(false);
@@ -1259,6 +1284,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const [mercatoPlan, setMercatoPlan] = useState<{ key: string; plan: CauseriePlan | null } | null>(null);
   const [activeSlide, setActiveSlide] = useState(0);
   const [slideDirection, setSlideDirection] = useState<"next" | "previous">("next");
+  const [pendingTravelCode, setPendingTravelCode] = useState<string | null>(null);
   const slideViewportRef = useRef<HTMLDivElement | null>(null);
   const slideTouchStart = useRef<{ x: number; y: number } | null>(null);
   const slideLabels = ["Coup de sifflet final", "Cérémonie des performances", "Statistiques du match", "Brief équipe"];
@@ -1338,6 +1364,15 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
     moveSlide(activeSlide + (deltaX < 0 ? 1 : -1));
   }
 
+  async function handleTravelExclusionChange(travelCode: string, excluded: boolean) {
+    setPendingTravelCode(travelCode);
+    try {
+      await onTravelExclusionChange(travelCode, excluded);
+    } finally {
+      setPendingTravelCode(null);
+    }
+  }
+
   const slideClass = (index: number) => `match-slide-panel ${activeSlide === index ? `is-active is-enter-${slideDirection}` : index < activeSlide ? "is-before" : "is-after"}`;
 
   return (
@@ -1352,7 +1387,10 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
             <button
               type="button"
               className="match-exit-celebration"
-              onClick={() => setCelebrationMode(false)}
+              onClick={() => {
+                setCelebrationMode(false);
+                setActiveSlide(0);
+              }}
               aria-label="Sortir du mode Célébration"
               title="Sortir du mode Célébration"
             >
@@ -1582,7 +1620,12 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         </div>
 
         <div className="match-stat-grid">
-          <OperationalChartsCarousel snapshot={snapshot} />
+          <OperationalChartsCarousel
+            snapshot={snapshot}
+            canEditTravelScope={session.agency.canImport}
+            onToggleTravel={handleTravelExclusionChange}
+            pendingTravelCode={pendingTravelCode}
+          />
         </div>
       </section>
       <section className={`match-brief-slide ${slideClass(3)}`} aria-hidden={activeSlide !== 3} inert={activeSlide !== 3} aria-roledescription="diapositive" aria-label="4 sur 4 : Brief équipe">
@@ -1598,7 +1641,9 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   );
 }
 
-function OperationalChartsCarousel({ snapshot }: { snapshot: Snapshot }) {
+type TravelScopeToggle = (travelCode: string, excluded: boolean) => Promise<void>;
+
+function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const slideRefs = useRef<Array<HTMLElement | null>>([]);
@@ -1611,12 +1656,12 @@ function OperationalChartsCarousel({ snapshot }: { snapshot: Snapshot }) {
     {
       id: "reception-time",
       label: "% duels gagnés",
-      content: <ReceptionQualityCard snapshot={snapshot} />,
+      content: <ReceptionQualityCard snapshot={snapshot} canEditTravelScope={canEditTravelScope} onToggleTravel={onToggleTravel} pendingTravelCode={pendingTravelCode} />,
     },
     {
       id: "loading",
       label: "% tirs cadrés",
-      content: <LoadingQualityCard snapshot={snapshot} />,
+      content: <LoadingQualityCard snapshot={snapshot} canEditTravelScope={canEditTravelScope} onToggleTravel={onToggleTravel} pendingTravelCode={pendingTravelCode} />,
     },
     {
       id: "centers",
@@ -1662,6 +1707,25 @@ function OperationalChartsCarousel({ snapshot }: { snapshot: Snapshot }) {
 
   return (
     <section className="operational-charts-carousel" aria-label="Carrousel de lecture opérationnelle">
+      {snapshot.excludedTravelCodes && snapshot.excludedTravelCodes.length > 0 && (
+        <details className="travel-exclusion-panel" open>
+          <summary><EyeOff size={15} /> Voyages exclus de l'analyse <span>{formatNumber(snapshot.excludedTravelCodes.length)}</span></summary>
+          <div className="travel-exclusion-list">
+            {snapshot.excludedTravelCodes.map((travelCode) => (
+              <button
+                type="button"
+                className="travel-restore-button"
+                key={travelCode}
+                disabled={!canEditTravelScope || pendingTravelCode === travelCode}
+                onClick={() => void onToggleTravel(travelCode, false)}
+              >
+                <RefreshCw size={14} />
+                <span>Réintégrer {travelCode}</span>
+              </button>
+            ))}
+          </div>
+        </details>
+      )}
       <div className="operational-charts-carousel-toolbar">
         <span className="operational-charts-carousel-counter" aria-live="polite">{activeIndex + 1} / {cards.length}</span>
         <div className="operational-charts-carousel-actions">
@@ -1767,7 +1831,7 @@ function CentersQualityCard({ snapshot }: { snapshot: Snapshot }) {
 }
 
 
-function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
+function LoadingQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null }) {
   const quality = snapshot.loadingQuality;
   if (!quality) return null;
   const loadingTarget = formatReadableDuration(snapshot.performanceCriteria?.loadingSeconds ?? 165);
@@ -1807,12 +1871,12 @@ function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
           <summary>Voir les tirs non cadrés <span>{formatNumber(quality.nonTargetedShots.length)}</span></summary>
           <div className="loading-quality-table-wrap">
           <div className="loading-quality-table" role="table" aria-label="Détails des tirs non cadrés">
-            <div className="loading-quality-table-row is-head" role="row">
-              <span>Voyage</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Frappe</span><span>Résultat</span>
+            <div className={`loading-quality-table-row is-head ${canEditTravelScope ? "has-travel-action" : ""}`} role="row">
+              <span>Voyage</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Frappe</span><span>Résultat</span>{canEditTravelScope && <span>Action</span>}
             </div>
             {quality.nonTargetedShots.map((shot) => (
-              <div className="loading-quality-table-row" role="row" key={`${shot.travelCode}-${shot.time}`}>
-                <span>{shot.travelCode}</span><span>{shot.time}</span><span>{shot.positions}</span><span>{shot.timePerPosition}</span><span>{shot.where}</span><span><i className="loading-result-dot is-off-target" title="Non cadré" aria-label="Non cadré" /></span>
+              <div className={`loading-quality-table-row ${canEditTravelScope ? "has-travel-action" : ""}`} role="row" key={`${shot.travelCode}-${shot.time}`}>
+                <span>{shot.travelCode}</span><span>{shot.time}</span><span>{shot.positions}</span><span>{shot.timePerPosition}</span><span>{shot.where}</span><span><i className="loading-result-dot is-off-target" title="Non cadré" aria-label="Non cadré" /></span>{canEditTravelScope && <span className="travel-action-cell"><button type="button" className="travel-visibility-button" disabled={pendingTravelCode === shot.travelCode} onClick={() => void onToggleTravel(shot.travelCode, true)} aria-label={`Masquer le voyage ${shot.travelCode}`} title={`Masquer le voyage ${shot.travelCode}`}><EyeOff size={14} /></button></span>}
               </div>
             ))}
           </div>
@@ -1823,7 +1887,7 @@ function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
   );
 }
 
-function ReceptionQualityCard({ snapshot }: { snapshot: Snapshot }) {
+function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null }) {
   const quality = snapshot.unloadingQuality;
   const duelQuality = snapshot.unloadingDuelQuality;
   if (!quality) return null;
@@ -1835,11 +1899,11 @@ function ReceptionQualityCard({ snapshot }: { snapshot: Snapshot }) {
     ? null
     : formatReadableDuration(quality.averageTimePerPositionSeconds);
   return (
-    <section className="loading-quality-card reception-quality-card" aria-label="% Duels gagnés">
+    <section className="loading-quality-card loading-duel-quality-card reception-quality-card" aria-label="% Duels gagnés">
       <div className="loading-quality-heading">
         <div>
           <span>Déchargement</span>
-          <strong>% duels gagnés</strong>
+          <strong>% Duels gagnés</strong>
           <p className="loading-quality-explanation">Voyages dans la cible : temps moyen inférieur ou égal à {target}/poz.</p>
         </div>
         <b>{formatNumber(total)} voyages</b>
@@ -1867,12 +1931,12 @@ function ReceptionQualityCard({ snapshot }: { snapshot: Snapshot }) {
           {duelQuality.lostDuels.length > 0 ? (
             <div className="duel-quality-table-wrap">
               <div className="duel-quality-table" role="table" aria-label="Duels perdus">
-                <div className="duel-quality-table-row is-head" role="row">
-                  <span>Voyage</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>
+                <div className={`duel-quality-table-row is-head ${canEditTravelScope ? "has-travel-action" : ""}`} role="row">
+                  <span>Voyage</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>{canEditTravelScope && <span>Action</span>}
                 </div>
                 {duelQuality.lostDuels.map((duel) => (
-                  <div className="duel-quality-table-row" role="row" key={`${duel.travelCode}-${duel.time}`}>
-                    <span>{duel.travelCode}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className="duel-result duel-result-perdu">perdu</span>
+                  <div className={`duel-quality-table-row ${canEditTravelScope ? "has-travel-action" : ""}`} role="row" key={`${duel.travelCode}-${duel.time}`}>
+                    <span>{duel.travelCode}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className="duel-result duel-result-perdu">perdu</span>{canEditTravelScope && <span className="travel-action-cell"><button type="button" className="travel-visibility-button" disabled={pendingTravelCode === duel.travelCode} onClick={() => void onToggleTravel(duel.travelCode, true)} aria-label={`Masquer le voyage ${duel.travelCode}`} title={`Masquer le voyage ${duel.travelCode}`}><EyeOff size={14} /></button></span>}
                   </div>
                 ))}
               </div>
@@ -1889,12 +1953,20 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   // The chart total is scoped to the displayed hourly series. The operational
   // score is a separate four-indicator contract and must not replace it.
   const totalPassRate = snapshot.summary.passRate ?? null;
-  const width = 1440;
-  const height = 600;
-  const left = 92;
-  const right = 42;
-  const top = 30;
-  const bottom = 76;
+  const [wideShortPresentation, setWideShortPresentation] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 2200px) and (max-height: 900px)");
+    const sync = () => setWideShortPresentation(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  const width = wideShortPresentation ? 2600 : 1440;
+  const height = wideShortPresentation ? 330 : 600;
+  const left = wideShortPresentation ? 80 : 92;
+  const right = wideShortPresentation ? 40 : 42;
+  const top = wideShortPresentation ? 18 : 30;
+  const bottom = wideShortPresentation ? 44 : 76;
   const chartWidth = width - left - right;
   const chartHeight = height - top - bottom;
   const points = data.map((item, index) => ({

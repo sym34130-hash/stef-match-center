@@ -20270,3 +20270,798 @@ body.match-celebration-active .main-area {
     font-size: 14px;
   }
 }
+
+/* Large-screen brief presentation: keep the same visual language while
+   giving the active slide a deliberate reading scale. This breakpoint is
+   intentionally isolated from the normal view and smaller laptops. */
+@media (min-width: 2200px) and (min-height: 1100px) {
+  .match-page.is-celebration-mode .match-carousel-navigation {
+    gap: 10px 24px;
+    padding: 14px 22px 13px;
+  }
+
+  .match-page.is-celebration-mode .match-carousel-heading > span {
+    font-size: 15px;
+    line-height: 1.1;
+  }
+
+  .match-page.is-celebration-mode .match-carousel-heading > strong {
+    font-size: 25px;
+    line-height: 1.1;
+  }
+
+  .match-page.is-celebration-mode .match-carousel-count {
+    min-width: 74px;
+    font-size: 18px;
+  }
+
+  .match-page.is-celebration-mode .match-carousel-arrow {
+    width: 48px;
+    height: 48px;
+  }
+
+  .match-page.is-celebration-mode .match-carousel-progress {
+    gap: 8px;
+  }
+
+  .match-page.is-celebration-mode .match-carousel-progress > button {
+    height: 7px;
+    border-radius: 4px;
+  }
+
+  .match-page.is-celebration-mode .match-exit-celebration {
+    min-height: 44px;
+    max-width: none;
+    padding: 9px 16px;
+    font-size: 14px;
+  }
+
+  .match-page.is-celebration-mode .match-slide-viewport {
+    overflow: hidden;
+  }
+
+  /* Slide 1: make the score and the four KPI explanations readable without
+     letting the result stage become an oversized empty canvas. */
+  .match-page.is-celebration-mode .match-ceremony.is-active {
+    gap: 16px;
+    padding: 20px 28px 22px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-ceremony-header {
+    gap: 18px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-ceremony-header h2 {
+    font-size: 58px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-ceremony-header span {
+    margin-top: 8px;
+    font-size: 16px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-result-stage {
+    grid-template-columns: minmax(430px, .62fr) minmax(0, 1.38fr);
+    gap: 20px;
+    padding: 22px 24px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-result-visual {
+    gap: 18px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-result-visual .football-score-panel,
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-result-visual .yellow-cards-panel {
+    padding: 24px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .football-score-panel {
+    gap: 14px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .football-score-side {
+    padding: 16px 12px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .football-score-side > strong {
+    font-size: 76px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .football-score-side > span,
+  .match-page.is-celebration-mode .match-ceremony.is-active .football-score-side > small,
+  .match-page.is-celebration-mode .match-ceremony.is-active .football-score-panel > p,
+  .match-page.is-celebration-mode .match-ceremony.is-active .yellow-cards-panel p,
+  .match-page.is-celebration-mode .match-ceremony.is-active .yellow-cards-panel li small {
+    font-size: 15px !important;
+    line-height: 1.25;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .yellow-cards-heading span {
+    font-size: 16px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .yellow-cards-heading strong {
+    font-size: 36px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-scoreboard {
+    gap: 14px;
+    padding: 28px 32px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-scoreboard > span {
+    font-size: 16px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-scoreboard > strong {
+    font-size: 42px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-scoreboard .match-score-bubbles {
+    grid-auto-rows: minmax(180px, 1fr);
+    gap: 16px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-score-bubble {
+    gap: 12px !important;
+    padding: 20px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-score-bubble > span {
+    font-size: 16px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-score-bubble > strong {
+    font-size: 52px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-score-bubble > small {
+    max-width: 360px;
+    font-size: 15px !important;
+    line-height: 1.35;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-heading {
+    gap: 16px;
+    padding-bottom: 6px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-title {
+    font-size: 18px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-navigation button {
+    width: 42px;
+    height: 42px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-viewport {
+    --indicator-width: 360px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-track {
+    gap: 18px;
+    padding: 10px var(--indicator-padding) 16px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicator-card {
+    height: 300px;
+    padding: 18px;
+  }
+
+  /* Slide 2: center the award content inside a controlled card height so a
+     tall display does not turn the cards into large empty columns. */
+  .match-page.is-celebration-mode .awards-ceremony.is-active {
+    gap: 22px;
+    padding: 28px 34px 34px;
+  }
+
+  .match-page.is-celebration-mode .awards-ceremony.is-active .awards-heading {
+    gap: 10px;
+  }
+
+  .match-page.is-celebration-mode .awards-ceremony.is-active .awards-heading h2 {
+    font-size: 56px;
+  }
+
+  .match-page.is-celebration-mode .awards-ceremony.is-active .awards-heading span {
+    font-size: 18px;
+  }
+
+  .match-page.is-celebration-mode .category-awards {
+    height: min(100%, 980px);
+    align-self: center;
+    gap: 22px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-card {
+    align-content: center;
+    gap: 16px;
+    padding: 32px 28px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-card .award-shirt {
+    width: 112px;
+    height: 82px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-copy strong {
+    font-size: 34px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-copy span,
+  .match-page.is-celebration-mode .award-challengers > strong {
+    font-size: 16px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-leader strong {
+    font-size: 26px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-leader span,
+  .match-page.is-celebration-mode .award-challenger {
+    font-size: 15px;
+  }
+
+  /* Slide 3: cap the graph canvas and center it. The data stays identical;
+     only the presentation scale changes on ultra-wide screens. */
+  .match-page.is-celebration-mode .operational-chart-slide {
+    justify-content: center;
+  }
+
+  .match-page.is-celebration-mode .operational-chart-slide > .performance-chart-panel,
+  .match-page.is-celebration-mode .operational-chart-slide > .loading-quality-card,
+  .match-page.is-celebration-mode .operational-chart-slide > .duel-quality-card {
+    width: min(100%, 2800px);
+    margin-inline: auto;
+  }
+
+  .match-page.is-celebration-mode .performance-chart-panel {
+    gap: 24px;
+    align-content: center;
+  }
+
+  .match-page.is-celebration-mode .performance-chart {
+    height: min(100%, 980px);
+    max-height: 980px;
+    margin-inline: auto;
+  }
+
+  /* Slide 4: force the brief plan to be a real vertical layout on tall
+     screens. The explicit height/display override protects this panel from
+     older compact rules that otherwise leave a large empty area underneath. */
+  .match-page.is-celebration-mode .match-brief-slide.is-active > .tv-action {
+    display: flex !important;
+    flex-direction: column;
+    height: 100% !important;
+    min-height: 0 !important;
+    padding: 28px 34px 32px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-action-heading {
+    gap: 16px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-action-heading strong {
+    font-size: 34px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-edit-button {
+    min-height: 48px;
+    padding: 10px 16px;
+    font-size: 16px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    gap: 18px;
+    margin-top: 22px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-column,
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-empty-state {
+    height: 100%;
+    min-height: 0;
+    padding: 24px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-column > b {
+    font-size: 18px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-empty-state {
+    gap: 16px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-empty-state strong {
+    font-size: 28px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-empty-state span {
+    font-size: 20px;
+    line-height: 1.45;
+  }
+}
+
+/* Wide but not very tall presentation screens need a denser first slide. The
+   result remains readable while the KPI strip stays inside the visible canvas. */
+@media (min-width: 2200px) and (min-height: 1100px) and (max-height: 1500px) {
+  .match-page.is-celebration-mode .match-ceremony.is-active {
+    grid-template-rows: auto minmax(0, 1fr) 300px;
+    gap: 10px;
+    padding: 14px 20px 16px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-result-stage {
+    gap: 14px;
+    padding: 14px 16px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-scoreboard {
+    gap: 10px;
+    padding: 18px 22px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-scoreboard .match-score-bubbles {
+    grid-auto-rows: minmax(132px, 1fr);
+    gap: 12px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-score-bubble {
+    gap: 8px !important;
+    padding: 14px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-score-bubble > span {
+    font-size: 14px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-score-bubble > strong {
+    font-size: 44px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-score-bubble > small {
+    max-width: 300px;
+    font-size: 13px !important;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-area,
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators {
+    height: 300px;
+    min-height: 0;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-viewport {
+    height: 244px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-track {
+    padding: 8px var(--indicator-padding) 12px;
+  }
+
+.match-page.is-celebration-mode .match-ceremony.is-active .match-indicator-card {
+    height: 220px;
+  }
+}
+
+/* Travel scope controls stay attached to the analytical lists. They are
+   deliberately compact so the exclusion action does not compete with the
+   KPI reading surface. */
+.loading-quality-table-row.has-travel-action {
+  grid-template-columns: 1.05fr 1.15fr 0.65fr 1fr 1.15fr 0.9fr auto;
+}
+
+.duel-quality-table-row.has-travel-action {
+  grid-template-columns: 1.1fr 0.8fr 1.05fr 0.65fr 0.9fr 0.7fr auto;
+}
+
+.travel-action-cell {
+  display: flex;
+  justify-content: flex-end;
+  overflow: visible !important;
+}
+
+.travel-visibility-button,
+.travel-restore-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid rgba(29, 78, 137, 0.2);
+  border-radius: 7px;
+  color: var(--blue-stef);
+  background: #fff;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.travel-visibility-button:hover,
+.travel-visibility-button:focus-visible,
+.travel-restore-button:hover,
+.travel-restore-button:focus-visible {
+  border-color: var(--blue-stef);
+  color: var(--navy-900);
+  background: #eef5ff;
+}
+
+.travel-visibility-button:disabled,
+.travel-restore-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.travel-exclusion-panel {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(29, 78, 137, 0.18);
+  border-radius: 8px;
+  background: rgba(29, 78, 137, 0.035);
+}
+
+.travel-exclusion-panel summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--navy-900);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  list-style: none;
+}
+
+.travel-exclusion-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.travel-exclusion-panel summary span {
+  margin-left: auto;
+  color: var(--red-action);
+}
+
+.travel-exclusion-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.travel-restore-button {
+  justify-content: flex-start;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.composition-header {
+  position: relative;
+  top: auto;
+  z-index: auto;
+}
+
+/* Presentation displays are often very wide but not especially tall. This
+   breakpoint gives the active slide a compact frame while preserving readable
+   content instead of relying on an inner vertical scroll. */
+@media (min-width: 2200px) and (max-height: 900px) {
+  .match-page.is-celebration-mode .match-slide-viewport {
+    overflow-y: hidden;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active,
+  .match-page.is-celebration-mode .awards-ceremony.is-active,
+  .match-page.is-celebration-mode .match-statistics-section.is-active,
+  .match-page.is-celebration-mode .match-brief-slide.is-active {
+    gap: 8px;
+    padding: 10px 14px 12px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active {
+    grid-template-rows: auto minmax(0, 1fr) minmax(168px, 180px);
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-ceremony-header {
+    gap: 10px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-ceremony-header h2 {
+    font-size: clamp(30px, 2.6vw, 42px);
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-ceremony-header span {
+    margin-top: 3px;
+    font-size: 10px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-result-stage {
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-scoreboard {
+    gap: 5px;
+    padding: 6px 8px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-scoreboard > span {
+    font-size: 8px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-scoreboard > strong {
+    font-size: clamp(20px, 2vw, 27px);
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-score-bubbles {
+    grid-auto-rows: minmax(44px, 1fr);
+    gap: 5px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-score-bubble {
+    gap: 3px !important;
+    padding: 5px 6px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-score-bubble > span {
+    font-size: 8px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-score-bubble > strong {
+    font-size: clamp(20px, 1.9vw, 27px);
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-score-bubble > small {
+    display: none;
+    max-width: 180px;
+    font-size: 7px !important;
+    line-height: 1.12;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-area {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators {
+    height: 100%;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-heading {
+    gap: 6px;
+    padding-bottom: 3px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-title {
+    font-size: 12px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-navigation {
+    gap: 4px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-navigation button {
+    width: 28px;
+    height: 28px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-track {
+    padding-top: 4px;
+    padding-bottom: 6px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-kpi-actions {
+    margin-top: 2px;
+  }
+
+  .match-page.is-celebration-mode .awards-ceremony.is-active,
+  .match-page.is-celebration-mode .match-statistics-section.is-active {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .match-page.is-celebration-mode .awards-heading,
+  .match-page.is-celebration-mode .match-section-heading {
+    gap: 10px;
+  }
+
+  .match-page.is-celebration-mode .awards-heading h2,
+  .match-page.is-celebration-mode .match-section-heading h2 {
+    font-size: clamp(28px, 2.2vw, 36px);
+  }
+
+  .match-page.is-celebration-mode .awards-heading span,
+  .match-page.is-celebration-mode .match-section-heading span {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .match-page.is-celebration-mode .category-awards {
+    gap: 10px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-card {
+    min-height: 0;
+    gap: 6px;
+    padding: 10px 12px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-symbol {
+    width: 50px;
+    height: 29px;
+    font-size: 10px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-shirt {
+    width: 54px;
+    height: 50px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-copy {
+    gap: 3px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-copy i {
+    font-size: 10px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-copy strong {
+    font-size: clamp(17px, 1.35vw, 22px);
+    line-height: 1.05;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-copy small,
+  .match-page.is-celebration-mode .category-awards .award-copy b {
+    font-size: 10px;
+  }
+
+  .match-page.is-celebration-mode .award-challengers {
+    gap: 4px;
+    margin-top: 3px;
+    padding-top: 6px;
+  }
+
+  .match-page.is-celebration-mode .award-challengers > strong {
+    font-size: 9px;
+  }
+
+  .match-page.is-celebration-mode .award-challenger {
+    gap: 0;
+    padding: 4px 6px;
+  }
+
+  .match-page.is-celebration-mode .award-challenger b {
+    font-size: 10px;
+  }
+
+  .match-page.is-celebration-mode .award-challenger small,
+  .match-page.is-celebration-mode .award-challengers > small {
+    font-size: 8px;
+    line-height: 1.15;
+  }
+
+  .match-page.is-celebration-mode .category-awards .podium-step {
+    min-height: 34px;
+    margin-top: 3px;
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-card > em {
+    font-size: 9px;
+  }
+
+  .match-page.is-celebration-mode .match-statistics-section.is-active {
+    gap: 6px;
+  }
+
+  .match-page.is-celebration-mode .match-statistics-section.is-active .match-section-heading .secondary-button {
+    min-height: 32px;
+    padding: 7px 10px;
+    font-size: 11px;
+  }
+
+  .match-page.is-celebration-mode .operational-charts-carousel {
+    gap: 6px;
+  }
+
+  .match-page.is-celebration-mode .operational-charts-carousel-toolbar {
+    min-height: 28px;
+  }
+
+  .match-page.is-celebration-mode .operational-charts-carousel .icon-button {
+    width: 30px;
+    height: 30px;
+  }
+
+  .match-page.is-celebration-mode .operational-charts-carousel-viewport {
+    padding-bottom: 4px;
+  }
+
+  .match-page.is-celebration-mode .operational-chart-slide > .performance-chart-panel,
+  .match-page.is-celebration-mode .operational-chart-slide > .loading-quality-card,
+  .match-page.is-celebration-mode .operational-chart-slide > .duel-quality-card {
+    padding: 10px 14px 8px;
+    gap: 8px;
+  }
+
+  .match-page.is-celebration-mode .performance-chart-heading {
+    gap: 10px;
+  }
+
+  .match-page.is-celebration-mode .performance-chart-heading span,
+  .match-page.is-celebration-mode .performance-chart-total small {
+    font-size: 10px;
+  }
+
+  .match-page.is-celebration-mode .performance-chart-heading strong {
+    margin-top: 3px;
+    font-size: 18px;
+  }
+
+  .match-page.is-celebration-mode .performance-chart-caption {
+    margin-top: 4px;
+    font-size: 11px;
+  }
+
+  .match-page.is-celebration-mode .performance-chart-total {
+    padding: 6px 9px;
+  }
+
+  .match-page.is-celebration-mode .performance-chart-total b {
+    font-size: 18px;
+  }
+
+  .match-page.is-celebration-mode .performance-chart g > text {
+    font-size: 16px;
+  }
+
+  .match-page.is-celebration-mode .performance-chart-point > text:first-of-type {
+    font-size: 17px;
+  }
+
+  .match-page.is-celebration-mode .performance-chart-point .performance-chart-volume,
+  .match-page.is-celebration-mode .performance-chart-point .performance-chart-hour {
+    font-size: 15px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active > .tv-action {
+    padding: 12px 14px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-action-heading {
+    gap: 10px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-action-heading strong {
+    font-size: 24px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-grid {
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-column,
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-empty-state {
+    padding: 12px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-column > b {
+    font-size: 13px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-empty-state {
+    gap: 10px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-empty-state strong {
+    font-size: 18px;
+  }
+
+  .match-page.is-celebration-mode .match-brief-slide.is-active .tv-plan-empty-state span {
+    font-size: 14px;
+    line-height: 1.3;
+  }
+}

@@ -201,6 +201,35 @@ try {
   assert.equal(snapshot.loadingQuality.offTarget, 2, "Chargements non cadrés après import API");
   assert.equal(snapshot.loadingQuality.nonTargetedShots.find((shot) => shot.travelCode === "X47890")?.timePerPosition, "02:47", "Tir non cadré après import API");
 
+  const exclusionCandidate = snapshot.unloadingDuelQuality?.lostDuels?.[0]?.travelCode;
+  assert.ok(exclusionCandidate, "Un voyage doit être disponible pour tester le périmètre d'analyse");
+  const exclusionHeaders = { ...leagueConfigHeaders, "Content-Type": "application/json" };
+  const hideTravelResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/travel-exclusions`, {
+    method: "POST",
+    headers: exclusionHeaders,
+    body: JSON.stringify({ travelCode: exclusionCandidate, excluded: true }),
+  });
+  const hiddenTravelPayload = await hideTravelResponse.json();
+  assert.equal(hideTravelResponse.status, 200, JSON.stringify(hiddenTravelPayload));
+  assert.ok(hiddenTravelPayload.snapshot.excludedTravelCodes.includes(exclusionCandidate), "Le voyage masqué doit être présent dans le périmètre exclu");
+  assert.ok(hiddenTravelPayload.snapshot.summary.operations < snapshot.summary.operations, "Le masquage doit réduire le périmètre opérationnel");
+  assert.ok(hiddenTravelPayload.snapshot.summary.duelTotal < snapshot.summary.duelTotal, "Le masquage doit réduire le dénominateur des duels");
+  assert.equal(hiddenTravelPayload.snapshot.unloadingDuelQuality.lostDuels.some((duel) => duel.travelCode === exclusionCandidate), false, "Le voyage masqué doit disparaître du détail des duels");
+  const persistedExclusionResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/snapshot`, { headers: leagueConfigHeaders });
+  const persistedExclusionPayload = await persistedExclusionResponse.json();
+  assert.ok(persistedExclusionPayload.snapshot.excludedTravelCodes.includes(exclusionCandidate), "Le masquage doit survivre à une relecture du snapshot");
+
+  const restoreTravelResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/travel-exclusions`, {
+    method: "POST",
+    headers: exclusionHeaders,
+    body: JSON.stringify({ travelCode: exclusionCandidate, excluded: false }),
+  });
+  const restoredTravelPayload = await restoreTravelResponse.json();
+  assert.equal(restoreTravelResponse.status, 200, JSON.stringify(restoredTravelPayload));
+  assert.deepEqual(restoredTravelPayload.snapshot.excludedTravelCodes, [], "La réintégration doit vider le périmètre exclu");
+  assert.equal(restoredTravelPayload.snapshot.summary.operations, snapshot.summary.operations, "La réintégration doit restaurer les opérations");
+  assert.equal(restoredTravelPayload.snapshot.summary.duelTotal, snapshot.summary.duelTotal, "La réintégration doit restaurer le dénominateur des duels");
+
   const latestResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/snapshot`, {
     headers: { "x-access-code": accessCode },
   });

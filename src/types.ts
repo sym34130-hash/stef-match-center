@@ -58,6 +58,7 @@ export type Snapshot = {
   version: number;
   sourceName: string;
   importedAt: string;
+  excludedTravelCodes?: string[];
   performanceCriteria?: {
     zonageMinutes: number;
     loadingSeconds: number;
@@ -138,6 +139,7 @@ export type Snapshot = {
     scoringRows?: number;
     excludedByPeriod?: number;
     excludedByOperator?: number;
+    excludedByTravel?: number;
     excludedFromScore?: number;
   };
   hourlyPerformance?: Array<{
@@ -265,6 +267,7 @@ export type Snapshot = {
       scoringRows: number;
       excludedByPeriod: number;
       excludedByOperator: number;
+      excludedByTravel?: number;
       excludedFromScore: number;
     };
     kpiRules?: {

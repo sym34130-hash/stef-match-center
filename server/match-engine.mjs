@@ -56,6 +56,14 @@ function normalizePositiveInteger(value, fallback) {
   return Number.isFinite(numericValue) && numericValue > 0 ? Math.round(numericValue) : fallback;
 }
 
+function normalizeTravelCodes(value) {
+  return new Set(
+    Array.isArray(value)
+      ? value.map((code) => cleanText(code)).filter(Boolean)
+      : [],
+  );
+}
+
 export function normalizeTimeRange(start = DEFAULT_PERIOD_START, end = DEFAULT_PERIOD_END) {
   const startMinutes = parseTimeInput(start);
   const endMinutes = parseTimeInput(end);
@@ -193,6 +201,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   const compositionOnly = periodInput.compositionOnly === true;
   const criteria = normalizePerformanceCriteria(periodInput.criteria);
   const period = normalizeTimeRange(periodInput.start ?? DEFAULT_PERIOD_START, periodInput.end ?? DEFAULT_PERIOD_END);
+  const excludedTravelCodes = normalizeTravelCodes(periodInput.excludedTravelCodes);
   const parsed = parseWorkbookSource(buffer);
   if (!parsed.ok) return parsed;
 
@@ -208,6 +217,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     period.label,
     period.useExcelPeriod ? "excel-period" : "clock-period",
     `criteria-${criteria.zonageMinutes}-${criteria.loadingSeconds}-${criteria.unloadingSeconds}-${criteria.scoreTargetPercent}`,
+    `excluded-${Array.from(excludedTravelCodes).sort().join(",")}`,
     `106j-${periodInput.dailyIndicators?.importedAt ?? "none"}`,
     compositionOnly ? "composition" : "snapshot",
   ].join("|");
@@ -260,7 +270,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     validation.warnings.push(`${validation.duplicateRows} doublon(s) potentiel(s) détecté(s).`);
   }
 
-  const filterStats = buildFilterStats(rows, period, criteria);
+  const filterStats = buildFilterStats(rows, period, criteria, excludedTravelCodes);
   validation.filterStats = filterStats;
   validation.kpiRules = {
     matchFilter: `Filtre opérateur + plage ${period.label} (fin incluse)`,
@@ -279,7 +289,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     validation.warnings.push("Aucune ligne éligible au score après exclusion des positions non zonées.");
   }
 
-  const matchRows = rows.filter((row) => isMatchRow(row, period));
+  const matchRows = rows.filter((row) => isMatchRow(row, period) && !excludedTravelCodes.has(row.travelCode));
   const scoringRows = isDerivedTemplate
     ? buildDerivedScoringRows(matchRows, criteria.zonageMinutes * 60)
     : buildScoringRows(matchRows, period, criteria.zonageMinutes * 60);
@@ -319,11 +329,12 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     filterStats,
     period,
     criteria,
-    hourlyPassPerformance: buildHourlyPassPerformance(rawWorkbook, period),
-    loadingQuality: buildLoadingQualityFromTcd(rawWorkbook, period, criteria.loadingSeconds),
-    unloadingDuelQuality: buildUnloadingDuelQuality(rawWorkbook, period, expectedAgencyCode),
+    hourlyPassPerformance: buildHourlyPassPerformance(rawWorkbook, period, rows.filter((row) => !excludedTravelCodes.has(row.travelCode))),
+    loadingQuality: buildLoadingQualityFromTcd(rawWorkbook, period, criteria.loadingSeconds, excludedTravelCodes),
+    unloadingDuelQuality: buildUnloadingDuelQuality(rawWorkbook, period, expectedAgencyCode, excludedTravelCodes),
     unloadingQuality: buildUnloadingQuality(matchRows, criteria.unloadingSeconds),
-    yellowCards: buildYellowCards(rawWorkbook, period),
+    yellowCards: buildYellowCards(rawWorkbook, period, excludedTravelCodes),
+    excludedTravelCodes,
     dailyIndicators: periodInput.dailyIndicators ?? null,
   });
 
@@ -449,6 +460,7 @@ function parseWorkbookSource(buffer) {
         operationType,
         position,
         travelCode,
+        hourOperation: parseNumber(columnMap.hourOperation === undefined ? null : row[columnMap.hourOperation]),
         agencySegment,
         segmentType,
         operatorFilter,
@@ -530,7 +542,7 @@ export function normalizeSnapshotContract(snapshot) {
   };
 }
 
-function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period, criteria, hourlyPassPerformance, loadingQuality, unloadingDuelQuality, unloadingQuality, yellowCards, dailyIndicators }) {
+function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period, criteria, hourlyPassPerformance, loadingQuality, unloadingDuelQuality, unloadingQuality, yellowCards, dailyIndicators, excludedTravelCodes }) {
   const importedAt = new Date();
   const firstOperation = minDate(matchRows.map((row) => row.startedAt));
   const lastOperation = maxDate(matchRows.map((row) => row.startedAt));
@@ -595,6 +607,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
     version: 1,
     sourceName,
     importedAt: importedAt.toISOString(),
+    excludedTravelCodes: Array.from(excludedTravelCodes ?? []).sort((left, right) => left.localeCompare(right, "fr")),
     agency: {
       code: expectedAgencyCode || detectedAgency || "AGENCE",
       detectedCode: detectedAgency,
@@ -639,6 +652,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
       scoringRows: scoringRows.length,
       excludedByPeriod: filterStats.excludedByPeriod,
       excludedByOperator: filterStats.excludedByOperator,
+      excludedByTravel: filterStats.excludedByTravel ?? 0,
       excludedFromScore: filterStats.excludedFromScore,
     },
     hourlyPerformance: hourlyPassPerformance.items,
@@ -751,7 +765,7 @@ function formatDuration(totalSeconds) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds) {
+function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds, excludedTravelCodes = new Set()) {
   const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.loadingSeconds);
   const empty = {
     targeted: 0,
@@ -815,7 +829,7 @@ function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds) {
     const timePerPositionCell = sheet[XLSX.utils.encode_cell({ r: row, c: timePerPositionColumn })];
     const timePerPositionSeconds = parseDurationSeconds(timePerPositionCell?.v, timePerPositionCell?.w);
     const positions = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: positionsColumn })]?.v);
-    if (!travel || !Number.isFinite(positions) || positions < 15 || !Number.isFinite(timePerPositionSeconds) || timePerPositionSeconds <= 0) continue;
+    if (!travel || excludedTravelCodes.has(travel) || !Number.isFinite(positions) || positions < 15 || !Number.isFinite(timePerPositionSeconds) || timePerPositionSeconds <= 0) continue;
     const start = parseExcelDate(sheet[XLSX.utils.encode_cell({ r: row, c: startColumn })]?.v);
     if (!isInActiveTimeRange(start, period)) continue;
     const result = timePerPositionSeconds <= targetSeconds ? "cadré" : "non cadré";
@@ -837,6 +851,7 @@ function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds) {
   const averageTimePerPositionSeconds = loadingDetails.length > 0
     ? Math.round(loadingDurations.reduce((sum, seconds) => sum + seconds, 0) / loadingDurations.length)
     : null;
+  loadingDetails.sort(compareTimePerPositionDescending);
   return {
     targeted,
     offTarget,
@@ -859,7 +874,7 @@ function sheetEndRow(sheet, fallbackRow) {
   }
 }
 
-function buildUnloadingDuelQuality(workbook, period, agencyCode) {
+function buildUnloadingDuelQuality(workbook, period, agencyCode, excludedTravelCodes = new Set()) {
   const empty = { won: 0, lost: 0, wonPercent: null, lostPercent: null, duels: [], lostDuels: [] };
   const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "tcd ppt");
   const sheet = sheetName ? workbook.Sheets[sheetName] : null;
@@ -906,7 +921,7 @@ function buildUnloadingDuelQuality(workbook, period, agencyCode) {
     const wonValue = Number(wonRaw);
     const totalRaw = sheet[XLSX.utils.encode_cell({ r: row, c: totalColumn })]?.v;
     const totalValue = Number(totalRaw);
-    if (!travel || !Number.isFinite(totalValue) || totalValue <= 0 || wonRaw === "" || wonRaw === null || wonRaw === undefined || !Number.isFinite(wonValue) || (wonValue !== 0 && wonValue !== 1)) continue;
+    if (!travel || excludedTravelCodes.has(travel) || !Number.isFinite(totalValue) || totalValue <= 0 || wonRaw === "" || wonRaw === null || wonRaw === undefined || !Number.isFinite(wonValue) || (wonValue !== 0 && wonValue !== 1)) continue;
     const start = parseExcelDate(sheet[XLSX.utils.encode_cell({ r: row, c: startColumn })]?.v);
     if (!isInActiveTimeRange(start, period)) continue;
     total += totalValue;
@@ -926,6 +941,8 @@ function buildUnloadingDuelQuality(workbook, period, agencyCode) {
     if (wonValue < totalValue) lostDuels.push(duel);
   }
   const lost = Math.max(0, total - won);
+  duels.sort(compareTimePerPositionDescending);
+  lostDuels.sort(compareTimePerPositionDescending);
   return {
     won,
     lost,
@@ -990,7 +1007,7 @@ function buildUnloadingQuality(matchRows, configuredTargetSeconds) {
   };
 }
 
-function buildYellowCards(workbook, period) {
+function buildYellowCards(workbook, period, excludedTravelCodes = new Set()) {
   const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "feuille de match");
   const sheet = sheetName ? workbook.Sheets[sheetName] : null;
   if (!sheet) return [];
@@ -1012,7 +1029,7 @@ function buildYellowCards(workbook, period) {
         clockSeconds,
       };
     })
-    .filter((card) => card.playerName && (period.useExcelPeriod || isClockSecondsInPeriod(card.clockSeconds, period)))
+    .filter((card) => card.playerName && !excludedTravelCodes.has(card.travelCode) && (period.useExcelPeriod || isClockSecondsInPeriod(card.clockSeconds, period)))
     .map((card) => ({
       playerName: card.playerName,
       time: card.time,
@@ -1422,6 +1439,8 @@ function mapColumns(headerRow) {
     const index = normalizedHeaders.findIndex((header) => aliases.includes(header));
     if (index !== -1) map[key] = index;
   }
+  const hourOperationIndex = normalizedHeaders.findIndex((header) => header === "heure op");
+  if (hourOperationIndex !== -1) map.hourOperation = hourOperationIndex;
   return map;
 }
 
@@ -1454,10 +1473,11 @@ function hasUsableCalculatedColumns(matrix, columnMap) {
   return duelFlags.length >= sourceRows.length * 0.8 && dzValues.length > 0;
 }
 
-function buildFilterStats(rows, period, criteria) {
+function buildFilterStats(rows, period, criteria, excludedTravelCodes = new Set()) {
   const periodRows = rows.filter((row) => period.useExcelPeriod ? isExcelBlank(row.hourFilter) : isInTimeRange(row.startedAt, period));
   const operatorRows = period.useDerivedRows ? rows : rows.filter((row) => isExcelBlank(row.operatorFilter));
-  const matchRows = rows.filter((row) => isMatchRow(row, period));
+  const unexcludedRows = rows.filter((row) => isMatchRow(row, period));
+  const matchRows = unexcludedRows.filter((row) => !excludedTravelCodes.has(row.travelCode));
   const scoringRows = period.useDerivedRows
     ? buildDerivedScoringRows(matchRows, (criteria?.zonageMinutes ?? DEFAULT_PERFORMANCE_CRITERIA.zonageMinutes) * 60)
     : buildScoringRows(matchRows, period, (criteria?.zonageMinutes ?? DEFAULT_PERFORMANCE_CRITERIA.zonageMinutes) * 60);
@@ -1470,6 +1490,7 @@ function buildFilterStats(rows, period, criteria) {
     scoringRows: scoringRows.length,
     excludedByPeriod: rows.length - periodRows.length,
     excludedByOperator: rows.length - operatorRows.length,
+    excludedByTravel: unexcludedRows.length - matchRows.length,
     excludedFromScore: matchRows.length - scoringRows.length,
   };
 }
@@ -1728,6 +1749,16 @@ function parseDurationSeconds(value, displayValue = "") {
   return parsedClock === null ? null : parsedClock;
 }
 
+function compareTimePerPositionDescending(left, right) {
+  const leftSeconds = parseDurationSeconds(left.timePerPosition);
+  const rightSeconds = parseDurationSeconds(right.timePerPosition);
+  const leftHasTime = Number.isFinite(leftSeconds);
+  const rightHasTime = Number.isFinite(rightSeconds);
+  if (leftHasTime !== rightHasTime) return rightHasTime ? 1 : -1;
+  if (leftHasTime && rightHasTime && rightSeconds !== leftSeconds) return rightSeconds - leftSeconds;
+  return left.travelCode.localeCompare(right.travelCode, "fr");
+}
+
 function formatImportedDuration(value) {
   const seconds = parseClockSeconds(value);
   return seconds === null ? cleanText(value) : formatDuration(seconds);
@@ -1804,7 +1835,48 @@ function normalizedVolume(value, topValue) {
   return top > 0 ? volume / top : 0;
 }
 
-function buildHourlyPassPerformance(workbook, period) {
+function buildHourlyPassPerformance(workbook, period, sourceRows = null) {
+  if (Array.isArray(sourceRows) && sourceRows.some((row) => Number.isFinite(row?.hourOperation))) {
+    const chartHours = readHourlyChartHours(workbook);
+    const byHour = new Map();
+    for (const row of sourceRows) {
+      if (!isExcelBlank(row.operatorFilter) || !isExcelBlank(row.unzonedFilter) || !Number.isFinite(row.hourOperation)) continue;
+      const hour = Math.round(row.hourOperation);
+      if (hour < 0 || hour > 23) continue;
+      const hourMinutes = hour * 60;
+      const inRange = period.isOvernight || period.endMinutes < period.startMinutes
+        ? hourMinutes >= period.startMinutes || hourMinutes <= period.endMinutes
+        : hourMinutes >= period.startMinutes && hourMinutes <= period.endMinutes;
+      if (!inRange || (chartHours.size > 0 && !chartHours.has(hour))) continue;
+      const current = byHour.get(hour) ?? { won: 0, total: 0 };
+      current.total += 1;
+      if (row.duelWonFlag === 1) current.won += 1;
+      byHour.set(hour, current);
+    }
+    const values = Array.from(byHour.entries())
+      .filter(([, value]) => value.total > 0)
+      .map(([hour, value]) => ({
+        label: `${String(hour).padStart(2, "0")}h`,
+        hour,
+        won: value.won,
+        total: value.total,
+        rate: percent(value.won, value.total),
+      }));
+    values.sort((a, b) => {
+      const toOffset = (hour) => {
+        const minutes = hour * 60;
+        return period.isOvernight && minutes < period.startMinutes ? minutes + 1440 - period.startMinutes : minutes - period.startMinutes;
+      };
+      return toOffset(a.hour) - toOffset(b.hour);
+    });
+    const weightedWon = values.reduce((sum, item) => sum + item.won, 0);
+    const weightedTotal = values.reduce((sum, item) => sum + item.total, 0);
+    return {
+      items: values,
+      totalRate: weightedTotal > 0 ? percent(weightedWon, weightedTotal) : null,
+    };
+  }
+
   const empty = { items: [], totalRate: null };
   const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "x");
   const sheet = sheetName ? workbook.Sheets[sheetName] : null;
@@ -1887,6 +1959,31 @@ function buildHourlyPassPerformance(workbook, period) {
     items: values,
     totalRate: weightedTotal > 0 ? percent(weightedWon, weightedTotal) : null,
   };
+}
+
+function readHourlyChartHours(workbook) {
+  const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "x");
+  const sheet = sheetName ? workbook.Sheets[sheetName] : null;
+  if (!sheet) return new Set();
+  const chartHeader = Object.entries(sheet).find(([address, cell]) => !address.startsWith("!") && normalizeKey(cell?.v) === "somme de passes reussies");
+  if (!chartHeader) return new Set();
+  const chartHeaderCell = XLSX.utils.decode_cell(chartHeader[0]);
+  const range = XLSX.utils.decode_range(sheet["!ref"] ?? "A1:A1");
+  let chartHourColumn = -1;
+  for (let col = chartHeaderCell.c - 1; col >= 0; col -= 1) {
+    if (normalizeKey(sheet[XLSX.utils.encode_cell({ r: chartHeaderCell.r, c: col })]?.v) === "heure op") {
+      chartHourColumn = col;
+      break;
+    }
+  }
+  if (chartHourColumn < 0) return new Set();
+  const hours = new Set();
+  for (let row = chartHeaderCell.r + 1; row <= range.e.r; row += 1) {
+    const hour = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: chartHourColumn })]?.v);
+    const rate = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: chartHeaderCell.c })]?.v);
+    if (Number.isFinite(hour) && Number.isFinite(rate)) hours.add(Math.round(hour));
+  }
+  return hours;
 }
 
 function statusFromScore(score) {

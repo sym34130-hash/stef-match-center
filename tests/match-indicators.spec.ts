@@ -182,6 +182,76 @@ test("le carrousel distingue un PDF absent, une valeur nulle et un indicateur ab
   await expect(page.locator(".match-indicator-card")).toHaveCount(8);
 });
 
+test("le carrousel KPI revient depuis la dernière vignette sur un écran très large", async ({ page }) => {
+  await page.setViewportSize({ width: 2842, height: 620 });
+  await page.route("**/api/agencies/058/causerie**", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ plan: { mercato: "Camille Martin, Julien Thomas", mercatoProfiles: { "camille martin": "female", "julien thomas": "male" } } }),
+    });
+  });
+  await login(page);
+  await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
+  const carousel = page.locator(".match-indicators");
+  const viewport = page.locator(".match-indicators-viewport");
+  await viewport.focus();
+  await page.keyboard.press("End");
+  await expect(carousel.getByRole("button", { name: "Indicateurs suivants", exact: true })).toBeDisabled();
+  await expect(carousel.locator(".match-indicators-navigation > span")).toHaveText("9 / 9");
+  const endScroll = await viewport.evaluate((element) => element.scrollLeft);
+  await carousel.getByRole("button", { name: "Indicateurs précédents", exact: true }).click();
+  await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeLessThan(endScroll - 20);
+  await expect(carousel.locator(".match-indicators-navigation > span")).toHaveText("7–8 / 9");
+  await expect(carousel.getByRole("button", { name: "Indicateurs suivants", exact: true })).not.toBeDisabled();
+});
+
+test("le masquage d'un voyage recalcule les KPI et reste réversible", async ({ page }) => {
+  await useEmptyMercatoFixture(page);
+  await login(page);
+  const matchNavigation = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
+  await matchNavigation.getByRole("button", { name: "Aller à Statistiques du match" }).click();
+  await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % duels gagnés" }).click();
+  const details = page.locator(".reception-quality-card .duel-quality-details");
+  await details.locator("summary").click();
+  const action = page.locator('button[aria-label^="Masquer le voyage "]').first();
+  const ariaLabel = await action.getAttribute("aria-label");
+  const travelCode = ariaLabel?.replace("Masquer le voyage ", "");
+  if (!travelCode) throw new Error("Aucun voyage masquable n'a été trouvé dans les duels perdus.");
+
+  const readSnapshot = () => page.evaluate(async () => {
+    const response = await fetch("/api/agencies/058/snapshot", { headers: { "x-access-code": "LOCAL-058-DEV" }, cache: "no-store" });
+    return response.json() as Promise<{ snapshot: { excludedTravelCodes: string[]; summary: { operations: number; duelTotal: number }; unloadingDuelQuality?: { lostDuels: Array<{ travelCode: string }> } } }>;
+  });
+  const before = await readSnapshot();
+  try {
+    await action.click();
+    await expect(page.locator(".travel-exclusion-panel")).toContainText(`Réintégrer ${travelCode}`);
+    const hidden = await readSnapshot();
+    expect(hidden.snapshot.excludedTravelCodes).toContain(travelCode);
+    expect(hidden.snapshot.summary.operations).toBeLessThan(before.snapshot.summary.operations);
+    expect(hidden.snapshot.summary.duelTotal).toBeLessThan(before.snapshot.summary.duelTotal);
+    expect(hidden.snapshot.unloadingDuelQuality?.lostDuels.some((duel) => duel.travelCode === travelCode)).toBe(false);
+
+    await page.getByRole("button", { name: `Réintégrer ${travelCode}`, exact: true }).click();
+    await expect(page.locator(".travel-exclusion-panel")).toHaveCount(0);
+    const restored = await readSnapshot();
+    expect(restored.snapshot.excludedTravelCodes).toEqual([]);
+    expect(restored.snapshot.summary.operations).toBe(before.snapshot.summary.operations);
+    expect(restored.snapshot.summary.duelTotal).toBe(before.snapshot.summary.duelTotal);
+  } finally {
+    // Keep the local agency fixture clean even when an assertion fails.
+    await page.evaluate(async (code) => {
+      await fetch("/api/agencies/058/travel-exclusions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-access-code": "LOCAL-058-DEV" },
+        body: JSON.stringify({ travelCode: code, excluded: false }),
+      });
+    }, travelCode);
+  }
+});
+
 test("le Mercato occupe la première vignette KPI et affiche le profil sélectionné", async ({ page }, testInfo) => {
   await page.route("**/api/agencies/058/causerie**", async (route) => {
     if (route.request().method() !== "GET") return route.fallback();

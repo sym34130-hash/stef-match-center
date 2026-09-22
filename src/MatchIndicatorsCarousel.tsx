@@ -65,7 +65,24 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     let navigationTarget: number | null = null;
     const targetLeft = (index: number, centers: number) => {
       const maxFirst = Math.max(0, totalCount - centers);
-      return index === maxFirst ? Math.max(0, viewport.scrollWidth - viewport.clientWidth) : index * geometry.current.pitch;
+      const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      if (index === maxFirst) return maxScrollLeft;
+      // On a very wide presentation screen the viewport shows more cards than
+      // the two-card logical window. Spread the logical positions across the
+      // available scroll range so the previous arrow still moves back from
+      // the final 9/9 position instead of being clamped at the end.
+      if (maxFirst > 0 && maxScrollLeft > 2 && maxScrollLeft < maxFirst * geometry.current.pitch) {
+        return Math.round((maxScrollLeft * index) / maxFirst);
+      }
+      return index * geometry.current.pitch;
+    };
+    const firstFromScroll = (scrollLeft: number, centers: number) => {
+      const maxFirst = Math.max(0, totalCount - centers);
+      const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+      if (maxFirst > 0 && maxScrollLeft > 2 && maxScrollLeft < maxFirst * geometry.current.pitch) {
+        return Math.round((maxFirst * scrollLeft) / maxScrollLeft);
+      }
+      return Math.round(scrollLeft / geometry.current.pitch);
     };
 
     // Depth follows the actual scroll position; React only tracks the settled group.
@@ -74,13 +91,14 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       const { pitch, width, centers } = geometry.current;
       const maxFirst = Math.max(0, totalCount - centers);
       const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
-      const atStart = viewport.scrollLeft <= 2;
-      const atEnd = viewport.scrollLeft >= maxScrollLeft - 2;
-      const windowFirst = atStart
-        ? 0
-        : atEnd
-          ? maxFirst
-          : Math.max(0, Math.min(maxFirst, Math.round(viewport.scrollLeft / pitch)));
+      const hasNoOverflow = maxScrollLeft <= 2;
+      const atEnd = hasNoOverflow || viewport.scrollLeft >= maxScrollLeft - 2;
+      const atStart = !hasNoOverflow && viewport.scrollLeft <= 2;
+      const windowFirst = atEnd
+        ? maxFirst
+        : atStart
+          ? 0
+          : Math.max(0, Math.min(maxFirst, firstFromScroll(viewport.scrollLeft, centers)));
       // The last desktop window contains two cards, but the final card is still
       // the last logical indicator. Keep the physical window and its label
       // separate so the user can reach and identify 9/9 without changing the layout.
@@ -89,8 +107,11 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       geometry.current.first = windowFirst;
       setPosition((current) => current.first === displayFirst && current.centers === visibleCenters ? current : { first: displayFirst, centers: visibleCenters });
       const core = (centers - 1) * pitch / 2;
+      const logicalScrollLeft = atEnd
+        ? maxFirst * pitch
+        : (maxScrollLeft > 2 && maxScrollLeft < maxFirst * pitch ? windowFirst * pitch : viewport.scrollLeft);
       slides.forEach((slide, index) => {
-        const distance = Math.abs((index - viewport.scrollLeft / pitch) * pitch - core);
+        const distance = Math.abs((index - logicalScrollLeft / pitch) * pitch - core);
         const depth = Math.max(0, (distance - core) / pitch);
         const edge = smooth((distance - (viewport.clientWidth / 2 - width / 2)) / width);
         const scale = 1 - .05 * smooth(depth) - .07 * smooth((depth - 1) / 2);
@@ -128,7 +149,11 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     const layout = () => {
       const available = viewport.clientWidth;
       const centers = available >= 640 ? 2 : 1;
-      const width = centers === 2 ? (available >= 1500 ? 260 : 280) : Math.min(320, available - 72);
+      const isLargeBrief = document.body.classList.contains("match-celebration-active")
+        && window.innerWidth >= 2200;
+      const width = centers === 2
+        ? (isLargeBrief ? 360 : available >= 1500 ? 260 : 280)
+        : Math.min(320, available - 72);
       const gap = Number.parseFloat(getComputedStyle(track).columnGap) || 16;
       const padding = (available - centers * width - (centers - 1) * gap) / 2;
       const first = Math.max(0, Math.min(totalCount - centers, geometry.current.first));
@@ -151,7 +176,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       }
       manualScroll.current = false;
       navigationTarget = null;
-      go(Math.round(viewport.scrollLeft / geometry.current.pitch), true);
+      go(firstFromScroll(viewport.scrollLeft, geometry.current.centers), true);
     };
     const queueSettle = () => {
       clearTimeout(settleTimer);
@@ -202,8 +227,8 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     if (moved) settleRef.current();
   };
   const lastFirst = Math.max(0, itemCount - position.centers);
-  const visibleFirst = geometry.current.first;
-  const atLastIndicator = visibleFirst >= lastFirst || position.first >= itemCount - 1;
+  const visibleFirst = Math.max(0, Math.min(lastFirst, geometry.current.first));
+  const atLastIndicator = visibleFirst >= lastFirst;
   const navigationLabel = atLastIndicator
     ? `${itemCount}`
     : `${position.first + 1}${position.centers === 2 ? `–${Math.min(itemCount, position.first + 2)}` : ""}`;
@@ -213,8 +238,8 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
         <h2 className="match-indicators-title"><Activity size={17} /> Le collectif en chiffres</h2>
         <div className="match-indicators-navigation">
           <span aria-live="polite" aria-atomic="true">{navigationLabel} / {itemCount}</span>
-          <button type="button" disabled={position.first === 0} aria-label="Indicateurs précédents" title="Indicateurs précédents" onClick={() => goRef.current(geometry.current.first - 1)}><ChevronLeft size={19} /></button>
-          <button type="button" disabled={atLastIndicator} aria-label="Indicateurs suivants" title="Indicateurs suivants" onClick={() => goRef.current(geometry.current.first + 1)}><ChevronRight size={19} /></button>
+          <button type="button" disabled={visibleFirst === 0} aria-label="Indicateurs précédents" title="Indicateurs précédents" onClick={() => goRef.current(visibleFirst - 1)}><ChevronLeft size={19} /></button>
+          <button type="button" disabled={atLastIndicator} aria-label="Indicateurs suivants" title="Indicateurs suivants" onClick={() => goRef.current(visibleFirst + 1)}><ChevronRight size={19} /></button>
         </div>
       </header>
       <div ref={viewportRef} className="match-indicators-viewport" tabIndex={0} role="group" aria-label="Défilement des indicateurs du match"

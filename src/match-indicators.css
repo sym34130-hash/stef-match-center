@@ -105,3 +105,85 @@
   .match-indicator-value { font-size: 40px; }
   .match-indicator-card.is-performance .match-indicator-value { font-size: 20px; }
 }
+
+/* Wide presentation screens can be short in height. Keep every KPI card
+   inside the visible slide instead of letting the carousel crop its footer. */
+@media (min-width: 2200px) and (max-height: 900px) {
+  .match-page.is-celebration-mode .match-indicators,
+  .match-page.is-celebration-mode .match-indicators-viewport,
+  .match-page.is-celebration-mode .match-indicators-track,
+  .match-page.is-celebration-mode .match-indicator-slide {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-card {
+    grid-template-rows: 28px minmax(0, 1fr) 42px;
+    gap: 6px;
+    height: 100%;
+    min-height: 0;
+    padding: 10px;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-title {
+    gap: 6px;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-title svg {
+    flex-basis: 17px;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-title h3 {
+    font-size: 10px;
+    line-height: 1.18;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-value {
+    font-size: 34px;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-card.is-performance .match-indicator-value {
+    font-size: 18px;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-card .team-motivation-message {
+    margin-top: 5px;
+    padding-left: 6px;
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-source,
+  .match-page.is-celebration-mode .match-indicator-staff > small {
+    padding-bottom: 0;
+    font-size: 9px;
+    line-height: 1.2;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-card .match-indicator-staff {
+    gap: 2px;
+    padding-top: 6px;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-card .match-indicator-staff > strong {
+    font-size: 14px;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-meter-wrap {
+    gap: 3px;
+    margin-top: 6px;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-meter {
+    height: 7px;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-meter-scale {
+    min-height: 10px;
+    font-size: 8px;
+  }
+
+  .match-page.is-celebration-mode .match-indicator-meter-scale strong {
+    font-size: 8px;
+  }
+}

@@ -168,11 +168,12 @@ app.post("/api/agencies/:agencyCode/time-range", requireAgency, async (req, res)
         readLatestSnapshot(req.agency.code),
       ]);
       const criteria = readRequestedPerformanceCriteria(req.body?.criteria) ?? currentSnapshot?.performanceCriteria;
+      const excludedTravelCodes = await readExcludedTravelCodesForSnapshot(req.agency.code, currentSnapshot, period);
       const result = buildSnapshotFromWorkbook(
         buffer,
         currentSnapshot?.sourceName ?? "match.xlsx",
         req.agency.code,
-        { ...period, criteria, dailyIndicators: currentSnapshot?.dailyIndicators ?? null },
+        { ...period, criteria, dailyIndicators: currentSnapshot?.dailyIndicators ?? null, excludedTravelCodes },
       );
       if (!result.ok) {
         res.status(400).json(result.error);
@@ -200,6 +201,95 @@ app.post("/api/agencies/:agencyCode/time-range", requireAgency, async (req, res)
       title: "SOURCE EXCEL INDISPONIBLE",
       message: "Réimporte le dernier fichier Excel avant de modifier la plage horaire.",
     });
+  }
+});
+
+app.post("/api/agencies/:agencyCode/travel-exclusions", requireAgency, async (req, res) => {
+  if (!req.agency.canImport) {
+    res.status(403).json({
+      title: "PÉRIMÈTRE NON MODIFIÉ",
+      message: "Ce code d'accès permet uniquement de consulter les résultats.",
+    });
+    return;
+  }
+
+  const travelCode = normalizeTravelCode(req.body?.travelCode);
+  const excluded = req.body?.excluded === true;
+  if (!travelCode) {
+    res.status(400).json({
+      title: "VOYAGE NON IDENTIFIÉ",
+      message: "Le code voyage est nécessaire pour modifier le périmètre d'analyse.",
+    });
+    return;
+  }
+
+  try {
+    await withAgencyLock(req.agency.code, async () => {
+      const agencyDir = path.join(dataDir, sanitizeSegment(req.agency.code));
+      const currentSnapshot = await readLatestSnapshot(req.agency.code);
+      if (!currentSnapshot) {
+        res.status(404).json({ title: "AUCUN MATCH IMPORTÉ", message: "Importe un fichier Excel avant de modifier le périmètre." });
+        return;
+      }
+      const scopeKey = travelExclusionScopeKey(currentSnapshot);
+      if (!scopeKey) {
+        res.status(409).json({ title: "PÉRIMÈTRE INDISPONIBLE", message: "La période active ne permet pas d'identifier le périmètre à modifier." });
+        return;
+      }
+
+      const state = await readTravelExclusionState(req.agency.code);
+      const currentExcluded = new Set(await readExcludedTravelCodesForSnapshot(req.agency.code, currentSnapshot));
+      const knownTravelCodes = new Set([
+        ...(currentSnapshot.positions ?? []).map((position) => normalizeTravelCode(position.travelCode)),
+        ...(currentSnapshot.loadingQuality?.loadingDetails ?? []).map((item) => normalizeTravelCode(item.travelCode)),
+        ...(currentSnapshot.loadingQuality?.nonTargetedShots ?? []).map((item) => normalizeTravelCode(item.travelCode)),
+        ...(currentSnapshot.unloadingDuelQuality?.duels ?? []).map((item) => normalizeTravelCode(item.travelCode)),
+        ...(currentSnapshot.unloadingDuelQuality?.lostDuels ?? []).map((item) => normalizeTravelCode(item.travelCode)),
+        ...currentExcluded,
+      ]);
+      knownTravelCodes.delete("");
+      if (!knownTravelCodes.has(travelCode)) {
+        res.status(404).json({ title: "VOYAGE INTROUVABLE", message: `Le voyage ${travelCode} n'est pas présent dans la période active.` });
+        return;
+      }
+
+      if (excluded) currentExcluded.add(travelCode);
+      else currentExcluded.delete(travelCode);
+      const nextExcluded = normalizeTravelCodeList(currentExcluded);
+      state.scopes[scopeKey] = nextExcluded;
+
+      const workbook = await readWorkbookForBuild(agencyDir);
+      const period = normalizeTimeRange(currentSnapshot.match.periodStart, currentSnapshot.match.periodEnd);
+      const result = buildSnapshotFromWorkbook(
+        workbook,
+        currentSnapshot.sourceName || "match.xlsx",
+        req.agency.code,
+        {
+          ...period,
+          criteria: currentSnapshot.performanceCriteria,
+          dailyIndicators: currentSnapshot.dailyIndicators ?? null,
+          excludedTravelCodes: nextExcluded,
+        },
+      );
+      if (!result.ok) {
+        res.status(400).json(result.error);
+        return;
+      }
+      result.snapshot.agency.name = req.agency.name;
+      await writeTravelExclusionState(req.agency.code, state);
+      await writeJsonAtomic(path.join(agencyDir, "latest.json"), result.snapshot);
+      clearCompositionCache(req.agency.code);
+      res.json({
+        message: excluded ? `Voyage ${travelCode} masqué de l'analyse.` : `Voyage ${travelCode} réintégré dans l'analyse.`,
+        snapshot: result.snapshot,
+      });
+    });
+  } catch (error) {
+    if (!isMissingSourceError(error)) {
+      respondInternalError(res, `travel-exclusions:${req.agency.code}`, error);
+      return;
+    }
+    res.status(404).json({ title: "SOURCE EXCEL INDISPONIBLE", message: "Réimporte le dernier fichier Excel avant de modifier le périmètre." });
   }
 });
 
@@ -245,7 +335,8 @@ app.post("/api/agencies/:agencyCode/composition-range", requireAgency, async (re
         return;
       }
 
-      const cacheKey = [req.agency.code, currentSnapshot.sourceName ?? "match.xlsx", period.start, period.end].join("|");
+      const excludedTravelCodes = await readExcludedTravelCodesForSnapshot(req.agency.code, currentSnapshot, period);
+      const cacheKey = [req.agency.code, currentSnapshot.sourceName ?? "match.xlsx", period.start, period.end, excludedTravelCodes.join(",")].join("|");
       let calculation = compositionRangeCache.get(cacheKey);
       if (!calculation) {
         calculation = (async () => {
@@ -254,7 +345,7 @@ app.post("/api/agencies/:agencyCode/composition-range", requireAgency, async (re
             buffer,
             currentSnapshot.sourceName ?? "match.xlsx",
             req.agency.code,
-            period,
+            { ...period, excludedTravelCodes },
           );
         })().catch((error) => {
           compositionRangeCache.delete(cacheKey);
@@ -360,7 +451,8 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
         const workbook = await readWorkbookForBuild(agencyDir);
         const dailyIndicators = await parse106jPdf(req.file.buffer, req.file.originalname);
         const period = normalizeTimeRange(currentSnapshot.match?.periodStart, currentSnapshot.match?.periodEnd);
-        const result = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code, { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators });
+        const excludedTravelCodes = await readExcludedTravelCodesForSnapshot(req.agency.code, currentSnapshot, period);
+        const result = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code, { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators, excludedTravelCodes });
         if (!result.ok) {
           res.status(400).json(result.error);
           return;
@@ -381,11 +473,26 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
       }
 
       result.snapshot.agency.name = req.agency.name;
-      await saveImport(req.agency.code, req.file.originalname, req.file.buffer, result.snapshot);
+      const excludedTravelCodes = await readExcludedTravelCodesForSnapshot(req.agency.code, result.snapshot);
+      const scopedResult = excludedTravelCodes.length > 0
+        ? buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code, {
+            start: result.snapshot.match.periodStart,
+            end: result.snapshot.match.periodEnd,
+            criteria: result.snapshot.performanceCriteria,
+            dailyIndicators,
+            excludedTravelCodes,
+          })
+        : result;
+      if (!scopedResult.ok) {
+        res.status(400).json(scopedResult.error);
+        return;
+      }
+      scopedResult.snapshot.agency.name = req.agency.name;
+      await saveImport(req.agency.code, req.file.originalname, req.file.buffer, scopedResult.snapshot);
       clearCompositionCache(req.agency.code);
       res.json({
         message: dailyIndicators ? "MATCH ET 106J ACTUALISÉS" : "MATCH ACTUALISÉ",
-        snapshot: result.snapshot,
+        snapshot: scopedResult.snapshot,
       });
     });
   } catch (error) {
@@ -650,7 +757,9 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
   try {
     let snapshot = normalizeSnapshotContract(JSON.parse(await fs.readFile(latestPath, "utf8")));
     const agency = agencies.find((item) => String(item.code).toUpperCase() === String(agencyCode).toUpperCase());
+    const persistedExcludedTravelCodes = await readExcludedTravelCodesForSnapshot(agencyCode, snapshot);
     let shouldPersistRebuiltSnapshot = false;
+    const exclusionsChanged = !sameTravelCodeList(snapshot.excludedTravelCodes, persistedExcludedTravelCodes);
     const operationalScoreNeedsRefresh = operationalScoreContractNeedsRefresh(snapshot);
     const punctuality = snapshot.dailyIndicators?.punctuality;
     const dailyIndicatorTargetsNeedRefresh = Boolean(
@@ -670,7 +779,8 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
       !snapshot.unloadingDuelQuality ||
       !snapshot.duelQuality ||
       operationalScoreNeedsRefresh ||
-      dailyIndicatorTargetsNeedRefresh;
+      dailyIndicatorTargetsNeedRefresh ||
+      exclusionsChanged;
 
     const storedCriteriaMatchesRequest = requestedCriteria
       ? Object.entries(requestedCriteria).every(([key, value]) => snapshot.performanceCriteria?.[key] === value)
@@ -684,7 +794,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
           workbook,
           snapshot.sourceName || "match.xlsx",
           agency?.code || agencyCode,
-          { ...period, criteria: requestedCriteria, dailyIndicators },
+          { ...period, criteria: requestedCriteria, dailyIndicators, excludedTravelCodes: persistedExcludedTravelCodes },
         );
         if (rebuilt.ok) {
           snapshot = rebuilt.snapshot;
@@ -711,7 +821,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
           workbook,
           snapshot.sourceName || "match.xlsx",
           agency?.code || agencyCode,
-          { ...period, criteria: storedCriteria, dailyIndicators },
+          { ...period, criteria: storedCriteria, dailyIndicators, excludedTravelCodes: persistedExcludedTravelCodes },
         );
         if (rebuilt.ok) {
           snapshot = rebuilt.snapshot;
@@ -765,6 +875,76 @@ function clearCompositionCache(agencyCode) {
   for (const key of compositionRangeCache.keys()) {
     if (key.toUpperCase().startsWith(prefix)) compositionRangeCache.delete(key);
   }
+}
+
+const TRAVEL_EXCLUSION_STATE_VERSION = 1;
+
+function normalizeTravelCode(value) {
+  return typeof value === "string" ? value.normalize("NFKC").trim().replace(/\s+/g, " ").slice(0, 120) : "";
+}
+
+function normalizeTravelCodeList(value) {
+  return Array.from(new Set(
+    (value instanceof Set ? Array.from(value) : Array.isArray(value) ? value : [])
+      .map(normalizeTravelCode)
+      .filter(Boolean),
+  )).sort((left, right) => left.localeCompare(right, "fr"));
+}
+
+function travelExclusionScopeKey(snapshot, period = null) {
+  const date = normalizeTravelCode(snapshot?.match?.date);
+  const start = normalizeTravelCode(period?.start ?? snapshot?.match?.periodStart);
+  const end = normalizeTravelCode(period?.end ?? snapshot?.match?.periodEnd);
+  return date && start && end ? `${date}|${start}|${end}` : null;
+}
+
+function travelExclusionStatePath(agencyCode) {
+  return path.join(dataDir, sanitizeSegment(agencyCode), "travel-exclusions.json");
+}
+
+async function readTravelExclusionState(agencyCode) {
+  try {
+    const parsed = JSON.parse(await fs.readFile(travelExclusionStatePath(agencyCode), "utf8"));
+    const scopes = parsed && typeof parsed.scopes === "object" && !Array.isArray(parsed.scopes) ? parsed.scopes : {};
+    return {
+      version: TRAVEL_EXCLUSION_STATE_VERSION,
+      scopes: Object.fromEntries(Object.entries(scopes).map(([key, value]) => [key, normalizeTravelCodeList(value)])),
+    };
+  } catch (error) {
+    if (error?.code === "ENOENT") return { version: TRAVEL_EXCLUSION_STATE_VERSION, scopes: {} };
+    throw error;
+  }
+}
+
+async function writeTravelExclusionState(agencyCode, state) {
+  const scopes = state && typeof state.scopes === "object" && !Array.isArray(state.scopes) ? state.scopes : {};
+  await writeJsonAtomic(travelExclusionStatePath(agencyCode), {
+    version: TRAVEL_EXCLUSION_STATE_VERSION,
+    scopes: Object.fromEntries(Object.entries(scopes).map(([key, value]) => [key, normalizeTravelCodeList(value)])),
+  });
+}
+
+async function readExcludedTravelCodesForSnapshot(agencyCode, snapshot, period = null) {
+  const state = await readTravelExclusionState(agencyCode);
+  const scopeKey = travelExclusionScopeKey(snapshot, period);
+  if (!scopeKey) return normalizeTravelCodeList(snapshot?.excludedTravelCodes);
+  const stored = state.scopes[scopeKey];
+  if (Array.isArray(stored)) return stored;
+
+  // Migrate the field that was briefly stored directly in latest.json before
+  // the per-scope state file existed. Source workbooks remain untouched.
+  const legacy = normalizeTravelCodeList(snapshot?.excludedTravelCodes);
+  if (legacy.length > 0) {
+    state.scopes[scopeKey] = legacy;
+    await writeTravelExclusionState(agencyCode, state);
+  }
+  return legacy;
+}
+
+function sameTravelCodeList(left, right) {
+  const normalizedLeft = normalizeTravelCodeList(left);
+  const normalizedRight = normalizeTravelCodeList(right);
+  return normalizedLeft.length === normalizedRight.length && normalizedLeft.every((value, index) => value === normalizedRight[index]);
 }
 
 function readRequestedPerformanceCriteria(value) {
