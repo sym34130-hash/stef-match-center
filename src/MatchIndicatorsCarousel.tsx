@@ -203,7 +203,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   };
   const lastFirst = Math.max(0, itemCount - position.centers);
   const visibleFirst = geometry.current.first;
-  const atLastIndicator = position.first >= itemCount - 1;
+  const atLastIndicator = visibleFirst >= lastFirst || position.first >= itemCount - 1;
   const navigationLabel = atLastIndicator
     ? `${itemCount}`
     : `${position.first + 1}${position.centers === 2 ? `–${Math.min(itemCount, position.first + 2)}` : ""}`;
@@ -260,7 +260,9 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
         {hasMercato && <button type="button" className={visibleFirst === 0 ? "is-current" : ""} aria-label="Afficher le Mercato" aria-current={visibleFirst === 0 ? "true" : undefined} title="Mercato" onClick={() => goRef.current(0)} />}
         {cards.map((card, index) => {
           const slideIndex = index + (hasMercato ? 1 : 0);
-          const current = slideIndex >= visibleFirst && slideIndex < visibleFirst + position.centers;
+          const current = atLastIndicator
+            ? slideIndex === itemCount - 1
+            : slideIndex >= visibleFirst && slideIndex < visibleFirst + position.centers;
           return <button key={card.id} type="button" className={current ? "is-current" : ""} aria-label={`Afficher ${card.label}`} aria-current={current ? "true" : undefined} title={card.label} onClick={() => goRef.current(Math.min(slideIndex, lastFirst))} />;
         })}
       </div>
