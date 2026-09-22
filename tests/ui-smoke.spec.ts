@@ -1329,6 +1329,41 @@ test("la feuille de match défile entre ses quatre sections sans empiler les vue
   await assertNoHorizontalOverflow(page);
 });
 
+test("le mode Célébration reste quittable sur chaque slide et garde le graphique actif visible", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await page.getByLabel("Code agence").selectOption("058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
+  await page.getByRole("button", { name: "Accéder au match" }).click();
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
+
+  const navigation = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
+  const exitButton = page.getByRole("button", { name: "Sortir du mode Célébration", exact: true });
+  await expect(exitButton).toBeVisible();
+  await navigation.getByRole("button", { name: "Aller à Cérémonie des performances" }).click();
+  await expect(exitButton).toBeVisible();
+  await navigation.getByRole("button", { name: "Aller à Statistiques du match" }).click();
+  await expect(exitButton).toBeVisible();
+  await expect(page.locator(".operational-chart-slide.is-active .performance-chart")).toBeVisible();
+
+  if (testInfo.project.name !== "mobile") {
+    const chartGeometry = await page.locator(".operational-chart-slide.is-active .performance-chart").evaluate((element) => {
+      const chart = element.getBoundingClientRect();
+      const viewport = element.closest(".match-slide-viewport")?.getBoundingClientRect();
+      return { chartBottom: chart.bottom, viewportBottom: viewport?.bottom ?? 0, chartRight: chart.right, viewportRight: viewport?.right ?? 0 };
+    });
+    expect(chartGeometry.chartBottom).toBeLessThanOrEqual(chartGeometry.viewportBottom + 1);
+    expect(chartGeometry.chartRight).toBeLessThanOrEqual(chartGeometry.viewportRight + 1);
+  }
+
+  await navigation.getByRole("button", { name: "Aller à Brief équipe" }).click();
+  await expect(exitButton).toBeVisible();
+  await exitButton.click();
+  await expect(page.locator("body.match-celebration-active")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Mode célébration", exact: true })).toBeVisible();
+  await assertNoHorizontalOverflow(page);
+});
+
 async function assertNoHorizontalOverflow(page: Page) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(overflow, `débordement horizontal à ${await page.evaluate(() => `${window.innerWidth}x${window.innerHeight}`)}`).toBe(false);

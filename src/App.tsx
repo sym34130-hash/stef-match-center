@@ -1348,6 +1348,18 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
           <strong aria-live="polite">{slideLabels[activeSlide]}</strong>
         </div>
         <div className="match-carousel-controls">
+          {celebrationMode && (
+            <button
+              type="button"
+              className="match-exit-celebration"
+              onClick={() => setCelebrationMode(false)}
+              aria-label="Sortir du mode Célébration"
+              title="Sortir du mode Célébration"
+            >
+              <Minimize2 size={15} />
+              <span>Sortir du mode Célébration</span>
+            </button>
+          )}
           <span className="match-carousel-count" aria-live="polite">0{activeSlide + 1} / 04</span>
           <button type="button" className="match-carousel-arrow" onClick={() => moveSlide(activeSlide - 1)} disabled={activeSlide === 0} aria-label="Section précédente" title="Section précédente">
             <ChevronLeft size={20} />
@@ -1398,10 +1410,12 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
                 <i />
               </span>
             </span>
-            <button className="secondary-on-dark" type="button" onClick={() => setCelebrationMode((current) => !current)}>
-              {celebrationMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-              {celebrationMode ? "Sortir du mode Célébration" : "Mode célébration"}
-            </button>
+            {!celebrationMode && (
+              <button className="secondary-on-dark" type="button" onClick={() => setCelebrationMode(true)}>
+                <Maximize2 size={16} />
+                Mode célébration
+              </button>
+            )}
             <button className="secondary-on-dark" type="button" onClick={onComposition}>
               <Shirt size={16} />
               Composition
@@ -1907,7 +1921,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
         </div>
       </div>
       {data.length > 0 ? (
-        <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Évolution horaire du pourcentage de passes réussies">
+        <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label="Évolution horaire du pourcentage de passes réussies">
           <rect className="performance-chart-plot" x={left} y={top} width={chartWidth} height={chartHeight} rx="10" />
           {[0, 20, 40, 60, 80, 100].map((value) => {
             const y = top + ((100 - value) / 100) * chartHeight;
