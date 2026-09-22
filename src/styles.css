@@ -19151,7 +19151,7 @@ body.tv-screen-active .app-shell.league-platine {
    than the available viewport at common brief/display resolutions. */
 @media (min-width: 1201px) and (max-height: 1100px) {
   .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-    height: clamp(280px, 34vh, 360px);
+    height: clamp(320px, 36vh, 410px);
   }
 }
 

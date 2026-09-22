@@ -811,6 +811,9 @@ async function updateTravelExclusion(session: Session, travelCode: string, exclu
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message ?? "Le périmètre d'analyse n'a pas pu être actualisé.");
+  if (!payload.snapshot || typeof payload.snapshot !== "object") {
+    throw new Error("Le recalcul du périmètre n'a pas renvoyé de résultat exploitable.");
+  }
   return payload.snapshot;
 }
 
