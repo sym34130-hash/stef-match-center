@@ -18791,6 +18791,30 @@ body.tv-screen-active .app-shell.league-platine {
     font-size: 25px;
   }
 
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-section-heading {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-section-heading > div {
+    min-width: 0;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-section-heading h2 {
+    font-size: 22px;
+    line-height: 1.05;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-section-heading .secondary-button {
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 32px;
+    padding: 6px 8px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
   .main-area:has(.match-page:not(.is-celebration-mode)) .awards-heading span,
   .main-area:has(.match-page:not(.is-celebration-mode)) .match-section-heading span {
     font-size: 11px;
@@ -18879,7 +18903,7 @@ body.tv-screen-active .app-shell.league-platine {
   }
 
   .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-    height: 130px;
+    height: 165px;
   }
 
   .main-area:has(.match-page:not(.is-celebration-mode)) .match-statistics-section,
@@ -19361,7 +19385,7 @@ body.tv-screen-active .app-shell.league-platine {
   }
 
   .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-    height: 130px;
+    height: 165px;
   }
 
   .main-area:has(.match-page:not(.is-celebration-mode)) .match-statistics-section,
