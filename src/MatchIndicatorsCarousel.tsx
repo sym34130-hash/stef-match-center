@@ -76,14 +76,18 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
       const atStart = viewport.scrollLeft <= 2;
       const atEnd = viewport.scrollLeft >= maxScrollLeft - 2;
-      const first = atStart
+      const windowFirst = atStart
         ? 0
         : atEnd
           ? maxFirst
           : Math.max(0, Math.min(maxFirst, Math.round(viewport.scrollLeft / pitch)));
+      // The last desktop window contains two cards, but the final card is still
+      // the last logical indicator. Keep the physical window and its label
+      // separate so the user can reach and identify 9/9 without changing the layout.
+      const displayFirst = atEnd ? Math.max(0, totalCount - 1) : windowFirst;
       const visibleCenters = centers;
-      geometry.current.first = first;
-      setPosition((current) => current.first === first && current.centers === visibleCenters ? current : { first, centers: visibleCenters });
+      geometry.current.first = windowFirst;
+      setPosition((current) => current.first === displayFirst && current.centers === visibleCenters ? current : { first: displayFirst, centers: visibleCenters });
       const core = (centers - 1) * pitch / 2;
       slides.forEach((slide, index) => {
         const distance = Math.abs((index - viewport.scrollLeft / pitch) * pitch - core);
@@ -106,9 +110,10 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       const next = Math.max(0, Math.min(maxFirst, requested));
       geometry.current.first = next;
       manualScroll.current = false;
+      const wasNavigating = navigationTarget !== null;
       navigationTarget = next;
       setPosition((current) => current.first === next && current.centers === centers ? current : { first: next, centers });
-      viewport.scrollTo({ left: targetLeft(next, centers), behavior: instant || motion.matches ? "instant" : "smooth" });
+      viewport.scrollTo({ left: targetLeft(next, centers), behavior: instant || wasNavigating || motion.matches ? "instant" : "smooth" });
       schedulePaint();
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -197,14 +202,19 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     if (moved) settleRef.current();
   };
   const lastFirst = Math.max(0, itemCount - position.centers);
+  const visibleFirst = geometry.current.first;
+  const atLastIndicator = position.first >= itemCount - 1;
+  const navigationLabel = atLastIndicator
+    ? `${itemCount}`
+    : `${position.first + 1}${position.centers === 2 ? `–${Math.min(itemCount, position.first + 2)}` : ""}`;
   return (
     <section className="match-indicators" aria-label="Indicateurs du match" aria-roledescription="carrousel">
       <header className="match-indicators-heading">
         <h2 className="match-indicators-title"><Activity size={17} /> Le collectif en chiffres</h2>
         <div className="match-indicators-navigation">
-          <span aria-live="polite" aria-atomic="true">{position.first + 1}{position.centers === 2 ? `–${Math.min(itemCount, position.first + 2)}` : ""} / {itemCount}</span>
-          <button type="button" disabled={position.first === 0} aria-label="Indicateurs précédents" title="Indicateurs précédents" onClick={() => goRef.current(position.first - 1)}><ChevronLeft size={19} /></button>
-          <button type="button" disabled={position.first === lastFirst} aria-label="Indicateurs suivants" title="Indicateurs suivants" onClick={() => goRef.current(position.first + 1)}><ChevronRight size={19} /></button>
+          <span aria-live="polite" aria-atomic="true">{navigationLabel} / {itemCount}</span>
+          <button type="button" disabled={position.first === 0} aria-label="Indicateurs précédents" title="Indicateurs précédents" onClick={() => goRef.current(geometry.current.first - 1)}><ChevronLeft size={19} /></button>
+          <button type="button" disabled={atLastIndicator} aria-label="Indicateurs suivants" title="Indicateurs suivants" onClick={() => goRef.current(geometry.current.first + 1)}><ChevronRight size={19} /></button>
         </div>
       </header>
       <div ref={viewportRef} className="match-indicators-viewport" tabIndex={0} role="group" aria-label="Défilement des indicateurs du match"
@@ -216,12 +226,12 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
         >
         <div className="match-indicators-track" ref={trackRef}>
           {hasMercato && (
-            <div className="match-indicator-slide mercato-indicator-slide" data-indicator="mercato" data-featured={position.first === 0 ? "" : undefined} role="group" aria-roledescription="diapositive" aria-label={`Mercato, 1 sur ${itemCount}`}>
+            <div className="match-indicator-slide mercato-indicator-slide" data-indicator="mercato" data-featured={visibleFirst === 0 ? "" : undefined} role="group" aria-roledescription="diapositive" aria-label={`Mercato, 1 sur ${itemCount}`}>
               <MercatoCarouselSection mercato={mercato} profiles={mercatoProfiles} />
             </div>
           )}
           {cards.map(({ id, label, value, detail, icon: Icon, accent, percent, targetKey }, index) => (
-            <div className="match-indicator-slide" key={id} data-indicator={id} data-featured={index + (hasMercato ? 1 : 0) >= position.first && index + (hasMercato ? 1 : 0) < position.first + position.centers ? "" : undefined} role="group" aria-roledescription="diapositive" aria-label={`${label}, ${index + (hasMercato ? 2 : 1)} sur ${itemCount}`}>
+            <div className="match-indicator-slide" key={id} data-indicator={id} data-featured={index + (hasMercato ? 1 : 0) >= visibleFirst && index + (hasMercato ? 1 : 0) < visibleFirst + position.centers ? "" : undefined} role="group" aria-roledescription="diapositive" aria-label={`${label}, ${index + (hasMercato ? 2 : 1)} sur ${itemCount}`}>
               <article className={`match-indicator-card ${id === "performance" ? "is-performance" : ""} ${typeof percent === "number" ? (percent > (targetKey ? punctualityTargets?.[targetKey] ?? 100 : 100) ? "is-at-target" : "is-below-target") : ""}`} style={{ "--indicator-accent": accent } as CSSProperties}>
                 <div className="match-indicator-title"><Icon size={21} /><h3>{label}</h3></div>
                 <div className="match-indicator-body">
@@ -247,10 +257,10 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
         </div>
       </div>
       <div className="match-indicators-index" aria-label="Accès aux indicateurs">
-        {hasMercato && <button type="button" className={position.first === 0 ? "is-current" : ""} aria-label="Afficher le Mercato" aria-current={position.first === 0 ? "true" : undefined} title="Mercato" onClick={() => goRef.current(0)} />}
+        {hasMercato && <button type="button" className={visibleFirst === 0 ? "is-current" : ""} aria-label="Afficher le Mercato" aria-current={visibleFirst === 0 ? "true" : undefined} title="Mercato" onClick={() => goRef.current(0)} />}
         {cards.map((card, index) => {
           const slideIndex = index + (hasMercato ? 1 : 0);
-          const current = slideIndex >= position.first && slideIndex < position.first + position.centers;
+          const current = slideIndex >= visibleFirst && slideIndex < visibleFirst + position.centers;
           return <button key={card.id} type="button" className={current ? "is-current" : ""} aria-label={`Afficher ${card.label}`} aria-current={current ? "true" : undefined} title={card.label} onClick={() => goRef.current(Math.min(slideIndex, lastFirst))} />;
         })}
       </div>

@@ -1835,11 +1835,11 @@ function ReceptionQualityCard({ snapshot }: { snapshot: Snapshot }) {
     ? null
     : formatReadableDuration(quality.averageTimePerPositionSeconds);
   return (
-    <section className="loading-duel-quality-card reception-quality-card" aria-label="% Duels gagnés">
+    <section className="loading-quality-card reception-quality-card" aria-label="% Duels gagnés">
       <div className="loading-quality-heading">
         <div>
           <span>Déchargement</span>
-          <strong>% Duels gagnés</strong>
+          <strong>% duels gagnés</strong>
           <p className="loading-quality-explanation">Voyages dans la cible : temps moyen inférieur ou égal à {target}/poz.</p>
         </div>
         <b>{formatNumber(total)} voyages</b>
@@ -1889,12 +1889,12 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   // The chart total is scoped to the displayed hourly series. The operational
   // score is a separate four-indicator contract and must not replace it.
   const totalPassRate = snapshot.summary.passRate ?? null;
-  const width = 960;
-  const height = 660;
-  const left = 64;
-  const right = 24;
+  const width = 1440;
+  const height = 600;
+  const left = 92;
+  const right = 42;
   const top = 30;
-  const bottom = 72;
+  const bottom = 76;
   const chartWidth = width - left - right;
   const chartHeight = height - top - bottom;
   const points = data.map((item, index) => ({
@@ -1921,7 +1921,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
         </div>
       </div>
       {data.length > 0 ? (
-        <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" role="img" aria-label="Évolution horaire du pourcentage de passes réussies">
+        <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Évolution horaire du pourcentage de passes réussies">
           <rect className="performance-chart-plot" x={left} y={top} width={chartWidth} height={chartHeight} rx="10" />
           {[0, 20, 40, 60, 80, 100].map((value) => {
             const y = top + ((100 - value) / 100) * chartHeight;

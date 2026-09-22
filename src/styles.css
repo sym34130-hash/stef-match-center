@@ -3683,6 +3683,17 @@ body.match-celebration-active .main-area {
   border-top: 1px solid var(--line);
 }
 
+.reception-quality-average {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.reception-quality-average strong {
+  color: var(--navy-900);
+}
+
 .duel-quality-pie::after {
   background: #f8fbff;
 }
@@ -20200,5 +20211,62 @@ body.match-celebration-active .main-area {
   .match-page:not(.is-celebration-mode) .match-carousel-arrow {
     width: 30px;
     height: 30px;
+  }
+}
+
+/* Keep the operational chart readable on wide displays instead of stretching
+   its labels across the entire screen. Give the score side the recovered
+   space so its KPI explanations stay inside their bubbles. */
+@media (min-width: 1200px) {
+  .match-page:not(.is-celebration-mode) .match-ceremony {
+    grid-template-columns: minmax(0, 1.18fr) minmax(0, .82fr);
+  }
+
+  .match-page:not(.is-celebration-mode) .match-result-stage {
+    grid-template-columns: minmax(250px, .95fr) minmax(0, 1.45fr);
+  }
+
+  .match-page:not(.is-celebration-mode) .operational-chart-slide {
+    flex-basis: min(92%, 1600px);
+  }
+
+  .match-page:not(.is-celebration-mode) .operational-charts-carousel-track {
+    padding-inline: 5%;
+  }
+
+  .match-page:not(.is-celebration-mode) .operational-charts-carousel-track::before,
+  .match-page:not(.is-celebration-mode) .operational-charts-carousel-track::after {
+    flex-basis: 5%;
+  }
+
+  .match-page:not(.is-celebration-mode) .operational-chart-slide > .performance-chart-panel,
+  .match-page:not(.is-celebration-mode) .operational-chart-slide > .loading-quality-card,
+  .match-page:not(.is-celebration-mode) .operational-chart-slide > .duel-quality-card {
+    min-height: 560px;
+  }
+
+  .match-page:not(.is-celebration-mode) .performance-chart-panel {
+    max-width: 1600px;
+    margin-inline: auto;
+  }
+
+  .match-page:not(.is-celebration-mode) .performance-chart {
+    height: clamp(430px, 38vw, 560px);
+  }
+
+  .match-page:not(.is-celebration-mode) .performance-chart g > text {
+    font-size: 14px;
+  }
+
+  .match-page:not(.is-celebration-mode) .performance-chart-point > text:first-of-type {
+    font-size: 16px;
+  }
+
+  .match-page:not(.is-celebration-mode) .performance-chart-point .performance-chart-volume {
+    font-size: 13px;
+  }
+
+  .match-page:not(.is-celebration-mode) .performance-chart-point .performance-chart-hour {
+    font-size: 14px;
   }
 }
