@@ -20122,3 +20122,83 @@ body.match-celebration-active .main-area {
     font-size: 8px;
   }
 }
+
+/* The normal match-sheet navigator only needs to orient the reader. Keep it
+   compact so the active slide receives the recovered vertical space. */
+.match-page:not(.is-celebration-mode) {
+  gap: 14px;
+}
+
+.match-page:not(.is-celebration-mode) .match-carousel-navigation {
+  top: 4px;
+  gap: 4px 14px;
+  padding: 7px 12px 6px;
+  border-radius: 10px;
+}
+
+.match-page:not(.is-celebration-mode) .match-carousel-heading {
+  gap: 2px;
+}
+
+.match-page:not(.is-celebration-mode) .match-carousel-heading > span {
+  font-size: 9px;
+  line-height: 1.1;
+}
+
+.match-page:not(.is-celebration-mode) .match-carousel-heading > strong {
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.match-page:not(.is-celebration-mode) .match-carousel-controls {
+  gap: 5px;
+}
+
+.match-page:not(.is-celebration-mode) .match-carousel-count {
+  min-width: 48px;
+  margin-right: 0;
+  font-size: 11px;
+}
+
+.match-page:not(.is-celebration-mode) .match-carousel-arrow {
+  width: 32px;
+  height: 32px;
+}
+
+.match-page:not(.is-celebration-mode) .match-carousel-progress {
+  gap: 5px;
+}
+
+.match-page:not(.is-celebration-mode) .match-carousel-progress > button {
+  height: 4px;
+  border-radius: 2px;
+}
+
+@media (max-width: 640px) {
+  .match-page:not(.is-celebration-mode) {
+    gap: 10px;
+  }
+
+  .match-page:not(.is-celebration-mode) .match-carousel-navigation {
+    gap: 4px 8px;
+    padding: 7px 9px 6px;
+  }
+
+  .match-page:not(.is-celebration-mode) .match-carousel-heading > span {
+    font-size: 8px;
+  }
+
+  .match-page:not(.is-celebration-mode) .match-carousel-heading > strong {
+    font-size: 14px;
+  }
+
+  .match-page:not(.is-celebration-mode) .match-carousel-count {
+    min-width: 42px;
+    font-size: 10px;
+  }
+
+  .match-page:not(.is-celebration-mode) .match-carousel-arrow {
+    width: 30px;
+    height: 30px;
+  }
+}
