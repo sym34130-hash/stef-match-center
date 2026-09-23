@@ -21,9 +21,20 @@ export default defineConfig({
     video: "retain-on-failure",
   },
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1536, height: 1024 } } },
-    { name: "tablet", use: { ...devices["iPad Mini"], browserName: "chromium", viewport: { width: 1024, height: 768 }, isMobile: false } },
-    { name: "mobile", use: { ...devices["iPhone 13"], browserName: "chromium", viewport: { width: 390, height: 844 } } },
+    { name: "desktop", testIgnore: /responsive-regression\.spec\.ts/, use: { ...devices["Desktop Chrome"], viewport: { width: 1536, height: 1024 } } },
+    { name: "tablet", testIgnore: /responsive-regression\.spec\.ts/, use: { ...devices["iPad Mini"], browserName: "chromium", viewport: { width: 1024, height: 768 }, isMobile: false } },
+    { name: "mobile", testIgnore: /responsive-regression\.spec\.ts/, use: { ...devices["iPhone 13"], browserName: "chromium", viewport: { width: 390, height: 844 } } },
+    {
+      name: "responsive",
+      testMatch: /responsive-regression\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        browserName: "chromium",
+        viewport: { width: 1536, height: 864 },
+        isMobile: false,
+        reducedMotion: "reduce",
+      },
+    },
   ],
   webServer: {
     command: `STEF_BIND_HOST=127.0.0.1 PORT=${apiPort} VITE_PORT=${webPort} pnpm dev`,

@@ -1701,10 +1701,15 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
     const viewport = viewportRef.current;
     const slide = slideRefs.current[nextIndex];
     if (!viewport || !slide) return;
+    const isCelebrationMode = Boolean(viewport.closest(".match-page.is-celebration-mode"));
     const viewportRect = viewport.getBoundingClientRect();
     const slideRect = slide.getBoundingClientRect();
-    const targetLeft = viewport.scrollLeft + slideRect.left + slideRect.width / 2 - (viewportRect.left + viewport.clientWidth / 2);
-    viewport.scrollTo({ left: targetLeft, behavior: "smooth" });
+    const centeredLeft = isCelebrationMode
+      ? slide.offsetLeft - viewport.offsetLeft - (viewport.clientWidth - slide.offsetWidth) / 2
+      : viewport.scrollLeft + slideRect.left + slideRect.width / 2 - (viewportRect.left + viewport.clientWidth / 2);
+    const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+    const targetLeft = Math.max(0, Math.min(maxScrollLeft, centeredLeft));
+    viewport.scrollTo({ left: targetLeft, behavior: isCelebrationMode ? "auto" : "smooth" });
     setActiveIndex(nextIndex);
   };
 

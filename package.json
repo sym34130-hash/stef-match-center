@@ -14,6 +14,7 @@
     "test:pdf:import": "node scripts/verify-pdf-import.mjs",
     "test:deploy": "node scripts/deploy-smoke-test.mjs",
     "test:ui": "playwright test",
+    "test:ui:responsive": "playwright test --project=responsive",
     "deploy:package": "node scripts/package-deploy.mjs",
     "preview": "vite preview",
     "start": "node server/index.mjs"

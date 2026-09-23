@@ -19061,6 +19061,15 @@ body.tv-screen-active .app-shell.league-platine {
 }
 
 @media (min-width: 901px) {
+  .match-page.is-celebration-mode .operational-charts-carousel-viewport {
+    scroll-padding-inline: 0;
+    scroll-snap-type: none;
+  }
+
+  .match-page.is-celebration-mode .operational-chart-slide {
+    scroll-snap-align: start;
+  }
+
   .main-area:has(.match-page:not(.is-celebration-mode)) {
     height: auto;
     min-height: 100svh;
@@ -19747,6 +19756,8 @@ body.match-celebration-active .main-area {
   }
 
   .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-area {
+    position: relative;
+    z-index: 5;
     min-height: 0;
     overflow: hidden;
   }
@@ -21517,5 +21528,242 @@ body.match-celebration-active .main-area {
 
   .match-page.is-celebration-mode .match-ceremony.is-active .match-indicator-meter-scale strong {
     font-size: 8px;
+  }
+}
+
+/* Responsive match-sheet contract: the navigator is content-sized and the
+   remaining row belongs to the active slide. This prevents CSS grid from
+   stretching the compact header into a large blank band on wide displays. */
+.match-page:not(.is-celebration-mode) {
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: normal;
+}
+
+.main-area:has(.match-page:not(.is-celebration-mode)) .match-page {
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: normal;
+}
+
+.match-page:not(.is-celebration-mode) .match-carousel-navigation {
+  align-self: start;
+  height: auto;
+  min-height: 0;
+}
+
+@media (min-width: 901px) {
+  .main-area:has(.match-page:not(.is-celebration-mode)) {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) > .screen-transition {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-page {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-viewport {
+    height: 100%;
+    max-height: none;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-ceremony,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .awards-ceremony,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-statistics-section,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-brief-slide {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-ceremony.is-active,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .awards-ceremony.is-active,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-statistics-section.is-active {
+    grid-template-rows: auto minmax(0, 1fr);
+    align-content: normal;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-stat-grid,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-track,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .performance-chart-panel,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .loading-quality-card,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .duel-quality-card {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
+    height: clamp(320px, 38dvh, 620px);
+  }
+}
+
+/* Short desktop windows need a readable document flow. Keeping the slide
+   content natural here prevents the result and chart panels from being
+   clipped by a forced full-viewport row. */
+@media (min-width: 901px) and (max-height: 820px) {
+  .main-area:has(.match-page:not(.is-celebration-mode)) {
+    height: auto;
+    min-height: 100dvh;
+    overflow-y: auto;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) > .screen-transition {
+    overflow: visible;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-page {
+    height: auto;
+    overflow: visible;
+    grid-template-rows: auto auto;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-viewport {
+    height: auto;
+    overflow: visible;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-ceremony,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .awards-ceremony,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-statistics-section,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-brief-slide {
+    height: auto;
+    overflow: visible;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-track,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .performance-chart-panel,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .loading-quality-card,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .duel-quality-card {
+    height: auto;
+    min-height: 0;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
+    grid-template-rows: auto auto auto;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport {
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
+    height: clamp(240px, 36dvh, 320px);
+  }
+}
+
+/* On short desktop viewports the chart card must grow from its contents. A
+   fixed row can otherwise clip the SVG after its heading and caption. */
+@media (min-width: 901px) and (max-height: 900px) {
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-track,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .performance-chart-panel,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .loading-quality-card,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .duel-quality-card {
+    height: auto;
+    min-height: 0;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
+    grid-template-rows: auto auto auto;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport {
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
+    height: clamp(240px, 32dvh, 340px);
+  }
+}
+
+/* Preserve the existing compact tablet contract after the height-aware
+   desktop flow above. This keeps the supported 1024px layout inside one
+   viewport while retaining the short-window behavior on wider screens. */
+@media (min-width: 901px) and (max-width: 1080px) {
+  .main-area:has(.match-page:not(.is-celebration-mode)) {
+    height: calc(100dvh - 72px);
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) > .screen-transition {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-page {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-viewport {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-ceremony,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .awards-ceremony,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-statistics-section,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-brief-slide {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-statistics-section.is-active,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-stat-grid,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-track,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .performance-chart-panel,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .loading-quality-card,
+  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .duel-quality-card {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
+    height: 165px;
   }
 }
