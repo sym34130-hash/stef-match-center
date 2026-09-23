@@ -21767,3 +21767,12 @@ body.match-celebration-active .main-area {
     height: 165px;
   }
 }
+
+/* On desktop, let the curve chart use its native 1440:600 ratio. This keeps
+   the full SVG readable on wide screens without stretching it vertically. */
+@media (min-width: 1081px) {
+  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
+    height: auto;
+    aspect-ratio: 12 / 5;
+  }
+}

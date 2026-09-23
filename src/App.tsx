@@ -1961,20 +1961,14 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   // The chart total is scoped to the displayed hourly series. The operational
   // score is a separate four-indicator contract and must not replace it.
   const totalPassRate = snapshot.summary.passRate ?? null;
-  const [wideShortPresentation, setWideShortPresentation] = useState(false);
-  useEffect(() => {
-    const media = window.matchMedia("(min-width: 2200px) and (max-height: 900px)");
-    const sync = () => setWideShortPresentation(media.matches);
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
-  }, []);
-  const width = wideShortPresentation ? 2600 : 1440;
-  const height = wideShortPresentation ? 330 : 600;
-  const left = wideShortPresentation ? 80 : 92;
-  const right = wideShortPresentation ? 40 : 42;
-  const top = wideShortPresentation ? 18 : 30;
-  const bottom = wideShortPresentation ? 44 : 76;
+  // Keep the SVG coordinate system stable. CSS scales this native ratio on
+  // every screen, so the curve and its labels stay proportional.
+  const width = 1440;
+  const height = 600;
+  const left = 92;
+  const right = 42;
+  const top = 30;
+  const bottom = 76;
   const chartWidth = width - left - right;
   const chartHeight = height - top - bottom;
   const points = data.map((item, index) => ({
