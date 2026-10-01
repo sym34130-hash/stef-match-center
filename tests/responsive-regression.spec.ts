@@ -165,14 +165,17 @@ async function assertOperationalCarousel(page: Page, label: string) {
       const card = element as HTMLElement;
       const cardRect = card.getBoundingClientRect();
       const carouselViewport = card.closest(".operational-charts-carousel")?.querySelector<HTMLElement>(".operational-charts-carousel-viewport")?.getBoundingClientRect();
-      const chart = card.querySelector<HTMLElement>(".performance-chart");
-      const chartRect = chart?.getBoundingClientRect();
+      const visuals = [...card.querySelectorAll<HTMLElement>(".performance-chart, .loading-quality-pie")]
+        .map((visual) => {
+          const rect = visual.getBoundingClientRect();
+          return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+        });
       const visibleText = [...card.querySelectorAll<HTMLElement>("h3, h4, strong, span, summary")]
         .filter((node) => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0).length;
       return {
         card: { left: cardRect.left, right: cardRect.right, top: cardRect.top, bottom: cardRect.bottom },
         viewport: carouselViewport ? { left: carouselViewport.left, right: carouselViewport.right, top: carouselViewport.top, bottom: carouselViewport.bottom } : null,
-        chart: chartRect ? { left: chartRect.left, right: chartRect.right, top: chartRect.top, bottom: chartRect.bottom } : null,
+        visuals,
         scrollWidth: card.scrollWidth,
         clientWidth: card.clientWidth,
         scrollHeight: card.scrollHeight,
@@ -182,12 +185,14 @@ async function assertOperationalCarousel(page: Page, label: string) {
     });
     expect(geometry.scrollWidth, `${label}: débordement horizontal du graphique ${index + 1}`).toBeLessThanOrEqual(geometry.clientWidth + 1);
     expect(geometry.visibleText, `${label}: texte critique absent du graphique ${index + 1}`).toBeGreaterThan(0);
-    if (geometry.chart) {
-      expect(geometry.chart.left, `${label}: graphique ${index + 1} rogné à gauche`).toBeGreaterThanOrEqual(geometry.card.left - 1);
-      expect(geometry.chart.right, `${label}: graphique ${index + 1} rogné à droite`).toBeLessThanOrEqual(geometry.card.right + 1);
-      expect(geometry.chart.top, `${label}: graphique ${index + 1} rogné en haut`).toBeGreaterThanOrEqual(geometry.card.top - 1);
-      expect(geometry.chart.bottom, `${label}: graphique ${index + 1} rogné en bas`).toBeLessThanOrEqual(geometry.card.bottom + 1);
-    }
+    expect(geometry.visuals.length, `${label}: aucun visuel de graphique détecté sur la slide ${index + 1}`).toBeGreaterThan(0);
+    geometry.visuals.forEach((visual, visualIndex) => {
+      const subpixelTolerance = 2;
+      expect(visual.left, `${label}: visuel ${visualIndex + 1} de la slide ${index + 1} rogné à gauche`).toBeGreaterThanOrEqual(geometry.card.left - subpixelTolerance);
+      expect(visual.right, `${label}: visuel ${visualIndex + 1} de la slide ${index + 1} rogné à droite`).toBeLessThanOrEqual(geometry.card.right + subpixelTolerance);
+      expect(visual.top, `${label}: visuel ${visualIndex + 1} de la slide ${index + 1} rogné en haut`).toBeGreaterThanOrEqual(geometry.card.top - subpixelTolerance);
+      expect(visual.bottom, `${label}: visuel ${visualIndex + 1} de la slide ${index + 1} rogné en bas`).toBeLessThanOrEqual(geometry.card.bottom + subpixelTolerance);
+    });
     if (geometry.viewport) {
       expect(geometry.card.left, `${label}: carte ${index + 1} active coupée à gauche`).toBeGreaterThanOrEqual(geometry.viewport.left - 4);
       expect(geometry.card.right, `${label}: carte ${index + 1} active coupée à droite`).toBeLessThanOrEqual(geometry.viewport.right + 4);

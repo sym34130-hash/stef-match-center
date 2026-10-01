@@ -21776,3 +21776,52 @@ body.match-celebration-active .main-area {
     aspect-ratio: 12 / 5;
   }
 }
+
+/* In Brief mode, a short viewport must keep the complete donut and its
+   legend inside the active slide instead of letting the default 300px chart
+   escape below the card. The size follows the available height so the
+   presentation remains readable without adding a resolution-specific scale. */
+@media (min-width: 901px) and (max-width: 2199px) and (max-height: 820px) {
+  .match-page.is-celebration-mode .operational-chart-slide > .loading-quality-card,
+  .match-page.is-celebration-mode .operational-chart-slide > .duel-quality-card {
+    gap: 5px;
+    overflow: hidden;
+    padding: 10px 12px 8px;
+  }
+
+  .match-page.is-celebration-mode .operational-chart-slide .loading-quality-overview {
+    grid-template-columns: minmax(120px, 0.65fr) minmax(0, 1fr);
+    gap: 14px;
+    width: min(100%, 760px);
+    margin-top: 5px;
+  }
+
+  .match-page.is-celebration-mode .operational-chart-slide .loading-quality-pie {
+    width: clamp(120px, 17vh, 145px);
+  }
+
+  .match-page.is-celebration-mode .operational-chart-slide .loading-quality-pie span {
+    font-size: clamp(24px, 3.6vh, 34px);
+  }
+
+  .match-page.is-celebration-mode .operational-chart-slide .loading-quality-legend {
+    gap: 7px;
+  }
+
+  .match-page.is-celebration-mode .operational-chart-slide .loading-quality-legend span {
+    font-size: 12px;
+  }
+
+  .match-page.is-celebration-mode .operational-chart-slide .loading-quality-legend b {
+    font-size: 11px;
+  }
+
+  .match-page.is-celebration-mode .operational-chart-slide .reception-quality-average {
+    font-size: 11px;
+  }
+
+  .match-page.is-celebration-mode .operational-chart-slide .duel-quality-details summary {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+}
