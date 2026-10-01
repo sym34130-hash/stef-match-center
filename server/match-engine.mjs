@@ -200,12 +200,18 @@ export const KPI_DICTIONARY = [
 export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode, periodInput = {}) {
   const compositionOnly = periodInput.compositionOnly === true;
   const criteria = normalizePerformanceCriteria(periodInput.criteria);
-  const period = normalizeTimeRange(periodInput.start ?? DEFAULT_PERIOD_START, periodInput.end ?? DEFAULT_PERIOD_END);
   const excludedTravelCodes = normalizeTravelCodes(periodInput.excludedTravelCodes);
   const parsed = parseWorkbookSource(buffer);
   if (!parsed.ok) return parsed;
 
   const { isDerivedTemplate, rows, sourceValidation, missingColumns, rawWorkbook } = parsed;
+  const autoPeriod = periodInput.start === undefined && periodInput.end === undefined
+    ? inferOvernightPeriod(rows)
+    : null;
+  const period = normalizeTimeRange(
+    periodInput.start ?? autoPeriod?.start ?? DEFAULT_PERIOD_START,
+    periodInput.end ?? autoPeriod?.end ?? DEFAULT_PERIOD_END,
+  );
   // The cached Excel "Filtre heure" is not authoritative in the current
   // workbook: Feuille de match contains an error in the lookup that feeds it.
   // Always apply the selected clock window to the parsed start date instead.
@@ -1555,6 +1561,50 @@ function isInActiveTimeRange(date, period) {
     return minutes >= period.startMinutes || minutes <= period.endMinutes;
   }
   return minutes >= period.startMinutes && minutes <= period.endMinutes;
+}
+
+function inferOvernightPeriod(rows) {
+  const hourCounts = Array.from({ length: 24 }, () => 0);
+  for (const row of rows) {
+    const minutes = parisMinutes(row.startedAt);
+    if (Number.isFinite(minutes)) hourCounts[Math.floor(minutes / 60)] += 1;
+  }
+
+  const totalRows = hourCounts.reduce((sum, count) => sum + count, 0);
+  const overnightRows = hourCounts.slice(20).reduce((sum, count) => sum + count, 0)
+    + hourCounts.slice(0, 9).reduce((sum, count) => sum + count, 0);
+  if (totalRows === 0 || overnightRows / totalRows < 0.75) return null;
+
+  const minimumHourCount = Math.max(3, Math.ceil(totalRows * 0.005));
+  let bestRun = null;
+  for (const startHour of [20, 21, 22, 23]) {
+    if (hourCounts[startHour] < minimumHourCount) continue;
+    const hours = [];
+    for (let offset = 0; offset < 13; offset += 1) {
+      const hour = (startHour + offset) % 24;
+      if (hourCounts[hour] < minimumHourCount) break;
+      hours.push(hour);
+    }
+    if (!bestRun || hours.length > bestRun.hours.length) bestRun = { hours, startHour };
+  }
+  if (!bestRun || bestRun.hours.length < 4) return null;
+
+  const selectedHours = new Set(bestRun.hours);
+  const startClockMinutes = bestRun.startHour * 60;
+  const selectedOffsets = rows
+    .map((row) => parisMinutes(row.startedAt))
+    .filter((minutes) => Number.isFinite(minutes) && selectedHours.has(Math.floor(minutes / 60)))
+    .map((minutes) => (minutes - startClockMinutes + 1440) % 1440);
+  if (selectedOffsets.length === 0) return null;
+
+  const startMinutes = startClockMinutes + Math.floor(Math.min(...selectedOffsets) / 30) * 30;
+  const endMinutes = startClockMinutes + Math.ceil((Math.max(...selectedOffsets) + 1) / 30) * 30;
+  const normalizedEnd = endMinutes % 1440;
+  const start = formatTimeInput(startMinutes % 1440);
+  const end = formatTimeInput(normalizedEnd);
+  if (start === end) return null;
+
+  return { start, end };
 }
 
 function isClockSecondsInPeriod(clockSeconds, period) {
