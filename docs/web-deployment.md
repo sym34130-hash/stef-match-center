@@ -16,9 +16,12 @@ RECOMMENDATION: héberger la V1 comme une application web Node avec stockage
 persistant.
 
 Le fichier `render.yaml` prépare ce déploiement avec un service Docker Free et
-`STEF_DATA_DIR=/data/agencies`. Le plan Free ne fournit pas de disque
-persistant : il reste adapté au pilote, mais les imports et les Causeries
-peuvent disparaître après un redémarrage.
+`STEF_DATA_DIR=/data/agencies`. Tant que le service reste sur un plan gratuit,
+il ne faut pas considérer ce chemin comme un stockage durable : les imports
+Excel, les snapshots et les Causeries peuvent disparaître après un redémarrage.
+
+DECISION_REQUIRED: passer plus tard sur un plan compatible avec disque
+persistant avant usage officiel multi-utilisateurs.
 
 ## Architecture V1 recommandée
 

@@ -21,12 +21,19 @@ const compositionRangeCache = new Map();
 const compositionRangeCacheLimit = 64;
 const workbookReadPromises = new Map();
 const agencyOperationQueues = new Map();
+const failedSessionAttempts = new Map();
+const sessionRateLimitWindowMs = 15 * 60 * 1000;
+const maxFailedSessionAttempts = 20;
 
 const app = express();
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: uploadLimitMb * 1024 * 1024 },
 });
+
+app.use(securityHeaders);
 
 // A plan can contain several resized captures; keep the JSON body bounded but
 // large enough for the client-side gallery limit.
@@ -54,14 +61,24 @@ app.get("/api/agencies", (_req, res) => {
 
 app.post("/api/session", (req, res) => {
   const { agencyCode, accessCode } = req.body ?? {};
+  const sessionKey = sessionAttemptKey(req, agencyCode);
+  if (isSessionRateLimited(sessionKey)) {
+    res.status(429).json({
+      title: "TROP DE TENTATIVES",
+      message: "Trop d'essais de connexion. Réessaie dans quelques minutes.",
+    });
+    return;
+  }
   const agency = findAgency(agencyCode, accessCode);
   if (!agency) {
+    registerFailedSessionAttempt(sessionKey);
     res.status(401).json({
       title: "ACCÈS REFUSÉ",
       message: "Code agence ou code d'accès incorrect.",
     });
     return;
   }
+  clearFailedSessionAttempts(sessionKey);
   res.json({ agency: publicAgency(agency) });
 });
 
@@ -506,8 +523,25 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
 
 const distDir = path.join(rootDir, "dist");
 if (existsSync(distDir)) {
-  app.use(express.static(distDir));
+  app.use("/assets", express.static(path.join(distDir, "assets"), {
+    immutable: true,
+    maxAge: "1y",
+  }));
+  app.use(express.static(distDir, {
+    setHeaders(res, filePath) {
+      if (path.basename(filePath) === "index.html") {
+        res.set("Cache-Control", "no-store, max-age=0");
+      }
+    },
+  }));
+  app.use("/api", (_req, res) => {
+    res.status(404).json({
+      title: "API INTROUVABLE",
+      message: "Cette route API n'existe pas.",
+    });
+  });
   app.get(/.*/, (_req, res) => {
+    res.set("Cache-Control", "no-store, max-age=0");
     res.sendFile(path.join(distDir, "index.html"));
   });
 }
@@ -588,6 +622,60 @@ function publicAgency(agency) {
     name: agency.name,
     canImport: Boolean(agency.canImport),
   };
+}
+
+function securityHeaders(_req, res, next) {
+  res.set({
+    "Content-Security-Policy": [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "font-src 'self' data:",
+      "connect-src 'self'",
+      "frame-src https://www.youtube-nocookie.com",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join("; "),
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+  });
+  next();
+}
+
+function sessionAttemptKey(req, agencyCode) {
+  const forwardedFor = req.header("x-forwarded-for")?.split(",")[0]?.trim();
+  const ip = forwardedFor || req.ip || "unknown";
+  return `${ip}:${String(agencyCode ?? "").trim().toUpperCase() || "unknown"}`;
+}
+
+function isSessionRateLimited(key) {
+  const entry = failedSessionAttempts.get(key);
+  if (!entry) return false;
+  if (entry.resetAt <= Date.now()) {
+    failedSessionAttempts.delete(key);
+    return false;
+  }
+  return entry.count >= maxFailedSessionAttempts;
+}
+
+function registerFailedSessionAttempt(key) {
+  const now = Date.now();
+  const current = failedSessionAttempts.get(key);
+  if (!current || current.resetAt <= now) {
+    failedSessionAttempts.set(key, { count: 1, resetAt: now + sessionRateLimitWindowMs });
+    return;
+  }
+  failedSessionAttempts.set(key, { count: current.count + 1, resetAt: current.resetAt });
+}
+
+function clearFailedSessionAttempts(key) {
+  failedSessionAttempts.delete(key);
 }
 
 const DEFAULT_LEAGUE_CONFIGS = [

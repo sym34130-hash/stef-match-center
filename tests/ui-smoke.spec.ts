@@ -685,12 +685,12 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
         });
         expect(compactControls).toEqual({ display: "grid", switchesScrollable: true, buttonsStayOnRow: true });
       }
-      await page.getByLabel("Début de la vue personnalisée").fill("14:00");
-      await page.getByLabel("Fin de la vue personnalisée").fill("15:00");
+      await page.getByLabel("Début de la vue personnalisée").selectOption("14:00");
+      await page.getByLabel("Fin de la vue personnalisée").selectOption("15:00");
       await page.getByRole("button", { name: "Afficher", exact: true }).click();
       await expect(page.getByText("Vue affichée : 14:00 - 15:00", { exact: true })).toBeVisible();
-      await expect(page.getByRole("textbox", { name: "Début", exact: true })).toHaveValue("13:00");
-      await expect(page.getByRole("textbox", { name: "Fin", exact: true })).toHaveValue("22:30");
+      await expect(page.getByRole("combobox", { name: "Début", exact: true })).toHaveValue("13:00");
+      await expect(page.getByRole("combobox", { name: "Fin", exact: true })).toHaveValue("22:30");
       await page.getByRole("button", { name: "Mode terrain", exact: true }).click();
       await expect(page.locator(".composition-page.is-field-mode")).toHaveCount(1);
       const fieldLayout = await page.evaluate(() => {
@@ -882,31 +882,31 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   await expect(page.getByText("Donnée Excel Feuille de match, heure par heure", { exact: true })).toBeVisible();
   await expect(page.locator(".performance-chart-total b")).toHaveText("69,2%");
 
-  await page.locator(".time-range-control input").nth(0).fill("13:00");
-  await page.locator(".time-range-control input").nth(1).fill("22:30");
+  await page.locator(".time-range-control select").nth(0).selectOption("13:00");
+  await page.locator(".time-range-control select").nth(1).selectOption("22:30");
   await page.getByRole("button", { name: "Appliquer", exact: true }).click();
-  await expect(page.locator(".time-range-control input").nth(0)).toHaveValue("13:00");
-  await expect(page.locator(".time-range-control input").nth(1)).toHaveValue("22:30");
+  await expect(page.locator(".time-range-control select").nth(0)).toHaveValue("13:00");
+  await expect(page.locator(".time-range-control select").nth(1)).toHaveValue("22:30");
   await expect(matchNavigation.locator(".match-carousel-count")).toHaveText("03 / 04");
   const initialHours = await page.locator(".performance-chart-hour").allTextContents();
   expect(initialHours).not.toContain("00h");
   expect(initialHours).toEqual(["13h", "14h", "16h", "17h", "18h", "19h", "20h", "21h", "22h"]);
 
-  await page.locator(".time-range-control input").nth(0).fill("16:00");
-  await page.locator(".time-range-control input").nth(1).fill("18:00");
+  await page.locator(".time-range-control select").nth(0).selectOption("16:00");
+  await page.locator(".time-range-control select").nth(1).selectOption("18:00");
   await page.getByRole("button", { name: "Appliquer", exact: true }).click();
-  await expect(page.locator(".time-range-control input").nth(0)).toHaveValue("16:00");
-  await expect(page.locator(".time-range-control input").nth(1)).toHaveValue("18:00");
+  await expect(page.locator(".time-range-control select").nth(0)).toHaveValue("16:00");
+  await expect(page.locator(".time-range-control select").nth(1)).toHaveValue("18:00");
   await expect(matchNavigation.locator(".match-carousel-count")).toHaveText("03 / 04");
   await expect(page.locator(".performance-chart-hour")).toHaveText(["16h", "17h", "18h"]);
   expect(await page.locator(".performance-chart-hour").allTextContents()).not.toContain("00h");
   await expect(page.locator(".performance-chart-total b")).toHaveText("59,4%");
 
-  await page.locator(".time-range-control input").nth(0).fill("22:30");
-  await page.locator(".time-range-control input").nth(1).fill("06:00");
+  await page.locator(".time-range-control select").nth(0).selectOption("22:30");
+  await page.locator(".time-range-control select").nth(1).selectOption("06:00");
   await page.getByRole("button", { name: "Appliquer", exact: true }).click();
-  await expect(page.locator(".time-range-control input").nth(0)).toHaveValue("22:30");
-  await expect(page.locator(".time-range-control input").nth(1)).toHaveValue("06:00");
+  await expect(page.locator(".time-range-control select").nth(0)).toHaveValue("22:30");
+  await expect(page.locator(".time-range-control select").nth(1)).toHaveValue("06:00");
   await expect(matchNavigation.locator(".match-carousel-count")).toHaveText("03 / 04");
 });
 

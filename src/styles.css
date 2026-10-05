@@ -321,7 +321,7 @@ button:disabled {
   font-size: 12px;
 }
 
-.time-range-control input {
+.time-range-control select {
   width: 92px;
   min-height: 32px;
   padding: 5px 7px;
@@ -334,7 +334,7 @@ button:disabled {
   font-weight: 800;
 }
 
-.time-range-control input:focus {
+.time-range-control select:focus {
   outline: 2px solid rgba(29, 78, 137, 0.2);
   border-color: var(--blue-stef);
 }
@@ -3931,7 +3931,7 @@ body.match-celebration-active .main-area {
   text-transform: uppercase;
 }
 
-.composition-custom-fields input {
+.composition-custom-fields select {
   width: 96px;
   min-height: 34px;
   padding: 6px 8px;
@@ -3943,7 +3943,7 @@ body.match-celebration-active .main-area {
   font-weight: 900;
 }
 
-.composition-custom-fields input:focus-visible {
+.composition-custom-fields select:focus-visible {
   outline: 3px solid rgba(72, 199, 142, 0.55);
   outline-offset: 2px;
 }
@@ -9059,14 +9059,19 @@ body.tv-screen-active .tv-mode {
   }
 
   .login-visual {
+    display: grid;
+    align-content: start;
+    gap: 24px;
     min-height: 360px;
   }
 
   .login-signature {
-    left: 30px;
-    bottom: 26px;
+    position: relative;
+    left: auto;
+    bottom: auto;
+    z-index: 1;
     width: max-content;
-    max-width: 360px;
+    max-width: 100%;
   }
 
   .login-form {
@@ -18596,7 +18601,7 @@ body.tv-screen-active .app-shell.league-platine {
     display: none;
   }
 
-  .main-area:has(.match-page:not(.is-celebration-mode)) .time-range-control input {
+  .main-area:has(.match-page:not(.is-celebration-mode)) .time-range-control select {
     width: 70px;
     min-height: 28px;
     padding: 4px;
@@ -19218,7 +19223,7 @@ body.tv-screen-active .app-shell.league-platine {
     padding: 4px 6px;
   }
 
-  .main-area:has(.match-page:not(.is-celebration-mode)) .time-range-control input {
+  .main-area:has(.match-page:not(.is-celebration-mode)) .time-range-control select {
     width: 70px;
     min-height: 28px;
     padding: 4px;

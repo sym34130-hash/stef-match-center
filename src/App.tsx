@@ -135,6 +135,7 @@ const leagueOptions: LeagueConfig[] = [
 const zonageMinuteOptions = Array.from({ length: 120 }, (_, index) => index + 1);
 const loadingTimeOptions = [105, 120, 135, 150, 165, 180, 195, 210, 225, 240, 255, 270, 300];
 const unloadingTimeOptions = [30, 40, 45, 50, 55, 60, 75, 90, 105, 120];
+const halfHourClockOptions = buildClockOptions();
 
 type StorageKind = "local" | "session";
 
@@ -1023,12 +1024,16 @@ function TopBar({ snapshot, agency, activeLeague, onRefresh, onTimeRangeChange, 
             <small className="time-range-hint">pas de 30 min · fin incluse</small>
             <label>
               <span className="sr-only">Début</span>
-              <input type="time" min="00:00" max="23:30" step={1800} value={start} onChange={(event) => setStart(event.target.value)} />
+              <select aria-label="Début" value={start} onChange={(event) => setStart(event.target.value)}>
+                {halfHourClockOptions.map((time) => <option key={`start-${time}`} value={time}>{time}</option>)}
+              </select>
             </label>
             <b>à</b>
             <label>
               <span className="sr-only">Fin</span>
-              <input type="time" min="00:00" max="23:30" step={1800} value={end} onChange={(event) => setEnd(event.target.value)} />
+              <select aria-label="Fin" value={end} onChange={(event) => setEnd(event.target.value)}>
+                {halfHourClockOptions.map((time) => <option key={`end-${time}`} value={time}>{time}</option>)}
+              </select>
             </label>
             <button className="secondary-button compact" type="submit" disabled={savingRange || loading}>
               {savingRange ? "Mise à jour..." : "Appliquer"}
@@ -2029,7 +2034,7 @@ function Composition({ snapshot, session, onPlayer }: { snapshot: Snapshot; sess
   const [customLoading, setCustomLoading] = useState(false);
   const [customError, setCustomError] = useState("");
   const customRequestRef = useRef(0);
-  const activePeriodOvernight = Boolean(snapshot.match.periodStart && snapshot.match.periodEnd && snapshot.match.periodEnd < snapshot.match.periodStart);
+  const customPeriodOptions = buildClockOptions(snapshot.match.periodStart, snapshot.match.periodEnd);
   const selectedPeriod = compositionView === "first" || compositionView === "second"
     ? snapshot.compositionPeriods?.[compositionView]
     : null;
@@ -2163,12 +2168,16 @@ function Composition({ snapshot, session, onPlayer }: { snapshot: Snapshot; sess
               <div className="composition-custom-fields">
                 <label>
                   <span>Début</span>
-                  <input aria-label="Début de la vue personnalisée" type="time" min={activePeriodOvernight ? undefined : snapshot.match.periodStart} max={activePeriodOvernight ? undefined : snapshot.match.periodEnd} step={1800} value={customStart} onChange={(event) => setCustomStart(event.target.value)} />
+                  <select aria-label="Début de la vue personnalisée" value={customStart} onChange={(event) => setCustomStart(event.target.value)}>
+                    {customPeriodOptions.map((time) => <option key={`custom-start-${time}`} value={time}>{time}</option>)}
+                  </select>
                 </label>
                 <b aria-hidden="true">à</b>
                 <label>
                   <span>Fin</span>
-                  <input aria-label="Fin de la vue personnalisée" type="time" min={activePeriodOvernight ? undefined : snapshot.match.periodStart} max={activePeriodOvernight ? undefined : snapshot.match.periodEnd} step={1800} value={customEnd} onChange={(event) => setCustomEnd(event.target.value)} />
+                  <select aria-label="Fin de la vue personnalisée" value={customEnd} onChange={(event) => setCustomEnd(event.target.value)}>
+                    {customPeriodOptions.map((time) => <option key={`custom-end-${time}`} value={time}>{time}</option>)}
+                  </select>
                 </label>
                 <button className="composition-range-apply" type="submit" disabled={customLoading}>
                   <RefreshCw size={14} className={customLoading ? "is-spinning" : ""} />
@@ -3337,6 +3346,37 @@ function formatTimeInput(totalSeconds: number) {
   return `${hours}:${minutes}:${seconds}`;
 }
 
+function buildClockOptions(start?: string, end?: string) {
+  const startMinutes = start ? parseClockMinutes(start) : 0;
+  const endMinutes = end ? parseClockMinutes(end) : 23 * 60 + 30;
+  if (startMinutes === null || endMinutes === null) {
+    return Array.from({ length: 48 }, (_, index) => formatClockMinutes(index * 30));
+  }
+  let normalizedEnd = endMinutes;
+  if (normalizedEnd < startMinutes) normalizedEnd += 24 * 60;
+  const options: string[] = [];
+  for (let current = startMinutes; current <= normalizedEnd; current += 30) {
+    options.push(formatClockMinutes(current));
+  }
+  return [...new Set(options)];
+}
+
+function parseClockMinutes(value: string) {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function formatClockMinutes(totalMinutes: number) {
+  const normalized = ((totalMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
+  const hours = Math.floor(normalized / 60).toString().padStart(2, "0");
+  const minutes = Math.round(normalized % 60).toString().padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
 function formatReadableDuration(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = Math.round(totalSeconds % 60);
@@ -3502,7 +3542,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                 <li><b>Lisez les contrôles.</b><span>Un point à contrôler n’empêche pas forcément la lecture, mais doit être compris avant une décision.</span></li>
                 <li><b>Choisissez la plage horaire.</b><span>Renseignez le début et la fin, puis cliquez sur <strong>Appliquer</strong>. Toutes les vues se recalculent avec cette plage.</span></li>
               </ol>
-              <div className="guide-callout info"><RefreshCw size={20} /><span><strong>Après un redémarrage du service en ligne :</strong> la version gratuite de Render ne garantit pas la conservation du fichier importé. Si aucune base n’est retrouvée, réimportez le dernier Excel.</span></div>
+              <div className="guide-callout info"><RefreshCw size={20} /><span><strong>Après un redémarrage du service en ligne :</strong> les imports sont conservés uniquement si le service est bien relié à un stockage persistant. Si aucune base n’est retrouvée, réimportez le dernier Excel.</span></div>
               <div className="guide-actions"><button className="primary-button" type="button" onClick={() => onNavigate("import")}><Upload size={17} /> Aller à Import</button></div>
             </GuidePanel>
           )}
@@ -3578,7 +3618,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                 <GuideTrouble title="MATCH ACTUALISÉ avec alertes" detail="L’import a fonctionné. Ouvrez Excel, utilisez Ctrl + F ou les filtres pour retrouver les lignes signalées, puis décidez si elles doivent être corrigées." />
                 <GuideTrouble title="Aucun match après Actualiser" detail="Actualiser ne lit pas votre ordinateur. Retournez dans Import et réimportez le dernier fichier Excel complet." />
               </div>
-              <div className="guide-limit-card"><strong>Limite actuelle à retenir</strong><p>La version en ligne est hébergée sur une offre gratuite sans disque persistant garanti. En cas de redémarrage ou redéploiement, le dernier Excel peut devoir être réimporté.</p></div>
+              <div className="guide-limit-card"><strong>Limite actuelle à retenir</strong><p>La conservation des imports dépend du stockage persistant configuré sur l’hébergeur. En cas de stockage absent ou mal monté, le dernier Excel peut devoir être réimporté.</p></div>
               <div className="guide-callout info"><CircleHelp size={20} /><span>En cas de blocage, revenez à la règle de base : conserver l’original Excel, préparer une copie avec l’onglet <strong>Données</strong> actualisé, puis refaire un import complet.</span></div>
             </GuidePanel>
           )}
@@ -3645,6 +3685,7 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
   const [message, setMessage] = useState<string>("");
   const [details, setDetails] = useState<string[]>([]);
   const [importedSnapshot, setImportedSnapshot] = useState<Snapshot | null>(null);
+  const [lastImportKind, setLastImportKind] = useState<"excel" | "pdf" | null>(null);
 
   async function importFile(file: File | null, kind: "excel" | "pdf") {
     if (!file) {
@@ -3678,6 +3719,7 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
         return;
       }
       setState("success");
+      setLastImportKind(kind);
       setMessage(kind === "excel" ? "Le match est prêt." : "Les indicateurs 106J sont prêts.");
       setDetails(payload.snapshot.validation.warnings ?? []);
       setImportedSnapshot(payload.snapshot);
@@ -3710,7 +3752,7 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
         <div className={`import-result ${state}`}>
           {state === "error" ? <XCircle size={24} /> : state === "success" ? <CheckCircle2 size={24} /> : <RefreshCw size={24} />}
           <div>
-            <strong>{state === "error" ? "FICHIER NON IMPORTÉ" : state === "success" ? "MATCH ACTUALISÉ" : "CONTRÔLE EN COURS"}</strong>
+            <strong>{state === "error" ? "FICHIER NON IMPORTÉ" : state === "success" ? (lastImportKind === "pdf" ? "PDF 106J ACTUALISÉ" : "MATCH ACTUALISÉ") : "CONTRÔLE EN COURS"}</strong>
             <p>{message}</p>
             {details.map((detail) => <span key={detail}>{detail}</span>)}
           </div>
