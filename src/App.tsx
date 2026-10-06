@@ -2115,7 +2115,7 @@ function Composition({ snapshot, session, onPlayer }: { snapshot: Snapshot; sess
       <header className="composition-header">
         <div>
           <p className="eyebrow">03 - Composition</p>
-          <h2>Composition du jour</h2>
+          <h2>Composition</h2>
           <span>{snapshot.agency.name} - Match du {formatDate(snapshot.match.lastOperation ?? snapshot.match.date)} - Plage active : {snapshot.match.timeRangeLabel}</span>
           <small className="composition-period-label" aria-live="polite">Vue affichée : {periodLabel}</small>
           <ActivePeriodBadge snapshot={snapshot} />
@@ -2207,7 +2207,7 @@ function Composition({ snapshot, session, onPlayer }: { snapshot: Snapshot; sess
 
         <div className="composition-scoreboard" aria-label="Résumé de la composition">
           <span>STEF MATCH CENTER</span>
-          <strong>COMPOSITION DU JOUR</strong>
+          <strong>COMPOSITION</strong>
           <small>{compositionSummary} · {periodLabel}</small>
         </div>
 
