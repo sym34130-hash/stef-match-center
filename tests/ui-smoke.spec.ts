@@ -630,6 +630,13 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".award-card.polyvalent .award-leader-score b")).toHaveText("39%");
       await expect(page.locator(".award-card.polyvalent .award-challenger")).toHaveCount(2);
       await expect(page.locator(".award-card.midfield .award-challenger").first()).toContainText("227 poz · -9 avec le premier");
+      for (const kind of ["attack", "midfield", "defense"]) {
+        const card = page.locator(`.award-card.${kind}:not(.polyvalent)`);
+        const leaderPositions = Number((await card.locator(".award-leader-score b").textContent() ?? "").replace(/\D/g, ""));
+        const challengerPositions = (await card.locator(".award-challenger small").allTextContents()).map((text) => Number(text.split(" poz")[0].replace(/\D/g, "")));
+        expect(challengerPositions.every((positions) => positions <= leaderPositions), JSON.stringify({ kind, leaderPositions, challengerPositions })).toBe(true);
+        expect(challengerPositions).toEqual([...challengerPositions].sort((a, b) => b - a));
+      }
       await expect(page.locator(".award-card.polyvalent .award-challenger").first()).toContainText("% polyvalence");
       await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
       await expect(page.getByRole("button", { name: "Sortir du mode Célébration", exact: true })).toBeVisible();

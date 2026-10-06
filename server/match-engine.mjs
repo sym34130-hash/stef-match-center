@@ -511,7 +511,7 @@ export function buildCompositionViewFromWorkbook(buffer, sourceName, expectedAge
 
 export function normalizeSnapshotContract(snapshot) {
   if (!snapshot || !Array.isArray(snapshot.players)) return snapshot;
-  const categoryLeaders = selectDistinctCategoryLeaders(snapshot.players);
+  const categoryLeaders = selectCategoryLeaders(snapshot.players);
   const performanceCriteria = normalizePerformanceCriteria(snapshot.performanceCriteria);
   const summary = snapshot.summary
     ? {
@@ -556,7 +556,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
   const positions = buildPositions(matchRows, period, scoringRows, criteria);
   const players = buildPlayers(matchRows);
   const topPlayers = sortDesc(players, "operations");
-  const categoryLeaders = selectDistinctCategoryLeaders(players);
+  const categoryLeaders = selectCategoryLeaders(players);
   const duelWon = scoringRows.filter((row) => row.duelWonFlag === 1).length;
   const duelTotal = scoringRows.filter((row) => row.duelWonFlag === 0 || row.duelWonFlag === 1).length;
   const duelRate = duelTotal > 0 ? percent(duelWon, duelTotal) : null;
@@ -1249,23 +1249,19 @@ function buildCategoryHighlights(categoryLeaders) {
   };
 }
 
-function selectDistinctCategoryLeaders(players) {
-  const selectedNames = new Set();
-  const attack = topCategoryPlayer(players, "CHG", selectedNames);
-  if (attack) selectedNames.add(attack.name);
-  const midfield = topCategoryPlayer(players, "ZONAGE", selectedNames);
-  if (midfield) selectedNames.add(midfield.name);
-  const defense = topCategoryPlayer(players, "DECHG", selectedNames);
+function selectCategoryLeaders(players) {
+  const attack = topCategoryPlayer(players, "CHG");
+  const midfield = topCategoryPlayer(players, "ZONAGE");
+  const defense = topCategoryPlayer(players, "DECHG");
 
   return { attack, midfield, defense };
 }
 
-function topCategoryPlayer(players, operationType, excludedNames) {
+function topCategoryPlayer(players, operationType) {
   const eligible = players.filter((player) => (player.byType[operationType] ?? 0) > 0);
-  const available = eligible.filter((player) => !excludedNames.has(player.name));
-  const pool = available.length > 0 ? available : eligible;
-  if (pool.length === 0 || (available.length === 0 && excludedNames.size > 0)) return null;
-  return [...pool].sort((a, b) => {
+  return [...eligible].sort((a, b) => {
+    const positionDelta = (b.positionsByType?.[operationType] ?? 0) - (a.positionsByType?.[operationType] ?? 0);
+    if (positionDelta !== 0) return positionDelta;
     const categoryDelta = (b.byType[operationType] ?? 0) - (a.byType[operationType] ?? 0);
     if (categoryDelta !== 0) return categoryDelta;
     const volumeDelta = b.operations - a.operations;

@@ -350,16 +350,10 @@ assert.ok(
   snapshot.coach.polyvalents.every((player) => player.operationTypes >= 2),
   "La liste des polyvalents doit contenir au moins deux activités."
 );
-const categoryHighlightNames = [
-  snapshot.highlights.bestScorer?.name,
-  snapshot.highlights.bestPasser?.name,
-  snapshot.highlights.defensiveWall?.name,
-].filter(Boolean);
-assert.equal(
-  new Set(categoryHighlightNames).size,
-  categoryHighlightNames.length,
-  "Les trois distinctions par ligne doivent rester attribuées à des joueurs distincts quand les données le permettent."
-);
+for (const [key, operationType] of [["bestScorer", "CHG"], ["bestPasser", "ZONAGE"], ["defensiveWall", "DECHG"]]) {
+  const leader = snapshot.players.find((player) => player.name === snapshot.highlights[key]?.name);
+  assert.equal(leader?.positionsByType[operationType], Math.max(...snapshot.players.map((player) => player.positionsByType[operationType])), "Le premier de chaque ligne doit avoir le plus de positions de cette catégorie.");
+}
 
 console.log(`Réconciliation OK - ${path.basename(workbookPath)}`);
 console.log(`Score ${snapshot.summary.duelWon}/${snapshot.summary.duelTotal} = ${snapshot.summary.duelRate}%`);

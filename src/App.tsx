@@ -4082,7 +4082,7 @@ function buildAwardChallengers(players: Player[], award: MatchAward) {
   const ranked = players
     .filter((player) => player.name !== award.highlight.name && (operationType ? operationCount(player) > 0 : player.operationTypes >= 2))
     .sort((a, b) => {
-      return operationCount(b) - operationCount(a) || b.operations - a.operations || a.name.localeCompare(b.name, "fr");
+      return (operationType ? positionCount(b) - positionCount(a) : 0) || operationCount(b) - operationCount(a) || b.operations - a.operations || a.name.localeCompare(b.name, "fr");
     })
     .slice(0, 2);
   const leader = players.find((player) => player.name === award.highlight.name);

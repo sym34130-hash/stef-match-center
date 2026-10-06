@@ -9,7 +9,7 @@
     "dev:web": "vite",
     "lint": "eslint . --max-warnings=0",
     "build": "tsc -b && vite build",
-    "test": "node scripts/reconcile-import.mjs",
+    "test": "node --test scripts/category-ranking.test.mjs && node scripts/reconcile-import.mjs",
     "test:pdf": "node --test scripts/pdf-106j.test.mjs",
     "test:pdf:import": "node scripts/verify-pdf-import.mjs",
     "test:deploy": "node scripts/deploy-smoke-test.mjs",
