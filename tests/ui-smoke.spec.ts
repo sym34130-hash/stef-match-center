@@ -132,6 +132,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       const player = page.locator(".kickoff-music-player iframe");
       await expect(player).toBeVisible();
       await expect(page.locator(".yellow-cards-panel .yellow-cards-heading strong")).toHaveText("1");
+      await expect(page.locator(".red-cards-panel")).toHaveCount(0);
       await expect(page.locator(".yellow-cards-disclosure")).not.toHaveAttribute("open", "");
       await page.locator(".yellow-cards-disclosure summary").click();
       await expect(page.locator(".yellow-cards-disclosure")).toHaveAttribute("open", "");
@@ -202,6 +203,27 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await page.getByLabel("Cartons rouges manuels").fill("Camille Martin · 18:42 · règle SST");
       await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
       await expect(page.locator(".coach-red-list")).toContainText("Camille Martin · 18:42 · règle SST");
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".red-cards-panel")).toBeVisible();
+      await expect(page.locator(".red-cards-heading strong")).toHaveText("1");
+      await page.locator(".red-cards-disclosure summary").click();
+      await expect(page.locator(".red-cards-disclosure")).toContainText("Camille Martin · 18:42 · règle SST");
+      const disciplineLayout = await page.locator(".yellow-cards-panel").evaluate((element) => {
+        const yellow = element.querySelector(".yellow-cards-content")!.getBoundingClientRect();
+        const red = element.querySelector(".red-cards-panel")!.getBoundingClientRect();
+        return { sameRow: Math.abs(yellow.top - red.top) < 1, separated: red.left >= yellow.right };
+      });
+      expect(disciplineLayout).toEqual({ sameRow: true, separated: true });
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Saisir", exact: true }).click();
+      await page.getByLabel("Cartons rouges manuels").fill("   ");
+      await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+      await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+      await expect(page.locator(".red-cards-panel")).toHaveCount(0);
+      await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+      await page.getByRole("button", { name: "Saisir", exact: true }).click();
+      await page.getByLabel("Cartons rouges manuels").fill("Camille Martin · 18:42 · règle SST");
+      await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
       const coachFieldsBeforeProfileUpdate = {
         attack: savedCauseriePlan?.attack,
         midfield: savedCauseriePlan?.midfield,

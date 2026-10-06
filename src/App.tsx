@@ -1299,6 +1299,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const mercatoPlanKey = `${session.agency.code}:${snapshot.match.date}:${snapshot.importedAt}`;
   const mercatoText = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.mercato ?? "" : null;
   const mercatoProfiles = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.mercatoProfiles ?? {} : {};
+  const redCards = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.redCards ?? "" : "";
   const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
   const loadingTarget = formatReadableDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
   const scoreIndicators = operationalScoreIndicators(snapshot);
@@ -1472,7 +1473,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         <div className="match-result-stage">
           <div className="match-result-visual">
             <FootballScoreDisplay footballScore={footballScore} />
-            <YellowCardsPanel snapshot={snapshot} />
+            <YellowCardsPanel snapshot={snapshot} redCards={redCards} />
           </div>
 
           <div className="match-scoreboard">
@@ -3979,30 +3980,45 @@ function FootballScoreDisplay({ footballScore }: { footballScore: FootballScore 
   );
 }
 
-function YellowCardsPanel({ snapshot }: { snapshot: Snapshot }) {
+function YellowCardsPanel({ snapshot, redCards }: { snapshot: Snapshot; redCards: string }) {
   const cards = snapshot.yellowCards ?? [];
+  const redCardEntries = redCards.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
   return (
-    <section className="yellow-cards-panel" aria-label="Cartons jaunes">
-      <div className="yellow-cards-heading">
-        <span><CreditCard size={16} /> Cartons jaunes</span>
-        <strong>{cards.length}</strong>
-      </div>
-      {cards.length > 0 ? (
-        <details className="yellow-cards-disclosure">
-          <summary>Afficher le détail</summary>
-          <ul>
-            {cards.map((card, index) => (
-              <li key={`${card.playerName}-${card.time}-${index}`}>
-                <b>{card.playerName}</b>
-                <small>{card.time}{card.reason ? ` · ${card.reason}` : ""}{card.travelCode ? ` · ${card.travelCode}` : ""}</small>
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : (
-        <p>Aucun carton jaune dans la plage active.</p>
+    <div className={`yellow-cards-panel${redCardEntries.length > 0 ? " has-red-cards" : ""}`}>
+      <section className="yellow-cards-content" aria-label="Cartons jaunes">
+        <div className="yellow-cards-heading">
+          <span><CreditCard size={16} /> Cartons jaunes</span>
+          <strong>{cards.length}</strong>
+        </div>
+        {cards.length > 0 ? (
+          <details className="yellow-cards-disclosure">
+            <summary>Afficher le détail</summary>
+            <ul>
+              {cards.map((card, index) => (
+                <li key={`${card.playerName}-${card.time}-${index}`}>
+                  <b>{card.playerName}</b>
+                  <small>{card.time}{card.reason ? ` · ${card.reason}` : ""}{card.travelCode ? ` · ${card.travelCode}` : ""}</small>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : (
+          <p>Aucun carton jaune dans la plage active.</p>
+        )}
+      </section>
+      {redCardEntries.length > 0 && (
+        <section className="red-cards-panel" aria-label="Cartons rouges">
+          <div className="red-cards-heading">
+            <span><CreditCard size={16} /> Cartons rouges</span>
+            <strong>{redCardEntries.length}</strong>
+          </div>
+          <details className="red-cards-disclosure">
+            <summary>Afficher le détail</summary>
+            <ul>{redCardEntries.map((entry, index) => <li key={`${index}-${entry}`}><b>{entry}</b></li>)}</ul>
+          </details>
+        </section>
       )}
-    </section>
+    </div>
   );
 }
 
