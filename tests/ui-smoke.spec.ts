@@ -939,6 +939,67 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   await expect(matchNavigation.locator(".match-carousel-count")).toHaveText("03 / 04");
 });
 
+test("le plan de jeu saisi dans Coach reste séparé sous le brief de la feuille de match", async ({ page }) => {
+  let savedPlan: Record<string, unknown> | null = null;
+  await page.route("**/api/agencies/058/causerie**", async (route) => {
+    if (route.request().method() === "POST") savedPlan = route.request().postDataJSON().plan;
+    await route.fulfill({ status: 200, json: { plan: savedPlan } });
+  });
+  await page.goto("/");
+  await page.getByLabel("Code agence").selectOption("058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
+  await page.getByRole("button", { name: "Accéder au match" }).click();
+  await page.getByRole("button", { name: "04 Coach", exact: true }).click();
+  await page.getByRole("button", { name: "Écrire", exact: true }).click();
+  await page.getByLabel("Priorité terrain, consigne du chef de quai").fill("Sécuriser le prochain départ.");
+  await page.getByLabel("Zone à surveiller, consigne du chef de quai").fill("Contrôler la zone de réception.");
+  await page.getByLabel("Équilibre d'équipe, consigne du chef de quai").fill("Renforcer le zonage.");
+  await page.getByLabel("Prochaine revue du plan").fill("18:30");
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  await page.getByRole("button", { name: "Aller à Brief équipe", exact: true }).click();
+  const coachPlan = page.locator(".match-coach-plan");
+  await expect(coachPlan).toContainText("Sécuriser le prochain départ.");
+  await expect(coachPlan).toContainText("Contrôler la zone de réception.");
+  await expect(coachPlan).toContainText("Renforcer le zonage.");
+  await expect(coachPlan).toContainText("18:30");
+  await expect(coachPlan.locator("textarea,input")).toHaveCount(0);
+  const slide = page.locator(".match-brief-slide");
+  await expect(slide.locator(".tv-action")).not.toContainText("Sécuriser le prochain départ.");
+  const separate = await slide.evaluate((element) => {
+    const brief = element.querySelector(".tv-action")!.getBoundingClientRect();
+    const coach = element.querySelector(".match-coach-plan")!.getBoundingClientRect();
+    return coach.top >= brief.bottom + 12;
+  });
+  expect(separate).toBe(true);
+  await slide.getByRole("button", { name: "Écrire", exact: true }).click();
+  await page.getByLabel("SAV, contenu du brief").fill("Traiter les retours clients.");
+  await slide.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await expect(slide.locator(".tv-action")).toContainText("Traiter les retours clients.");
+  await expect(coachPlan).not.toContainText("Traiter les retours clients.");
+  await expect(coachPlan).toContainText("Sécuriser le prochain départ.");
+  await coachPlan.getByRole("button", { name: "Coach", exact: true }).click();
+  await expect(page.locator(".coach-action-entry").first()).toHaveText("Sécuriser le prochain départ.");
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  await page.getByRole("button", { name: "Aller à Brief équipe", exact: true }).click();
+  await expect(slide.locator(".tv-action")).toContainText("Traiter les retours clients.");
+  await expect(coachPlan).toContainText("Sécuriser le prochain départ.");
+  await page.screenshot({ path: test.info().outputPath("brief-et-plan-de-jeu.png"), fullPage: true });
+  await assertNoHorizontalOverflow(page);
+  await page.getByRole("button", { name: "Aller à Coup de sifflet final", exact: true }).click();
+  await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
+  await page.getByRole("button", { name: "Aller à Brief équipe", exact: true }).click();
+  await coachPlan.scrollIntoViewIfNeeded();
+  await expect(coachPlan).toBeVisible();
+  expect(await slide.evaluate((element) => {
+    const brief = element.querySelector(".tv-action")!.getBoundingClientRect();
+    const coach = element.querySelector(".match-coach-plan")!.getBoundingClientRect();
+    return coach.top >= brief.bottom + 12;
+  })).toBe(true);
+  await page.screenshot({ path: test.info().outputPath("brief-et-plan-de-jeu-celebration.png"), fullPage: true });
+  await assertNoHorizontalOverflow(page);
+});
+
 test("le guide et le retour du brief équipe restent accessibles avant le premier import", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("05R");

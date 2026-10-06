@@ -1644,6 +1644,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
           sharedPlan={{ ready: mercatoPlan?.key === mercatoPlanKey, plan: mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan : null }}
           onPlanSaved={(plan) => setMercatoPlan({ key: mercatoPlanKey, plan })}
         />
+        <MatchCoachPlan plan={mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan : null} onCoach={onCoach} />
       </section>
       </div>
     </div>
@@ -2961,6 +2962,31 @@ function TvMode({ snapshot, session, causerieRevision, onExit }: { snapshot: Sna
         </div>
       </div>
       <BriefTeamPlan snapshot={snapshot} session={session} causerieRevision={causerieRevision} />
+    </section>
+  );
+}
+
+function MatchCoachPlan({ plan, onCoach }: { plan: CauseriePlan | null; onCoach: () => void }) {
+  const fields = [
+    ["tactic", "Priorité terrain"],
+    ["priority", "Zone à surveiller"],
+    ["arbitration", "Équilibre d'équipe"],
+  ] as const;
+  return (
+    <section className="match-coach-plan" aria-label="Plan de jeu du chef de quai">
+      <header>
+        <div><p className="eyebrow">Plan de jeu</p><h3>Priorités du chef de quai</h3></div>
+        <button className="secondary-on-dark" type="button" onClick={onCoach} title="Modifier le plan de jeu dans Coach"><Edit3 size={16} /> Coach</button>
+      </header>
+      <div className="match-coach-plan-grid">
+        {fields.map(([field, label], index) => (
+          <article key={field}>
+            <h4>0{index + 1} · {label}</h4>
+            <p className={plan?.coach[field].trim() ? "" : "is-empty"}>{plan?.coach[field].trim() || "À renseigner dans Coach"}</p>
+          </article>
+        ))}
+      </div>
+      <p className="match-coach-plan-review"><span>Prochaine revue</span><strong>{plan?.coach.review.trim() || "À planifier"}</strong></p>
     </section>
   );
 }
