@@ -4077,14 +4077,14 @@ function buildAwardItems(snapshot: Snapshot): MatchAward[] {
     },
     {
       kind: "defense",
-      label: "Meilleur joueur",
+      label: "Meilleur défenseur",
       symbol: "DEF",
       podiumLabel: "Défense",
       highlight: snapshot.highlights.defensiveWall,
     },
     {
       kind: "polyvalent",
-      label: "Couteau suisse",
+      label: "Meilleur joueur",
       symbol: "ALL",
       podiumLabel: "Polyvalence",
       highlight: playerHighlight(snapshot.coach.polyvalents[0], "Polyvalence", "Joueur le plus polyvalent"),

@@ -644,7 +644,8 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".award-card.midfield:not(.polyvalent) .award-leader-score small")).toHaveText("positions ZONAGE");
       await expect(page.locator(".award-card.midfield:not(.polyvalent) .award-copy > i")).toHaveText("Meilleur passeur");
       await expect(page.locator(".award-card.midfield:not(.polyvalent) .award-copy > strong")).toHaveText("MORGAN JOUY");
-      await expect(page.locator(".award-card.defense .award-copy > i")).toHaveText("Meilleur joueur");
+      await expect(page.locator(".award-card.defense .award-copy > i")).toHaveText("Meilleur défenseur");
+      await expect(page.locator(".award-card.polyvalent .award-copy > i")).toHaveText("Meilleur joueur");
       await expect(page.locator(".award-card.defense .award-copy > strong")).toHaveText("SYLVIE JACQUIER");
       await expect(page.locator(".award-card.polyvalent .award-leader-score b")).toHaveText(/\d+%/);
       await expect(page.locator(".award-card.polyvalent .award-leader-score small")).toHaveText("polyvalence");
