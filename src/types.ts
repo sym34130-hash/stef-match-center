@@ -148,6 +148,7 @@ export type Snapshot = {
     won: number | null;
     total: number | null;
     rate: number;
+    travels?: number | null;
   }>;
   loadingQuality?: {
     targeted: number;

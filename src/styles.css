@@ -3039,7 +3039,8 @@ body.match-celebration-active .main-area {
   text-anchor: middle;
 }
 
-.performance-chart-point .performance-chart-volume {
+.performance-chart-point .performance-chart-volume,
+.performance-chart-point .performance-chart-travels {
   fill: var(--muted);
   font-size: 11px;
   font-weight: 700;
@@ -17024,18 +17025,25 @@ body.tv-screen-active .app-shell.league-platine {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 10px 24px rgba(0, 0, 0, 0.14);
 }
 
-.yellow-cards-panel.has-red-cards {
+.yellow-cards-panel:has(details) {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 8px;
+  min-height: 0;
+}
+
+.yellow-cards-panel.has-red-cards {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
 .yellow-cards-content,
 .red-cards-panel {
-  min-width: 0;
+  display: contents;
 }
 
-.red-cards-panel {
+.red-cards-heading {
   padding-left: 10px;
   border-left: 1px solid rgba(255, 119, 134, 0.45);
 }
@@ -17064,7 +17072,7 @@ body.tv-screen-active .app-shell.league-platine {
 }
 
 .yellow-cards-panel.has-red-cards :is(.yellow-cards-heading, .red-cards-heading) {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 5px;
 }
 
@@ -17072,12 +17080,12 @@ body.tv-screen-active .app-shell.league-platine {
   flex-shrink: 0;
 }
 
-.yellow-cards-panel.has-red-cards li b {
+.yellow-cards-panel li :is(b, small) {
   overflow-wrap: anywhere;
 }
 
 .red-cards-disclosure {
-  margin-top: 9px;
+  display: contents;
 }
 
 .red-cards-disclosure summary {
@@ -17183,19 +17191,70 @@ body.tv-screen-active .app-shell.league-platine {
 .yellow-cards-panel ul {
   display: grid;
   gap: 7px;
-  max-height: 148px;
-  margin: 10px 0 0;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  min-height: 0;
+  max-height: 220px;
+  margin: 0;
   padding: 0;
-  overflow: auto;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(229, 242, 255, 0.4) transparent;
   list-style: none;
 }
 
 .yellow-cards-disclosure {
-  margin-top: 9px;
+  display: contents;
+}
+
+.yellow-cards-disclosure::details-content,
+.red-cards-disclosure::details-content {
+  display: contents;
+}
+
+.yellow-cards-disclosure:not([open]) ul,
+.red-cards-disclosure:not([open]) ul {
+  display: none;
+}
+
+.yellow-cards-panel :is(.yellow-cards-heading, .red-cards-heading) {
+  min-width: 0;
+}
+
+.yellow-cards-panel :is(.yellow-cards-heading, .red-cards-heading) span {
+  min-width: 0;
+}
+
+.yellow-cards-panel :is(.yellow-cards-heading, .red-cards-heading) strong {
+  flex-shrink: 0;
+}
+
+.yellow-cards-panel summary {
+  grid-row: 1;
+  min-width: 0;
+}
+
+.yellow-cards-panel summary :is(.yellow-cards-heading, .red-cards-heading) {
+  display: inline-flex;
+  width: calc(100% - 14px);
+  vertical-align: middle;
+}
+
+.yellow-cards-panel summary :is(.yellow-cards-heading, .red-cards-heading) svg {
+  display: none;
 }
 
 .yellow-cards-disclosure summary {
-  width: fit-content;
+  grid-column: 1;
+}
+
+.red-cards-disclosure summary {
+  grid-column: 2;
+}
+
+.yellow-cards-disclosure summary {
   color: rgba(229, 242, 255, 0.82);
   font-size: 11px;
   font-weight: 700;
@@ -17213,7 +17272,7 @@ body.tv-screen-active .app-shell.league-platine {
 }
 
 .yellow-cards-disclosure[open] summary {
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .yellow-cards-panel li {
@@ -17845,8 +17904,6 @@ body.tv-screen-active .app-shell.league-platine {
   }
 
   .match-page.is-celebration-mode .yellow-cards-panel ul {
-    max-height: 164px;
-    margin-top: 14px;
     gap: 9px;
   }
 
@@ -19291,7 +19348,8 @@ body.match-celebration-active .main-area {
     font-size: 22px;
   }
 
-  .performance-chart-point .performance-chart-volume {
+  .performance-chart-point .performance-chart-volume,
+  .performance-chart-point .performance-chart-travels {
     font-size: 18px;
   }
 
@@ -19770,7 +19828,8 @@ body.match-celebration-active .main-area {
     font-size: 16px;
   }
 
-  .match-page:not(.is-celebration-mode) .performance-chart-point .performance-chart-volume {
+  .match-page:not(.is-celebration-mode) .performance-chart-point .performance-chart-volume,
+  .match-page:not(.is-celebration-mode) .performance-chart-point .performance-chart-travels {
     font-size: 13px;
   }
 
@@ -20530,6 +20589,7 @@ body.match-celebration-active .main-area {
   }
 
   .match-page.is-celebration-mode .performance-chart-point .performance-chart-volume,
+  .match-page.is-celebration-mode .performance-chart-point .performance-chart-travels,
   .match-page.is-celebration-mode .performance-chart-point .performance-chart-hour {
     font-size: 15px;
   }

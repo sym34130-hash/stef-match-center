@@ -1975,7 +1975,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const left = 92;
   const right = 42;
   const top = 30;
-  const bottom = 76;
+  const bottom = data.some((item) => item.travels != null) ? 100 : 76;
   const chartWidth = width - left - right;
   const chartHeight = height - top - bottom;
   const points = data.map((item, index) => ({
@@ -1983,6 +1983,15 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
     x: data.length <= 1 ? left + chartWidth / 2 : left + (index / (data.length - 1)) * chartWidth,
     y: top + ((100 - item.rate) / 100) * chartHeight,
   }));
+  // Keep the detail lines below neighboring curve segments, especially at peaks.
+  const detailBases = points.map((point, index) => {
+    if (point.travels == null) return point.y;
+    const radius = index === 0 || index === points.length - 1 ? 110 : 60;
+    const neighbors = [points[index - 1], points[index + 1]].filter(Boolean);
+    return Math.max(point.y, ...neighbors.map((neighbor) => (
+      point.y + (neighbor.y - point.y) * Math.min(radius / Math.abs(neighbor.x - point.x), 1)
+    )));
+  });
   const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
   const areaPath = points.length > 0
     ? `${path} L ${points[points.length - 1].x} ${top + chartHeight} L ${points[0].x} ${top + chartHeight} Z`
@@ -2010,11 +2019,16 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
           })}
           <path className="performance-chart-area" d={areaPath} />
           <path className="performance-chart-line" d={path} />
-          {points.map((point) => (
+          {points.map((point, index) => (
             <g className="performance-chart-point" key={point.label}>
               <circle cx={point.x} cy={point.y} r="6" />
               <text x={point.x} y={point.y - 14}>{point.rate}%</text>
-              <text className="performance-chart-volume" x={point.x} y={point.y + 25}>{point.won !== null && point.total !== null ? `${point.won}/${point.total}` : "Excel"}</text>
+              <text className="performance-chart-volume" x={point.x} y={detailBases[index] + 25}>{point.won !== null && point.total !== null ? `${point.won}/${point.total}` : "Excel"}</text>
+              {point.travels != null && (
+                <text className="performance-chart-travels" x={point.x} y={detailBases[index] + 46} style={{ textAnchor: points.length === 1 ? "middle" : index === 0 ? "start" : index === points.length - 1 ? "end" : "middle" }}>
+                  {point.travels} {point.travels === 1 ? "voyage" : "voyages"}
+                </text>
+              )}
               <text className="performance-chart-hour" x={point.x} y={height - 20}>{point.label}</text>
             </g>
           ))}
@@ -4012,36 +4026,42 @@ function YellowCardsPanel({ snapshot, redCards }: { snapshot: Snapshot; redCards
   return (
     <div className={`yellow-cards-panel${redCardEntries.length > 0 ? " has-red-cards" : ""}`}>
       <section className="yellow-cards-content" aria-label="Cartons jaunes">
-        <div className="yellow-cards-heading">
-          <span><CreditCard size={16} /> Cartons jaunes</span>
-          <strong>{cards.length}</strong>
-        </div>
-        {cards.length > 0 ? (
-          <details className="yellow-cards-disclosure">
-            <summary>Afficher le détail</summary>
-            <ul>
-              {cards.map((card, index) => (
-                <li key={`${card.playerName}-${card.time}-${index}`}>
-                  <b>{card.playerName}</b>
-                  <small>{card.time}{card.reason ? ` · ${card.reason}` : ""}{card.travelCode ? ` · ${card.travelCode}` : ""}</small>
-                </li>
-              ))}
-            </ul>
-          </details>
+        {cards.length === 0 ? (
+          <div className="yellow-cards-heading">
+            <span><CreditCard size={16} /> Cartons jaunes</span>
+            <strong>{cards.length}</strong>
+          </div>
         ) : (
-          <p>Aucun carton jaune dans la plage active.</p>
+            <details className="yellow-cards-disclosure" name="match-discipline">
+              <summary title="Afficher le détail des cartons jaunes" aria-label="Afficher le détail des cartons jaunes">
+                <div className="yellow-cards-heading">
+                  <span><CreditCard size={16} /> Cartons jaunes</span>
+                  <strong>{cards.length}</strong>
+                </div>
+              </summary>
+              <ul>
+                {cards.map((card, index) => (
+                  <li key={`${card.playerName}-${card.time}-${index}`}>
+                    <b>{card.playerName}</b>
+                    <small>{card.time}{card.reason ? ` · ${card.reason}` : ""}{card.travelCode ? ` · ${card.travelCode}` : ""}</small>
+                  </li>
+                ))}
+              </ul>
+            </details>
         )}
+        {cards.length === 0 && redCardEntries.length === 0 && <p>Aucun carton jaune dans la plage active.</p>}
       </section>
       {redCardEntries.length > 0 && (
         <section className="red-cards-panel" aria-label="Cartons rouges">
-          <div className="red-cards-heading">
-            <span><CreditCard size={16} /> Cartons rouges</span>
-            <strong>{redCardEntries.length}</strong>
-          </div>
-          <details className="red-cards-disclosure">
-            <summary>Afficher le détail</summary>
-            <ul>{redCardEntries.map((entry, index) => <li key={`${index}-${entry}`}><b>{entry}</b></li>)}</ul>
-          </details>
+            <details className="red-cards-disclosure" name="match-discipline">
+              <summary title="Afficher le détail des cartons rouges" aria-label="Afficher le détail des cartons rouges">
+                <div className="red-cards-heading">
+                  <span><CreditCard size={16} /> Cartons rouges</span>
+                  <strong>{redCardEntries.length}</strong>
+                </div>
+              </summary>
+              <ul>{redCardEntries.map((entry, index) => <li key={`${index}-${entry}`}><b>{entry}</b></li>)}</ul>
+            </details>
         </section>
       )}
     </div>

@@ -337,7 +337,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     criteria,
     hourlyPassPerformance: buildHourlyPassPerformance(rawWorkbook, period, rows.filter((row) => !excludedTravelCodes.has(row.travelCode))),
     loadingQuality: buildLoadingQualityFromTcd(rawWorkbook, period, criteria.loadingSeconds, excludedTravelCodes),
-    unloadingDuelQuality: buildUnloadingDuelQuality(rawWorkbook, period, expectedAgencyCode, excludedTravelCodes),
+    unloadingDuelQuality: buildUnloadingDuelQuality(rawWorkbook, period, matchRows, excludedTravelCodes),
     unloadingQuality: buildUnloadingQuality(matchRows, criteria.unloadingSeconds),
     yellowCards: buildYellowCards(rawWorkbook, period, excludedTravelCodes),
     excludedTravelCodes,
@@ -880,7 +880,33 @@ function sheetEndRow(sheet, fallbackRow) {
   }
 }
 
-function buildUnloadingDuelQuality(workbook, period, agencyCode, excludedTravelCodes = new Set()) {
+function resolveUnloadingAgencies(matchRows) {
+  const candidatesByTravel = new Map();
+  // matchRows already respects the active period, operator filter and exclusions.
+  for (const row of matchRows) {
+    if (row.operationType !== "DECHG" || !row.travelCode || !row.agencySegment) continue;
+    if (!candidatesByTravel.has(row.travelCode)) candidatesByTravel.set(row.travelCode, new Map());
+    const candidates = candidatesByTravel.get(row.travelCode);
+    const candidate = candidates.get(row.agencySegment) ?? { count: 0, firstAt: Infinity };
+    candidate.count += 1;
+    candidate.firstAt = Math.min(candidate.firstAt, row.startedAt.getTime());
+    candidates.set(row.agencySegment, candidate);
+  }
+  const agencies = new Map();
+  for (const [travel, candidates] of candidatesByTravel) {
+    let best = null;
+    for (const [agency, candidate] of candidates) {
+      // Ties use the earliest DECHG; identical timestamps keep source row order.
+      if (!best || candidate.count > best.count || (candidate.count === best.count && candidate.firstAt < best.firstAt)) {
+        best = { agency, ...candidate };
+      }
+    }
+    agencies.set(travel, best.agency);
+  }
+  return agencies;
+}
+
+function buildUnloadingDuelQuality(workbook, period, matchRows, excludedTravelCodes = new Set()) {
   const empty = { won: 0, lost: 0, wonPercent: null, lostPercent: null, duels: [], lostDuels: [] };
   const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "tcd ppt");
   const sheet = sheetName ? workbook.Sheets[sheetName] : null;
@@ -915,6 +941,7 @@ function buildUnloadingDuelQuality(workbook, period, agencyCode, excludedTravelC
   const startColumn = findColumn((value) => value.startsWith("min de date heure de debut d operation"));
   if ([travelColumn, wonColumn, totalColumn, positionsColumn, startColumn, endColumn].some((value) => value === undefined)) return empty;
 
+  const agencies = resolveUnloadingAgencies(matchRows);
   let total = 0;
   let won = 0;
   const duels = [];
@@ -937,7 +964,7 @@ function buildUnloadingDuelQuality(workbook, period, agencyCode, excludedTravelC
     const elapsedSeconds = start && end ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000)) : 0;
     const duel = {
       travelCode: travel,
-      agency: agencyCode || "Non renseignée",
+      agency: agencies.get(travel) || "Non renseignée",
       time: formatDateClock(start),
       positions,
       timePerPosition: formatDuration(elapsedSeconds / Math.max(positions, 1)),
@@ -1894,9 +1921,10 @@ function buildHourlyPassPerformance(workbook, period, sourceRows = null) {
         ? hourMinutes >= period.startMinutes || hourMinutes <= period.endMinutes
         : hourMinutes >= period.startMinutes && hourMinutes <= period.endMinutes;
       if (!inRange || (chartHours.size > 0 && !chartHours.has(hour))) continue;
-      const current = byHour.get(hour) ?? { won: 0, total: 0 };
+      const current = byHour.get(hour) ?? { won: 0, total: 0, travels: new Set() };
       current.total += 1;
       if (row.duelWonFlag === 1) current.won += 1;
+      if (row.travelCode) current.travels.add(row.travelCode);
       byHour.set(hour, current);
     }
     const values = Array.from(byHour.entries())
@@ -1907,6 +1935,7 @@ function buildHourlyPassPerformance(workbook, period, sourceRows = null) {
         won: value.won,
         total: value.total,
         rate: percent(value.won, value.total),
+        travels: value.travels.size,
       }));
     values.sort((a, b) => {
       const toOffset = (hour) => {
@@ -1990,6 +2019,7 @@ function buildHourlyPassPerformance(workbook, period, sourceRows = null) {
       won: summary?.won ?? null,
       total: summary?.total ?? null,
       rate: Math.round(rateFraction * 1000) / 10,
+      travels: null,
     });
   }
   values.sort((a, b) => {

@@ -183,6 +183,116 @@ if (rawLoadingResult.ok) {
   assert.equal(rawLoadingResult.snapshot.loadingQuality.loadingDetails?.[0]?.where, "Poteau!", "Le lexique TCD est conservé");
 }
 
+// Agency enrichment must never replace the authoritative unloading pivot results.
+const unloadingAgencyTravels = ["A", "B", "TEST-001", "MAJ", "TIE", "MISSING", "FILTERED", "TCD-ONLY", "EXCLUDED", "OUT-TCD"];
+const unloadingAgencyRows = [];
+function addUnloadingAgencyRow(travel, agency, time = "14:00:00", operation = "DECHG", operatorFilter = "") {
+  unloadingAgencyRows.push([
+    "Joueur", `11/09/2026 ${time}`, operation, `P-${unloadingAgencyRows.length}`,
+    travel, agency, "X", operatorFilter, "", "Defenseur", "", "", 1,
+  ]);
+}
+addUnloadingAgencyRow("A", "058");
+addUnloadingAgencyRow("B", "04P");
+addUnloadingAgencyRow("TEST-001", "01K");
+for (const agency of ["04P", "04P", "04P", "01K"]) addUnloadingAgencyRow("MAJ", agency);
+// Deliberately reverse source order: chronology, not first array entry, breaks ties.
+addUnloadingAgencyRow("TIE", "04P", "14:05:00");
+addUnloadingAgencyRow("TIE", "01K", "14:01:00");
+addUnloadingAgencyRow("MISSING", "");
+addUnloadingAgencyRow("MISSING", "   ");
+addUnloadingAgencyRow("FILTERED", "01K");
+for (let index = 0; index < 3; index += 1) {
+  addUnloadingAgencyRow("FILTERED", "04P", "14:00:00", "CHG");
+  addUnloadingAgencyRow("FILTERED", "04P", "12:00:00");
+  addUnloadingAgencyRow("FILTERED", "04P", "14:00:00", "DECHG", "exclu");
+}
+addUnloadingAgencyRow("EXCLUDED", "04P");
+addUnloadingAgencyRow("OUT-TCD", "04P", "12:00:00");
+const unloadingAgencyWorkbook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(unloadingAgencyWorkbook, XLSX.utils.aoa_to_sheet([rawLoadingDataHeaders, ...unloadingAgencyRows]), "Données");
+XLSX.utils.book_append_sheet(unloadingAgencyWorkbook, XLSX.utils.aoa_to_sheet([
+  ["Déchargement"],
+  ["Code Voyage", "Min. de Date/Heure de début d'opération", "Max. de Date/Heure de début d'opération", "Nombre de N° Position", "Duels gagnés", "Duels perdus", "Duels"],
+  ...unloadingAgencyTravels.map((travel, index) => [
+    travel, `11/09/2026 ${travel === "OUT-TCD" ? "12" : "14"}:00:00`,
+    `11/09/2026 ${travel === "OUT-TCD" ? "12" : "14"}:04:00`, 2, index % 2 === 0 ? 1 : 0, index % 2, 1,
+  ]),
+]), "TCD PPT");
+const unloadingAgencyResult = buildSnapshotFromWorkbook(
+  XLSX.write(unloadingAgencyWorkbook, { type: "buffer", bookType: "xlsx" }),
+  "unloading-agencies.xlsx", "058",
+  { start: "13:00", end: "15:00", excludedTravelCodes: ["EXCLUDED"] },
+);
+assert.equal(unloadingAgencyResult.ok, true, "Le classeur multi-agences doit être exploitable");
+const unloadingAgencyQuality = unloadingAgencyResult.snapshot.unloadingDuelQuality;
+const expectedUnloadingAgencies = {
+  A: "058", B: "04P", "TEST-001": "01K", MAJ: "04P", TIE: "01K",
+  MISSING: "Non renseignée", FILTERED: "01K", "TCD-ONLY": "Non renseignée",
+};
+for (const [travel, agency] of Object.entries(expectedUnloadingAgencies)) {
+  assert.equal(unloadingAgencyQuality.duels.find((duel) => duel.travelCode === travel)?.agency, agency, `Agence Segment du voyage ${travel}`);
+}
+assert.deepEqual(unloadingAgencyQuality, {
+  won: 4, lost: 4, wonPercent: 50, lostPercent: 50,
+  duels: unloadingAgencyTravels.slice(0, 8).map((travel, index) => ({
+    travelCode: travel, agency: expectedUnloadingAgencies[travel], time: "14:00:00",
+    positions: 2, timePerPosition: "02:00", result: index % 2 === 0 ? "gagné" : "perdu",
+  })).sort((left, right) => left.travelCode.localeCompare(right.travelCode, "fr")),
+  lostDuels: unloadingAgencyTravels.slice(0, 8).filter((_, index) => index % 2 === 1).map((travel) => ({
+    travelCode: travel, agency: expectedUnloadingAgencies[travel], time: "14:00:00",
+    positions: 2, timePerPosition: "02:00", result: "perdu",
+  })).sort((left, right) => left.travelCode.localeCompare(right.travelCode, "fr")),
+}, "Seule l'agence enrichit les voyages : compteurs, temps, positions, résultats et périmètre restent ceux du TCD");
+console.log("Régression Agence Segment OK : multi-agences, espace différent, majorité, égalité chronologique, agence absente, périmètre et garde-fou TCD");
+
+// Distinct hourly travels enrich the exact same rows as the pass counters.
+function hourlyTravelSnapshot(entries, excludedTravelCodes = [], chartRows = null) {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    [...rawLoadingDataHeaders, "Heure op"],
+    ...entries.map((entry, index) => [
+      "Joueur", "11/09/2026 01:00:00", "DECHG", `P-${index}`, entry.travel ?? "", "058", "X",
+      entry.operatorFilter ?? "", "", "Defenseur", entry.unzonedFilter ?? "", "", index % 2, entry.hour ?? "",
+    ]),
+  ]), "Données");
+  if (chartRows) XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(chartRows), "X");
+  const result = buildSnapshotFromWorkbook(
+    XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }), "hourly-travels.xlsx", "058",
+    { start: "00:00", end: "03:00", excludedTravelCodes },
+  );
+  assert.equal(result.ok, true, "Le test voyages horaires doit être exploitable");
+  return result.snapshot;
+}
+const duplicatedHourlyEntries = Array.from({ length: 10 }, () => ({ hour: 1, travel: "X001" }));
+const multipleHourlyEntries = ["X001", "X001", "X002", "X002", "X003", "X003"].map((travel) => ({ hour: 1, travel }));
+for (const [label, entries, exclusions, expected] of [
+  ["doublon même voyage", duplicatedHourlyEntries, [], [{ label: "01h", hour: 1, won: 5, total: 10, rate: 50, travels: 1 }]],
+  ["plusieurs voyages", multipleHourlyEntries, [], [{ label: "01h", hour: 1, won: 3, total: 6, rate: 50, travels: 3 }]],
+  ["même voyage sur deux heures", [1, 1, 2, 2].map((hour) => ({ hour, travel: "X001" })), [], [
+    { label: "01h", hour: 1, won: 1, total: 2, rate: 50, travels: 1 },
+    { label: "02h", hour: 2, won: 1, total: 2, rate: 50, travels: 1 },
+  ]],
+  ["voyage exclu", multipleHourlyEntries, ["X002"], [{ label: "01h", hour: 1, won: 2, total: 4, rate: 50, travels: 2 }]],
+  ["travelCode vide", ["", null, "   ", "X001"].map((travel) => ({ hour: 1, travel })), [], [{ label: "01h", hour: 1, won: 2, total: 4, rate: 50, travels: 1 }]],
+  ["aucun voyage renseigné", ["", null].map((travel) => ({ hour: 1, travel })), [], [{ label: "01h", hour: 1, won: 1, total: 2, rate: 50, travels: 0 }]],
+]) {
+  const result = hourlyTravelSnapshot(entries, exclusions);
+  assert.deepEqual(result.hourlyPerformance, expected, `Voyages distincts et compteurs inchangés : ${label}`);
+  assert.equal(result.summary.passRate, 50, `Taux global inchangé : ${label}`);
+  console.log(`Régression voyages horaires OK : ${label}`);
+}
+const filteredHourlySnapshot = hourlyTravelSnapshot([
+  { hour: 1, travel: "X001" }, { hour: 1, travel: "X002", operatorFilter: "exclu" },
+  { hour: 1, travel: "X003", unzonedFilter: "exclu" }, { hour: 5, travel: "X004" },
+]);
+assert.deepEqual(filteredHourlySnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 0, total: 1, rate: 0, travels: 1 }], "Voyages : mêmes filtres opérateur, zonage et plage que la série");
+const hourlyFallbackSnapshot = hourlyTravelSnapshot([{ travel: "X001" }], [], [
+  ["Heure op", "Duels perdus", "Duels gagnés", "", "Passes réussies", "", "Heure op", "Somme de % passes réussies"],
+  [1, 1, 3, "", 0.75, "", 1, 0.75],
+]);
+assert.deepEqual(hourlyFallbackSnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 3, total: 4, rate: 75, travels: null }], "Fallback : aucun nombre de voyages déduit des compteurs Excel");
+
 // Regression guard: French text dates must keep day/month order and a zonage
 // before a reception must not be used for that reception's delay.
 const chronologyRows = [
