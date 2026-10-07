@@ -221,6 +221,7 @@ button:disabled {
 
 .main-area {
   min-width: 0;
+  container: workspace / inline-size;
   min-height: 100vh;
   min-height: 100svh;
   overflow-x: clip;
@@ -245,6 +246,7 @@ button:disabled {
 
 .top-actions {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
@@ -1860,12 +1862,12 @@ body.match-celebration-active .main-area {
 }
 
 .match-ceremony::before {
-  left: 2%;
+  left: max(2%, 32px);
   transform: rotate(8deg);
 }
 
 .match-ceremony::after {
-  right: 2%;
+  right: max(2%, 32px);
   transform: rotate(-8deg);
 }
 
@@ -2869,6 +2871,15 @@ body.match-celebration-active .main-area {
 
 .award-copy b {
   color: var(--green-field);
+}
+
+.award-leader-score {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
 }
 
 .award-card > em {
@@ -18290,16 +18301,34 @@ body.tv-screen-active .app-shell.league-platine {
   font-size: 13px;
 }
 
-body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) {
+.main-area .match-page:not(.is-celebration-mode) .match-brief-slide.is-active:has(.match-coach-plan) {
   display: flex;
   flex-direction: column;
   gap: 20px;
   overflow-y: auto;
 }
 
-body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) > .tv-action {
+.main-area .match-page:not(.is-celebration-mode) .match-brief-slide.is-active:has(.match-coach-plan) > .tv-action {
   flex: 0 0 auto;
   height: auto;
+}
+
+.match-page.is-celebration-mode .match-brief-slide.is-active:has(.match-coach-plan) {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.match-page.is-celebration-mode .match-brief-slide:has(.match-coach-plan) > .tv-action {
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+}
+
+.match-page.is-celebration-mode .match-brief-slide:has(.match-coach-plan) > .match-coach-plan {
+  max-height: 35svh;
+  overflow: auto;
 }
 
 @media (max-width: 640px) {
@@ -18413,9 +18442,9 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
   .main-area:has(.match-page) {
     display: flex;
     flex-direction: column;
-    height: 100svh;
-    min-height: 0;
-    overflow: hidden;
+    height: auto;
+    min-height: 100svh;
+    overflow: visible;
   }
 
   .main-area:has(.match-page) > .screen-transition {
@@ -18423,30 +18452,30 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
     flex: 1 1 auto;
     flex-direction: column;
     min-height: 0;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .match-page:not(.is-celebration-mode) {
-    flex: 1 1 auto;
-    grid-template-rows: auto minmax(0, 1fr);
+    flex: none;
+    grid-template-rows: auto auto;
     min-height: 0;
-    height: 100%;
-    overflow: hidden;
+    height: auto;
+    overflow: visible;
   }
 
-  .match-page:not(.is-celebration-mode) .match-slide-viewport {
+.match-page:not(.is-celebration-mode) .match-slide-viewport {
     min-height: 0;
     max-height: none;
-    height: 100%;
+    height: auto;
   }
 
-  .match-page:not(.is-celebration-mode) .match-ceremony {
+.match-page:not(.is-celebration-mode) .match-ceremony {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
     align-content: stretch;
     gap: 12px;
     min-height: 0;
-    height: 100%;
+    height: auto;
     padding: 16px;
   }
 
@@ -18465,14 +18494,14 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
     font-size: clamp(30px, 2.8vw, 42px);
   }
 
-  .match-page:not(.is-celebration-mode) .match-result-stage {
+.match-page:not(.is-celebration-mode) .match-result-stage {
     grid-column: 1;
     grid-row: 2;
     grid-template-columns: minmax(180px, 0.85fr) minmax(0, 1.55fr);
     align-items: stretch;
     gap: 10px;
     min-height: 0;
-    height: 100%;
+    height: auto;
     padding: 12px;
   }
 
@@ -18519,12 +18548,12 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
     font-size: 9px !important;
   }
 
-  .match-page:not(.is-celebration-mode) .match-indicators-area {
+.match-page:not(.is-celebration-mode) .match-indicators-area {
     grid-column: 2;
     grid-row: 2;
     align-content: center;
     min-height: 0;
-    overflow: hidden;
+    overflow: visible;
   }
 
   .match-page:not(.is-celebration-mode) .match-indicators-track {
@@ -18533,9 +18562,7 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
   }
 
   .match-page:not(.is-celebration-mode) .match-indicator-card {
-    grid-template-rows: 40px minmax(0, 1fr) 72px;
     gap: 10px;
-    height: clamp(250px, 34svh, 320px);
     padding: 14px;
   }
 
@@ -18555,22 +18582,22 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
     min-height: 34px;
   }
 
-  .match-page:not(.is-celebration-mode) .awards-ceremony,
+.match-page:not(.is-celebration-mode) .awards-ceremony,
   .match-page:not(.is-celebration-mode) .match-statistics-section {
     min-height: 0;
-    height: 100%;
+    height: auto;
     gap: 12px;
     padding: 16px;
   }
 
-  .match-page:not(.is-celebration-mode) .awards-ceremony {
-    grid-template-rows: auto minmax(0, 1fr);
+.match-page:not(.is-celebration-mode) .awards-ceremony {
+    grid-template-rows: auto auto;
   }
 
-  .match-page:not(.is-celebration-mode) .awards-stage,
+.match-page:not(.is-celebration-mode) .awards-stage,
   .match-page:not(.is-celebration-mode) .special-awards {
     min-height: 0;
-    height: 100%;
+    height: auto;
   }
 
   .match-page:not(.is-celebration-mode) .category-awards .award-card {
@@ -18613,13 +18640,13 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
     padding: 7px 9px;
   }
 
-  .match-page:not(.is-celebration-mode) .match-statistics-section {
-    grid-template-rows: auto minmax(0, 1fr);
+.match-page:not(.is-celebration-mode) .match-statistics-section {
+    grid-template-rows: auto auto;
   }
 
-  .match-page:not(.is-celebration-mode) .match-brief-slide {
+.match-page:not(.is-celebration-mode) .match-brief-slide {
     min-height: 0;
-    height: 100%;
+    height: auto;
   }
 
   .match-page:not(.is-celebration-mode) .match-brief-slide > .tv-action {
@@ -18637,10 +18664,10 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
     font-size: clamp(26px, 2.4vw, 36px);
   }
 
-  .match-page:not(.is-celebration-mode) .match-stat-grid,
+.match-page:not(.is-celebration-mode) .match-stat-grid,
   .match-page:not(.is-celebration-mode) .operational-charts-carousel {
     min-height: 0;
-    height: 100%;
+    height: auto;
   }
 
   .match-page:not(.is-celebration-mode) .operational-charts-carousel {
@@ -18653,18 +18680,18 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
     height: 32px;
   }
 
-  .match-page:not(.is-celebration-mode) .operational-charts-carousel-viewport,
+.match-page:not(.is-celebration-mode) .operational-charts-carousel-viewport,
   .match-page:not(.is-celebration-mode) .operational-charts-carousel-track,
   .match-page:not(.is-celebration-mode) .operational-chart-slide {
     min-height: 0;
-    height: 100%;
+    height: auto;
   }
 
-  .match-page:not(.is-celebration-mode) .operational-chart-slide > .performance-chart-panel,
+.match-page:not(.is-celebration-mode) .operational-chart-slide > .performance-chart-panel,
   .match-page:not(.is-celebration-mode) .operational-chart-slide > .loading-quality-card,
   .match-page:not(.is-celebration-mode) .operational-chart-slide > .duel-quality-card {
     min-height: 0;
-    height: 100%;
+    height: auto;
     padding: 14px;
     gap: 8px;
   }
@@ -18691,434 +18718,21 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
     width: 58%;
   }
 
-  .match-page:not(.is-celebration-mode) .match-brief-slide > .tv-action {
-    height: 100%;
+.match-page:not(.is-celebration-mode) .match-brief-slide > .tv-action {
+    height: auto;
     padding: 14px;
   }
 
-  .match-page:not(.is-celebration-mode) .match-brief-slide .tv-plan-column {
+.match-page:not(.is-celebration-mode) .match-brief-slide .tv-plan-column {
     min-height: 0;
     max-height: 100%;
-    height: 100%;
+    height: auto;
   }
 }
 
-@media (min-width: 901px) and (max-width: 1080px) {
-  .main-area:has(.match-page:not(.is-celebration-mode)) {
-    height: calc(100svh - 72px);
-    min-height: 0;
-    padding: 12px 18px 14px;
-  }
 
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-bar {
-    align-items: center;
-    flex-wrap: nowrap;
-    gap: 10px;
-    margin-bottom: 8px;
-    padding-bottom: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-bar h2 {
-    font-size: 19px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-actions {
-    flex: 1 1 auto;
-    flex-wrap: nowrap;
-    gap: 6px;
-    min-width: 0;
-    font-size: 11px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-actions > span {
-    display: none;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-league-badge {
-    min-height: 28px;
-    padding: 5px 7px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-league-badge > span {
-    display: none;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .time-range-control {
-    flex-wrap: nowrap;
-    gap: 4px;
-    padding: 4px 6px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .time-range-hint {
-    display: none;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .time-range-control select {
-    width: 70px;
-    min-height: 28px;
-    padding: 4px;
-    font-size: 12px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .time-range-control .secondary-button,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-actions > .secondary-button {
-    min-height: 28px;
-    padding: 5px 7px;
-    font-size: 11px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .kickoff-music-dock {
-    margin: 0 0 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .kickoff-music-wrap {
-    width: 190px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .kickoff-music-control {
-    min-height: 34px;
-    padding-inline: 10px;
-    font-size: 12px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) > .screen-transition {
-    min-height: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-page {
-    gap: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-viewport {
-    max-height: none;
-    height: 100%;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-ceremony:not(.is-celebration-mode) {
-    grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
-    gap: 8px;
-    padding: 12px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-ceremony-header {
-    align-items: center;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-ceremony-header > div:first-child > span {
-    display: none;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-ceremony-header h2 {
-    font-size: 28px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-header-actions {
-    gap: 5px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-header-actions button {
-    min-height: 32px;
-    padding: 6px 8px;
-    font-size: 11px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-result-stage {
-    grid-template-columns: minmax(180px, 0.85fr) minmax(0, 1.55fr);
-    gap: 6px;
-    padding: 7px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-result-visual {
-    gap: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-panel {
-    gap: 5px;
-    padding: 8px 6px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-heading > span {
-    font-size: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-heading > small {
-    display: none;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-line {
-    gap: 3px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-side {
-    padding: 5px 3px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-side > strong {
-    font-size: 32px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-side > span,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-side > small {
-    font-size: 7px !important;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-separator {
-    font-size: 18px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-panel > p {
-    font-size: 9px !important;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-meter {
-    gap: 3px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-meter span {
-    height: 5px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-integrated {
-    gap: 2px 4px;
-    font-size: 7px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .yellow-cards-panel {
-    padding: 7px 8px;
-    font-size: 10px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-scoreboard {
-    gap: 4px;
-    padding: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-scoreboard > span {
-    font-size: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-scoreboard > strong {
-    font-size: 20px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-scoreboard .match-score-bubbles {
-    grid-auto-rows: minmax(58px, 1fr);
-    gap: 4px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-score-bubble {
-    gap: 3px !important;
-    padding: 4px 3px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-score-bubble > span {
-    font-size: 7px;
-    letter-spacing: 0.04em;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-score-bubble > strong {
-    font-size: 23px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-score-bubble > small {
-    font-size: 7px !important;
-    line-height: 1.15;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-score-bubble > small {
-    font-size: 8px !important;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-indicator-card {
-    grid-template-rows: 23px minmax(0, 1fr) 38px;
-    gap: 4px;
-    height: 170px;
-    padding: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-indicator-card.is-mercato {
-    padding: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-indicator-value {
-    font-size: 29px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-indicator-card.is-performance .match-indicator-value {
-    font-size: 16px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .awards-ceremony,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-statistics-section {
-    gap: 8px;
-    padding: 12px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .awards-heading h2,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-section-heading h2 {
-    font-size: 25px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-section-heading {
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-section-heading > div {
-    min-width: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-section-heading h2 {
-    font-size: 22px;
-    line-height: 1.05;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-section-heading .secondary-button {
-    flex: 0 0 auto;
-    width: auto;
-    min-height: 32px;
-    padding: 6px 8px;
-    font-size: 11px;
-    white-space: nowrap;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .awards-heading span,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-section-heading span {
-    font-size: 11px;
-    line-height: 1.25;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .award-card {
-    min-height: 0;
-    height: 100%;
-    gap: 5px;
-    padding: 7px 5px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 7px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .award-symbol {
-    width: 42px;
-    height: 25px;
-    font-size: 10px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .award-shirt {
-    width: 46px;
-    height: 42px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .award-shirt::before,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .award-shirt::after {
-    width: 14px;
-    height: 24px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .award-copy strong {
-    font-size: 13px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .award-copy i {
-    font-size: 8px;
-    letter-spacing: 0.04em;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .award-challengers {
-    gap: 3px;
-    padding-top: 4px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .award-challenger {
-    padding: 3px 4px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .award-challenger b {
-    font-size: 9px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .award-challenger small {
-    font-size: 7px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .podium-step {
-    min-height: 26px;
-    font-size: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel .icon-button {
-    width: 28px;
-    height: 28px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .performance-chart-panel,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .loading-quality-card,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .duel-quality-card {
-    padding: 10px;
-    gap: 6px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart-heading strong {
-    font-size: 19px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart-caption {
-    margin-top: 4px;
-    font-size: 10px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-    height: 165px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-statistics-section,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-stat-grid,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
-    height: 100%;
-    min-height: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    gap: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-track,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide {
-    height: 100%;
-    min-height: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .performance-chart-panel,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .loading-quality-card,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .duel-quality-card {
-    height: 100%;
-    min-height: 0;
-    padding: 10px;
-    gap: 6px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-brief-slide > .tv-action {
-    padding: 10px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-brief-slide .tv-plan-grid {
-    gap: 8px;
-    margin-top: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-brief-slide .tv-plan-column {
-    min-height: 0;
-    max-height: 100%;
-    padding: 9px;
-  }
-}
-
-/* Final precedence layer for the normal match sheet and the full-screen brief. */
+/* Normal application flow is content-sized; viewport fitting belongs only
+   to the explicitly scoped presentation mode below. */
 .main-area:has(.match-page:not(.is-celebration-mode)) {
   overflow-x: clip;
 }
@@ -19133,6 +18747,12 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
   height: auto;
   min-height: 0;
   overflow: visible;
+}
+
+.match-page:not(.is-celebration-mode) .match-carousel-navigation {
+  align-self: start;
+  height: auto;
+  min-height: 0;
 }
 
 .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-viewport {
@@ -19176,7 +18796,8 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
 }
 
 .main-area:has(.match-page:not(.is-celebration-mode)) .match-indicator-card {
-  height: clamp(270px, 34svh, 340px);
+  height: auto;
+  min-height: 352px;
 }
 
 .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .award-card {
@@ -19198,7 +18819,34 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
 }
 
 .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-  height: clamp(300px, 34vw, 460px);
+  height: auto;
+  aspect-ratio: 12 / 5;
+}
+
+/* Panels respond to usable space after the sidebar and main padding. */
+@container workspace (max-width: 1050px) {
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-ceremony {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-indicators-area {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container workspace (max-width: 700px) {
+  .main-area:has(.match-page:not(.is-celebration-mode)) .match-result-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .main-area:has(.match-page:not(.is-celebration-mode)) .match-brief-slide .tv-plan-grid {
@@ -19230,7 +18878,7 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
   .main-area:has(.match-page:not(.is-celebration-mode)) {
     height: auto;
     min-height: 100svh;
-    overflow-y: auto;
+    overflow-y: visible;
   }
 
   .main-area:has(.match-page:not(.is-celebration-mode)) .top-bar {
@@ -19248,17 +18896,10 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
     max-height: none;
   }
 
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .award-card {
     min-height: 300px;
   }
 
-  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-    height: clamp(300px, 42vw, 420px);
-  }
 }
 
 @media (min-width: 901px) {
@@ -19313,303 +18954,6 @@ body .main-area .match-page .match-brief-slide.is-active:has(.match-coach-plan) 
   }
 }
 
-/* Keep the operational chart readable without making the match sheet taller
-   than the available viewport at common brief/display resolutions. */
-@media (min-width: 1201px) and (max-height: 1100px) {
-  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-    height: clamp(320px, 36vh, 410px);
-  }
-}
-
-@media (min-width: 901px) and (max-width: 1200px) {
-  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-    height: clamp(260px, 36vh, 320px);
-  }
-}
-
-/* Re-apply the compact 901-1080 layout after the natural-height rules above.
-   This breakpoint is still a full-screen presentation surface, so it must
-   use the available height rather than add a page-level scrollbar. */
-@media (min-width: 901px) and (max-width: 1080px) {
-  .main-area:has(.match-page:not(.is-celebration-mode)) {
-    height: calc(100svh - 72px);
-    min-height: 0;
-    padding: 12px 18px 14px;
-    overflow: hidden;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-bar {
-    align-items: center;
-    flex-wrap: nowrap;
-    gap: 10px;
-    margin-bottom: 8px;
-    padding-bottom: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-bar h2 {
-    font-size: 19px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-actions {
-    flex: 1 1 auto;
-    flex-wrap: nowrap;
-    gap: 6px;
-    min-width: 0;
-    font-size: 11px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-actions > span,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-league-badge > span,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .time-range-hint {
-    display: none;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-league-badge {
-    min-height: 28px;
-    padding: 5px 7px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .time-range-control {
-    flex-wrap: nowrap;
-    gap: 4px;
-    padding: 4px 6px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .time-range-control select {
-    width: 70px;
-    min-height: 28px;
-    padding: 4px;
-    font-size: 12px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .time-range-control .secondary-button,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .top-actions > .secondary-button {
-    min-height: 28px;
-    padding: 5px 7px;
-    font-size: 11px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .kickoff-music-dock {
-    margin: 0 0 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .kickoff-music-wrap {
-    width: 190px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .kickoff-music-control {
-    min-height: 34px;
-    padding-inline: 10px;
-    font-size: 12px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-page {
-    grid-template-rows: auto minmax(0, 1fr);
-    height: 100%;
-    min-height: 0;
-    gap: 8px;
-    overflow: hidden;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-viewport {
-    height: 100%;
-    max-height: none;
-    overflow: hidden;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-ceremony:not(.is-celebration-mode) {
-    grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr);
-    gap: 8px;
-    padding: 12px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-ceremony-header {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-ceremony-header > div:first-child > span {
-    display: none;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-ceremony-header h2 {
-    font-size: 28px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-header-actions {
-    gap: 5px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-header-actions button {
-    min-height: 32px;
-    padding: 6px 8px;
-    font-size: 11px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-result-stage {
-    grid-template-columns: minmax(180px, .85fr) minmax(0, 1.55fr);
-    gap: 6px;
-    padding: 7px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-panel {
-    gap: 5px;
-    padding: 8px 6px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-heading > span {
-    font-size: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-heading > small,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .time-range-hint {
-    display: none;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-side > strong {
-    font-size: 32px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-side > span,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-side > small,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .football-score-panel > p {
-    font-size: 8px !important;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-scoreboard {
-    gap: 4px;
-    padding: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-scoreboard .match-score-bubbles {
-    grid-auto-rows: minmax(58px, 1fr);
-    gap: 4px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-score-bubble {
-    gap: 3px !important;
-    padding: 4px 3px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-score-bubble > span,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-score-bubble > small {
-    font-size: 8px !important;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-score-bubble > strong {
-    font-size: 23px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-indicator-card {
-    grid-template-rows: 23px minmax(0, 1fr) 38px;
-    gap: 4px;
-    height: 170px;
-    padding: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-indicator-card.is-mercato {
-    padding: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-indicator-value {
-    font-size: 29px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .awards-ceremony,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-statistics-section {
-    gap: 8px;
-    padding: 12px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .awards-heading h2,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-section-heading h2 {
-    font-size: 25px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 7px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .award-card {
-    min-height: 0;
-    height: 100%;
-    gap: 5px;
-    padding: 7px 5px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .award-symbol {
-    width: 42px;
-    height: 25px;
-    font-size: 10px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .award-shirt {
-    width: 46px;
-    height: 42px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .category-awards .award-copy strong {
-    font-size: 13px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .award-challenger b {
-    font-size: 9px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .award-challenger small {
-    font-size: 7px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-    height: 165px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-statistics-section,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-stat-grid,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
-    height: 100%;
-    min-height: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    gap: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-track,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide {
-    height: 100%;
-    min-height: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .performance-chart-panel,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .loading-quality-card,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .duel-quality-card {
-    height: 100%;
-    min-height: 0;
-    padding: 10px;
-    gap: 6px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-brief-slide > .tv-action {
-    height: 100%;
-    padding: 10px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-brief-slide .tv-plan-grid {
-    gap: 8px;
-    margin-top: 8px;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-brief-slide .tv-plan-column {
-    min-height: clamp(220px, 40vh, 410px);
-    max-height: none;
-    height: auto;
-    padding: 9px;
-  }
-}
 
 /* Final carousel pass: the presentation mode uses the full viewport for the
    active slide, while the mobile layout keeps natural scrolling for content
@@ -20183,7 +19527,6 @@ body.match-celebration-active .main-area {
   }
 
   .match-page.is-celebration-mode .match-ceremony.is-active .match-indicator-card {
-    grid-template-rows: 28px minmax(0, 1fr) 52px;
     gap: 8px;
     height: 190px;
     padding: 8px;
@@ -20237,15 +19580,12 @@ body.match-celebration-active .main-area {
   }
 
   .match-page.is-celebration-mode .match-ceremony.is-active .match-indicator-card {
-    grid-template-rows: 24px minmax(0, 1fr) 42px;
     gap: 5px;
     height: 136px;
     padding: 7px;
-    overflow: hidden;
   }
 
   .match-page.is-celebration-mode .match-ceremony.is-active .match-indicator-card.is-performance {
-    grid-template-rows: 22px minmax(0, 1fr) 34px;
     gap: 4px;
   }
 
@@ -21616,7 +20956,6 @@ body.match-celebration-active .main-area {
 
   .match-page.is-celebration-mode .match-ceremony.is-active .match-indicator-card {
     flex: 0 0 220px;
-    grid-template-rows: 36px minmax(0, 1fr) 48px;
     gap: 6px;
     height: 220px !important;
     padding: 10px;
@@ -21688,251 +21027,6 @@ body.match-celebration-active .main-area {
   }
 }
 
-/* Responsive match-sheet contract: the navigator is content-sized and the
-   remaining row belongs to the active slide. This prevents CSS grid from
-   stretching the compact header into a large blank band on wide displays. */
-.match-page:not(.is-celebration-mode) {
-  grid-template-rows: auto minmax(0, 1fr);
-  align-content: normal;
-}
-
-.main-area:has(.match-page:not(.is-celebration-mode)) .match-page {
-  grid-template-rows: auto minmax(0, 1fr);
-  align-content: normal;
-}
-
-.match-page:not(.is-celebration-mode) .match-carousel-navigation {
-  align-self: start;
-  height: auto;
-  min-height: 0;
-}
-
-@media (min-width: 901px) {
-  .main-area:has(.match-page:not(.is-celebration-mode)) {
-    height: 100dvh;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) > .screen-transition {
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-page {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-viewport {
-    height: 100%;
-    max-height: none;
-    min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active {
-    height: 100%;
-    min-height: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-ceremony,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .awards-ceremony,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-statistics-section,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-brief-slide {
-    height: 100%;
-    min-height: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-ceremony.is-active,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .awards-ceremony.is-active,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-statistics-section.is-active {
-    grid-template-rows: auto minmax(0, 1fr);
-    align-content: normal;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-stat-grid,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-track,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .performance-chart-panel,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .loading-quality-card,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .duel-quality-card {
-    height: 100%;
-    min-height: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
-    grid-template-rows: auto minmax(0, 1fr) auto;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-    height: clamp(320px, 38dvh, 620px);
-  }
-}
-
-/* Short desktop windows need a readable document flow. Keeping the slide
-   content natural here prevents the result and chart panels from being
-   clipped by a forced full-viewport row. */
-@media (min-width: 901px) and (max-height: 820px) {
-  .main-area:has(.match-page:not(.is-celebration-mode)) {
-    height: auto;
-    min-height: 100dvh;
-    overflow-y: auto;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) > .screen-transition {
-    overflow: visible;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-page {
-    height: auto;
-    overflow: visible;
-    grid-template-rows: auto auto;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-viewport {
-    height: auto;
-    overflow: visible;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-ceremony,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .awards-ceremony,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-statistics-section,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-brief-slide {
-    height: auto;
-    overflow: visible;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-track,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .performance-chart-panel,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .loading-quality-card,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .duel-quality-card {
-    height: auto;
-    min-height: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
-    grid-template-rows: auto auto auto;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport {
-    overflow-x: auto;
-    overflow-y: visible;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-    height: clamp(240px, 36dvh, 320px);
-  }
-}
-
-/* On short desktop viewports the chart card must grow from its contents. A
-   fixed row can otherwise clip the SVG after its heading and caption. */
-@media (min-width: 901px) and (max-height: 900px) {
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-track,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .performance-chart-panel,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .loading-quality-card,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .duel-quality-card {
-    height: auto;
-    min-height: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
-    grid-template-rows: auto auto auto;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport {
-    overflow-x: auto;
-    overflow-y: visible;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-    height: clamp(240px, 32dvh, 340px);
-  }
-}
-
-/* Preserve the existing compact tablet contract after the height-aware
-   desktop flow above. This keeps the supported 1024px layout inside one
-   viewport while retaining the short-window behavior on wider screens. */
-@media (min-width: 901px) and (max-width: 1080px) {
-  .main-area:has(.match-page:not(.is-celebration-mode)) {
-    height: calc(100dvh - 72px);
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) > .screen-transition {
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-page {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-    grid-template-rows: auto minmax(0, 1fr);
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-viewport {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-ceremony,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .awards-ceremony,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-statistics-section,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-slide-panel.is-active > .match-brief-slide {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-statistics-section.is-active,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .match-stat-grid,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
-    height: 100%;
-    min-height: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel {
-    grid-template-rows: auto minmax(0, 1fr) auto;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-viewport,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-charts-carousel-track,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .performance-chart-panel,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .loading-quality-card,
-  .main-area:has(.match-page:not(.is-celebration-mode)) .operational-chart-slide > .duel-quality-card {
-    height: 100%;
-    min-height: 0;
-  }
-
-  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-    height: 165px;
-  }
-}
-
-/* On desktop, let the curve chart use its native 1440:600 ratio. This keeps
-   the full SVG readable on wide screens without stretching it vertically. */
-@media (min-width: 1081px) {
-  .main-area:has(.match-page:not(.is-celebration-mode)) .performance-chart {
-    height: auto;
-    aspect-ratio: 12 / 5;
-  }
-}
 
 /* In Brief mode, a short viewport must keep the complete donut and its
    legend inside the active slide instead of letting the default 300px chart
@@ -21942,7 +21036,7 @@ body.match-celebration-active .main-area {
   .match-page.is-celebration-mode .operational-chart-slide > .loading-quality-card,
   .match-page.is-celebration-mode .operational-chart-slide > .duel-quality-card {
     gap: 5px;
-    overflow: hidden;
+    overflow: auto;
     padding: 10px 12px 8px;
   }
 

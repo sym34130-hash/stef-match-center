@@ -1411,11 +1411,19 @@ test("la feuille de match défile entre ses quatre sections sans empiler les vue
   await expect(navigation.locator(".match-carousel-count")).toHaveText("03 / 04");
   await expect(page.locator(".match-indicators .match-indicator-card:not(.is-mercato)")).toHaveCount(8);
   await expect(page.locator(".match-indicators .mercato-carousel-card")).toHaveCount(1);
-  if (testInfo.project.name !== "mobile") {
-    const pageGeometry = await page.evaluate(() => {
-      return { viewport: window.innerHeight, document: document.documentElement.scrollHeight };
-    });
-    expect(pageGeometry.document, `débordement vertical: ${pageGeometry.document}px pour une fenêtre de ${pageGeometry.viewport}px`).toBeLessThanOrEqual(pageGeometry.viewport + 1);
+  // Normal mode is a readable document, not a viewport-fitted presentation.
+  // Keep the non-clipping checks above and verify the extra height is reachable.
+  const pageGeometry = await page.evaluate(() => ({
+    viewport: window.innerHeight,
+    document: document.documentElement.scrollHeight,
+    overflowY: getComputedStyle(document.querySelector(".main-area")!).overflowY,
+  }));
+  if (pageGeometry.document > pageGeometry.viewport + 1) {
+    expect(pageGeometry.overflowY, "le mode normal ne doit pas masquer la hauteur supplémentaire").not.toMatch(/hidden|clip/);
+    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+    await expect.poll(() => page.evaluate(() => window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1), {
+      message: "le bas du document doit rester accessible par défilement",
+    }).toBe(true);
   }
   await assertNoHorizontalOverflow(page);
 });

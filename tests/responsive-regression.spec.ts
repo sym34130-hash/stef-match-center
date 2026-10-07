@@ -9,6 +9,7 @@ type ViewportCase = {
 
 const viewports: ViewportCase[] = [
   { name: "1366x768", width: 1366, height: 768, reference: true },
+  { name: "1440x900", width: 1440, height: 900, reference: true },
   { name: "1536x864", width: 1536, height: 864, reference: true },
   { name: "1600x900", width: 1600, height: 900, reference: true },
   { name: "1920x1080", width: 1920, height: 1080, reference: true },
@@ -17,6 +18,9 @@ const viewports: ViewportCase[] = [
   { name: "1536x720", width: 1536, height: 720, reference: false },
   { name: "1920x800", width: 1920, height: 800, reference: false },
   { name: "1920x900", width: 1920, height: 900, reference: false },
+  { name: "1024x768", width: 1024, height: 768, reference: false },
+  { name: "1180x640", width: 1180, height: 640, reference: false },
+  { name: "2560x800", width: 2560, height: 800, reference: false },
 ];
 
 const matchSlides = [
@@ -28,7 +32,151 @@ const matchSlides = [
 
 test.describe.configure({ mode: "serial", timeout: 8 * 60_000 });
 
+test.beforeEach(async ({ page }) => {
+  // Stabilize only import metadata used by the visual header, not KPI data.
+  await page.route("**/api/agencies/058/snapshot**", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    if (body.snapshot) body.snapshot.importedAt = "2026-10-06T06:00:00.000Z";
+    await route.fulfill({ response, json: body });
+  });
+});
+
+test("contrat structurel : collisions ciblées et textes longs", async ({ page }, testInfo) => {
+  await page.clock.setFixedTime(new Date("2026-10-06T08:00:00+02:00"));
+  const screens = ["01 Coup d'envoi", "03 Composition", "04 Coach", "05 BRIEF ÉQUIPE", "Import", "Guide", "Administrateur"];
+  for (const viewport of viewports) {
+    console.log(`[structure] ${viewport.name}`);
+    await page.setViewportSize(viewport);
+    await openMatchSheet(page);
+    const navigation = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
+    for (const slide of matchSlides) {
+      await navigation.getByRole("button", { name: `Aller à ${slide}`, exact: true }).click();
+      await page.waitForTimeout(350);
+      await assertNoHorizontalOverflow(page, viewport);
+      await assertFunctionalCollisions(page, `${viewport.name} / ${slide}`);
+    }
+    await navigation.getByRole("button", { name: `Aller à ${matchSlides[0]}`, exact: true }).click();
+    // DOM-only fixture: no saved plan, API write or business value is changed.
+    await page.locator(".match-indicator-card:not(.is-mercato)").evaluateAll((cards) => {
+      for (const card of cards) {
+        const title = card.querySelector("h3");
+        const source = card.querySelector(".match-indicator-source");
+        if (title) title.textContent = "Indicateur opérationnel avec un intitulé volontairement long pour contrôler le retour à la ligne";
+        if (source) source.textContent = "Source documentaire de test avec une référence longue et plusieurs précisions opérationnelles à conserver intégralement.";
+      }
+    });
+    await assertFunctionalCollisions(page, `${viewport.name} / KPI longs`);
+    await assertTextNotClipped(page, ".match-indicator-card:not(.is-mercato)", viewport.name);
+    if (viewport.reference) await page.screenshot({ path: testInfo.outputPath(`${viewport.name}-long-kpi.png`), fullPage: true });
+    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+    await assertFullyVisible(navigation.locator(".match-carousel-count"), `${viewport.name} / compteur après défilement`);
+    await assertFullyVisible(navigation.getByRole("button", { name: "Section suivante", exact: true }), `${viewport.name} / navigation après défilement`);
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
+    await assertFunctionalCollisions(page, `${viewport.name} / KPI longs en célébration`);
+    await assertTextNotClipped(page, ".match-indicator-card:not(.is-mercato)", `${viewport.name} / célébration`);
+    await page.getByRole("button", { name: "Sortir du mode Célébration", exact: true }).click();
+    for (const screen of screens) {
+      // Secondary navigation items include a small MAJ/ADM prefix.
+      await page.locator(".sidebar").getByRole("button", { name: screen, exact: !["Import", "Guide", "Administrateur"].includes(screen) }).click();
+      await page.waitForTimeout(350);
+      await assertNoHorizontalOverflow(page, viewport);
+      await assertFunctionalCollisions(page, `${viewport.name} / ${screen}`);
+      if (screen === "03 Composition") {
+        await page.locator(".formation-player-copy strong").evaluateAll((nodes) => {
+          for (const node of nodes) node.textContent = "Alexandre Jean-Baptiste Dupont-Martin";
+        });
+        await assertFunctionalCollisions(page, `${viewport.name} / noms longs`);
+        await assertTextNotClipped(page, ".formation-player", viewport.name);
+        await page.getByRole("button", { name: "Mode terrain", exact: true }).click();
+        await assertNoHorizontalOverflow(page, viewport);
+        await assertFunctionalCollisions(page, `${viewport.name} / mode terrain`);
+        await assertTextNotClipped(page, ".formation-player", `${viewport.name} / mode terrain`);
+        await page.getByRole("button", { name: "Sortir du mode Terrain", exact: true }).click();
+      }
+      if (screen === "04 Coach" || screen === "05 BRIEF ÉQUIPE") {
+        const selector = screen === "04 Coach" ? ".coach-action-entry" : ".tv-plan-column";
+        await page.locator(selector).evaluateAll((nodes) => {
+          for (const node of nodes) {
+            const text = node.matches(".tv-plan-column") ? node.querySelector(".tv-plan-content, .tv-plan-empty-state") : node;
+            if (text) {
+              const content = "Consigne de test : vérifier les priorités et les responsabilités avec chaque équipe avant la prochaine opération. ".repeat(8);
+              if (text.matches(".tv-plan-empty-state")) {
+                const replacement = document.createElement("span");
+                replacement.className = "tv-plan-content";
+                replacement.textContent = content;
+                text.replaceWith(replacement);
+              } else text.textContent = content;
+            }
+          }
+        });
+        await assertFunctionalCollisions(page, `${viewport.name} / consignes longues`);
+        await assertTextNotClipped(page, selector, viewport.name);
+        if (screen === "04 Coach") {
+          await page.getByRole("button", { name: "Mode briefing", exact: true }).click();
+          await assertNoHorizontalOverflow(page, viewport);
+          await assertFunctionalCollisions(page, `${viewport.name} / Coach briefing`);
+          await assertTextNotClipped(page, selector, `${viewport.name} / Coach briefing`);
+          await page.getByRole("button", { name: "Quitter le mode plein écran", exact: true }).click();
+        }
+      }
+      if (viewport.reference) await page.screenshot({ path: testInfo.outputPath(`${viewport.name}-${screen.replace(/[^a-z0-9]/gi, "-")}.png`), fullPage: true });
+      if (screen === "05 BRIEF ÉQUIPE") await page.getByRole("button", { name: "Quitter le brief équipe", exact: true }).click();
+    }
+  }
+});
+
+async function assertFunctionalCollisions(page: Page, label: string) {
+  const collisions = await page.evaluate(() => {
+    const selectors = [
+      ".top-bar", ".top-actions", ".time-range-control", ".match-carousel-navigation",
+      ".kickoff-header", ".kickoff-header-actions", ".tv-header",
+      ".match-ceremony-header", ".match-section-heading", ".awards-heading",
+      ".match-indicators-heading", ".match-indicators-navigation",
+      ".match-indicator-card:not(.is-mercato)", ".match-score-bubble",
+      ".formation-player-copy", ".formation-row", ".formation-rows", ".formation-zone", ".formation-pitch",
+      ".composition-layout", ".composition-header", ".coach-decision-header",
+      ".coach-section-heading", ".coach-plan-heading", ".coach-action-card",
+      ".tv-action-heading", ".tv-plan-grid", ".tv-plan-column", ".match-coach-plan > header",
+      ".match-carousel-controls", ".operational-charts-carousel-toolbar",
+    ];
+    return selectors.flatMap((selector) => [...document.querySelectorAll<HTMLElement>(selector)].flatMap((parent) => {
+      if (!parent.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return [];
+      if (parent.closest(".match-slide-panel:not(.is-active)")) return [];
+      const children = [...parent.children].filter((child) => child instanceof HTMLElement && child.getAttribute("aria-hidden") !== "true" && child.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) as HTMLElement[];
+      return children.flatMap((child, i) => children.slice(i + 1).flatMap((other) => {
+        const a = child.getBoundingClientRect();
+        const b = other.getBoundingClientRect();
+        const x = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+        const y = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+        return x > 2 && y > 2 ? [`${selector}: ${child.className || child.tagName} / ${other.className || other.tagName} (${Math.round(x)}x${Math.round(y)})`] : [];
+      }));
+    }));
+  });
+  expect(collisions, `${label}: collisions fonctionnelles`).toEqual([]);
+}
+
+async function assertTextNotClipped(page: Page, selector: string, label: string) {
+  const clipped = await page.locator(selector).evaluateAll((parents) => parents.flatMap((parent) => {
+    const root = parent as HTMLElement;
+    const style = getComputedStyle(root);
+    if (/hidden|clip/.test(style.overflowY) && root.scrollHeight > root.clientHeight + 2) return [`${root.className}: contenu vertical masqué`];
+    const descendants = [...root.querySelectorAll<HTMLElement>("h3, strong, small, p, .tv-plan-content")];
+    return descendants.flatMap((node) => {
+      if (!node.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return [];
+      const box = node.getBoundingClientRect();
+      const bounds = root.getBoundingClientRect();
+      const hidden = /hidden|clip/.test(style.overflowY);
+      return (hidden && (box.bottom > bounds.bottom + 2 || box.top < bounds.top - 2)) || (getComputedStyle(node).display !== "inline" && node.scrollWidth > node.clientWidth + 2)
+        ? [node.textContent?.slice(0, 80)] : [];
+    });
+  }));
+  expect(clipped, `${label}: texte rogné dans ${selector}`).toEqual([]);
+}
+
 test("recette responsive complète et références visuelles", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-10-06T08:00:00+02:00"));
   page.setDefaultTimeout(10_000);
   page.setDefaultNavigationTimeout(15_000);
   const browserErrors: string[] = [];
@@ -130,6 +278,7 @@ async function assertBriefSlide(page: Page, slideIndex: number, viewport: Viewpo
   await expect(active).toHaveCount(1);
   await expect(active).toBeVisible();
   await assertSlideGeometry(active, `slide Brief ${slideIndex + 1}`, viewport, { allowPageVerticalScroll: false });
+  await assertFunctionalCollisions(page, `${viewport.name} / Brief ${slideIndex + 1}`);
   await assertFullyVisible(exitButton, `sortie Brief slide ${slideIndex + 1}`);
 
   const navigation = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
@@ -161,6 +310,9 @@ async function assertOperationalCarousel(page: Page, label: string) {
     await expect(carousel.locator(".operational-charts-carousel-counter")).toHaveText(`${index + 1} / 4`);
     await expect(tabs.nth(index)).toHaveAttribute("aria-selected", "true");
     await page.waitForTimeout(650);
+    await expect(carousel.locator(".operational-charts-carousel-counter")).toHaveText(`${index + 1} / 4`);
+    await expect(tabs.nth(index)).toHaveAttribute("aria-selected", "true");
+    await assertTextNotClipped(page, ".operational-chart-slide.is-active > .performance-chart-panel, .operational-chart-slide.is-active > .loading-quality-card, .operational-chart-slide.is-active > .duel-quality-card", label);
     const geometry = await activeChart.evaluate((element) => {
       const card = element as HTMLElement;
       const cardRect = card.getBoundingClientRect();
@@ -310,7 +462,11 @@ async function assertNoHorizontalOverflow(page: Page, viewport: ViewportCase) {
 }
 
 async function captureReference(page: Page, scene: string, viewport: ViewportCase) {
-  await expect(page).toHaveScreenshot(`${viewport.name}-${scene}.png`, {
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: test.info().outputPath(`${viewport.name}-${scene}-full.png`), fullPage: !scene.startsWith("brief-") });
+  // Keep every comparison strict, but finish the geometry matrix even when
+  // an older image differs. Soft failures still fail the test.
+  await expect.soft(page).toHaveScreenshot(`${viewport.name}-${scene}.png`, {
     animations: "disabled",
     caret: "hide",
     maxDiffPixelRatio: 0.02,

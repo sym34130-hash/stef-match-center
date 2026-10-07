@@ -16,7 +16,9 @@
 .match-indicators-viewport.is-dragging { cursor: grabbing; user-select: none; scroll-behavior: auto; }
 .match-indicators-track { display: flex; gap: var(--indicator-gap, 16px); width: max-content; padding: 18px var(--indicator-padding) 24px; }
 .match-indicator-slide { position: relative; flex: 0 0 var(--indicator-width); width: var(--indicator-width); min-width: 0; }
-.match-indicator-card { display: grid; grid-template-rows: 48px minmax(0, 1fr) 94px; gap: 14px; height: 352px; width: 100%; padding: 20px; border: 1px solid #c6e0f23d; border-top: 2px solid var(--indicator-accent); border-radius: 8px; color: #fff; background: linear-gradient(150deg, #3e6380, #264762); box-shadow: 0 12px 24px -14px #061826a8, inset 0 1px 0 #ffffff12; opacity: var(--indicator-opacity, 1); transform: translateY(var(--indicator-lift, 0px)) scale(var(--indicator-scale, 1)); transform-origin: center; }
+/* Content owns the three tracks. Fixed presentation cards can scroll
+   internally; normal application cards grow in the main layout. */
+.match-indicator-card { display: grid; grid-template-rows: auto minmax(min-content, 1fr) auto; gap: 14px; height: 352px; width: 100%; overflow: auto; scrollbar-width: thin; padding: 20px; border: 1px solid #c6e0f23d; border-top: 2px solid var(--indicator-accent); border-radius: 8px; color: #fff; background: linear-gradient(150deg, #3e6380, #264762); box-shadow: 0 12px 24px -14px #061826a8, inset 0 1px 0 #ffffff12; opacity: var(--indicator-opacity, 1); transform: translateY(var(--indicator-lift, 0px)) scale(var(--indicator-scale, 1)); transform-origin: center; }
 .match-indicator-card.is-at-target,
 .match-indicator-card.is-below-target { border-color: #c6e0f23d; box-shadow: 0 12px 24px -14px #061826a8, inset 0 1px 0 #ffffff12; }
 .match-indicator-slide[data-featured] .match-indicator-card { box-shadow: 0 12px 24px -14px #061826a8, inset 0 1px 0 var(--league-glint, #ffffff22); }
@@ -118,7 +120,6 @@
   }
 
   .match-page.is-celebration-mode .match-indicator-card {
-    grid-template-rows: 28px minmax(0, 1fr) 42px;
     gap: 6px;
     height: 100%;
     min-height: 0;
