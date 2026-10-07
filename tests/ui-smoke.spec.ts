@@ -908,7 +908,7 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   const matchNavigation = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
   await matchNavigation.getByRole("button", { name: "Aller à Statistiques du match" }).click();
   await expect(page.locator(".performance-chart-panel")).toBeVisible();
-  await expect(page.getByRole("img", { name: "Évolution horaire du pourcentage de passes réussies" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Évolution horaire du pourcentage de passes réussies" })).toBeVisible();
   await expect(page.getByText("Donnée Excel Feuille de match, heure par heure", { exact: true })).toBeVisible();
   await expect(page.locator(".performance-chart-total b")).toHaveText("69,2%");
 

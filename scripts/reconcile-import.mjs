@@ -246,20 +246,20 @@ assert.deepEqual(unloadingAgencyQuality, {
 }, "Seule l'agence enrichit les voyages : compteurs, temps, positions, résultats et périmètre restent ceux du TCD");
 console.log("Régression Agence Segment OK : multi-agences, espace différent, majorité, égalité chronologique, agence absente, périmètre et garde-fou TCD");
 
-// Distinct hourly travels enrich the exact same rows as the pass counters.
-function hourlyTravelSnapshot(entries, excludedTravelCodes = [], chartRows = null) {
+// Arrival enrichment never changes the authoritative hourly pass counters.
+function hourlyTravelSnapshot(entries, excludedTravelCodes = [], chartRows = null, range = { start: "00:00", end: "03:00" }) {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
     [...rawLoadingDataHeaders, "Heure op"],
     ...entries.map((entry, index) => [
-      "Joueur", "11/09/2026 01:00:00", "DECHG", `P-${index}`, entry.travel ?? "", "058", "X",
+      "Joueur", `11/09/2026 ${entry.time ?? "01:00:00"}`, "DECHG", `P-${index}`, entry.travel ?? "", "058", "X",
       entry.operatorFilter ?? "", "", "Defenseur", entry.unzonedFilter ?? "", "", index % 2, entry.hour ?? "",
     ]),
   ]), "Données");
   if (chartRows) XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(chartRows), "X");
   const result = buildSnapshotFromWorkbook(
     XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }), "hourly-travels.xlsx", "058",
-    { start: "00:00", end: "03:00", excludedTravelCodes },
+    { ...range, excludedTravelCodes },
   );
   assert.equal(result.ok, true, "Le test voyages horaires doit être exploitable");
   return result.snapshot;
@@ -278,7 +278,12 @@ for (const [label, entries, exclusions, expected] of [
   ["aucun voyage renseigné", ["", null].map((travel) => ({ hour: 1, travel })), [], [{ label: "01h", hour: 1, won: 1, total: 2, rate: 50, travels: 0 }]],
 ]) {
   const result = hourlyTravelSnapshot(entries, exclusions);
-  assert.deepEqual(result.hourlyPerformance, expected, `Voyages distincts et compteurs inchangés : ${label}`);
+  const codes = [...new Set(entries.filter((entry) => entry.travel?.trim() && !exclusions.includes(entry.travel)).map((entry) => entry.travel))].sort();
+  assert.deepEqual(result.hourlyPerformance, expected.map((previous) => {
+    const item = { ...previous };
+    delete item.travels;
+    return { ...item, arrivingTravels: item.hour === 1 ? codes.length : 0, arrivingTravelCodes: item.hour === 1 ? codes : [] };
+  }), `Arrivées et compteurs inchangés : ${label}`);
   assert.equal(result.summary.passRate, 50, `Taux global inchangé : ${label}`);
   console.log(`Régression voyages horaires OK : ${label}`);
 }
@@ -286,12 +291,37 @@ const filteredHourlySnapshot = hourlyTravelSnapshot([
   { hour: 1, travel: "X001" }, { hour: 1, travel: "X002", operatorFilter: "exclu" },
   { hour: 1, travel: "X003", unzonedFilter: "exclu" }, { hour: 5, travel: "X004" },
 ]);
-assert.deepEqual(filteredHourlySnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 0, total: 1, rate: 0, travels: 1 }], "Voyages : mêmes filtres opérateur, zonage et plage que la série");
+assert.deepEqual(filteredHourlySnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 0, total: 1, rate: 0, arrivingTravels: 2, arrivingTravelCodes: ["X001", "X004"] }], "Arrivées : filtres permanents identiques, date réelle indépendante de Heure op");
 const hourlyFallbackSnapshot = hourlyTravelSnapshot([{ travel: "X001" }], [], [
   ["Heure op", "Duels perdus", "Duels gagnés", "", "Passes réussies", "", "Heure op", "Somme de % passes réussies"],
   [1, 1, 3, "", 0.75, "", 1, 0.75],
 ]);
-assert.deepEqual(hourlyFallbackSnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 3, total: 4, rate: 75, travels: null }], "Fallback : aucun nombre de voyages déduit des compteurs Excel");
+assert.deepEqual(hourlyFallbackSnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 3, total: 4, rate: 75, arrivingTravels: 1, arrivingTravelCodes: ["X001"] }], "Fallback : arrivées calculées depuis Données, jamais depuis les compteurs Excel");
+for (const [label, entries, range, exclusions, expected] of [
+  ["voyage multi-heures", [
+    { travel: "X001", time: "22:42:00", hour: 22 }, { travel: "X001", time: "23:03:00", hour: 23 }, { travel: "X001", time: "23:18:00", hour: 23 },
+  ], { start: "21:30", end: "06:30" }, [], [[22, ["X001"]], [23, []]]],
+  ["plusieurs arrivées et tri", [
+    { travel: "X003", time: "01:52:00", hour: 1 }, { travel: "X002", time: "01:17:00", hour: 1 }, { travel: "X001", time: "01:05:00", hour: 1 },
+    { travel: "X000", time: "01:05:00", hour: 1 },
+  ], { start: "00:00", end: "03:00" }, [], [[1, ["X000", "X001", "X002", "X003"]]]],
+  ["voyage commencé avant plage", [
+    { travel: "X001", time: "12:52:00", hour: 12 }, { travel: "X001", time: "13:05:00", hour: 13 }, { travel: "X001", time: "13:22:00", hour: 13 },
+  ], { start: "13:00", end: "22:30" }, [], [[13, []]]],
+  ["frontière horaire", [{ travel: "X001", time: "00:59:59", hour: 0 }, { travel: "X002", time: "01:00:00", hour: 1 }],
+    { start: "00:00", end: "03:00" }, [], [[0, ["X001"]], [1, ["X002"]]]],
+  ["voyage exclu", [{ travel: "X001", time: "01:05:00", hour: 1 }, { travel: "X002", time: "01:17:00", hour: 1 }],
+    { start: "00:00", end: "03:00" }, ["X001"], [[1, ["X002"]]]],
+  ["code vide", [{ travel: "", time: "01:05:00", hour: 1 }, { travel: null, time: "01:17:00", hour: 1 }],
+    { start: "00:00", end: "03:00" }, [], [[1, []]]],
+]) {
+  const result = hourlyTravelSnapshot(entries, exclusions, null, range);
+  assert.deepEqual(result.hourlyPerformance.map((item) => [item.hour, item.arrivingTravelCodes]), expected, label);
+  const allCodes = result.hourlyPerformance.flatMap((item) => item.arrivingTravelCodes);
+  assert.equal(new Set(allCodes).size, allCodes.length, `Unicité globale : ${label}`);
+  for (const item of result.hourlyPerformance) assert.equal(item.arrivingTravels, item.arrivingTravelCodes.length);
+  console.log(`Régression voyages arrivés OK : ${label}, unicité globale et compteur/liste`);
+}
 
 // Regression guard: French text dates must keep day/month order and a zonage
 // before a reception must not be used for that reception's delay.

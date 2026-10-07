@@ -1909,6 +1909,28 @@ function normalizedVolume(value, topValue) {
 }
 
 function buildHourlyPassPerformance(workbook, period, sourceRows = null) {
+  const arrivals = new Map();
+  const hasArrivalSource = Array.isArray(sourceRows) && sourceRows.some((row) => row.startedAt instanceof Date);
+  // Resolve the first operation before applying any time or chart-hour filter.
+  for (const row of sourceRows ?? []) {
+    if (!row.travelCode || !isExcelBlank(row.operatorFilter) || !isExcelBlank(row.unzonedFilter)) continue;
+    const previous = arrivals.get(row.travelCode);
+    if (!previous || row.startedAt < previous) arrivals.set(row.travelCode, row.startedAt);
+  }
+  const arrivingCodesByHour = new Map();
+  const orderedArrivals = [...arrivals].sort(([leftCode, leftDate], [rightCode, rightDate]) =>
+    leftDate - rightDate || leftCode.localeCompare(rightCode, "fr"));
+  for (const [code, date] of orderedArrivals) {
+    if (!isInActiveTimeRange(date, period)) continue;
+    const hour = Math.floor(parisMinutes(date) / 60);
+    const codes = arrivingCodesByHour.get(hour) ?? [];
+    codes.push(code);
+    arrivingCodesByHour.set(hour, codes);
+  }
+  const arrivalDetails = (hour) => {
+    const arrivingTravelCodes = arrivingCodesByHour.get(hour) ?? [];
+    return { arrivingTravels: hasArrivalSource ? arrivingTravelCodes.length : null, arrivingTravelCodes };
+  };
   if (Array.isArray(sourceRows) && sourceRows.some((row) => Number.isFinite(row?.hourOperation))) {
     const chartHours = readHourlyChartHours(workbook);
     const byHour = new Map();
@@ -1921,10 +1943,9 @@ function buildHourlyPassPerformance(workbook, period, sourceRows = null) {
         ? hourMinutes >= period.startMinutes || hourMinutes <= period.endMinutes
         : hourMinutes >= period.startMinutes && hourMinutes <= period.endMinutes;
       if (!inRange || (chartHours.size > 0 && !chartHours.has(hour))) continue;
-      const current = byHour.get(hour) ?? { won: 0, total: 0, travels: new Set() };
+      const current = byHour.get(hour) ?? { won: 0, total: 0 };
       current.total += 1;
       if (row.duelWonFlag === 1) current.won += 1;
-      if (row.travelCode) current.travels.add(row.travelCode);
       byHour.set(hour, current);
     }
     const values = Array.from(byHour.entries())
@@ -1935,7 +1956,7 @@ function buildHourlyPassPerformance(workbook, period, sourceRows = null) {
         won: value.won,
         total: value.total,
         rate: percent(value.won, value.total),
-        travels: value.travels.size,
+        ...arrivalDetails(hour),
       }));
     values.sort((a, b) => {
       const toOffset = (hour) => {
@@ -2019,7 +2040,7 @@ function buildHourlyPassPerformance(workbook, period, sourceRows = null) {
       won: summary?.won ?? null,
       total: summary?.total ?? null,
       rate: Math.round(rateFraction * 1000) / 10,
-      travels: null,
+      ...arrivalDetails(hour),
     });
   }
   values.sort((a, b) => {

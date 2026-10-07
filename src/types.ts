@@ -148,7 +148,8 @@ export type Snapshot = {
     won: number | null;
     total: number | null;
     rate: number;
-    travels?: number | null;
+    arrivingTravels?: number | null;
+    arrivingTravelCodes?: string[];
   }>;
   loadingQuality?: {
     targeted: number;

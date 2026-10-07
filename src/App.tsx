@@ -1,4 +1,5 @@
-import { FormEvent, useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
+import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
+import { createPortal } from "react-dom";
 import {
   AlertTriangle,
   Award,
@@ -1964,6 +1965,58 @@ function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pe
 }
 
 function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
+  const [arrivalDetail, setArrivalDetail] = useState<{ hour: string; codes: string[]; left: number; top: number; width: number; height: number } | null>(null);
+  const arrivalPanel = useRef<HTMLDivElement>(null);
+  const arrivalTrigger = useRef<SVGTextElement | null>(null);
+  useLayoutEffect(() => {
+    if (!arrivalDetail || !arrivalPanel.current || !arrivalTrigger.current) return;
+    const box = arrivalTrigger.current.getBoundingClientRect();
+    const height = arrivalPanel.current.getBoundingClientRect().height;
+    const below = box.bottom + 8;
+    const desiredTop = below + height <= window.innerHeight - 12 ? below : box.top - height - 8;
+    const top = Math.max(12, Math.min(desiredTop, window.innerHeight - height - 12));
+    if (top !== arrivalDetail.top) setArrivalDetail({ ...arrivalDetail, top });
+  }, [arrivalDetail]);
+  useEffect(() => {
+    if (!arrivalDetail) return;
+    const outside = (event: PointerEvent) => {
+      if (!arrivalPanel.current?.contains(event.target as Node) && !arrivalTrigger.current?.contains(event.target as Node)) setArrivalDetail(null);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setArrivalDetail(null);
+        arrivalTrigger.current?.focus({ preventScroll: true });
+      }
+    };
+    const reposition = () => setArrivalDetail(null);
+    const scroll = (event: Event) => {
+      if (!(event.target instanceof Node) || !arrivalPanel.current?.contains(event.target)) setArrivalDetail(null);
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("resize", reposition);
+    document.addEventListener("scroll", scroll, true);
+    arrivalPanel.current?.focus({ preventScroll: true });
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("resize", reposition);
+      document.removeEventListener("scroll", scroll, true);
+    };
+  }, [arrivalDetail]);
+  const openArrivals = (trigger: SVGTextElement, hour: string, codes: string[]) => {
+    trigger.focus({ preventScroll: true });
+    if (arrivalDetail?.hour === hour) { setArrivalDetail(null); return; }
+    arrivalTrigger.current = trigger;
+    const box = trigger.getBoundingClientRect();
+    const width = Math.min(320, window.innerWidth - 24);
+    const height = Math.min(360, window.innerHeight - 24);
+    const left = Math.max(12, Math.min(box.left, window.innerWidth - width - 12));
+    const below = box.bottom + 8;
+    const desiredTop = below + height <= window.innerHeight - 12 ? below : box.top - height - 8;
+    const top = Math.max(12, Math.min(desiredTop, window.innerHeight - height - 12));
+    setArrivalDetail({ hour, codes, left, top, width, height });
+  };
   const data = snapshot.hourlyPerformance ?? [];
   // The chart total is scoped to the displayed hourly series. The operational
   // score is a separate four-indicator contract and must not replace it.
@@ -1973,9 +2026,9 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const width = 1440;
   const height = 600;
   const left = 92;
-  const right = 42;
+  const right = data.some((item) => item.arrivingTravels != null) ? 92 : 42;
   const top = 30;
-  const bottom = data.some((item) => item.travels != null) ? 100 : 76;
+  const bottom = data.some((item) => item.arrivingTravels != null) ? 100 : 76;
   const chartWidth = width - left - right;
   const chartHeight = height - top - bottom;
   const points = data.map((item, index) => ({
@@ -1985,8 +2038,8 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   }));
   // Keep the detail lines below neighboring curve segments, especially at peaks.
   const detailBases = points.map((point, index) => {
-    if (point.travels == null) return point.y;
-    const radius = index === 0 || index === points.length - 1 ? 110 : 60;
+    if (point.arrivingTravels == null) return point.y;
+    const radius = 90;
     const neighbors = [points[index - 1], points[index + 1]].filter(Boolean);
     return Math.max(point.y, ...neighbors.map((neighbor) => (
       point.y + (neighbor.y - point.y) * Math.min(radius / Math.abs(neighbor.x - point.x), 1)
@@ -2011,7 +2064,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
         </div>
       </div>
       {data.length > 0 ? (
-        <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label="Évolution horaire du pourcentage de passes réussies">
+        <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="group" aria-label="Évolution horaire du pourcentage de passes réussies">
           <rect className="performance-chart-plot" x={left} y={top} width={chartWidth} height={chartHeight} rx="10" />
           {[0, 20, 40, 60, 80, 100].map((value) => {
             const y = top + ((100 - value) / 100) * chartHeight;
@@ -2024,9 +2077,13 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
               <circle cx={point.x} cy={point.y} r="6" />
               <text x={point.x} y={point.y - 14}>{point.rate}%</text>
               <text className="performance-chart-volume" x={point.x} y={detailBases[index] + 25}>{point.won !== null && point.total !== null ? `${point.won}/${point.total}` : "Excel"}</text>
-              {point.travels != null && (
-                <text className="performance-chart-travels" x={point.x} y={detailBases[index] + 46} style={{ textAnchor: points.length === 1 ? "middle" : index === 0 ? "start" : index === points.length - 1 ? "end" : "middle" }}>
-                  {point.travels} {point.travels === 1 ? "voyage" : "voyages"}
+              {point.arrivingTravels != null && point.arrivingTravelCodes?.length === point.arrivingTravels && (
+                <text className="performance-chart-travels" x={point.x} y={detailBases[index] + 46}
+                  role="button" tabIndex={0} aria-expanded={arrivalDetail?.hour === point.label} aria-controls="hourly-arrivals-detail"
+                  aria-label={`${point.arrivingTravels} ${point.arrivingTravels === 1 ? "voyage arrivé" : "voyages arrivés"} à ${point.label}`}
+                  onClick={(event) => openArrivals(event.currentTarget, point.label, point.arrivingTravelCodes!)}
+                  onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openArrivals(event.currentTarget, point.label, point.arrivingTravelCodes!); } }}>
+                  {point.arrivingTravels} {point.arrivingTravels === 1 ? "voyage arrivé" : "voyages arrivés"}
                 </text>
               )}
               <text className="performance-chart-hour" x={point.x} y={height - 20}>{point.label}</text>
@@ -2035,6 +2092,14 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
         </svg>
       ) : (
         <div className="performance-chart-empty">Aucune donnée horaire disponible sur cette plage.</div>
+      )}
+      {arrivalDetail && createPortal(
+        <div ref={arrivalPanel} id="hourly-arrivals-detail" className="hourly-arrivals-detail" role="dialog" aria-label={`Voyages arrivés à ${arrivalDetail.hour}`} tabIndex={-1}
+          style={{ left: arrivalDetail.left, top: arrivalDetail.top, width: arrivalDetail.width, maxHeight: arrivalDetail.height }}>
+          <div className="hourly-arrivals-heading"><strong>Voyages arrivés à {arrivalDetail.hour}</strong><button type="button" aria-label="Fermer les voyages arrivés" onClick={() => { setArrivalDetail(null); arrivalTrigger.current?.focus({ preventScroll: true }); }}><XCircle size={18} /></button></div>
+          <ul>{arrivalDetail.codes.map((code) => <li key={code}>{code}</li>)}</ul>
+          <small>{arrivalDetail.codes.length} {arrivalDetail.codes.length === 1 ? "voyage" : "voyages"}</small>
+        </div>, document.body,
       )}
     </div>
   );
