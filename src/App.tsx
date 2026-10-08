@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 import { createPortal } from "react-dom";
+import { ceremonyPolyvalents } from "./ceremony-selection";
 import {
   AlertTriangle,
   Award,
@@ -1564,9 +1565,12 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
                 const player = playersByName.get(award.highlight.name);
                 const jersey = formatJerseyNumber(jerseyNumbers.get(award.highlight.name) ?? index + 1);
                 const role = player?.role ?? award.highlight.role;
-                const challengers = buildAwardChallengers(snapshot.players, award);
+                const candidates = award.kind === "polyvalent"
+                  ? ceremonyPolyvalents(snapshot.players, awards.filter((item) => item.kind !== "polyvalent").map((item) => item.highlight.name))
+                  : snapshot.players;
+                const challengers = buildAwardChallengers(candidates, award);
                 const leaderScore = awardReferenceScore(award, player);
-                const className = `award-card ${award.kind} ${roleClass(role)}`;
+                const className = `award-card ${award.kind}`;
                 const disabled = !player;
                 return (
                   <button
@@ -1601,11 +1605,19 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
                         </span>
                       )) : <small>Aucun challenger disponible</small>}
                     </span>
-                    <span className="podium-step" aria-hidden="true">{award.podiumLabel}</span>
-                    <em>Voir sa fiche</em>
+                    <span className="award-footer">
+                      <span className="podium-step" aria-hidden="true">{award.podiumLabel}</span>
+                      <em>Voir sa fiche</em>
+                    </span>
                   </button>
                 );
               })}
+              {!awards.some((award) => award.kind === "polyvalent") && (
+                <div className="award-card polyvalent award-unavailable">
+                  <span className="award-copy"><i>Meilleur polyvalent</i><strong>Aucun candidat disponible</strong><small>Aucun autre joueur éligible à cette distinction.</small></span>
+                  <span className="award-footer"><span className="podium-step">Polyvalence</span></span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="award-empty-state">
@@ -1965,6 +1977,35 @@ function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pe
 }
 
 function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
+  const [expanded, setExpanded] = useState(false);
+  const [selectedHour, setSelectedHour] = useState<string | null>(null);
+  const expandedPanel = useRef<HTMLDialogElement>(null);
+  const expandTrigger = useRef<HTMLButtonElement>(null);
+  const closeExpanded = () => {
+    setArrivalDetail(null);
+    expandedPanel.current?.close();
+    setExpanded(false);
+    expandTrigger.current?.focus({ preventScroll: true });
+  };
+  useEffect(() => {
+    if (!expanded || !expandedPanel.current) return;
+    const dialog = expandedPanel.current;
+    dialog.showModal();
+    dialog.querySelector<HTMLButtonElement>(".performance-chart-close")?.focus({ preventScroll: true });
+    // Lock background scrolling without removing its scrollbar or moving it.
+    const lockScroll = (event: WheelEvent | TouchEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const scrollable = target?.closest(".performance-chart-expanded-scroll, .hourly-arrivals-detail ul");
+      if (!scrollable || !dialog.contains(scrollable) || (scrollable.scrollHeight <= scrollable.clientHeight && scrollable.scrollWidth <= scrollable.clientWidth)) event.preventDefault();
+    };
+    window.addEventListener("wheel", lockScroll, { passive: false });
+    window.addEventListener("touchmove", lockScroll, { passive: false });
+    return () => {
+      window.removeEventListener("wheel", lockScroll);
+      window.removeEventListener("touchmove", lockScroll);
+      dialog.close();
+    };
+  }, [expanded]);
   const [arrivalDetail, setArrivalDetail] = useState<{ hour: string; codes: string[]; left: number; top: number; width: number; height: number } | null>(null);
   const arrivalPanel = useRef<HTMLDivElement>(null);
   const arrivalTrigger = useRef<SVGTextElement | null>(null);
@@ -1972,9 +2013,12 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
     if (!arrivalDetail || !arrivalPanel.current || !arrivalTrigger.current) return;
     const box = arrivalTrigger.current.getBoundingClientRect();
     const height = arrivalPanel.current.getBoundingClientRect().height;
+    const minTop = expandedPanel.current?.open
+      ? (expandedPanel.current.querySelector(".performance-chart-heading")?.getBoundingClientRect().bottom ?? 4) + 8
+      : 12;
     const below = box.bottom + 8;
     const desiredTop = below + height <= window.innerHeight - 12 ? below : box.top - height - 8;
-    const top = Math.max(12, Math.min(desiredTop, window.innerHeight - height - 12));
+    const top = Math.max(minTop, Math.min(desiredTop, window.innerHeight - height - 12));
     if (top !== arrivalDetail.top) setArrivalDetail({ ...arrivalDetail, top });
   }, [arrivalDetail]);
   useEffect(() => {
@@ -1989,8 +2033,13 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
       }
     };
     const reposition = () => setArrivalDetail(null);
+    const anchor = arrivalTrigger.current?.getBoundingClientRect();
     const scroll = (event: Event) => {
-      if (!(event.target instanceof Node) || !arrivalPanel.current?.contains(event.target)) setArrivalDetail(null);
+      if (event.target instanceof Node && arrivalPanel.current?.contains(event.target)) return;
+      const current = arrivalTrigger.current?.getBoundingClientRect();
+      // Focus can queue a scroll event before the detail opens; ignore it if its anchor has not moved.
+      if (expandedPanel.current?.open && anchor && current && current.left === anchor.left && current.top === anchor.top) return;
+      setArrivalDetail(null);
     };
     document.addEventListener("pointerdown", outside);
     document.addEventListener("keydown", escape);
@@ -2005,6 +2054,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
     };
   }, [arrivalDetail]);
   const openArrivals = (trigger: SVGTextElement, hour: string, codes: string[]) => {
+    setSelectedHour(hour);
     trigger.focus({ preventScroll: true });
     if (arrivalDetail?.hour === hour) { setArrivalDetail(null); return; }
     arrivalTrigger.current = trigger;
@@ -2050,20 +2100,28 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
     ? `${path} L ${points[points.length - 1].x} ${top + chartHeight} L ${points[0].x} ${top + chartHeight} Z`
     : "";
 
-  return (
-    <div className="performance-chart-panel">
+  const heading = (large: boolean) => (
       <div className="performance-chart-heading">
         <div>
           <span>Performance horaire</span>
           <strong>% passes réussies</strong>
           <small className="performance-chart-caption">Donnée Excel Feuille de match, heure par heure</small>
         </div>
-        <div className="performance-chart-total">
+        <div className="performance-chart-actions">
+          <div className="performance-chart-total">
           <small>Total</small>
           <b>{formatPercent(totalPassRate)}</b>
+          </div>
+          {large ? (
+            <button className="secondary-button compact performance-chart-close" type="button" aria-label="Fermer le graphique agrandi" title="Fermer" onClick={closeExpanded}><XCircle size={22} /></button>
+          ) : (
+            <button ref={expandTrigger} className="secondary-button compact performance-chart-expand" type="button" aria-label="Agrandir le graphique" title="Agrandir le graphique"
+              onClick={() => { setArrivalDetail(null); setExpanded(true); }}><Maximize2 size={16} />Agrandir</button>
+          )}
         </div>
       </div>
-      {data.length > 0 ? (
+  );
+  const chart = (large = false) => data.length > 0 ? (
         <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="group" aria-label="Évolution horaire du pourcentage de passes réussies">
           <rect className="performance-chart-plot" x={left} y={top} width={chartWidth} height={chartHeight} rx="10" />
           {[0, 20, 40, 60, 80, 100].map((value) => {
@@ -2073,13 +2131,13 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
           <path className="performance-chart-area" d={areaPath} />
           <path className="performance-chart-line" d={path} />
           {points.map((point, index) => (
-            <g className="performance-chart-point" key={point.label}>
+            <g className={`performance-chart-point${selectedHour === point.label ? " is-selected" : ""}`} key={point.label}>
               <circle cx={point.x} cy={point.y} r="6" />
-              <text x={point.x} y={point.y - 14}>{point.rate}%</text>
-              <text className="performance-chart-volume" x={point.x} y={detailBases[index] + 25}>{point.won !== null && point.total !== null ? `${point.won}/${point.total}` : "Excel"}</text>
+              <text x={point.x + (large && index === 0 ? 38 : 0)} y={point.y - (large ? 24 : 14)}>{point.rate}%</text>
+              <text className="performance-chart-volume" x={point.x + (large && index === 0 ? 70 : 0)} y={detailBases[index] + 25}>{point.won !== null && point.total !== null ? `${point.won}/${point.total}` : "Excel"}</text>
               {point.arrivingTravels != null && point.arrivingTravelCodes?.length === point.arrivingTravels && (
-                <text className="performance-chart-travels" x={point.x} y={detailBases[index] + 46}
-                  role="button" tabIndex={0} aria-expanded={arrivalDetail?.hour === point.label} aria-controls="hourly-arrivals-detail"
+                <text className="performance-chart-travels" x={point.x + (large && index === 0 ? 70 : 0)} y={detailBases[index] + (large ? 56 : 46)}
+                  role="button" tabIndex={0} aria-pressed={selectedHour === point.label} aria-expanded={arrivalDetail?.hour === point.label} aria-controls="hourly-arrivals-detail"
                   aria-label={`${point.arrivingTravels} ${point.arrivingTravels === 1 ? "voyage arrivé" : "voyages arrivés"} à ${point.label}`}
                   onClick={(event) => openArrivals(event.currentTarget, point.label, point.arrivingTravelCodes!)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openArrivals(event.currentTarget, point.label, point.arrivingTravelCodes!); } }}>
@@ -2092,6 +2150,31 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
         </svg>
       ) : (
         <div className="performance-chart-empty">Aucune donnée horaire disponible sur cette plage.</div>
+      );
+  return (
+    <div className="performance-chart-panel">
+      {heading(false)}
+      {chart()}
+      {expanded && createPortal(
+        <dialog ref={expandedPanel} className="performance-chart-expanded" aria-label="Graphique Performance horaire agrandi" aria-modal="true"
+          onKeyDown={(event) => {
+            if (event.key === "Escape" && arrivalDetail) {
+              event.preventDefault();
+              event.stopPropagation();
+              setArrivalDetail(null);
+              arrivalTrigger.current?.focus({ preventScroll: true });
+              return;
+            }
+            if (event.key !== "Tab") return;
+            const controls = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), [tabindex="0"]')];
+            const destination = event.shiftKey && document.activeElement === controls[0] ? controls.at(-1)
+              : !event.shiftKey && document.activeElement === controls.at(-1) ? controls[0] : null;
+            if (destination) { event.preventDefault(); destination.focus({ preventScroll: true }); }
+          }}
+          onCancel={(event) => { event.preventDefault(); closeExpanded(); }}>
+          {heading(true)}
+          <div className="performance-chart-expanded-scroll">{chart(true)}</div>
+        </dialog>, document.body,
       )}
       {arrivalDetail && createPortal(
         <div ref={arrivalPanel} id="hourly-arrivals-detail" className="hourly-arrivals-detail" role="dialog" aria-label={`Voyages arrivés à ${arrivalDetail.hour}`} tabIndex={-1}
@@ -2099,7 +2182,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
           <div className="hourly-arrivals-heading"><strong>Voyages arrivés à {arrivalDetail.hour}</strong><button type="button" aria-label="Fermer les voyages arrivés" onClick={() => { setArrivalDetail(null); arrivalTrigger.current?.focus({ preventScroll: true }); }}><XCircle size={18} /></button></div>
           <ul>{arrivalDetail.codes.map((code) => <li key={code}>{code}</li>)}</ul>
           <small>{arrivalDetail.codes.length} {arrivalDetail.codes.length === 1 ? "voyage" : "voyages"}</small>
-        </div>, document.body,
+        </div>, expanded && expandedPanel.current ? expandedPanel.current : document.body,
       )}
     </div>
   );
@@ -4145,6 +4228,9 @@ function teamMotivationMessage(footballScore: FootballScore): string {
 }
 
 function buildAwardItems(snapshot: Snapshot): MatchAward[] {
+  const winners = [snapshot.highlights.bestScorer, snapshot.highlights.defensiveWall, snapshot.highlights.bestPasser]
+    .flatMap((highlight) => highlight ? [highlight.name] : []);
+  const polyvalent = ceremonyPolyvalents(snapshot.players, winners)[0];
   return [
     {
       kind: "attack",
@@ -4169,10 +4255,10 @@ function buildAwardItems(snapshot: Snapshot): MatchAward[] {
     },
     {
       kind: "polyvalent",
-      label: "Meilleur joueur",
+      label: "Meilleur polyvalent",
       symbol: "ALL",
       podiumLabel: "Polyvalence",
-      highlight: playerHighlight(snapshot.coach.polyvalents[0], "Polyvalence", "Joueur le plus polyvalent"),
+      highlight: playerHighlight(polyvalent, "Polyvalence", "Joueur le plus polyvalent non déjà récompensé"),
     },
   ].filter((award): award is MatchAward => Boolean(award.highlight));
 }

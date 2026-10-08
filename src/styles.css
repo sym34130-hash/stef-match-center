@@ -2945,6 +2945,103 @@ body.match-celebration-active .main-area {
   gap: 16px;
 }
 
+.performance-chart-heading > div:first-child {
+  min-width: 0;
+}
+
+.performance-chart-actions {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: start;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.performance-chart-point.is-selected circle {
+  stroke: var(--navy-900);
+}
+
+.performance-chart-expanded {
+  position: fixed;
+  inset: 12px;
+  z-index: 10001;
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 20px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--green-field);
+  border-radius: 8px;
+  background: #f8fbff;
+  color: var(--navy-900);
+}
+
+.performance-chart-expanded[open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.performance-chart-expanded::backdrop {
+  background: rgba(7, 24, 51, 0.7);
+}
+
+.performance-chart-expanded-scroll {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.performance-chart-expanded .hourly-arrivals-detail ul {
+  overscroll-behavior: contain;
+}
+
+.performance-chart-expanded .performance-chart {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+}
+
+.performance-chart-expanded .performance-chart g > text {
+  font-size: 18px;
+}
+
+.performance-chart-expanded .performance-chart-point > text:first-of-type {
+  font-size: 22px;
+}
+
+.performance-chart-expanded .performance-chart-point .performance-chart-volume,
+.performance-chart-expanded .performance-chart-point .performance-chart-travels {
+  font-size: 18px;
+}
+
+.performance-chart-expanded .performance-chart-point .performance-chart-hour {
+  font-size: 20px;
+}
+
+@media (max-width: 900px) {
+  .performance-chart-expanded {
+    inset: 8px;
+    padding: 12px;
+  }
+
+  .performance-chart-expanded .performance-chart {
+    min-width: 1120px;
+    min-height: 480px;
+  }
+}
+
+@media (max-width: 640px) {
+  .performance-chart-actions {
+    grid-template-columns: auto;
+    justify-items: end;
+  }
+}
+
 .performance-chart-heading span,
 .performance-chart-total small {
   display: block;
@@ -9778,6 +9875,9 @@ body.tv-screen-active .tv-mode {
   isolation: isolate;
   min-height: 292px;
   padding: 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   overflow: hidden;
   border-color: rgba(72, 199, 142, 0.28);
   background:
@@ -9845,6 +9945,28 @@ body.tv-screen-active .tv-mode {
   z-index: 1;
 }
 
+.category-awards .award-card > * {
+  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.category-awards .award-footer {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.category-awards .award-footer > em {
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  color: var(--blue-stef);
+  text-transform: uppercase;
+}
+
 .category-awards .award-symbol {
   color: var(--navy-950);
   background:
@@ -9892,10 +10014,8 @@ body.tv-screen-active .tv-mode {
 }
 
 .award-challenger b {
-  overflow: hidden;
   font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .award-challenger small,
@@ -19399,6 +19519,39 @@ body.match-celebration-active .main-area {
   }
 }
 
+/* This intermediate presentation canvas cannot fit stacked result/KPI rows.
+   Give them separate columns without shrinking text or clipping card details. */
+@media (min-width: 1201px) and (max-width: 1599px) and (min-height: 821px) and (max-height: 960px) {
+  .match-page.is-celebration-mode .match-ceremony.is-active {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-ceremony-header {
+    grid-column: 1 / -1;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony-header > div:first-child > span:not(.active-period-badge) {
+    display: inline;
+    margin-right: 10px;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony-header .active-period-badge {
+    display: inline-flex;
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-result-stage {
+    box-sizing: border-box;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(250px, .9fr) minmax(0, 1.1fr);
+  }
+
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-result-visual {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: stretch;
+  }
+}
+
 @media (min-width: 901px) and (max-width: 1200px) {
   .performance-chart g > text {
     font-size: 20px;
@@ -19418,8 +19571,8 @@ body.match-celebration-active .main-area {
   }
 
   .match-page.is-celebration-mode .category-awards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .match-page.is-celebration-mode .category-awards .award-card {
@@ -19507,6 +19660,21 @@ body.match-celebration-active .main-area {
 /* Short laptop screens need a denser first slide so the result block keeps a
    real row instead of being squeezed between the header and KPI carousel. */
 @media (min-width: 901px) and (max-height: 820px) {
+  .match-page.is-celebration-mode .category-awards .award-card {
+    gap: 6px;
+    padding: 12px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .award-footer {
+    gap: 6px;
+    padding-top: 4px;
+  }
+
+  .match-page.is-celebration-mode .category-awards .podium-step {
+    min-height: 40px;
+    padding-block: 6px;
+  }
+
   .match-page.is-celebration-mode .match-ceremony.is-active {
     grid-template-rows: auto minmax(180px, .92fr) minmax(0, 1fr);
     gap: 8px;
@@ -20575,7 +20743,7 @@ body.match-celebration-active .main-area {
     font-size: 10px;
   }
 
-  .match-page.is-celebration-mode .category-awards .award-card > em {
+  .match-page.is-celebration-mode .category-awards .award-footer > em {
     font-size: 9px;
   }
 

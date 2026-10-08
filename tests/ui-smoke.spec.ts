@@ -645,12 +645,12 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".award-card.midfield:not(.polyvalent) .award-copy > i")).toHaveText("Meilleur passeur");
       await expect(page.locator(".award-card.midfield:not(.polyvalent) .award-copy > strong")).toHaveText("MORGAN JOUY");
       await expect(page.locator(".award-card.defense .award-copy > i")).toHaveText("Meilleur défenseur");
-      await expect(page.locator(".award-card.polyvalent .award-copy > i")).toHaveText("Meilleur joueur");
+      await expect(page.locator(".award-card.polyvalent .award-copy > i")).toHaveText("Meilleur polyvalent");
       await expect(page.locator(".award-card.defense .award-copy > strong")).toHaveText("SYLVIE JACQUIER");
       await expect(page.locator(".award-card.polyvalent .award-leader-score b")).toHaveText(/\d+%/);
       await expect(page.locator(".award-card.polyvalent .award-leader-score small")).toHaveText("polyvalence");
-      await expect(page.locator(".award-card.polyvalent .award-copy strong")).toHaveText("MORGAN JOUY");
-      await expect(page.locator(".award-card.polyvalent .award-leader-score b")).toHaveText("39%");
+      await expect(page.locator(".award-card.polyvalent .award-copy strong")).toHaveText("JÉRÔME COLOMBI");
+      await expect(page.locator(".award-card.polyvalent .award-leader-score b")).toHaveText("31%");
       await expect(page.locator(".award-card.polyvalent .award-challenger")).toHaveCount(2);
       await expect(page.locator(".award-card.midfield .award-challenger").first()).toContainText("227 poz · -9 avec le premier");
       for (const kind of ["attack", "midfield", "defense"]) {
