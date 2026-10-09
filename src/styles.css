@@ -15405,6 +15405,47 @@ kbd {
   margin-top: 4px;
 }
 
+/* Editing and illustrated briefs keep text before an independently scrolling gallery. */
+.tv-mode:has(.tv-action.is-editing),
+.tv-mode:has(.tv-plan-image-gallery) {
+  align-content: start;
+}
+
+.tv-action.is-editing .tv-plan-column,
+.tv-action .tv-plan-column:has(.tv-plan-image-gallery) {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.tv-action.is-editing .tv-plan-column > *,
+.tv-action .tv-plan-column:has(.tv-plan-image-gallery) > * {
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.tv-action.is-editing .tv-plan-column textarea {
+  height: 160px;
+  min-height: 120px;
+}
+
+.tv-action .tv-plan-column .tv-plan-image-gallery {
+  min-width: 0;
+  max-height: min(190px, 25svh);
+  overflow: auto;
+  grid-auto-rows: max-content;
+  align-content: start;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+
+.tv-action .tv-plan-image-gallery img {
+  height: 190px;
+  max-height: 190px;
+  max-width: 100%;
+  object-fit: contain;
+}
+
 .tv-plan-image-item {
   position: relative;
 }
