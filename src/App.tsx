@@ -1,6 +1,8 @@
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 import { createPortal } from "react-dom";
 import { ceremonyPolyvalents } from "./ceremony-selection";
+import { formatKpiDuration } from "./kpi-duration";
+import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout } from "../server/brief-layout.mjs";
 import {
   AlertTriangle,
   Award,
@@ -55,6 +57,7 @@ type CauserieContentZone = "attack" | "midfield" | "defense";
 type CauserieAttachments = Record<CauserieContentZone, string[]>;
 
 type CauseriePlan = {
+  briefLayoutVersion: number;
   team: string;
   manager: string;
   updatedAt: string | null;
@@ -1303,7 +1306,8 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const mercatoProfiles = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.mercatoProfiles ?? {} : {};
   const redCards = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.redCards ?? "" : "";
   const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
-  const loadingTarget = formatReadableDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
+  const loadingTarget = formatKpiDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
+  const unloadingTarget = formatKpiDuration(snapshot.performanceCriteria?.unloadingSeconds ?? leagueConfig.unloadingSeconds);
   const scoreIndicators = operationalScoreIndicators(snapshot);
   const footballScore = buildFootballScore(snapshot, snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent);
   const thresholdReached = footballScore.available && footballScore.goalsFor > footballScore.goalsAgainst;
@@ -1490,17 +1494,17 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
               <div className={`match-score-bubble loading-score-bubble ${Number.isFinite(scoreIndicators.loadingPercent) ? "" : "is-data-unavailable"}`}>
                 <span>% tirs cadrés</span>
                 <strong>{formatPercent(scoreIndicators.loadingPercent)}</strong>
-                <small>Chargement avec une moyenne<br />inférieure ou égale à {loadingTarget}/poz</small>
+                <small>Voyages chargés en {loadingTarget} ou moins par position</small>
               </div>
               <div className={`match-score-bubble reception-score-bubble ${Number.isFinite(scoreIndicators.unloadingPercent) ? "" : "is-data-unavailable"}`}>
                 <span>% duels gagnés</span>
                 <strong>{formatPercent(scoreIndicators.unloadingPercent)}</strong>
-                <small>Voyages dans la cible selon le temps maximum par position</small>
+                <small>Voyages réceptionnés en {unloadingTarget} ou moins par position</small>
               </div>
               <div className={`match-score-bubble possession-score-bubble ${Number.isFinite(scoreIndicators.possessionPercent) ? "" : "is-data-unavailable"}`}>
                 <span>% possession</span>
                 <strong>{formatPercent(scoreIndicators.possessionPercent)}</strong>
-                <small>Zonage dynamique</small>
+                <small>Positions zonées</small>
               </div>
             </div>
           </div>
@@ -3267,7 +3271,7 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
           {([
             ["attack", "SAV"],
             ["midfield", "Expédition"],
-            ["defense", "Ramasse & emballage"],
+            ["defense", "SST"],
           ] as const).map(([zone, label]) => (
             <div className={`tv-plan-column ${zone}`} key={zone}>
               <b>{label}</b>
@@ -3275,7 +3279,7 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
                 <>
                   <textarea
                     value={planDraft[zone].filter(Boolean).join("\n")}
-                    maxLength={500}
+                    maxLength={Math.max(BRIEF_TEXT_LIMITS[zone], planDraft[zone].filter(Boolean).join("\n").length)}
                     aria-label={`${label}, contenu du brief`}
                     placeholder="Écris ici les consignes, points de vigilance ou éléments à afficher."
                     rows={10}
@@ -3293,9 +3297,9 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
                         const files = Array.from(event.target.files ?? []);
                         if (!files.length) return;
                         const currentAttachments = planDraft.attachments[zone];
-                        const remaining = Math.max(0, 12 - currentAttachments.length);
+                        const remaining = Math.max(0, BRIEF_CAPTURE_LIMITS[zone] - currentAttachments.length);
                         if (!remaining) {
-                          setFeedback({ title: "Limite de captures atteinte", detail: `La zone ${label} peut contenir jusqu'à 12 captures.`, tone: "warning" });
+                          setFeedback({ title: "Limite de captures atteinte", detail: `La zone ${label} peut contenir jusqu'à ${BRIEF_CAPTURE_LIMITS[zone]} captures.`, tone: "warning" });
                           event.target.value = "";
                           return;
                         }
@@ -3743,7 +3747,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                 <GuideScreenCard step="02" title="Feuille de match" detail="La feuille de match se parcourt en quatre slides : Coup de sifflet final et collectif en chiffres, Cérémonie des performances, Statistiques du match, puis Brief équipe. Le score compare les pourcentages de passes réussies, de tirs cadrés, de duels gagnés et de possession à l’objectif de la ligue." />
               <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. Compare le match complet, les deux mi-temps ou les quatre quarts calculés depuis la plage active. Une vue personnalisée permet aussi d’isoler une sous-plage, par exemple 1 heure, sans modifier les indicateurs du match. L’activité Réception correspond au scan de la palette." />
                 <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, titres par catégorie, polyvalence, sujets à travailler et prochaines actions." />
-                <GuideScreenCard step="05" title="Brief équipe" detail="Vue dédiée aux consignes : trois grandes zones visibles, empilées verticalement : SAV, Expédition, Ramasse & emballage. Chaque zone accepte du texte et plusieurs captures d’écran, avec affichage plein écran." />
+                <GuideScreenCard step="05" title="Brief équipe" detail="Vue dédiée aux consignes : SAV, Expédition et SST. Expédition regroupe aussi le périmètre précédemment appelé Ramasse & emballage. SST est une zone indépendante, vide jusqu’à sa saisie. Chaque zone accepte du texte et des captures, avec affichage plein écran." />
               </div>
               <div className="guide-legend"><span className="legend-dot green" /> Vert = acquis ou action positive <span className="legend-dot orange" /> Orange = à surveiller <span className="legend-dot red" /> Rouge = action prioritaire</div>
               <div className="guide-callout info"><Shield size={20} /><span><strong>Réception dans l’application :</strong> le code interne <code>DECHG</code> reste inchangé pour les calculs, mais l’interface affiche <strong>Réception</strong>. Il s’agit du scan de la palette à la réception ; au déchargement, la palette est déposée en travée.</span></div>
@@ -3756,7 +3760,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
               <div className="guide-edit-grid">
                 <GuideEditCard title="Dans Feuille de match" detail="Modifier les chiffres permet de renseigner les blessures A.T et l'effectif prévu. Le carrousel Le collectif en chiffres conserve les positions calculées depuis l'Excel filtré. Le tonnage Expédition et les taux journaliers viennent du PDF 106J ; ils affichent PDF à importer tant que ce rapport n'a pas été chargé." />
                 <GuideEditCard title="Dans Coach" detail="Cliquez sur Écrire dans le tableau du coach, complétez Tactique, Priorité, Arbitrage et Revue, puis Enregistrer." />
-              <GuideEditCard title="Dans le brief équipe" detail="Cliquez sur Écrire. Les trois zones sont empilées et entièrement visibles : saisissez les consignes dans SAV, Expédition ou Ramasse & emballage, ajoutez plusieurs captures si nécessaire, puis enregistrez." />
+              <GuideEditCard title="Dans le brief équipe" detail="Cliquez sur Écrire. Saisissez les consignes dans SAV, Expédition ou SST, ajoutez des captures si nécessaire, puis enregistrez. Les anciens textes et captures Ramasse & emballage sont conservés dans Expédition ; SST reste indépendant." />
               </div>
               <div className="guide-callout success"><CheckCircle2 size={20} /><span><strong>À retenir :</strong> les chiffres manuels sont mémorisés pour l’agence et le match affichés sur ce poste. Ils complètent la lecture opérationnelle sans modifier le fichier source importé.</span></div>
               <div className="guide-callout info"><Upload size={20} /><span><strong>Ajouter une capture d’écran :</strong> dans chaque zone du brief équipe, cliquez sur <strong>Ajouter une capture d’écran</strong>, puis choisissez une image PNG, JPG ou WebP. L’image est redimensionnée automatiquement, affichée dans la zone correspondante et sauvegardée avec le texte. Chaque catégorie conserve sa propre capture.</span></div>
@@ -4386,7 +4390,13 @@ function causerieStorageKey(snapshot: Snapshot) {
 function readLocalCauseriePlan(snapshot: Snapshot): CauseriePlan | null {
   try {
     const saved = readStorageValue("local", causerieStorageKey(snapshot));
-    return saved ? normalizeCauseriePlan(JSON.parse(saved)) : null;
+    if (!saved) return null;
+    const stored = JSON.parse(saved);
+    const normalized = normalizeCauseriePlan(stored);
+    if (!(Number(stored?.briefLayoutVersion) >= BRIEF_LAYOUT_VERSION)) {
+      writeLocalCauseriePlan(snapshot, normalized);
+    }
+    return normalized;
   } catch {
     return null;
   }
@@ -4471,6 +4481,7 @@ function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
     team: "",
     manager: "",
     updatedAt: null,
+    briefLayoutVersion: BRIEF_LAYOUT_VERSION,
     attack: padPlanLines([
       priority,
       objective,
@@ -4480,12 +4491,11 @@ function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
       arbitration,
       weakRole ? `Équilibre terrain : ${displayRole(weakRole.role)} à ${Math.round(weakRole.percent)}% des joueurs.` : "",
       snapshot.summary.operationCounts.ZONAGE ? `${formatNumber(snapshot.summary.operationCounts.ZONAGE)} opérations ZONAGE.` : "",
-    ]),
-    defense: padPlanLines([
       risk,
       late > 0 ? `${late} position(s) à sécuriser.` : "Risque principal maîtrisé sur le dernier import.",
       snapshot.summary.operationCounts.DECHG ? `${formatNumber(snapshot.summary.operationCounts.DECHG)} opérations de réception.` : "",
     ]),
+    defense: padPlanLines([]),
     attachments: {
       attack: [],
       midfield: [],
@@ -4505,6 +4515,7 @@ function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
 
 function buildEmptyCauseriePlan(): CauseriePlan {
   return {
+    briefLayoutVersion: BRIEF_LAYOUT_VERSION,
     team: "",
     manager: "",
     updatedAt: null,
@@ -4531,21 +4542,23 @@ function buildEmptyCauseriePlan(): CauseriePlan {
 function normalizeCauseriePlan(plan: Partial<CauseriePlan> | null | undefined): CauseriePlan {
   const fallback = buildEmptyCauseriePlan();
   const input = plan && typeof plan === "object" ? plan : fallback;
+  const layout = migrateBriefLayout(input);
   const text = (value: unknown, fallbackValue = "") => typeof value === "string" ? value : fallbackValue;
   const planLines = (value: unknown) => padPlanLines(Array.isArray(value) ? value.filter((line): line is string => typeof line === "string") : []);
   const updatedAt = typeof input.updatedAt === "string" ? input.updatedAt : null;
   const mercato = text(input.mercato);
   return {
+    briefLayoutVersion: BRIEF_LAYOUT_VERSION,
     team: text(input.team, fallback.team),
     manager: text(input.manager, fallback.manager),
     updatedAt,
-    attack: planLines(input.attack),
-    midfield: planLines(input.midfield),
-    defense: planLines(input.defense),
+    attack: planLines(layout.attack),
+    midfield: planLines(layout.midfield),
+    defense: planLines(layout.defense),
     attachments: {
-      attack: normalizeCauserieAttachments(input.attachments?.attack, fallback.attachments.attack),
-      midfield: normalizeCauserieAttachments(input.attachments?.midfield, fallback.attachments.midfield),
-      defense: normalizeCauserieAttachments(input.attachments?.defense, fallback.attachments.defense),
+      attack: layout.attachments.attack,
+      midfield: layout.attachments.midfield,
+      defense: layout.attachments.defense,
     },
     mercato,
     mercatoProfiles: normalizeMercatoProfiles(input.mercatoProfiles, mercato),
@@ -4593,24 +4606,19 @@ function hasManualCauserieContent(plan: CauseriePlan, snapshot: Snapshot) {
   });
 }
 
-function normalizeCauserieAttachments(value: string[] | string | null | undefined, fallback: string[]) {
-  if (Array.isArray(value)) return value.filter((item): item is string => typeof item === "string").slice(0, 12);
-  return typeof value === "string" && value ? [value] : fallback;
-}
-
 function findCauserieValue(snapshot: Snapshot, label: string) {
   const normalizedLabel = label.toLowerCase();
   return snapshot.causerie.find((item) => item.label.toLowerCase().includes(normalizedLabel))?.value ?? "";
 }
 
 function cleanPlanLines(lines: string[]) {
-  return lines.map((line) => line.trim()).filter(Boolean).slice(0, 3);
+  return lines.filter((line) => line.trim());
 }
 
 function padPlanLines(lines: string[]) {
   const cleaned = cleanPlanLines(lines);
   while (cleaned.length < 3) cleaned.push("");
-  return cleaned.slice(0, 3);
+  return cleaned;
 }
 
 function matchAction(snapshot: Snapshot) {

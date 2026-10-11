@@ -7,6 +7,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, isTimeRangeWithin, KPI_DICTIONARY_VERSION, normalizePerformanceCriteria, normalizeSnapshotContract, normalizeTimeRange } from "./match-engine.mjs";
 import { parse106jPdf } from "./pdf-106j.mjs";
+import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout } from "./brief-layout.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,7 +38,7 @@ app.use(securityHeaders);
 
 // A plan can contain several resized captures; keep the JSON body bounded but
 // large enough for the client-side gallery limit.
-app.use(express.json({ limit: "10mb" }));
+app.use(express.json({ limit: "14mb" }));
 
 const agencies = await loadAgencies();
 
@@ -420,7 +421,15 @@ app.post("/api/agencies/:agencyCode/causerie", requireAgency, async (req, res) =
     return;
   }
 
-  const plan = normalizeCauseriePlan(req.body?.plan);
+  const layout = migrateBriefLayout(req.body?.plan);
+  const oversizedZone = ["attack", "midfield", "defense"].find((zone) =>
+    layout[zone].filter(Boolean).join("\n").length > BRIEF_TEXT_LIMITS[zone]
+    || layout.attachments[zone].length > BRIEF_CAPTURE_LIMITS[zone]);
+  if (oversizedZone) {
+    res.status(400).json({ title: "BRIEF NON ENREGISTRÉ", message: "La capacité de texte ou de captures d'une zone est dépassée. Aucun contenu n'a été supprimé." });
+    return;
+  }
+  const plan = normalizeCauseriePlan(layout);
   await withAgencyLock(req.agency.code, () => saveCauseriePlan(req.agency.code, matchDate, plan));
   res.json({
     message: "PLAN DE JEU ENREGISTRÉ",
@@ -1066,7 +1075,12 @@ async function readLatestWorkbook(agencyDir) {
 async function readCauseriePlan(agencyCode, matchDate) {
   const causeriePath = path.join(dataDir, sanitizeSegment(agencyCode), "causeries", `${sanitizeSegment(matchDate)}.json`);
   try {
-    return JSON.parse(await fs.readFile(causeriePath, "utf8"));
+    const stored = JSON.parse(await fs.readFile(causeriePath, "utf8"));
+    const migrated = migrateBriefLayout(stored);
+    if (!(Number(stored?.briefLayoutVersion) >= BRIEF_LAYOUT_VERSION)) {
+      await saveCauseriePlan(agencyCode, matchDate, migrated);
+    }
+    return migrated;
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
     return null;
@@ -1080,8 +1094,9 @@ async function saveCauseriePlan(agencyCode, matchDate, plan) {
 }
 
 function normalizeCauseriePlan(plan) {
-  const input = plan && typeof plan === "object" ? plan : {};
+  const input = migrateBriefLayout(plan);
   return {
+    briefLayoutVersion: BRIEF_LAYOUT_VERSION,
     team: limitText(input.team, 48),
     manager: limitText(input.manager, 48),
     updatedAt: new Date().toISOString(),
@@ -1090,7 +1105,7 @@ function normalizeCauseriePlan(plan) {
     defense: normalizeLines(input.defense),
     attachments: {
       attack: normalizeAttachments(input.attachments?.attack),
-      midfield: normalizeAttachments(input.attachments?.midfield),
+      midfield: normalizeAttachments(input.attachments?.midfield, BRIEF_CAPTURE_LIMITS.midfield),
       defense: normalizeAttachments(input.attachments?.defense),
     },
     mercato: limitMultilineText(input.mercato, 240),
@@ -1117,19 +1132,19 @@ function normalizeMercatoProfiles(value) {
 
 function normalizeLines(lines) {
   const clean = Array.isArray(lines)
-    ? lines.map((line) => limitMultilineText(line, 500)).filter(Boolean).slice(0, 3)
+    ? lines.filter((line) => typeof line === "string" && line.trim())
     : [];
   while (clean.length < 3) clean.push("");
   return clean;
 }
 
-function normalizeAttachments(value) {
+function normalizeAttachments(value, limit = 12) {
   const values = Array.isArray(value) ? value : [value];
   return values
     .filter((item) => typeof item === "string")
     .map((item) => item.trim())
     .filter((image) => /^data:image\/(jpeg|png|webp);base64,/.test(image) && image.length <= 260_000)
-    .slice(0, 12);
+    .slice(0, limit);
 }
 
 function limitMultilineText(value, maxLength) {

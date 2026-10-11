@@ -15405,21 +15405,24 @@ kbd {
   margin-top: 4px;
 }
 
-/* Editing and illustrated briefs keep text before an independently scrolling gallery. */
+/* Brief text stays uncompressed before an independently scrolling gallery. */
 .tv-mode:has(.tv-action.is-editing),
-.tv-mode:has(.tv-plan-image-gallery) {
+.tv-mode:has(.tv-plan-image-gallery),
+.tv-mode:has(.tv-plan-content) {
   align-content: start;
 }
 
 .tv-action.is-editing .tv-plan-column,
-.tv-action .tv-plan-column:has(.tv-plan-image-gallery) {
+.tv-action .tv-plan-column:has(.tv-plan-image-gallery),
+.tv-action .tv-plan-column:has(.tv-plan-content) {
   display: flex;
   flex-direction: column;
   overflow: auto;
 }
 
 .tv-action.is-editing .tv-plan-column > *,
-.tv-action .tv-plan-column:has(.tv-plan-image-gallery) > * {
+.tv-action .tv-plan-column:has(.tv-plan-image-gallery) > *,
+.tv-action .tv-plan-column:has(.tv-plan-content) > * {
   flex-shrink: 0;
   min-width: 0;
 }

@@ -144,7 +144,7 @@ try {
   const oversizedPlanResponse = await fetch(`${baseUrl}/api/session`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ payload: "x".repeat(10 * 1024 * 1024) }),
+    body: JSON.stringify({ payload: "x".repeat(14 * 1024 * 1024) }),
   });
   const oversizedPlanPayload = await oversizedPlanResponse.json();
   assert.equal(oversizedPlanResponse.status, 413, JSON.stringify(oversizedPlanPayload));
@@ -445,6 +445,9 @@ try {
   });
   const causeriePayload = await causerieResponse.json();
   assert.equal(causerieResponse.status, 200, JSON.stringify(causeriePayload));
+  assert.equal(causeriePayload.plan.briefLayoutVersion, 2, "Un ancien plan doit être migré en version 2");
+  assert.deepEqual(causeriePayload.plan.midfield, ["Contrôle snapshot", "Contrôle stockage", ""]);
+  assert.deepEqual(causeriePayload.plan.defense, ["", "", ""], "SST ne doit pas hériter de Ramasse");
   assert.equal(causeriePayload.plan.mercato, mercatoText, "Le texte Mercato doit être conservé par l'API");
   assert.equal(causeriePayload.plan.attachments.attack.length, 2, "Les captures multiples de la zone attaque doivent être conservées");
   assert.equal(causeriePayload.plan.attachments.midfield.length, 1, "La capture de la zone milieu doit être conservée");
@@ -477,6 +480,46 @@ try {
   assert.equal(await fileExists(expectedCauseriePath), true, "La causerie doit être écrite dans STEF_DATA_DIR");
   const savedCauserie = JSON.parse(await fs.readFile(expectedCauseriePath, "utf8"));
   assert.equal(savedCauserie.attachments.attack.length, 2, "Les captures multiples doivent être persistées dans STEF_DATA_DIR");
+
+  const legacyPlan = {
+    ...causeriePayload.plan,
+    briefLayoutVersion: 1,
+    midfield: ["E".repeat(500), "F".repeat(500), "G".repeat(500)],
+    defense: ["R".repeat(500), "S".repeat(500), "T".repeat(500)],
+    attachments: { attack: [], midfield: Array(12).fill(tinyAttachment), defense: Array(12).fill(tinyAttachment) },
+  };
+  await fs.writeFile(expectedCauseriePath, JSON.stringify(legacyPlan), "utf8");
+  const readBrief = async () => (await (await fetch(`${baseUrl}/api/agencies/${agencyCode}/causerie?matchDate=${encodeURIComponent(snapshot.match.date)}`, { headers: leagueConfigHeaders })).json()).plan;
+  const migratedBrief = await readBrief();
+  assert.equal(migratedBrief.briefLayoutVersion, 2);
+  assert.deepEqual(migratedBrief.midfield, [...legacyPlan.midfield, ...legacyPlan.defense]);
+  assert.equal(migratedBrief.attachments.midfield.length, 24);
+  assert.deepEqual(migratedBrief.defense, []);
+  assert.deepEqual(await readBrief(), migratedBrief, "La relecture ne doit pas migrer deux fois");
+  assert.deepEqual(JSON.parse(await fs.readFile(expectedCauseriePath, "utf8")), migratedBrief, "La migration doit être persistée");
+  const sstPlan = { ...migratedBrief, defense: ["Brief sécurité"], attachments: { ...migratedBrief.attachments, defense: [tinyAttachment] } };
+  const sstResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/causerie`, {
+    method: "POST", headers: { ...leagueConfigHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({ matchDate: snapshot.match.date, plan: sstPlan }),
+  });
+  assert.equal(sstResponse.status, 200);
+  const sstRead = await readBrief();
+  assert.deepEqual(sstRead.defense, ["Brief sécurité", "", ""]);
+  assert.equal(sstRead.attachments.defense.length, 1);
+  assert.deepEqual(sstRead.midfield, migratedBrief.midfield);
+  assert.equal(sstRead.attachments.midfield.length, 24);
+  for (const excess of [
+    { ...sstRead, midfield: ["X".repeat(3006)] },
+    { ...sstRead, attachments: { ...sstRead.attachments, midfield: Array(25).fill(tinyAttachment) } },
+  ]) {
+    const refused = await fetch(`${baseUrl}/api/agencies/${agencyCode}/causerie`, {
+      method: "POST", headers: { ...leagueConfigHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({ matchDate: snapshot.match.date, plan: excess }),
+    });
+    assert.equal(refused.status, 400, "Un dépassement doit être refusé, pas tronqué");
+    assert.deepEqual(await readBrief(), sstRead, "Un refus ne doit pas modifier le brief enregistré");
+  }
+  console.log("Migration Brief API : texte, 24 captures, persistance, idempotence et SST indépendant OK");
 
   await fs.writeFile(expectedCauseriePath, "{ invalid causerie", "utf8");
   const corruptedCauserieSyncResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/sync-state?matchDate=${encodeURIComponent(snapshot.match.date)}`, { headers: leagueConfigHeaders });

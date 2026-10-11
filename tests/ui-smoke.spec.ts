@@ -100,7 +100,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".tv-plan-column")).toHaveCount(3);
       await expect(page.getByText("SAV", { exact: true })).toBeVisible();
       await expect(page.getByText("Expédition", { exact: true })).toBeVisible();
-      await expect(page.getByText("Ramasse & emballage", { exact: true })).toBeVisible();
+      await expect(page.getByText("SST", { exact: true })).toBeVisible();
       await expect(page.getByText("Brief à renseigner", { exact: true })).toHaveCount(3);
     } else if (screen.name === "02-feuille-match") {
       await expect(page.locator(".match-ceremony.is-active")).toBeVisible();
@@ -573,7 +573,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".match-score-bubbles").getByText("% passes réussies", { exact: true })).toBeVisible();
       await expect(page.locator(".match-score-bubble.pass-score-bubble strong")).toHaveText("69,2%");
       await expect(page.locator(".match-score-bubbles").getByText("% tirs cadrés", { exact: true })).toBeVisible();
-      await expect(page.locator(".loading-score-bubble")).toContainText("inférieure ou égale à 2 min 45 s/poz");
+      await expect(page.locator(".loading-score-bubble")).toContainText("Voyages chargés en 2 min 45 ou moins par position");
       await expect(page.locator(".loading-score-bubble strong")).toHaveText("94,3%");
       await expect(page.locator(".football-score-panel")).toHaveCount(1);
       await expect(page.locator(".football-score-side-for strong")).toHaveText("4");
@@ -787,7 +787,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
   await expect(page.getByRole("dialog", { name: "Capture agrandie SAV · capture 1", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Annuler", exact: true }).click();
   await page.getByRole("button", { name: "Écrire", exact: true }).click();
-  for (const label of ["SAV", "Expédition", "Ramasse & emballage"]) {
+  for (const label of ["SAV", "Expédition", "SST"]) {
     await page.getByLabel(`${label}, contenu du brief`).fill("");
   }
   await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
@@ -1337,7 +1337,7 @@ test("le brief équipe porte ses zones et son mode plein écran", async ({ page 
   await expect(page.locator(".tv-plan-column")).toHaveCount(3);
   await expect(page.getByText("SAV", { exact: true })).toBeVisible();
   await expect(page.getByText("Expédition", { exact: true })).toBeVisible();
-  await expect(page.getByText("Ramasse & emballage", { exact: true })).toBeVisible();
+  await expect(page.getByText("SST", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Quitter le brief équipe", exact: true })).toBeVisible();
   await assertNoHorizontalOverflow(page);
 });

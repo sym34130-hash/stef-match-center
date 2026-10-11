@@ -41,7 +41,7 @@ test("captures du brief : texte prioritaire, galerie indépendante et édition c
         if (screen === "fullscreen") await page.getByRole("button", { name: "Mode plein écran", exact: true }).click();
       }
       await page.getByRole("button", { name: "Écrire", exact: true }).click();
-      for (const label of ["SAV", "Expédition", "Ramasse & emballage"]) {
+      for (const label of ["SAV", "Expédition", "SST"]) {
         const column = page.locator(".tv-plan-column").filter({ has: page.getByLabel(`${label}, contenu du brief`) });
         await column.evaluate((element) => Promise.all(element.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => undefined))));
         while (await column.locator(".tv-plan-image-item").count()) await column.getByRole("button", { name: /^Supprimer la capture/ }).last().click();
