@@ -25,12 +25,18 @@ test("Brief v2 : migration sans perte, SST indépendant et relecture", async ({ 
   await page.getByRole("button", { name: "05 BRIEF ÉQUIPE", exact: true }).click();
   const exp = page.locator(".tv-plan-column.midfield");
   const sst = page.locator(".tv-plan-column.defense");
+  await expect(page.locator(".tv-plan-column > b")).toHaveText(["SAV", "EXPÉDITION / RAMASSE & EMBALLAGE", "SST"]);
   await expect(exp.locator(".tv-plan-content")).toHaveText([...expedition, ...ramasse].join("\n"));
   await expect(exp.locator("img")).toHaveCount(24);
   await expect(sst.locator(".tv-plan-empty-state")).toBeVisible();
   await expect(sst.locator("img")).toHaveCount(0);
+  for (const index of [1, 13]) {
+    await exp.getByRole("button", { name: `Agrandir la capture EXPÉDITION / RAMASSE & EMBALLAGE ${index}`, exact: true }).click();
+    await expect(page.getByRole("dialog", { name: `Capture agrandie EXPÉDITION / RAMASSE & EMBALLAGE · capture ${index}`, exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+  }
   await page.getByRole("button", { name: "Écrire", exact: true }).click();
-  await expect(page.getByLabel("Expédition, contenu du brief")).toHaveValue([...expedition, ...ramasse].join("\n"));
+  await expect(page.getByLabel("EXPÉDITION / RAMASSE & EMBALLAGE, contenu du brief")).toHaveValue([...expedition, ...ramasse].join("\n"));
   await page.getByLabel("SST, contenu du brief").fill("Brief sécurité");
   await page.getByLabel("SST, capture d'écran").setInputFiles({ name: "sst.png", mimeType: "image/png", buffer: Buffer.from(image.split(",")[1], "base64") });
   await expect(sst.locator(".tv-plan-image-item")).toHaveCount(1);
@@ -45,7 +51,7 @@ test("Brief v2 : migration sans perte, SST indépendant et relecture", async ({ 
   await expect(exp.locator("img")).toHaveCount(24);
   await page.getByRole("button", { name: "Écrire", exact: true }).click();
   const editedExpedition = [...expedition, ...ramasse].join("\n").replace(/^E0/, "EX");
-  await page.getByLabel("Expédition, contenu du brief").fill(editedExpedition);
+  await page.getByLabel("EXPÉDITION / RAMASSE & EMBALLAGE, contenu du brief").fill(editedExpedition);
   await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
   await expect(sst.locator(".tv-plan-content")).toHaveText("Brief sécurité");
   await expect(sst.locator("img")).toHaveCount(1);
@@ -67,6 +73,8 @@ test("Brief v2 : migration sans perte, SST indépendant et relecture", async ({ 
         if (celebration) await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
         await nav.getByRole("button", { name: "Aller à Brief équipe", exact: true }).click();
         await expect(sst.locator("b")).toHaveText("SST");
+        await expect(exp.locator("b")).toHaveText("EXPÉDITION / RAMASSE & EMBALLAGE");
+        expect(await exp.locator("b").evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
         await expect(exp.locator(".tv-plan-content")).toHaveText(editedExpedition);
         await expect(exp.locator("img")).toHaveCount(withCaptures ? 24 : 0);
         await expect(sst.locator(".tv-plan-content")).toHaveText("Brief sécurité");
@@ -79,4 +87,30 @@ test("Brief v2 : migration sans perte, SST indépendant et relecture", async ({ 
       await page.getByRole("button", { name: "05 BRIEF ÉQUIPE", exact: true }).click();
     }
   }
+});
+
+test("Nouveau brief : trois zones explicites et SST indépendant", async ({ page }) => {
+  const snapshot = JSON.parse(readFileSync("data/agencies/058/latest.json", "utf8"));
+  let stored: Record<string, unknown> | null = null;
+  await page.route("**/api/agencies/058/snapshot**", route => route.fulfill({ json: { snapshot } }));
+  await page.route("**/api/agencies/058/causerie**", async route => {
+    if (route.request().method() === "POST") stored = route.request().postDataJSON().plan;
+    await route.fulfill({ json: { plan: stored } });
+  });
+  await page.goto("/");
+  await page.getByLabel("Code agence").selectOption("058");
+  await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
+  await page.getByRole("button", { name: "Accéder au match", exact: true }).click();
+  await page.getByRole("button", { name: "05 BRIEF ÉQUIPE", exact: true }).click();
+  await expect(page.locator(".tv-plan-column > b")).toHaveText(["SAV", "EXPÉDITION / RAMASSE & EMBALLAGE", "SST"]);
+  await expect(page.locator(".tv-plan-empty-state")).toHaveCount(3);
+  await page.getByRole("button", { name: "Écrire", exact: true }).click();
+  await page.getByLabel("EXPÉDITION / RAMASSE & EMBALLAGE, contenu du brief").fill("Consignes expédition\nConsignes ramasse et emballage");
+  await page.getByLabel("SST, contenu du brief").fill("Consignes sécurité indépendantes");
+  await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Écrire", exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "05 BRIEF ÉQUIPE", exact: true }).click();
+  await expect(page.locator(".midfield .tv-plan-content")).toHaveText("Consignes expédition\nConsignes ramasse et emballage");
+  await expect(page.locator(".defense .tv-plan-content")).toHaveText("Consignes sécurité indépendantes");
 });

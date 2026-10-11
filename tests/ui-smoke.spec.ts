@@ -99,7 +99,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".tv-grid").getByText("OPÉRATIONS", { exact: true })).toHaveCount(0);
       await expect(page.locator(".tv-plan-column")).toHaveCount(3);
       await expect(page.getByText("SAV", { exact: true })).toBeVisible();
-      await expect(page.getByText("Expédition", { exact: true })).toBeVisible();
+      await expect(page.getByText("EXPÉDITION / RAMASSE & EMBALLAGE", { exact: true })).toBeVisible();
       await expect(page.getByText("SST", { exact: true })).toBeVisible();
       await expect(page.getByText("Brief à renseigner", { exact: true })).toHaveCount(3);
     } else if (screen.name === "02-feuille-match") {
@@ -787,7 +787,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
   await expect(page.getByRole("dialog", { name: "Capture agrandie SAV · capture 1", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Annuler", exact: true }).click();
   await page.getByRole("button", { name: "Écrire", exact: true }).click();
-  for (const label of ["SAV", "Expédition", "SST"]) {
+  for (const label of ["SAV", "EXPÉDITION / RAMASSE & EMBALLAGE", "SST"]) {
     await page.getByLabel(`${label}, contenu du brief`).fill("");
   }
   await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
@@ -1336,7 +1336,7 @@ test("le brief équipe porte ses zones et son mode plein écran", async ({ page 
   await expect(page.locator(".tv-action-heading").getByText("BRIEF ÉQUIPE", { exact: true })).toBeVisible();
   await expect(page.locator(".tv-plan-column")).toHaveCount(3);
   await expect(page.getByText("SAV", { exact: true })).toBeVisible();
-  await expect(page.getByText("Expédition", { exact: true })).toBeVisible();
+  await expect(page.getByText("EXPÉDITION / RAMASSE & EMBALLAGE", { exact: true })).toBeVisible();
   await expect(page.getByText("SST", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Quitter le brief équipe", exact: true })).toBeVisible();
   await assertNoHorizontalOverflow(page);

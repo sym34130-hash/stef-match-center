@@ -1489,7 +1489,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
               <div className={`match-score-bubble pass-score-bubble ${Number.isFinite(scoreIndicators.passRate) ? "" : "is-data-unavailable"}`}>
                 <span>% passes réussies</span>
                 <strong>{formatPercent(scoreIndicators.passRate)}</strong>
-                <small>Part des passes réussies parmi toutes les passes contrôlées<br />pendant la période sélectionnée</small>
+                <small>Positions zonées en {snapshot.performanceCriteria?.zonageMinutes ?? leagueConfig.zonageMinutes} min ou moins</small>
               </div>
               <div className={`match-score-bubble loading-score-bubble ${Number.isFinite(scoreIndicators.loadingPercent) ? "" : "is-data-unavailable"}`}>
                 <span>% tirs cadrés</span>
@@ -3270,7 +3270,7 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
         <div className="tv-plan-grid">
           {([
             ["attack", "SAV"],
-            ["midfield", "Expédition"],
+            ["midfield", "EXPÉDITION / RAMASSE & EMBALLAGE"],
             ["defense", "SST"],
           ] as const).map(([zone, label]) => (
             <div className={`tv-plan-column ${zone}`} key={zone}>
@@ -3747,7 +3747,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                 <GuideScreenCard step="02" title="Feuille de match" detail="La feuille de match se parcourt en quatre slides : Coup de sifflet final et collectif en chiffres, Cérémonie des performances, Statistiques du match, puis Brief équipe. Le score compare les pourcentages de passes réussies, de tirs cadrés, de duels gagnés et de possession à l’objectif de la ligue." />
               <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. Compare le match complet, les deux mi-temps ou les quatre quarts calculés depuis la plage active. Une vue personnalisée permet aussi d’isoler une sous-plage, par exemple 1 heure, sans modifier les indicateurs du match. L’activité Réception correspond au scan de la palette." />
                 <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, titres par catégorie, polyvalence, sujets à travailler et prochaines actions." />
-                <GuideScreenCard step="05" title="Brief équipe" detail="Vue dédiée aux consignes : SAV, Expédition et SST. Expédition regroupe aussi le périmètre précédemment appelé Ramasse & emballage. SST est une zone indépendante, vide jusqu’à sa saisie. Chaque zone accepte du texte et des captures, avec affichage plein écran." />
+                <GuideScreenCard step="05" title="Brief équipe" detail="Vue dédiée aux consignes : SAV, EXPÉDITION / RAMASSE & EMBALLAGE et SST. La zone centrale réunit les textes et captures des deux anciens périmètres. SST est une zone indépendante, vide jusqu’à sa saisie. Chaque zone accepte du texte et des captures, avec affichage plein écran." />
               </div>
               <div className="guide-legend"><span className="legend-dot green" /> Vert = acquis ou action positive <span className="legend-dot orange" /> Orange = à surveiller <span className="legend-dot red" /> Rouge = action prioritaire</div>
               <div className="guide-callout info"><Shield size={20} /><span><strong>Réception dans l’application :</strong> le code interne <code>DECHG</code> reste inchangé pour les calculs, mais l’interface affiche <strong>Réception</strong>. Il s’agit du scan de la palette à la réception ; au déchargement, la palette est déposée en travée.</span></div>
@@ -3760,7 +3760,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
               <div className="guide-edit-grid">
                 <GuideEditCard title="Dans Feuille de match" detail="Modifier les chiffres permet de renseigner les blessures A.T et l'effectif prévu. Le carrousel Le collectif en chiffres conserve les positions calculées depuis l'Excel filtré. Le tonnage Expédition et les taux journaliers viennent du PDF 106J ; ils affichent PDF à importer tant que ce rapport n'a pas été chargé." />
                 <GuideEditCard title="Dans Coach" detail="Cliquez sur Écrire dans le tableau du coach, complétez Tactique, Priorité, Arbitrage et Revue, puis Enregistrer." />
-              <GuideEditCard title="Dans le brief équipe" detail="Cliquez sur Écrire. Saisissez les consignes dans SAV, Expédition ou SST, ajoutez des captures si nécessaire, puis enregistrez. Les anciens textes et captures Ramasse & emballage sont conservés dans Expédition ; SST reste indépendant." />
+              <GuideEditCard title="Dans le brief équipe" detail="Cliquez sur Écrire. Saisissez les consignes dans SAV, EXPÉDITION / RAMASSE & EMBALLAGE ou SST, ajoutez des captures si nécessaire, puis enregistrez. Les anciens textes et captures Expédition et Ramasse & Emballage sont réunis dans la zone centrale ; SST reste indépendant." />
               </div>
               <div className="guide-callout success"><CheckCircle2 size={20} /><span><strong>À retenir :</strong> les chiffres manuels sont mémorisés pour l’agence et le match affichés sur ce poste. Ils complètent la lecture opérationnelle sans modifier le fichier source importé.</span></div>
               <div className="guide-callout info"><Upload size={20} /><span><strong>Ajouter une capture d’écran :</strong> dans chaque zone du brief équipe, cliquez sur <strong>Ajouter une capture d’écran</strong>, puis choisissez une image PNG, JPG ou WebP. L’image est redimensionnée automatiquement, affichée dans la zone correspondante et sauvegardée avec le texte. Chaque catégorie conserve sa propre capture.</span></div>
