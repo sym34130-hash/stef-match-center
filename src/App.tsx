@@ -925,6 +925,8 @@ function LoginView({ onLogin, loading, message }: { onLogin: (agencyCode: string
     { code: "01K", name: "Montpellier" },
     { code: "05R", name: "Toulouse" },
     { code: "04P", name: "Bordeaux" },
+    { code: "R3A", name: "Lyon - R3A" },
+    { code: "04H", name: "Brive - 04H" },
   ]);
 
   useEffect(() => {

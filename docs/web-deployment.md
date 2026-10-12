@@ -42,12 +42,15 @@ Stockage persistant agences
 PORT=4174
 STEF_DATA_DIR=/var/lib/stef-match-center/agencies
 STEF_UPLOAD_LIMIT_MB=20
-STEF_AGENCIES_JSON='[{"code":"058","name":"Agen - 058","accessCode":"REMPLACER_PAR_SECRET_ALEATOIRE_058","canImport":true},{"code":"01K","name":"Montpellier","accessCode":"REMPLACER_PAR_SECRET_ALEATOIRE_01K","canImport":true},{"code":"05R","name":"Toulouse","accessCode":"REMPLACER_PAR_SECRET_ALEATOIRE_05R","canImport":true},{"code":"04P","name":"Bordeaux","accessCode":"REMPLACER_PAR_SECRET_ALEATOIRE_04P","canImport":true}]'
+STEF_AGENCIES_JSON='[{"code":"058","name":"Agen - 058","accessCode":"<SECRET_058>","canImport":true},{"code":"01K","name":"Montpellier","accessCode":"<SECRET_01K>","canImport":true},{"code":"05R","name":"Toulouse","accessCode":"<SECRET_05R>","canImport":true},{"code":"04P","name":"Bordeaux","accessCode":"<SECRET_04P>","canImport":true},{"code":"R3A","name":"Lyon - R3A","accessCode":"<SECRET_R3A>","canImport":true},{"code":"04H","name":"Brive - 04H","accessCode":"<SECRET_04H>","canImport":true}]'
 ```
 
 Remplacer chaque valeur d'exemple par un secret unique d'au moins 32 caractères,
 généré aléatoirement. Ne jamais réutiliser les codes locaux, les publier dans le
 guide ou le dépôt, ni partager le même secret entre plusieurs agences.
+Cet exemple documente une configuration future uniquement : ne jamais utiliser
+les placeholders littéralement. Aucun changement Render n'est effectué par
+l'ajout des agences locales.
 
 `STEF_DATA_DIR` doit pointer vers un disque persistant. Sans disque persistant,
 les fichiers Excel importés et les Causeries peuvent disparaître lors d'un

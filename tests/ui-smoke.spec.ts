@@ -1287,6 +1287,36 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
   await expect(page.getByText("Célébration activée", { exact: true })).toHaveCount(0);
 });
 
+test("le catalogue de secours conserve les six agences sans API disponible", async ({ page }) => {
+  await page.route("**/api/agencies", route => route.abort());
+  await page.goto("/");
+  const options = page.getByLabel("Code agence").locator("option");
+  await expect(options).toHaveCount(6);
+  await expect(options).toHaveText(["Agen - 058", "Montpellier - 01K", "Toulouse - 05R", "Bordeaux - 04P", "Lyon - R3A", "Brive - 04H"]);
+});
+
+test("Lyon et Brive : connexion et premier état sans import", async ({ page }) => {
+  for (const code of ["R3A", "04H"]) {
+    await page.goto("/");
+    await page.evaluate(() => sessionStorage.clear());
+    await page.reload();
+    await page.getByLabel("Code agence").selectOption(code);
+    await page.getByLabel("Code d'accès").fill("WRONG-TEST-ONLY");
+    const rejected = page.waitForResponse(response => response.url().endsWith("/api/session") && response.request().method() === "POST");
+    await page.getByRole("button", { name: "Accéder au match" }).click();
+    expect((await rejected).status()).toBe(401);
+    await expect(page.getByLabel("Code agence")).toBeVisible();
+    await page.getByLabel("Code d'accès").fill(`LOCAL-${code}-DEV`);
+    await page.getByRole("button", { name: "Accéder au match" }).click();
+    await expect(page.locator(".agency-pill")).toContainText(code);
+    await expect(page.getByRole("heading", { name: "Le stade est prêt", exact: true })).toBeVisible();
+    await expect(page.getByText("Aucun match importé", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "05 BRIEF ÉQUIPE", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Aucun match importé", exact: true })).toBeVisible();
+    await assertNoHorizontalOverflow(page);
+  }
+});
+
 test("le nom de l'agence connectée reste correct dans tous les onglets", async ({ page }) => {
   test.setTimeout(120_000);
   const agencies = [
@@ -1294,6 +1324,8 @@ test("le nom de l'agence connectée reste correct dans tous les onglets", async 
     { code: "01K", accessCode: "LOCAL-01K-DEV", name: "Montpellier" },
     { code: "05R", accessCode: "LOCAL-05R-DEV", name: "Toulouse" },
     { code: "04P", accessCode: "LOCAL-04P-DEV", name: "Bordeaux" },
+    { code: "R3A", accessCode: "LOCAL-R3A-DEV", name: "Lyon - R3A" },
+    { code: "04H", accessCode: "LOCAL-04H-DEV", name: "Brive - 04H" },
   ];
 
   for (const agency of agencies) {

@@ -22,5 +22,17 @@
     "name": "Bordeaux",
     "accessCode": "LOCAL-04P-DEV",
     "canImport": true
+  },
+  {
+    "code": "R3A",
+    "name": "Lyon - R3A",
+    "accessCode": "LOCAL-R3A-DEV",
+    "canImport": true
+  },
+  {
+    "code": "04H",
+    "name": "Brive - 04H",
+    "accessCode": "LOCAL-04H-DEV",
+    "canImport": true
   }
 ]
