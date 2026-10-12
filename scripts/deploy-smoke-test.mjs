@@ -416,6 +416,7 @@ try {
     },
     body: JSON.stringify({
       matchDate: snapshot.match.date,
+      expectedRevision: beforeCauserieSyncState.causerieRevision,
       plan: {
         team: "Smoke test",
         manager: "QA",
@@ -500,7 +501,7 @@ try {
   const sstPlan = { ...migratedBrief, defense: ["Brief sécurité"], attachments: { ...migratedBrief.attachments, defense: [tinyAttachment] } };
   const sstResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/causerie`, {
     method: "POST", headers: { ...leagueConfigHeaders, "Content-Type": "application/json" },
-    body: JSON.stringify({ matchDate: snapshot.match.date, plan: sstPlan }),
+    body: JSON.stringify({ matchDate: snapshot.match.date, plan: sstPlan, expectedRevision: (await (await fetch(`${baseUrl}/api/agencies/${agencyCode}/sync-state?matchDate=${snapshot.match.date}`, { headers: leagueConfigHeaders })).json()).causerieRevision }),
   });
   assert.equal(sstResponse.status, 200);
   const sstRead = await readBrief();

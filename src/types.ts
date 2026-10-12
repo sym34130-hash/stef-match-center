@@ -181,6 +181,7 @@ export type Snapshot = {
     lostPercent: number | null;
     duels: Array<{
       travelCode: string;
+      destination?: string | null;
       agency: string;
       time: string;
       positions: number;
@@ -189,6 +190,7 @@ export type Snapshot = {
     }>;
     lostDuels: Array<{
       travelCode: string;
+      destination?: string | null;
       agency: string;
       time: string;
       positions: number;
@@ -196,6 +198,7 @@ export type Snapshot = {
     }>;
   };
   unloadingQuality?: {
+    travels?: Array<{ travelCode: string; destination: string | null }>;
     targeted: number;
     offTarget: number;
     targetedPercent: number | null;
@@ -261,6 +264,10 @@ export type Snapshot = {
     duplicateRows: number;
     issueRows?: number;
     warnings: string[];
+    importReadiness?: {
+      status: "complete" | "partial";
+      unavailableKpis: Array<{ id: string; label: string; source: string; reason: string }>;
+    };
     filterStats?: {
       sourceRows: number;
       periodRows: number;

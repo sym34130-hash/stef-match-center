@@ -57,6 +57,7 @@ type CauserieContentZone = "attack" | "midfield" | "defense";
 type CauserieAttachments = Record<CauserieContentZone, string[]>;
 
 type CauseriePlan = {
+  revision?: string | null;
   briefLayoutVersion: number;
   team: string;
   manager: string;
@@ -846,11 +847,15 @@ async function fetchCauseriePlan(session: Session, snapshot: Snapshot): Promise<
     );
     if (!response.ok) throw new Error("Causerie non disponible.");
     const payload = await response.json();
-    return payload.plan ?? localPlan;
+    return { ...(payload.plan ?? localPlan ?? buildEmptyCauseriePlan()), revision: payload.causerieRevision };
   } catch (error) {
     if (localPlan) return localPlan;
     throw error;
   }
+}
+
+class CauserieConflictError extends Error {
+  constructor(message: string, readonly serverPlan: CauseriePlan) { super(message); }
 }
 
 async function saveCauseriePlan(session: Session, snapshot: Snapshot, plan: CauseriePlan): Promise<CauseriePlan> {
@@ -862,15 +867,20 @@ async function saveCauseriePlan(session: Session, snapshot: Snapshot, plan: Caus
     },
     body: JSON.stringify({
       matchDate: snapshot.match.date,
+      expectedRevision: plan.revision,
       plan,
     }),
   });
   const payload = await response.json();
+  if (response.status === 409) {
+    throw new CauserieConflictError(payload.message, normalizeCauseriePlan({ ...(payload.plan ?? buildEmptyCauseriePlan()), revision: payload.causerieRevision }));
+  }
   if (!response.ok) throw new Error(payload.message ?? "Causerie non enregistrée.");
   const savedPlan = payload.plan as CauseriePlan;
   if (!savedPlan || typeof savedPlan !== "object") {
     throw new Error("Le serveur a renvoyé une causerie invalide. Réessaie après actualisation.");
   }
+  savedPlan.revision = payload.causerieRevision;
   const savedProfiles = savedPlan?.mercatoProfiles ?? {};
   const profileWasDropped = Object.entries(plan.mercatoProfiles ?? {}).some(([key, profile]) => savedProfiles[key] !== profile);
   if (profileWasDropped) {
@@ -1489,7 +1499,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
               <div className={`match-score-bubble pass-score-bubble ${Number.isFinite(scoreIndicators.passRate) ? "" : "is-data-unavailable"}`}>
                 <span>% passes réussies</span>
                 <strong>{formatPercent(scoreIndicators.passRate)}</strong>
-                <small>Positions zonées en {snapshot.performanceCriteria?.zonageMinutes ?? leagueConfig.zonageMinutes} min ou moins</small>
+                <small>Objectif zonage : {snapshot.performanceCriteria?.zonageMinutes ?? leagueConfig.zonageMinutes} min ou moins</small>
               </div>
               <div className={`match-score-bubble loading-score-bubble ${Number.isFinite(scoreIndicators.loadingPercent) ? "" : "is-data-unavailable"}`}>
                 <span>% tirs cadrés</span>
@@ -1964,11 +1974,11 @@ function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pe
             <div className="duel-quality-table-wrap">
               <div className="duel-quality-table" role="table" aria-label="Duels perdus">
                 <div className={`duel-quality-table-row is-head ${canEditTravelScope ? "has-travel-action" : ""}`} role="row">
-                  <span>Voyage</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>{canEditTravelScope && <span>Action</span>}
+                  <span>Voyage</span><span>Destination</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>{canEditTravelScope && <span>Action</span>}
                 </div>
                 {duelQuality.lostDuels.map((duel) => (
                   <div className={`duel-quality-table-row ${canEditTravelScope ? "has-travel-action" : ""}`} role="row" key={`${duel.travelCode}-${duel.time}`}>
-                    <span>{duel.travelCode}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className="duel-result duel-result-perdu">perdu</span>{canEditTravelScope && <span className="travel-action-cell"><button type="button" className="travel-visibility-button" disabled={pendingTravelCode === duel.travelCode} onClick={() => void onToggleTravel(duel.travelCode, true)} aria-label={`Masquer le voyage ${duel.travelCode}`} title={`Masquer le voyage ${duel.travelCode}`}><EyeOff size={14} /></button></span>}
+                    <span>{duel.travelCode}</span><span className="duel-destination" title={duel.destination ?? undefined}>{duel.destination || "—"}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className="duel-result duel-result-perdu">perdu</span>{canEditTravelScope && <span className="travel-action-cell"><button type="button" className="travel-visibility-button" disabled={pendingTravelCode === duel.travelCode} onClick={() => void onToggleTravel(duel.travelCode, true)} aria-label={`Masquer le voyage ${duel.travelCode}`} title={`Masquer le voyage ${duel.travelCode}`}><EyeOff size={14} /></button></span>}
                   </div>
                 ))}
               </div>
@@ -2548,6 +2558,9 @@ function Coach({
   const [savingMercato, setSavingMercato] = useState(false);
   const [savingRedCards, setSavingRedCards] = useState(false);
   const [coachBoardFeedback, setCoachBoardFeedback] = useState<CauserieToast>(null);
+  const [conflictingCoachPlan, setConflictingCoachPlan] = useState<CauseriePlan | null>(null);
+  const coachEditingRef = useRef(false);
+  coachEditingRef.current = coachBoardMode === "edit" || mercatoMode === "edit" || redCardsMode === "edit";
   const [mercatoProfileFeedback, setMercatoProfileFeedback] = useState<{ tone: "success" | "error"; detail: string } | null>(null);
   const actions = coachDecisionActions(snapshot);
   const targetPercent = snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent;
@@ -2582,6 +2595,7 @@ function Coach({
   useEffect(() => {
     let cancelled = false;
     const emptyPlan = buildEmptyCauseriePlan();
+    if (coachEditingRef.current) return;
     setCoachPlan(emptyPlan);
     setCoachDraft(emptyPlan);
     setCoachBoardMode("view");
@@ -2594,9 +2608,9 @@ function Coach({
     setMercatoProfileFeedback(null);
     fetchCauseriePlan(session, snapshot)
       .then((remotePlan) => {
-        if (cancelled) return;
+        if (cancelled || coachEditingRef.current) return;
         const nextPlan = remotePlan ? normalizeCauseriePlan(remotePlan) : emptyPlan;
-        const visiblePlan = hasManualCauserieContent(nextPlan, snapshot) ? nextPlan : emptyPlan;
+        const visiblePlan = hasManualCauserieContent(nextPlan, snapshot) ? nextPlan : { ...emptyPlan, revision: nextPlan.revision };
         setCoachPlan(visiblePlan);
         setCoachDraft(visiblePlan);
         setMercatoDraft(visiblePlan.mercato);
@@ -2710,6 +2724,7 @@ function Coach({
       setMercatoMode("view");
       setMercatoProfileFeedback({ tone: "success", detail: "Mercato enregistré et synchronisé avec la Feuille de match." });
     } catch (error) {
+      if (error instanceof CauserieConflictError) setConflictingCoachPlan(error.serverPlan);
       setMercatoProfileFeedback({
         tone: "error",
         detail: error instanceof Error ? `Mercato non enregistré : ${error.message}` : "Mercato non enregistré. Vérifie la connexion puis réessaie.",
@@ -2750,7 +2765,12 @@ function Coach({
         detail: "Le tableau du coach est à jour pour l'équipe.",
         tone: "success",
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof CauserieConflictError) {
+        setConflictingCoachPlan(error.serverPlan);
+        setCoachBoardFeedback({ title: "Conflit de sauvegarde", detail: error.message, tone: "error" });
+        return;
+      }
       setCoachPlan(nextPlan);
       setCoachDraft(nextPlan);
       setCoachBoardMode("view");
@@ -2781,7 +2801,12 @@ function Coach({
         detail: "La saisie manuelle est enregistrée pour cette agence et cette journée.",
         tone: "success",
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof CauserieConflictError) {
+        setConflictingCoachPlan(error.serverPlan);
+        setCoachBoardFeedback({ title: "Conflit de sauvegarde", detail: error.message, tone: "error" });
+        return;
+      }
       setCoachPlan(nextPlan);
       setCoachDraft(nextPlan);
       setRedCardsDraft(nextPlan.redCards);
@@ -2969,6 +2994,11 @@ function Coach({
             )}
           </div>
           {coachBoardFeedback && <div className={`coach-board-feedback ${coachBoardFeedback.tone}`}><strong>{coachBoardFeedback.title}</strong><span>{coachBoardFeedback.detail}</span></div>}
+          {conflictingCoachPlan && <div role="alert"><p>Une autre version du brief est enregistrée. Ta saisie locale n'a pas été remplacée.</p><button type="button" className="secondary-button" onClick={() => {
+            setCoachPlan(conflictingCoachPlan); setCoachDraft(conflictingCoachPlan);
+            setMercatoDraft(conflictingCoachPlan.mercato); setMercatoProfilesDraft(conflictingCoachPlan.mercatoProfiles); setRedCardsDraft(conflictingCoachPlan.redCards);
+            setCoachBoardMode("view"); setMercatoMode("view"); setRedCardsMode("view"); setConflictingCoachPlan(null);
+          }}>Abandonner ma saisie et charger la version serveur</button></div>}
           <div className="coach-actions-grid">
             {actions.map((action, index) => {
               const actionField = coachActionFields[index];
@@ -3163,22 +3193,39 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
   const [planDraft, setPlanDraft] = useState<CauseriePlan>(() => buildEmptyCauseriePlan());
   const [savingPlan, setSavingPlan] = useState(false);
   const [feedback, setFeedback] = useState<CauserieToast>(null);
+  const [conflictingPlan, setConflictingPlan] = useState<CauseriePlan | null>(null);
   const [lightboxImage, setLightboxImage] = useState<{ src: string; label: string } | null>(null);
+  const lightboxRef = useRef<HTMLDivElement>(null);
   const planModeRef = useRef(planMode);
   planModeRef.current = planMode;
   const sharedPlanReady = sharedPlan?.ready;
   const sharedPlanValue = sharedPlan?.plan;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!lightboxImage) return;
+    const dialog = lightboxRef.current;
+    if (!dialog) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const background = Array.from(document.body.children).filter((element): element is HTMLElement => element instanceof HTMLElement && !element.contains(dialog));
+    const previousInert = background.map(element => element.inert);
+    background.forEach(element => { element.inert = true; });
+    const close = dialog.querySelector<HTMLButtonElement>("button");
+    close?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setLightboxImage(null);
+      if (event.key === "Escape") {
+        event.preventDefault(); event.stopImmediatePropagation(); setLightboxImage(null);
+      }
+      if (event.key === "Tab") {
+        event.preventDefault(); close?.focus();
+      }
     };
     document.body.classList.add("tv-lightbox-open");
-    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
     return () => {
       document.body.classList.remove("tv-lightbox-open");
-      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keydown", onKeyDown, true);
+      background.forEach((element, index) => { element.inert = previousInert[index]; });
+      if (previousFocus?.isConnected) previousFocus.focus();
     };
   }, [lightboxImage]);
 
@@ -3189,7 +3236,7 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
     if (sharedPlanReady === false) return () => { cancelled = true; };
     if (sharedPlanReady === true) {
       const nextPlan = sharedPlanValue ? normalizeCauseriePlan(sharedPlanValue) : emptyPlan;
-      const visiblePlan = hasManualCauserieContent(nextPlan, snapshot) ? nextPlan : emptyPlan;
+      const visiblePlan = hasManualCauserieContent(nextPlan, snapshot) ? nextPlan : { ...emptyPlan, revision: nextPlan.revision };
       setPlan(visiblePlan);
       setPlanDraft(visiblePlan);
       return () => { cancelled = true; };
@@ -3198,7 +3245,7 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
       .then((remotePlan) => {
         if (cancelled) return;
         const nextPlan = remotePlan ? normalizeCauseriePlan(remotePlan) : emptyPlan;
-        const visiblePlan = hasManualCauserieContent(nextPlan, snapshot) ? nextPlan : emptyPlan;
+        const visiblePlan = hasManualCauserieContent(nextPlan, snapshot) ? nextPlan : { ...emptyPlan, revision: nextPlan.revision };
         setPlan(visiblePlan);
         setPlanDraft(visiblePlan);
       })
@@ -3233,7 +3280,12 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
       setPlanMode("view");
       onPlanSaved?.(normalizedPlan);
       setFeedback({ title: "Brief enregistré", detail: "Les consignes du brief équipe sont à jour.", tone: "success" });
-    } catch {
+    } catch (error) {
+      if (error instanceof CauserieConflictError) {
+        setConflictingPlan(error.serverPlan);
+        setFeedback({ title: "Conflit de sauvegarde", detail: error.message, tone: "error" });
+        return;
+      }
       setPlan(nextPlan);
       setPlanDraft(nextPlan);
       setPlanMode("view");
@@ -3380,9 +3432,13 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
           ))}
         </div>
         {feedback && <p className={`tv-plan-feedback ${feedback.tone}`}>{feedback.title} · {feedback.detail}</p>}
+        {conflictingPlan && <div role="alert"><p>Ta saisie locale est conservée. La version serveur contient une autre modification.</p><button className="secondary-button" type="button" onClick={() => {
+          setPlan(conflictingPlan); setPlanDraft(conflictingPlan); setPlanMode("view"); onPlanSaved?.(conflictingPlan); setConflictingPlan(null);
+        }}>Abandonner ma saisie et charger la version serveur</button></div>}
       </div>
-      {lightboxImage && (
+      {lightboxImage && createPortal(
         <div
+          ref={lightboxRef}
           className="tv-image-lightbox"
           role="dialog"
           aria-modal="true"
@@ -3401,7 +3457,7 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
             <p>{lightboxImage.label}</p>
             <img src={lightboxImage.src} alt={`Capture agrandie du brief ${lightboxImage.label}`} />
           </div>
-        </div>
+        </div>, document.body
       )}
     </>
   );
@@ -3913,7 +3969,7 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
       }
       setState("success");
       setLastImportKind(kind);
-      setMessage(kind === "excel" ? "Le match est prêt." : "Les indicateurs 106J sont prêts.");
+      setMessage(kind === "excel" ? (payload.snapshot.validation.importReadiness?.status === "partial" ? "Fichier exploitable partiellement : le score opérationnel ne peut pas être calculé. Consulte les sources manquantes ci-dessous." : "Le match est prêt.") : "Les indicateurs 106J sont prêts.");
       setDetails(payload.snapshot.validation.warnings ?? []);
       setImportedSnapshot(payload.snapshot);
       onImported(payload.snapshot);
@@ -3945,7 +4001,7 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
         <div className={`import-result ${state}`}>
           {state === "error" ? <XCircle size={24} /> : state === "success" ? <CheckCircle2 size={24} /> : <RefreshCw size={24} />}
           <div>
-            <strong>{state === "error" ? "FICHIER NON IMPORTÉ" : state === "success" ? (lastImportKind === "pdf" ? "PDF 106J ACTUALISÉ" : "MATCH ACTUALISÉ") : "CONTRÔLE EN COURS"}</strong>
+            <strong>{state === "error" ? "FICHIER NON IMPORTÉ" : state === "success" ? (lastImportKind === "pdf" ? "PDF 106J ACTUALISÉ" : importedSnapshot?.validation.importReadiness?.status === "partial" ? "IMPORT PARTIEL" : "MATCH ACTUALISÉ") : "CONTRÔLE EN COURS"}</strong>
             <p>{message}</p>
             {details.map((detail) => <span key={detail}>{detail}</span>)}
           </div>
@@ -4515,6 +4571,7 @@ function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
 
 function buildEmptyCauseriePlan(): CauseriePlan {
   return {
+    revision: undefined,
     briefLayoutVersion: BRIEF_LAYOUT_VERSION,
     team: "",
     manager: "",
@@ -4548,6 +4605,7 @@ function normalizeCauseriePlan(plan: Partial<CauseriePlan> | null | undefined): 
   const updatedAt = typeof input.updatedAt === "string" ? input.updatedAt : null;
   const mercato = text(input.mercato);
   return {
+    revision: input.revision,
     briefLayoutVersion: BRIEF_LAYOUT_VERSION,
     team: text(input.team, fallback.team),
     manager: text(input.manager, fallback.manager),

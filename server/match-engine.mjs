@@ -204,7 +204,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   const parsed = parseWorkbookSource(buffer);
   if (!parsed.ok) return parsed;
 
-  const { isDerivedTemplate, rows, sourceValidation, missingColumns, rawWorkbook } = parsed;
+  const { isDerivedTemplate, rows, sourceValidation, missingColumns, rawWorkbook, travelDestinations } = parsed;
   const autoPeriod = periodInput.start === undefined && periodInput.end === undefined
     ? inferOvernightPeriod(rows)
     : null;
@@ -324,6 +324,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     );
   }
 
+  const hourlyPassPerformance = buildHourlyPassPerformance(rawWorkbook, period, rows.filter((row) => !excludedTravelCodes.has(row.travelCode)));
   const snapshot = buildMatchSnapshot({
     sourceRows: rows,
     matchRows,
@@ -335,14 +336,25 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     filterStats,
     period,
     criteria,
-    hourlyPassPerformance: buildHourlyPassPerformance(rawWorkbook, period, rows.filter((row) => !excludedTravelCodes.has(row.travelCode))),
+    hourlyPassPerformance,
     loadingQuality: buildLoadingQualityFromTcd(rawWorkbook, period, criteria.loadingSeconds, excludedTravelCodes),
-    unloadingDuelQuality: buildUnloadingDuelQuality(rawWorkbook, period, matchRows, excludedTravelCodes),
-    unloadingQuality: buildUnloadingQuality(matchRows, criteria.unloadingSeconds),
+    unloadingDuelQuality: buildUnloadingDuelQuality(rawWorkbook, period, matchRows, excludedTravelCodes, travelDestinations),
+    unloadingQuality: buildUnloadingQuality(matchRows, criteria.unloadingSeconds, travelDestinations),
     yellowCards: buildYellowCards(rawWorkbook, period, excludedTravelCodes),
     excludedTravelCodes,
     dailyIndicators: periodInput.dailyIndicators ?? null,
   });
+
+  const requirements = [
+    { id: "passRate", label: "Passes réussies", source: "Données : Heure op et Duels gagnés, ou X : tableau horaire Passes réussies et compteurs", available: hourlyPassPerformance.sourceAvailable },
+    { id: "loadingPercent", label: "Tirs cadrés", source: "TCD PPT : Chargement, Code Voyage, début d'opération, nombre de positions, TC et TC/poz brut", available: snapshot.loadingQuality.sourceAvailable },
+    { id: "unloadingPercent", label: "Duels gagnés", source: "Données : opérations DECHG, Code Voyage, position et date/heure de début", available: true },
+    { id: "possessionPercent", label: "Possession", source: "Données : positions DECHG et ZONAGE dans la plage active", available: true },
+  ];
+  const unavailableKpis = requirements.filter(({ id }) => !Number.isFinite(snapshot.operationalScore.indicators[id]))
+    .map(({ id, label, source, available }) => ({ id, label, source, reason: available ? "Aucune donnée éligible dans la plage active" : "Source Excel absente ou incomplète" }));
+  validation.importReadiness = { status: unavailableKpis.length ? "partial" : "complete", unavailableKpis };
+  for (const item of unavailableKpis) validation.warnings.push(`${item.label} indisponible : ${item.reason}. Source requise : ${item.source}.`);
 
   const result = { ok: true, snapshot };
   snapshotBuildCache.set(buildCacheKey, result);
@@ -494,6 +506,7 @@ function parseWorkbookSource(buffer) {
     isDerivedTemplate,
     rows,
     sourceValidation,
+    travelDestinations: buildTravelDestinationMap(rawWorkbook),
   };
   workbookParseCache.set(cacheKey, parsed);
   while (workbookParseCache.size > WORKBOOK_PARSE_CACHE_LIMIT) {
@@ -774,6 +787,7 @@ function formatDuration(totalSeconds) {
 function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds, excludedTravelCodes = new Set()) {
   const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.loadingSeconds);
   const empty = {
+    sourceAvailable: false,
     targeted: 0,
     offTarget: 0,
     targetedPercent: null,
@@ -859,6 +873,7 @@ function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds, e
     : null;
   loadingDetails.sort(compareTimePerPositionDescending);
   return {
+    sourceAvailable: true,
     targeted,
     offTarget,
     targetedPercent: loadingDetails.length > 0 ? percent(targeted, loadingDetails.length) : null,
@@ -906,7 +921,61 @@ function resolveUnloadingAgencies(matchRows) {
   return agencies;
 }
 
-function buildUnloadingDuelQuality(workbook, period, matchRows, excludedTravelCodes = new Set()) {
+export function buildTravelDestinationMap(workbook) {
+  const priorities = new Map([
+    ...["destination", "ville", "site", "site destination", "ville destination", "nom destination"].map(key => [key, 1]),
+    ...["nom agence destination", "libelle agence destination"].map(key => [key, 2]),
+    ...["libelle voyage", "nom voyage"].map(key => [key, 3]),
+  ]);
+  const candidates = new Map();
+  for (const sheetName of workbook.SheetNames) {
+    const rows = new Map();
+    for (const [address, cell] of Object.entries(workbook.Sheets[sheetName])) {
+      if (address.startsWith("!") || cell.v === undefined) continue;
+      const { r, c } = XLSX.utils.decode_cell(address);
+      if (!rows.has(r)) rows.set(r, new Map());
+      rows.get(r).set(c, { address, value: cell.v });
+    }
+    let tables = [];
+    for (const [, cells] of [...rows].sort(([a], [b]) => a - b)) {
+      const codeHeaders = [...cells].filter(([, cell]) => ["code voyage", "voyage"].includes(normalizeKey(cell.value))).sort(([a], [b]) => a - b);
+      if (codeHeaders.length) {
+        // A destination column belongs only to its own adjacent code column.
+        tables = codeHeaders.map(([code], index) => ({
+          code,
+          destinations: [...cells].filter(([column, cell]) => column > code && column < (codeHeaders[index + 1]?.[0] ?? Infinity) && priorities.has(normalizeKey(cell.value))),
+        }));
+        continue;
+      }
+      for (const columns of tables) {
+        const codes = cleanText(cells.get(columns.code)?.value).toUpperCase().split(/[;/]/).map(code => code.trim());
+        if (!codes.length || codes.some(code => !/^[A-Z0-9][A-Z0-9_-]*$/.test(code))) continue;
+        for (const [column, header] of columns.destinations) {
+          const cell = cells.get(column);
+          const destination = cleanText(cell?.value);
+          if (!destination || typeof cell?.value !== "string") continue;
+          const priority = priorities.get(normalizeKey(header.value));
+          for (const code of codes) {
+            const previous = candidates.get(code);
+            if (!previous || priority < previous.priority) {
+              candidates.set(code, { destination, priority, source: `${sheetName}!${cell.address}`, ambiguous: false });
+            } else if (priority === previous.priority && destination !== previous.destination) {
+              // Conflicting equally explicit destinations must not be guessed.
+              previous.ambiguous = true;
+            }
+          }
+        }
+      }
+    }
+  }
+  return new Map([...candidates].filter(([, value]) => !value.ambiguous));
+}
+
+function travelDestination(destinations, travelCode) {
+  return destinations?.get(cleanText(travelCode).toUpperCase())?.destination ?? null;
+}
+
+function buildUnloadingDuelQuality(workbook, period, matchRows, excludedTravelCodes = new Set(), travelDestinations = new Map()) {
   const empty = { won: 0, lost: 0, wonPercent: null, lostPercent: null, duels: [], lostDuels: [] };
   const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "tcd ppt");
   const sheet = sheetName ? workbook.Sheets[sheetName] : null;
@@ -964,6 +1033,7 @@ function buildUnloadingDuelQuality(workbook, period, matchRows, excludedTravelCo
     const elapsedSeconds = start && end ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000)) : 0;
     const duel = {
       travelCode: travel,
+      destination: travelDestination(travelDestinations, travel),
       agency: agencies.get(travel) || "Non renseignée",
       time: formatDateClock(start),
       positions,
@@ -986,7 +1056,7 @@ function buildUnloadingDuelQuality(workbook, period, matchRows, excludedTravelCo
   };
 }
 
-function buildUnloadingQuality(matchRows, configuredTargetSeconds) {
+function buildUnloadingQuality(matchRows, configuredTargetSeconds, travelDestinations = new Map()) {
   const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.unloadingSeconds);
   const empty = {
     targeted: 0,
@@ -996,6 +1066,7 @@ function buildUnloadingQuality(matchRows, configuredTargetSeconds) {
     targetTimePerPosition: formatDuration(targetSeconds),
     averageTimePerPositionSeconds: null,
     eligibleTrips: 0,
+    travels: [],
   };
   if (!Array.isArray(matchRows)) return empty;
 
@@ -1037,6 +1108,7 @@ function buildUnloadingQuality(matchRows, configuredTargetSeconds) {
     targetTimePerPosition: formatDuration(targetSeconds),
     averageTimePerPositionSeconds,
     eligibleTrips: total,
+    travels: unloadingRows.map(({ travelCode }) => ({ travelCode, destination: travelDestination(travelDestinations, travelCode) })),
   };
 }
 
@@ -1969,11 +2041,12 @@ function buildHourlyPassPerformance(workbook, period, sourceRows = null) {
     const weightedTotal = values.reduce((sum, item) => sum + item.total, 0);
     return {
       items: values,
+      sourceAvailable: true,
       totalRate: weightedTotal > 0 ? percent(weightedWon, weightedTotal) : null,
     };
   }
 
-  const empty = { items: [], totalRate: null };
+  const empty = { items: [], totalRate: null, sourceAvailable: false };
   const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "x");
   const sheet = sheetName ? workbook.Sheets[sheetName] : null;
   if (!sheet) return empty;
@@ -2054,6 +2127,7 @@ function buildHourlyPassPerformance(workbook, period, sourceRows = null) {
   const weightedTotal = values.reduce((sum, item) => sum + (Number.isFinite(item.total) ? item.total : 0), 0);
   return {
     items: values,
+    sourceAvailable: true,
     totalRate: weightedTotal > 0 ? percent(weightedWon, weightedTotal) : null,
   };
 }

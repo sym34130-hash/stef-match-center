@@ -63,14 +63,14 @@ app.get("/api/agencies", (_req, res) => {
 app.post("/api/session", (req, res) => {
   const { agencyCode, accessCode } = req.body ?? {};
   const sessionKey = sessionAttemptKey(req, agencyCode);
-  if (isSessionRateLimited(sessionKey)) {
+  const agency = findAgency(agencyCode, accessCode);
+  if (!agency && isSessionRateLimited(sessionKey)) {
     res.status(429).json({
       title: "TROP DE TENTATIVES",
       message: "Trop d'essais de connexion. Réessaie dans quelques minutes.",
     });
     return;
   }
-  const agency = findAgency(agencyCode, accessCode);
   if (!agency) {
     registerFailedSessionAttempt(sessionKey);
     res.status(401).json({
@@ -153,8 +153,8 @@ app.get("/api/agencies/:agencyCode/causerie", requireAgency, async (req, res) =>
     });
     return;
   }
-  const plan = await withAgencyLock(req.agency.code, () => readCauseriePlan(req.agency.code, matchDate));
-  res.json({ plan });
+  const state = await withAgencyLock(req.agency.code, () => readCauserieState(req.agency.code, matchDate));
+  res.json(state);
 });
 
 app.post("/api/agencies/:agencyCode/time-range", requireAgency, async (req, res) => {
@@ -430,10 +430,18 @@ app.post("/api/agencies/:agencyCode/causerie", requireAgency, async (req, res) =
     return;
   }
   const plan = normalizeCauseriePlan(layout);
-  await withAgencyLock(req.agency.code, () => saveCauseriePlan(req.agency.code, matchDate, plan));
-  res.json({
-    message: "PLAN DE JEU ENREGISTRÉ",
-    plan,
+  if (req.body.expectedRevision !== null && typeof req.body.expectedRevision !== "string") {
+    res.status(428).json({ message: "Recharge la causerie avant de l'enregistrer : sa révision est nécessaire." });
+    return;
+  }
+  await withAgencyLock(req.agency.code, async () => {
+    const current = await readCauserieState(req.agency.code, matchDate);
+    if (req.body.expectedRevision !== current.causerieRevision) {
+      res.status(409).json({ ...current, message: "Une autre modification a été enregistrée. Ta saisie est conservée ; recharge explicitement la version serveur avant de reprendre." });
+      return;
+    }
+    await saveCauseriePlan(req.agency.code, matchDate, plan);
+    res.json({ message: "PLAN DE JEU ENREGISTRÉ", ...await readCauserieState(req.agency.code, matchDate) });
   });
 });
 
@@ -556,6 +564,10 @@ if (existsSync(distDir)) {
 }
 
 app.use((error, _req, res, next) => {
+  if (error?.type === "entity.parse.failed") {
+    res.status(400).json({ title: "REQUÊTE INVALIDE", message: "Le contenu JSON envoyé est invalide." });
+    return;
+  }
   if (error?.type === "entity.too.large") {
     res.status(413).json({
       title: "REQUÊTE TROP VOLUMINEUSE",
@@ -633,7 +645,10 @@ function publicAgency(agency) {
   };
 }
 
-function securityHeaders(_req, res, next) {
+function securityHeaders(req, res, next) {
+  if (req.path === "/api" || req.path.startsWith("/api/")) {
+    res.set("Cache-Control", "no-store, max-age=0");
+  }
   res.set({
     "Content-Security-Policy": [
       "default-src 'self'",
@@ -658,8 +673,8 @@ function securityHeaders(_req, res, next) {
 }
 
 function sessionAttemptKey(req, agencyCode) {
-  const forwardedFor = req.header("x-forwarded-for")?.split(",")[0]?.trim();
-  const ip = forwardedFor || req.ip || "unknown";
+  // Express resolves the client from the trusted proxy hop, not the untrusted first header entry.
+  const ip = req.ip || "unknown";
   return `${ip}:${String(agencyCode ?? "").trim().toUpperCase() || "unknown"}`;
 }
 
@@ -736,14 +751,21 @@ async function readFileRevision(filePath) {
 }
 
 function requireAgency(req, res, next) {
+  const sessionKey = sessionAttemptKey(req, req.params.agencyCode);
   const agency = findAgency(req.params.agencyCode, req.header("x-access-code"));
+  if (!agency && isSessionRateLimited(sessionKey)) {
+    res.status(429).json({ title: "TROP DE TENTATIVES", message: "Trop d'essais de connexion. Réessaie dans quelques minutes." });
+    return;
+  }
   if (!agency) {
+    registerFailedSessionAttempt(sessionKey);
     res.status(401).json({
       title: "ACCÈS REFUSÉ",
       message: "Code agence ou code d'accès incorrect.",
     });
     return;
   }
+  clearFailedSessionAttempts(sessionKey);
   req.agency = agency;
   next();
 }
@@ -1070,6 +1092,12 @@ async function readLatestWorkbook(agencyDir) {
     if (!candidates[0]) throw new Error("Aucun Excel disponible.", { cause: error });
     return fs.readFile(candidates[0].filePath);
   }
+}
+
+async function readCauserieState(agencyCode, matchDate) {
+  const plan = await readCauseriePlan(agencyCode, matchDate);
+  const file = path.join(dataDir, sanitizeSegment(agencyCode), "causeries", `${sanitizeSegment(matchDate)}.json`);
+  return { plan, causerieRevision: await readFileRevision(file) };
 }
 
 async function readCauseriePlan(agencyCode, matchDate) {

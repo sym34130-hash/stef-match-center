@@ -27,7 +27,7 @@ test("KPI : descriptions issues des critères actifs sans modifier les valeurs",
     await expect(page.locator(".loading-score-bubble small")).toHaveText(`Voyages chargés en ${loadingText} ou moins par position`);
     await expect(page.locator(".reception-score-bubble small")).toHaveText(`Voyages réceptionnés en ${unloadingText} ou moins par position`);
     await expect(page.locator(".possession-score-bubble small")).toHaveText("Positions zonées");
-    await expect(page.locator(".pass-score-bubble small")).toHaveText(`Positions zonées en ${zonage} min ou moins`);
+    await expect(page.locator(".pass-score-bubble small")).toHaveText(`Objectif zonage : ${zonage} min ou moins`);
     expect(await page.locator(".match-score-bubble > strong").allTextContents()).toEqual(values);
   }
   const sizes = info.project.name === "desktop" ? [[1366,768],[1440,900],[1536,864],[1920,1080]] : [[info.project.use.viewport!.width,info.project.use.viewport!.height]];
@@ -35,7 +35,7 @@ test("KPI : descriptions issues des critères actifs sans modifier les valeurs",
     await page.setViewportSize({width,height});
     for (const celebration of [false,true]) {
       if (celebration) await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
-      await expect(page.locator(".pass-score-bubble small")).toHaveText("Positions zonées en 27 min ou moins");
+      await expect(page.locator(".pass-score-bubble small")).toHaveText("Objectif zonage : 27 min ou moins");
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
       const geometry = await page.locator(".match-score-bubble").evaluateAll(elements => elements.map(el => {
         const small = el.querySelector("small")!;

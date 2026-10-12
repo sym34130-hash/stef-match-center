@@ -3913,12 +3913,12 @@ body.match-celebration-active .main-area {
 }
 
 .duel-quality-table {
-  min-width: 640px;
+  min-width: 720px;
 }
 
 .duel-quality-table-row {
   display: grid;
-  grid-template-columns: 1.1fr 0.8fr 1.05fr 0.65fr 0.9fr 0.7fr;
+  grid-template-columns: 1fr 1.8fr 0.6fr 0.85fr 0.6fr 0.8fr 0.7fr;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
@@ -20492,7 +20492,7 @@ body.match-celebration-active .main-area {
 }
 
 .duel-quality-table-row.has-travel-action {
-  grid-template-columns: 1.1fr 0.8fr 1.05fr 0.65fr 0.9fr 0.7fr auto;
+  grid-template-columns: 1fr 1.8fr 0.6fr 0.85fr 0.6fr 0.8fr 0.7fr auto;
 }
 
 .travel-action-cell {

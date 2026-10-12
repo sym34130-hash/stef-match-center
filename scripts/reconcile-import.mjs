@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as XLSX from "xlsx";
-import { buildSnapshotFromWorkbook, isTimeRangeWithin, KPI_DICTIONARY, KPI_DICTIONARY_VERSION, normalizeTimeRange } from "../server/match-engine.mjs";
+import { buildSnapshotFromWorkbook, buildTravelDestinationMap, isTimeRangeWithin, KPI_DICTIONARY, KPI_DICTIONARY_VERSION, normalizeTimeRange } from "../server/match-engine.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -209,6 +209,8 @@ for (let index = 0; index < 3; index += 1) {
 }
 addUnloadingAgencyRow("EXCLUDED", "04P");
 addUnloadingAgencyRow("OUT-TCD", "04P", "12:00:00");
+// Two timestamps make A eligible for the independent reception calculation.
+addUnloadingAgencyRow("A", "058", "14:02:00");
 const unloadingAgencyWorkbook = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(unloadingAgencyWorkbook, XLSX.utils.aoa_to_sheet([rawLoadingDataHeaders, ...unloadingAgencyRows]), "Données");
 XLSX.utils.book_append_sheet(unloadingAgencyWorkbook, XLSX.utils.aoa_to_sheet([
@@ -236,15 +238,60 @@ for (const [travel, agency] of Object.entries(expectedUnloadingAgencies)) {
 assert.deepEqual(unloadingAgencyQuality, {
   won: 4, lost: 4, wonPercent: 50, lostPercent: 50,
   duels: unloadingAgencyTravels.slice(0, 8).map((travel, index) => ({
-    travelCode: travel, agency: expectedUnloadingAgencies[travel], time: "14:00:00",
+    travelCode: travel, destination: null, agency: expectedUnloadingAgencies[travel], time: "14:00:00",
     positions: 2, timePerPosition: "02:00", result: index % 2 === 0 ? "gagné" : "perdu",
   })).sort((left, right) => left.travelCode.localeCompare(right.travelCode, "fr")),
   lostDuels: unloadingAgencyTravels.slice(0, 8).filter((_, index) => index % 2 === 1).map((travel) => ({
-    travelCode: travel, agency: expectedUnloadingAgencies[travel], time: "14:00:00",
+    travelCode: travel, destination: null, agency: expectedUnloadingAgencies[travel], time: "14:00:00",
     positions: 2, timePerPosition: "02:00", result: "perdu",
   })).sort((left, right) => left.travelCode.localeCompare(right.travelCode, "fr")),
 }, "Seule l'agence enrichit les voyages : compteurs, temps, positions, résultats et périmètre restent ceux du TCD");
 console.log("Régression Agence Segment OK : multi-agences, espace différent, majorité, égalité chronologique, agence absente, périmètre et garde-fou TCD");
+
+const destinationWorkbook = XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(destinationWorkbook, XLSX.utils.aoa_to_sheet([
+  ["Code Voyage", "Libellé Voyage"], [" a ", "Liaison A"], ["X4734", "Ne pas associer"],
+  ["X473410", "Ne pas associer non plus"], ["X47311", "Autre code"],
+]), "Libellés");
+XLSX.utils.book_append_sheet(destinationWorkbook, XLSX.utils.aoa_to_sheet([
+  ["Code Voyage", "Nom agence destination"], ["A", "Agence A"],
+]), "Agences");
+XLSX.utils.book_append_sheet(destinationWorkbook, XLSX.utils.aoa_to_sheet([
+  ["Code Voyage", "Site destination"], ["A", "Site A"], ["A", "Site A"],
+  [" b / test-001 ", "Site partagé"], ["MAJ;TIE", "Autre site"],
+  ["AMBIGU", "Site 1"], ["AMBIGU", "Site 2"],
+]), "Destinations");
+XLSX.utils.book_append_sheet(destinationWorkbook, XLSX.utils.aoa_to_sheet([
+  ["Code Voyage", "Destination", "Code Voyage", "Destination"],
+  ["LEFT", "Site gauche", "RIGHT", "Site droit"],
+]), "Tables voisines");
+const destinations = buildTravelDestinationMap(destinationWorkbook);
+assert.equal(destinations.get("A")?.destination, "Site A", "Destination explicite prioritaire, répétitions cohérentes");
+assert.equal(destinations.get("B")?.destination, "Site partagé", "Espaces, casse et séparateur / normalisés");
+assert.equal(destinations.get("TEST-001")?.destination, "Site partagé");
+assert.equal(destinations.get("TIE")?.destination, "Autre site", "Séparateur ; explicite");
+assert.equal(destinations.has("X47341"), false, "Aucune correspondance partielle");
+assert.equal(destinations.has("MISSING"), false, "Destination absente");
+assert.equal(destinations.has("AMBIGU"), false, "Conflit explicite : ne pas inventer");
+assert.equal(destinations.get("LEFT")?.destination, "Site gauche", "Tables voisines non croisées");
+assert.equal(destinations.get("RIGHT")?.destination, "Site droit");
+for (const name of destinationWorkbook.SheetNames) XLSX.utils.book_append_sheet(unloadingAgencyWorkbook, destinationWorkbook.Sheets[name], name);
+const enriched = buildSnapshotFromWorkbook(
+  XLSX.write(unloadingAgencyWorkbook, { type: "buffer", bookType: "xlsx" }), "unloading-agencies.xlsx", "058",
+  { start: "13:00", end: "15:00", excludedTravelCodes: ["EXCLUDED"] },
+).snapshot;
+assert.equal(enriched.unloadingDuelQuality.duels.find(duel => duel.travelCode === "B").destination, "Site partagé");
+assert.equal(enriched.unloadingDuelQuality.duels.find(duel => duel.travelCode === "MISSING").destination, null);
+assert.equal(enriched.unloadingQuality.travels.find(travel => travel.travelCode === "A").destination, "Site A");
+const omitFields = (object, fields) => Object.fromEntries(Object.entries(object).filter(([key]) => !fields.includes(key)));
+const withoutDestination = quality => ({ ...quality, duels: quality.duels.map(duel => omitFields(duel, ["destination"])), lostDuels: quality.lostDuels.map(duel => omitFields(duel, ["destination"])) });
+assert.deepEqual(withoutDestination(enriched.unloadingDuelQuality), withoutDestination(unloadingAgencyQuality), "Enrichissement uniquement : agences, voyages, temps, positions et résultats inchangés");
+assert.deepEqual(enriched.summary, unloadingAgencyResult.snapshot.summary, "Tous les KPI et le score inchangés");
+assert.deepEqual(enriched.hourlyPerformance, unloadingAgencyResult.snapshot.hourlyPerformance, "Performance horaire inchangée");
+const beforeUnloading = omitFields(unloadingAgencyResult.snapshot.unloadingQuality, ["travels"]);
+const afterUnloading = omitFields(enriched.unloadingQuality, ["travels"]);
+assert.deepEqual(afterUnloading, beforeUnloading, "Calculs Réception inchangés");
+console.log("Régression destinations OK : priorité, casse, espaces, /, ;, répétitions, absence, ambiguïté, codes exacts et KPI inchangés");
 
 // Arrival enrichment never changes the authoritative hourly pass counters.
 function hourlyTravelSnapshot(entries, excludedTravelCodes = [], chartRows = null, range = { start: "00:00", end: "03:00" }) {
