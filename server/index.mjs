@@ -2,7 +2,7 @@ import express from "express";
 import multer from "multer";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, isTimeRangeWithin, KPI_DICTIONARY_VERSION, normalizePerformanceCriteria, normalizeSnapshotContract, normalizeTimeRange } from "./match-engine.mjs";
@@ -26,6 +26,7 @@ const agencyOperationQueues = new Map();
 const failedSessionAttempts = new Map();
 const sessionRateLimitWindowMs = 15 * 60 * 1000;
 const maxFailedSessionAttempts = 20;
+const importConfirmationSecret = randomBytes(32);
 
 const app = express();
 app.disable("x-powered-by");
@@ -507,6 +508,24 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
 
       const initialResult = buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code);
       if (!initialResult.ok) { res.status(400).json(initialResult.error); return; }
+      const mismatch = initialResult.snapshot.agency.detectedCode && initialResult.snapshot.agency.detectedCode !== req.agency.code;
+      if (mismatch) {
+        const fingerprint = createHash("sha256").update(req.file.buffer).digest("hex");
+        const signed = createHmac("sha256", importConfirmationSecret).update(`${req.agency.code}:${fingerprint}`).digest("hex");
+        const provided = String(req.body?.agencyConfirmation ?? "");
+        const isConfirmed = /^[0-9a-f]{64}$/.test(provided) && timingSafeEqual(Buffer.from(provided, "hex"), Buffer.from(signed, "hex"));
+        if (!isConfirmed) {
+          res.status(409).json({
+            title: "AGENCE À CONFIRMER",
+            message: `Ce classeur présente majoritairement des segments ${initialResult.snapshot.agency.detectedCode}, différents de l’espace ${req.agency.code}. Les segments ne prouvent pas à eux seuls l’origine du fichier.`,
+            action: "Vérifie l’agence d’origine du classeur, puis confirme explicitement si ce fichier appartient bien à ton espace.",
+            agencyConfirmation: signed,
+            detectedAgency: initialResult.snapshot.agency.detectedCode,
+            targetAgency: req.agency.code,
+          });
+          return;
+        }
+      }
       const lastPdf = await readLatestPdfIndicators(agencyDir);
       const association = lastPdf ? pdfAssociation(lastPdf, initialResult.snapshot) : null;
       const dailyIndicators = association?.status === "matched" ? lastPdf : null;
