@@ -80,6 +80,38 @@ test("A03 HTTP: confirmation signée, fichier et agence liés, aucune écriture 
     assert.equal(approved.payload.snapshot.agency.detectedCode, "05R");
     await fs.access(path.join(root, "01K", "latest.xlsx"));
     await assert.rejects(fs.access(path.join(root, "04P", "latest.xlsx")), { code: "ENOENT" });
+
+    // A05: one-time non-destructive migration of an old UTC-keyed Causerie.
+    const agencyDir = path.join(root, "01K");
+    const current = approved.payload.snapshot;
+    current.match.date = "2026-09-18";
+    current.match.legacyDate = "2026-09-17";
+    await fs.writeFile(path.join(agencyDir, "latest.json"), JSON.stringify(current));
+    const briefsDir = path.join(agencyDir, "causeries");
+    await fs.mkdir(briefsDir, { recursive: true });
+    const legacyPath = path.join(briefsDir, "2026-09-17.json");
+    const newPath = path.join(briefsDir, "2026-09-18.json");
+    const oldContents = JSON.stringify({
+      briefLayoutVersion: 2, team: "EQUIPE", manager: "TEST",
+      attack: ["Instruction conservée"], midfield: [], defense: [],
+      attachments: { attack: [], midfield: [], defense: [] },
+    });
+    await fs.writeFile(legacyPath, oldContents);
+    const migrated = await fetch(`${base}/api/agencies/01K/causerie?matchDate=2026-09-18`, {
+      headers: { "x-access-code": "test-01K" },
+    });
+    assert.equal(migrated.status, 200);
+    const state = await migrated.json();
+    assert.deepEqual(state.plan.attack, ["Instruction conservée"]);
+    assert.equal(await fs.readFile(legacyPath, "utf8"), oldContents, "Legacy brief must remain untouched");
+    assert.equal(await fs.readFile(newPath, "utf8"), oldContents, "New date must receive the same brief");
+    const secondRead = await fetch(`${base}/api/agencies/01K/causerie?matchDate=2026-09-18`, {
+      headers: { "x-access-code": "test-01K" },
+    });
+    assert.equal(secondRead.status, 200);
+    assert.equal((await secondRead.json()).causerieRevision, state.causerieRevision,
+      "Repeated migration must not rewrite the same brief");
+
   } finally {
     if (proc.exitCode === null) {
       const closed = once(proc, "close");
