@@ -841,7 +841,7 @@ async function savePdfImport(agencyCode, originalName, buffer, uploadedAt) {
   const safeName = sanitizeSegment(originalName.replace(/\.pdf$/i, "")) || "indicateurs-106j";
   await writeFileAtomic(path.join(uploadsDir, `${stamp}-${safeName}.pdf`), buffer);
   await writeFileAtomic(path.join(agencyDir, "latest-106j.pdf"), buffer);
-  await writeJsonAtomic(path.join(agencyDir, "latest-106j-meta.json"), { uploadedAt });
+  await writeJsonAtomic(path.join(agencyDir, "latest-106j-meta.json"), { uploadedAt, sourceName: originalName });
 }
 
 
@@ -858,12 +858,14 @@ function pdfReferenceDay(referenceDate) {
   const month = PDF_MONTHS.get(match[2]);
   if (!month) return null;
   const iso = `${match[3]}-${String(month).padStart(2, "0")}-${match[1].padStart(2, "0")}`;
-  return new Date(`${iso}T12:00:00Z`).toISOString().slice(0, 10) === iso ? iso : null;
+  return Number.isFinite(Date.parse(`${iso}T12:00:00Z`)) && new Date(`${iso}T12:00:00Z`).toISOString().slice(0, 10) === iso ? iso : null;
 }
 function parisDay(iso) {
   if (!iso || !Number.isFinite(Date.parse(iso))) return null;
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" })
-    .format(new Date(iso));
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date(iso)).map(part => [part.type, part.value]));
+  return `${p.year}-${p.month}-${p.day}`;
 }
 function pdfAssociation(pdf, snapshot) {
   const date = pdfReferenceDay(pdf?.referenceDate);
@@ -886,11 +888,13 @@ async function readLatestPdfIndicators(agencyDir) {
     const pdfPath = path.join(agencyDir, "latest-106j.pdf");
     const buffer = await fs.readFile(pdfPath);
     let uploadedAt = null;
+    let sourceName = "latest-106j.pdf";
     try {
       const meta = JSON.parse(await fs.readFile(path.join(agencyDir, "latest-106j-meta.json"), "utf8"));
       if (typeof meta.uploadedAt === "string" && Number.isFinite(Date.parse(meta.uploadedAt))) uploadedAt = meta.uploadedAt;
+      if (typeof meta.sourceName === "string" && meta.sourceName) sourceName = meta.sourceName;
     } catch (error) { if (error?.code !== "ENOENT") throw error; }
-    return await parse106jPdf(buffer, "latest-106j.pdf", { uploadedAt });
+    return await parse106jPdf(buffer, sourceName, { uploadedAt });
   } catch (error) {
     if (error?.code === "ENOENT") return null;
     throw error;
@@ -1129,7 +1133,6 @@ async function readExcludedTravelCodesForSnapshot(agencyCode, snapshot, period =
   if (Array.isArray(stored)) return stored;
   const oldDate = snapshot?.match?.legacyDate;
   if (oldDate && oldDate !== snapshot?.match?.date) {
-    const original = snapshot.match.date;
     const oldKey = travelExclusionScopeKey({ ...snapshot, match: { ...snapshot.match, date: oldDate } }, period);
     if (oldKey && Array.isArray(state.scopes[oldKey])) return state.scopes[oldKey];
   }
