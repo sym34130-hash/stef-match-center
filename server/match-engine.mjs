@@ -624,6 +624,14 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
     .slice(0, 5);
 
   const weakRole = roleDistribution.reduce((min, current) => (current.count < min.count ? current : min), roleDistribution[0]);
+  const operationalAnalyses = buildOperationalAnalyses({ rows: matchRows, period, criteria, loadingQuality, validation });
+  const legacyDate = firstOperation ? firstOperation.toISOString().slice(0, 10) : importedAt.toISOString().slice(0, 10);
+  const localDate = firstOperation ? new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(firstOperation) : legacyDate;
+  // A night crossing midnight belongs to its selected Paris operating start date.
+  // Keep the former UTC date for non-destructive compatibility with persisted briefs/exclusions.
+  const operationalDate = operationalAnalyses.anomalySummary?.night?.startDate ?? localDate;
   return {
     version: 1,
     sourceName,
@@ -635,7 +643,8 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
       name: `Agence ${expectedAgencyCode || detectedAgency || ""}`.trim(),
     },
     match: {
-      date: firstOperation ? firstOperation.toISOString().slice(0, 10) : importedAt.toISOString().slice(0, 10),
+      date: operationalDate,
+      legacyDate,
       firstOperation: firstOperation?.toISOString() ?? null,
       lastOperation: lastOperation?.toISOString() ?? null,
       // This label describes the operator-selected window. The actual first
@@ -708,7 +717,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
       zonageMinutes: criteria.zonageMinutes,
     }),
     performanceCriteria: criteria,
-    ...buildOperationalAnalyses({ rows: matchRows, period, criteria, loadingQuality, validation }),
+    ...operationalAnalyses,
     validation,
     kpiDictionaryVersion: KPI_DICTIONARY_VERSION,
   };
