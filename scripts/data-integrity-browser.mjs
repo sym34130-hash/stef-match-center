@@ -62,7 +62,7 @@ try {
     await page.getByLabel("Code agence").selectOption("01K");
     await page.getByLabel("Code d'accès").fill("INTEGRATION-01K");
     await page.getByRole("button", { name: "Accéder au match" }).click();
-    await page.getByRole("button", { name: /Import/ }).click();
+    await page.getByRole("button", { name: "MAJ Import", exact: true }).click();
     await page.locator(".import-source-drop-zone input[type=file]").first()
       .setInputFiles({ name: "multisegment.xlsx", mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer });
     await page.getByRole("button", { name: "Contrôler et importer Excel" }).click();
