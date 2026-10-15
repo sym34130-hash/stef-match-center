@@ -484,7 +484,12 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
           return;
         }
         const workbook = await readWorkbookForBuild(agencyDir);
-        const dailyIndicators = await parse106jPdf(req.file.buffer, req.file.originalname);
+        const dailyIndicators = await parse106jPdf(req.file.buffer, req.file.originalname, { uploadedAt: new Date().toISOString() });
+        const association = pdfAssociation(dailyIndicators, currentSnapshot);
+        if (association.status !== "matched") {
+          res.status(422).json({ title: "PDF NON ASSOCIÉ", message: association.message, action: "Vérifie la date de référence du rapport et importe un PDF correspondant à la nuit du match." });
+          return;
+        }
         const period = normalizeTimeRange(currentSnapshot.match?.periodStart, currentSnapshot.match?.periodEnd);
         const excludedTravelCodes = await readExcludedTravelCodesForSnapshot(req.agency.code, currentSnapshot, period);
         const result = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code, { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators, excludedTravelCodes });
@@ -493,15 +498,21 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
           return;
         }
         result.snapshot.agency.name = req.agency.name;
-        await savePdfImport(req.agency.code, req.file.originalname, req.file.buffer);
+        await savePdfImport(req.agency.code, req.file.originalname, req.file.buffer, dailyIndicators.importedAt);
         await writeJsonAtomic(path.join(agencyDir, "latest.json"), result.snapshot);
         clearCompositionCache(req.agency.code);
         res.json({ message: "PDF 106J ACTUALISÉ", snapshot: result.snapshot });
         return;
       }
 
-      const dailyIndicators = await readLatestPdfIndicators(agencyDir);
-      const result = buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code, { dailyIndicators });
+      const initialResult = buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code);
+      if (!initialResult.ok) { res.status(400).json(initialResult.error); return; }
+      const lastPdf = await readLatestPdfIndicators(agencyDir);
+      const association = lastPdf ? pdfAssociation(lastPdf, initialResult.snapshot) : null;
+      const dailyIndicators = association?.status === "matched" ? lastPdf : null;
+      const result = dailyIndicators
+        ? buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code, { dailyIndicators })
+        : initialResult;
       if (!result.ok) {
         res.status(400).json(result.error);
         return;
@@ -527,6 +538,7 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
       clearCompositionCache(req.agency.code);
       res.json({
         message: dailyIndicators ? "MATCH ET 106J ACTUALISÉS" : "MATCH ACTUALISÉ",
+        pdfAssociation: association,
         snapshot: scopedResult.snapshot,
       });
     });
@@ -801,7 +813,7 @@ async function saveImport(agencyCode, originalName, buffer, snapshot) {
   workbookReadPromises.delete(agencyDir);
 }
 
-async function savePdfImport(agencyCode, originalName, buffer) {
+async function savePdfImport(agencyCode, originalName, buffer, uploadedAt) {
   const safeAgency = sanitizeSegment(agencyCode);
   const agencyDir = path.join(dataDir, safeAgency);
   const uploadsDir = path.join(agencyDir, "uploads");
@@ -810,13 +822,56 @@ async function savePdfImport(agencyCode, originalName, buffer) {
   const safeName = sanitizeSegment(originalName.replace(/\.pdf$/i, "")) || "indicateurs-106j";
   await writeFileAtomic(path.join(uploadsDir, `${stamp}-${safeName}.pdf`), buffer);
   await writeFileAtomic(path.join(agencyDir, "latest-106j.pdf"), buffer);
+  await writeJsonAtomic(path.join(agencyDir, "latest-106j-meta.json"), { uploadedAt });
+}
+
+
+// An unverified PDF must never be silently presented as the current day's figures.
+// A night may legitimately cross midnight, so either civil date of that night qualifies.
+const PDF_MONTHS = new Map(Object.entries({
+  janvier: 1, fevrier: 2, mars: 3, avril: 4, mai: 5, juin: 6,
+  juillet: 7, aout: 8, septembre: 9, octobre: 10, novembre: 11, decembre: 12,
+}));
+function pdfReferenceDay(referenceDate) {
+  const normalized = String(referenceDate ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const match = normalized.match(/^(\d{1,2})\s+([a-z]+)\s+(\d{4})$/);
+  if (!match) return null;
+  const month = PDF_MONTHS.get(match[2]);
+  if (!month) return null;
+  const iso = `${match[3]}-${String(month).padStart(2, "0")}-${match[1].padStart(2, "0")}`;
+  return new Date(`${iso}T12:00:00Z`).toISOString().slice(0, 10) === iso ? iso : null;
+}
+function parisDay(iso) {
+  if (!iso || !Number.isFinite(Date.parse(iso))) return null;
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" })
+    .format(new Date(iso));
+}
+function pdfAssociation(pdf, snapshot) {
+  const date = pdfReferenceDay(pdf?.referenceDate);
+  const night = snapshot?.zonageDiagnostic?.night ?? snapshot?.anomalySummary?.night;
+  const start = night?.startDate ?? parisDay(snapshot?.match?.firstOperation);
+  const end = night?.endDate ?? parisDay(snapshot?.match?.lastOperation);
+  if (!date || !start || !end) return {
+    status: "unverified", referenceDate: pdf?.referenceDate ?? null,
+    message: "Impossible de vérifier automatiquement la correspondance entre le PDF 106J et la date du match.",
+  };
+  if (date !== start && date !== end) return {
+    status: "mismatched", referenceDate: pdf.referenceDate,
+    message: `Le rapport 106J correspond au ${pdf.referenceDate}, hors des dates d'exploitation ${start} à ${end}.`,
+  };
+  return { status: "matched", referenceDate: pdf.referenceDate, message: "PDF associé à la nuit du match." };
 }
 
 async function readLatestPdfIndicators(agencyDir) {
   try {
     const pdfPath = path.join(agencyDir, "latest-106j.pdf");
     const buffer = await fs.readFile(pdfPath);
-    return await parse106jPdf(buffer, "latest-106j.pdf");
+    let uploadedAt = null;
+    try {
+      const meta = JSON.parse(await fs.readFile(path.join(agencyDir, "latest-106j-meta.json"), "utf8"));
+      if (typeof meta.uploadedAt === "string" && Number.isFinite(Date.parse(meta.uploadedAt))) uploadedAt = meta.uploadedAt;
+    } catch (error) { if (error?.code !== "ENOENT") throw error; }
+    return await parse106jPdf(buffer, "latest-106j.pdf", { uploadedAt });
   } catch (error) {
     if (error?.code === "ENOENT") return null;
     throw error;
