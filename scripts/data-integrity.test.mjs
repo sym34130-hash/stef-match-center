@@ -78,3 +78,18 @@ test("A01: dates de Paris reconnues même à la frontière UTC", () => {
   assert.equal(pdfAssociation({ referenceDate: "18 septembre 2026" }, snapshot).status, "matched");
   assert.equal(pdfAssociation({ referenceDate: "17 septembre 2026" }, snapshot).status, "mismatched");
 });
+
+test("A03: le modèle calculé conserve l'indice agence sans altérer le contrat historique", () => {
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([
+    ["Opérateur", "Date heure de début d'opération", "Type d'opération",
+      "N° Position", "Code Voyage", "Agence Segment", "Type Segment",
+      "Filtre opérateur", "Filtre heure", "Poste", "Poz non zonées", "DZ", "Duels gagnés", "Quart temps"],
+    ["OP TEST", "17/09/2026 22:00:00", "DECHG", "P001", "TEST-01", "05R", "Test", "", "", "", "", "", "", ""],
+  ]), "Données");
+  const result = buildSnapshotFromWorkbook(XLSX.write(book, { type: "buffer", bookType: "xlsx" }),
+    "derived.xlsx", "01K", { start: "21:30", end: "06:30" });
+  assert.equal(result.ok, true, JSON.stringify(result.error));
+  assert.equal(result.snapshot.agency.detectedCode, "01K");
+  assert.equal(result.snapshot.validation.agencySegmentHint, "05R");
+});
