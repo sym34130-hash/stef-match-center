@@ -117,11 +117,11 @@ test("A03 HTTP: confirmation signée, fichier et agence liés, aucune écriture 
     const wrongPdf = await sendPdf("20 septembre 2026");
     assert.equal(wrongPdf.status, 422, JSON.stringify(wrongPdf.payload));
     await assert.rejects(fs.access(path.join(root, "01K", "latest-106j.pdf")), { code: "ENOENT" });
-    const correctPdf = await sendPdf("18 septembre 2026");
+    const correctPdf = await sendPdf("17 septembre 2026");
     assert.equal(correctPdf.status, 200, JSON.stringify(correctPdf.payload));
     const savedAt = correctPdf.payload.snapshot.dailyIndicators?.importedAt;
     assert.match(savedAt, /^2026-\d{2}-\d{2}T/);
-    assert.equal(correctPdf.payload.snapshot.dailyIndicators.referenceDate, "18 septembre 2026");
+    assert.equal(correctPdf.payload.snapshot.dailyIndicators.referenceDate, "17 septembre 2026");
     const reread = await fetch(`${base}/api/agencies/01K/snapshot`, { headers: { "x-access-code": "test-01K" } });
     assert.equal(reread.status, 200);
     assert.equal((await reread.json()).snapshot.dailyIndicators?.importedAt, savedAt);
