@@ -35,6 +35,10 @@ jobs:
         run: node --test scripts/data-integrity-api.test.mjs
       # import-contract.test.mjs and the complete reconciliation require the real 058 XLSX,
       # which is deliberately excluded from this public repository.
+      - name: Install Chromium for UI regression
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Browser import and agency confirmation (desktop/mobile)
+        run: node scripts/data-integrity-browser.mjs
       - name: Standalone unit and API checks
         run: |
           node --test \
