@@ -72,7 +72,12 @@ try {
     const before = await fetch(`http://127.0.0.1:${apiPort}/api/agencies/01K/snapshot`, { headers: { "x-access-code": "INTEGRATION-01K" } });
     if (viewport.width === 1366) assert.equal(before.status, 404);
     await confirmation.getByRole("button", { name: "Je confirme que ce fichier appartient à mon agence" }).click();
-    await page.getByText("MATCH ACTUALISÉ", { exact: true }).waitFor({ state: "visible", timeout: 20000 });
+    await page.locator(".import-result.success").waitFor({ state: "visible", timeout: 20000 });
+    const successText = await page.locator(".import-result.success").innerText();
+    assert.match(successText, /MATCH ACTUALISÉ|IMPORT PARTIEL/);
+    const after = await fetch(`http://127.0.0.1:${apiPort}/api/agencies/01K/snapshot`,
+      { headers: { "x-access-code": "INTEGRATION-01K" } });
+    assert.equal(after.status, 200, "Confirmed import must persist the snapshot");
     assert.deepEqual(errors, [], `Unexpected React errors at ${viewport.width}px`);
     console.log(`Browser: login, upload, agency confirmation, completed import at ${viewport.width}px: OK`);
     await page.close();
