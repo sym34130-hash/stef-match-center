@@ -54,10 +54,128 @@ export type CauserieItem = {
   value: string;
 };
 
+export type AnalysisState = "disponible" | "indisponible";
+
+export type OperatingNight = {
+  startDate: string;
+  endDate: string;
+  start: string;
+  end: string;
+  timeZone: "Europe/Paris";
+  /** Matches the official minute-precision range: all seconds of the final minute are included. */
+  endInclusiveMinute: true;
+  eligibleOperations: number;
+  otherNightOperations: number;
+  candidates: Array<{ startDate: string; operations: number }>;
+  selectionRule: "maximum_operations_puis_date_recente";
+};
+
+export type ZonageTravelDiagnostic = {
+  travelCode: string;
+  state: AnalysisState;
+  receivedPositions: number;
+  qualifiablePositions: number;
+  onTimePositions: number;
+  latePositions: number;
+  unqualifiablePositions: number;
+  /** Late / qualifiable; null when no position can be qualified. */
+  anomalyRate: number | null;
+  coverageRate: number | null;
+  averageExcessSeconds: number | null;
+};
+
+export type ZonageDiagnostic = {
+  state: AnalysisState;
+  reason: string | null;
+  night: OperatingNight | null;
+  targetMinutes: number;
+  receivedPositions: number;
+  qualifiablePositions: number;
+  onTimePositions: number;
+  latePositions: number;
+  unqualifiablePositions: number;
+  anomalyRate: number | null;
+  coverageRate: number | null;
+  unattributedPositions: number;
+  positionsWithoutReception: number;
+  repeatedReceptionPositions: number;
+  unqualifiableReasons: Record<string, number>;
+  travels: ZonageTravelDiagnostic[];
+  top5: ZonageTravelDiagnostic[];
+  details: Array<{
+    position: string;
+    travelCode: string | null;
+    classification: "hors_delai" | "non_qualifiable";
+    reason: string | null;
+    delaySeconds: number | null;
+    receptionAt: string;
+    zonageAt: string | null;
+  }>;
+  warnings: string[];
+};
+
+export type UnloadingHourlySlot = {
+  start: string;
+  end: string;
+  endInclusiveMinute: boolean;
+  label: string;
+  state: AnalysisState;
+  travelCount: number;
+  operationRows: number;
+  distinctPositions: number;
+  meanSecondsPerPosition: number | null;
+  offTargetTravels: number;
+  offTargetPercent: number | null;
+  targetSeconds: number;
+  travelCodes: string[];
+};
+
+export type UnloadingHourlyAnalysis = {
+  state: AnalysisState;
+  reason: string | null;
+  night: OperatingNight | null;
+  targetSeconds: number;
+  grouping: "heure_du_premier_DECHG_de_la_nuit";
+  eligibleTravels: number;
+  excludedZeroDurationTravels: number;
+  unidentifiedTravelRows: number;
+  meanSecondsPerPosition: number | null;
+  offTargetTravels: number;
+  offTargetPercent: number | null;
+  items: UnloadingHourlySlot[];
+  travels: Array<{
+    travelCode: string;
+    start: string;
+    end: string;
+    operationRows: number;
+    distinctPositions: number;
+    timePerPositionSeconds: number;
+    offTarget: boolean;
+  }>;
+};
+
+export type AnomalySummary = {
+  state: AnalysisState;
+  reason: string | null;
+  night: OperatingNight | null;
+  zonage: Pick<ZonageDiagnostic, "latePositions" | "unqualifiablePositions" | "receivedPositions" | "qualifiablePositions">;
+  unloading: Pick<UnloadingHourlyAnalysis, "offTargetTravels" | "eligibleTravels">;
+  /** Existing TCD loading population, not silently resegmented by operating night. */
+  loading: { state: AnalysisState; offTargetTravels: number | null; eligibleTravels: number | null; source: "TCD PPT"; scope: "plage_active_toutes_dates" };
+  worstReceptionSlot: Pick<UnloadingHourlySlot, "start" | "end" | "label" | "meanSecondsPerPosition" | "travelCount"> | null;
+  topZonageTravel: Pick<ZonageTravelDiagnostic, "travelCode" | "latePositions" | "qualifiablePositions"> | null;
+  warnings: string[];
+  messages: string[];
+};
+
 export type Snapshot = {
   version: number;
   sourceName: string;
   importedAt: string;
+  operationalAnalysisVersion?: number;
+  zonageDiagnostic?: ZonageDiagnostic;
+  unloadingHourlyAnalysis?: UnloadingHourlyAnalysis;
+  anomalySummary?: AnomalySummary;
   excludedTravelCodes?: string[];
   performanceCriteria?: {
     zonageMinutes: number;

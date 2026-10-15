@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import * as XLSX from "xlsx";
+import { buildOperationalAnalyses, normalizeOperationalAnalysisContract } from "./operational-analysis.mjs";
 
 const REQUIRED_COLUMNS = {
   operator: ["operateur"],
@@ -523,6 +524,7 @@ export function buildCompositionViewFromWorkbook(buffer, sourceName, expectedAge
 }
 
 export function normalizeSnapshotContract(snapshot) {
+  snapshot = normalizeOperationalAnalysisContract(snapshot);
   if (!snapshot || !Array.isArray(snapshot.players)) return snapshot;
   const categoryLeaders = selectCategoryLeaders(snapshot.players);
   const performanceCriteria = normalizePerformanceCriteria(snapshot.performanceCriteria);
@@ -706,6 +708,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
       zonageMinutes: criteria.zonageMinutes,
     }),
     performanceCriteria: criteria,
+    ...buildOperationalAnalyses({ rows: matchRows, period, criteria, loadingQuality, validation }),
     validation,
     kpiDictionaryVersion: KPI_DICTIONARY_VERSION,
   };

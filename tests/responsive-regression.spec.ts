@@ -302,22 +302,22 @@ async function assertOperationalCarousel(page: Page, label: string) {
   const carousel = page.locator(".operational-charts-carousel");
   await expect(carousel).toBeVisible();
   const tabs = carousel.locator(".operational-charts-carousel-dots [role='tab']");
-  await expect(tabs).toHaveCount(4);
-  for (let index = 0; index < 4; index += 1) {
+  await expect(tabs).toHaveCount(5);
+  for (let index = 0; index < 5; index += 1) {
     await tabs.nth(index).click();
     const activeChart = carousel.locator(".operational-chart-slide.is-active");
     await expect(activeChart).toBeVisible();
-    await expect(carousel.locator(".operational-charts-carousel-counter")).toHaveText(`${index + 1} / 4`);
+    await expect(carousel.locator(".operational-charts-carousel-counter")).toHaveText(`${index + 1} / 5`);
     await expect(tabs.nth(index)).toHaveAttribute("aria-selected", "true");
     await page.waitForTimeout(650);
-    await expect(carousel.locator(".operational-charts-carousel-counter")).toHaveText(`${index + 1} / 4`);
+    await expect(carousel.locator(".operational-charts-carousel-counter")).toHaveText(`${index + 1} / 5`);
     await expect(tabs.nth(index)).toHaveAttribute("aria-selected", "true");
-    await assertTextNotClipped(page, ".operational-chart-slide.is-active > .performance-chart-panel, .operational-chart-slide.is-active > .loading-quality-card, .operational-chart-slide.is-active > .duel-quality-card", label);
+    await assertTextNotClipped(page, ".operational-chart-slide.is-active > .performance-chart-panel, .operational-chart-slide.is-active > .loading-quality-card, .operational-chart-slide.is-active > .duel-quality-card, .operational-chart-slide.is-active > .operational-diagnostic-card", label);
     const geometry = await activeChart.evaluate((element) => {
       const card = element as HTMLElement;
       const cardRect = card.getBoundingClientRect();
       const carouselViewport = card.closest(".operational-charts-carousel")?.querySelector<HTMLElement>(".operational-charts-carousel-viewport")?.getBoundingClientRect();
-      const visuals = [...card.querySelectorAll<HTMLElement>(".performance-chart, .loading-quality-pie")]
+      const visuals = [...card.querySelectorAll<HTMLElement>(".performance-chart, .loading-quality-pie, .diagnostic-bar-track")]
         .map((visual) => {
           const rect = visual.getBoundingClientRect();
           return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
@@ -338,13 +338,27 @@ async function assertOperationalCarousel(page: Page, label: string) {
     expect(geometry.scrollWidth, `${label}: débordement horizontal du graphique ${index + 1}`).toBeLessThanOrEqual(geometry.clientWidth + 1);
     expect(geometry.visibleText, `${label}: texte critique absent du graphique ${index + 1}`).toBeGreaterThan(0);
     expect(geometry.visuals.length, `${label}: aucun visuel de graphique détecté sur la slide ${index + 1}`).toBeGreaterThan(0);
-    geometry.visuals.forEach((visual, visualIndex) => {
+    for (let visualIndex = 0; visualIndex < geometry.visuals.length; visualIndex++) {
+      let visual = geometry.visuals[visualIndex];
+      let cardBounds = geometry.card;
+      if (index === 4) {
+        // At low heights the diagnostic deliberately scrolls internally.
+        // Verify every bar is reachable, not only the initially visible ones.
+        const bar = activeChart.locator(".diagnostic-bar-track").nth(visualIndex);
+        await bar.scrollIntoViewIfNeeded();
+        const rect = await bar.boundingBox();
+        const root = await activeChart.locator(".operational-diagnostic-card").boundingBox();
+        expect(rect).not.toBeNull(); expect(root).not.toBeNull();
+        visual = { left: rect!.x, right: rect!.x + rect!.width, top: rect!.y, bottom: rect!.y + rect!.height };
+        cardBounds = { left: root!.x, right: root!.x + root!.width, top: root!.y, bottom: root!.y + root!.height };
+      }
       const subpixelTolerance = 2;
-      expect(visual.left, `${label}: visuel ${visualIndex + 1} de la slide ${index + 1} rogné à gauche`).toBeGreaterThanOrEqual(geometry.card.left - subpixelTolerance);
-      expect(visual.right, `${label}: visuel ${visualIndex + 1} de la slide ${index + 1} rogné à droite`).toBeLessThanOrEqual(geometry.card.right + subpixelTolerance);
-      expect(visual.top, `${label}: visuel ${visualIndex + 1} de la slide ${index + 1} rogné en haut`).toBeGreaterThanOrEqual(geometry.card.top - subpixelTolerance);
-      expect(visual.bottom, `${label}: visuel ${visualIndex + 1} de la slide ${index + 1} rogné en bas`).toBeLessThanOrEqual(geometry.card.bottom + subpixelTolerance);
-    });
+      expect(visual.left, `${label}: visuel ${visualIndex + 1} de la slide ${index + 1} rogné à gauche`).toBeGreaterThanOrEqual(cardBounds.left - subpixelTolerance);
+      expect(visual.right, `${label}: visuel ${visualIndex + 1} de la slide ${index + 1} rogné à droite`).toBeLessThanOrEqual(cardBounds.right + subpixelTolerance);
+      expect(visual.top, `${label}: visuel ${visualIndex + 1} de la slide ${index + 1} rogné en haut`).toBeGreaterThanOrEqual(cardBounds.top - subpixelTolerance);
+      expect(visual.bottom, `${label}: visuel ${visualIndex + 1} de la slide ${index + 1} rogné en bas`).toBeLessThanOrEqual(cardBounds.bottom + subpixelTolerance);
+    }
+    if (index === 4) await activeChart.locator(".operational-diagnostic-card").evaluate(element => { element.scrollTop = 0; });
     if (geometry.viewport) {
       expect(geometry.card.left, `${label}: carte ${index + 1} active coupée à gauche`).toBeGreaterThanOrEqual(geometry.viewport.left - 4);
       expect(geometry.card.right, `${label}: carte ${index + 1} active coupée à droite`).toBeLessThanOrEqual(geometry.viewport.right + 4);
@@ -463,7 +477,12 @@ async function assertNoHorizontalOverflow(page: Page, viewport: ViewportCase) {
 
 async function captureReference(page: Page, scene: string, viewport: ViewportCase) {
   await page.evaluate(() => window.scrollTo(0, 0));
-  await page.screenshot({ path: test.info().outputPath(`${viewport.name}-${scene}-full.png`), fullPage: !scene.startsWith("brief-") });
+  const operational = scene.endsWith("slide-3");
+  const counter = page.locator(".operational-charts-carousel-counter");
+  if (operational) await expect(counter).toHaveText("5 / 5");
+  // Chromium's full-page capture can re-snap this nested carousel while
+  // resizing the capture surface. Keep its proof at the requested viewport.
+  await page.screenshot({ path: test.info().outputPath(`${viewport.name}-${scene}-full.png`), fullPage: !scene.startsWith("brief-") && !operational });
   // Keep every comparison strict, but finish the geometry matrix even when
   // an older image differs. Soft failures still fail the test.
   await expect.soft(page).toHaveScreenshot(`${viewport.name}-${scene}.png`, {
@@ -472,4 +491,5 @@ async function captureReference(page: Page, scene: string, viewport: ViewportCas
     maxDiffPixelRatio: 0.02,
     threshold: 0.2,
   });
+  if (operational) await expect(counter).toHaveText("5 / 5");
 }

@@ -7,6 +7,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, isTimeRangeWithin, KPI_DICTIONARY_VERSION, normalizePerformanceCriteria, normalizeSnapshotContract, normalizeTimeRange } from "./match-engine.mjs";
 import { parse106jPdf } from "./pdf-106j.mjs";
+import { operationalAnalysisNeedsRefresh } from "./operational-analysis.mjs";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout } from "./brief-layout.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -886,6 +887,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
       Object.keys(punctuality).length > 0 &&
       Object.keys(punctuality).some((key) => !Number.isFinite(snapshot.dailyIndicators?.punctualityTargets?.[key])),
     );
+    const analysisNeedsRefresh = operationalAnalysisNeedsRefresh(snapshot);
     const snapshotNeedsRefresh =
       snapshot.kpiDictionaryVersion !== KPI_DICTIONARY_VERSION ||
       !Array.isArray(snapshot.hourlyPerformance) ||
@@ -904,7 +906,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
     const storedCriteriaMatchesRequest = requestedCriteria
       ? Object.entries(requestedCriteria).every(([key, value]) => snapshot.performanceCriteria?.[key] === value)
       : false;
-    if (requestedCriteria && (!storedCriteriaMatchesRequest || snapshotNeedsRefresh)) {
+    if (requestedCriteria && (!storedCriteriaMatchesRequest || snapshotNeedsRefresh || analysisNeedsRefresh)) {
       try {
         const workbook = await readWorkbookForBuild(agencyDir);
         const dailyIndicators = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;
@@ -930,7 +932,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
 
     // Older snapshots predate the hourly chart and half-time composition.
     // Rebuild them once from the latest workbook so new views work without a second import.
-    if (!requestedCriteria && snapshotNeedsRefresh) {
+    if (!requestedCriteria && (snapshotNeedsRefresh || analysisNeedsRefresh)) {
       try {
         const workbook = await readWorkbookForBuild(agencyDir);
         const dailyIndicators = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;

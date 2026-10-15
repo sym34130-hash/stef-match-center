@@ -25,6 +25,7 @@ import {
   FileCheck2,
   CircleHelp,
   LayoutDashboard,
+  ListFilter,
   Lock,
   Maximize2,
   Medal,
@@ -46,6 +47,7 @@ import type { LucideIcon } from "lucide-react";
 import type { Agency, Highlight, Player, Snapshot } from "./types";
 import { MatchIndicatorsCarousel } from "./MatchIndicatorsCarousel";
 import { KickoffMusicControl } from "./KickoffMusicControl";
+import { OperationalDiagnosticCard, ReceptionHourlyChart } from "./OperationalAnalysisCards";
 import { parseMercatoEntrants, type MercatoProfile, type MercatoProfiles } from "./mercato";
 
 type Session = {
@@ -1707,6 +1709,11 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
       label: "% centres réussis",
       content: <CentersQualityCard snapshot={snapshot} />,
     },
+    {
+      id: "operational-diagnostic",
+      label: "Diagnostic opérationnel",
+      content: <OperationalDiagnosticCard snapshot={snapshot} />,
+    },
   ];
 
   useEffect(() => {
@@ -1745,7 +1752,8 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
       : viewport.scrollLeft + slideRect.left + slideRect.width / 2 - (viewportRect.left + viewport.clientWidth / 2);
     const maxScrollLeft = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
     const targetLeft = Math.max(0, Math.min(maxScrollLeft, centeredLeft));
-    viewport.scrollTo({ left: targetLeft, behavior: isCelebrationMode ? "auto" : "smooth" });
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    viewport.scrollTo({ left: targetLeft, behavior: isCelebrationMode || reducedMotion ? "auto" : "smooth" });
     setActiveIndex(nextIndex);
   };
 
@@ -1789,6 +1797,7 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
         aria-label="Graphiques de lecture opérationnelle"
         tabIndex={0}
         onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
           if (!(["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key))) return;
           event.preventDefault();
           const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? cards.length - 1 : activeIndex + (event.key === "ArrowRight" ? 1 : -1);
@@ -1800,6 +1809,7 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
             <article
               className={`operational-chart-slide ${activeIndex === index ? "is-active" : ""}`}
               key={card.id}
+              inert={activeIndex !== index}
               ref={(element) => { slideRefs.current[index] = element; }}
               aria-label={`${card.label}, graphique ${index + 1} sur ${cards.length}`}
             >
@@ -1988,6 +1998,7 @@ function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pe
           ) : <p className="loading-quality-empty">Aucun duel à détailler sur cette plage.</p>}
         </details>
       )}
+      <ReceptionHourlyChart snapshot={snapshot} />
     </section>
   );
 }
@@ -3658,20 +3669,36 @@ function LeagueTargetMeter({ league }: { league: LeagueConfig }) {
   );
 }
 
-type GuideSection = "start" | "excel" | "import" | "read" | "edit" | "admin" | "help";
+type GuideSection = "start" | "excel" | "import" | "read" | "anomalies" | "edit" | "admin" | "help";
 
 function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot | null; leagueConfigs: LeagueConfig[]; onNavigate: (screen: Screen) => void }) {
   const [section, setSection] = useState<GuideSection>("start");
   const guideLeagues = leagueConfigs;
+  const guideContentRef = useRef<HTMLDivElement>(null);
+  function showSection(next: GuideSection) {
+    setSection(next);
+    requestAnimationFrame(() => {
+      const content = guideContentRef.current;
+      if (!content) return;
+      const navigation = document.querySelector<HTMLElement>(".sidebar");
+      const area = content.getBoundingClientRect();
+      const nav = navigation?.getBoundingClientRect();
+      const overlapsNavigation = navigation && nav && ["fixed", "sticky"].includes(getComputedStyle(navigation).position) && nav.right > area.left && nav.left < area.right;
+      // Use the navigation height, not its transient position during scrolling.
+      const inset = overlapsNavigation ? navigation.offsetHeight + 12 : 18;
+      window.scrollTo({ top: window.scrollY + area.top - inset, behavior: "instant" });
+    });
+  }
 
   const sections: Array<{ id: GuideSection; number: string; label: string }> = [
     { id: "start", number: "01", label: "Démarrer" },
     { id: "excel", number: "02", label: "Préparer Excel" },
-    { id: "import", number: "03", label: "Importer & actualiser" },
+    { id: "import", number: "03", label: "Importer et actualiser" },
     { id: "read", number: "04", label: "Lire les écrans" },
-    { id: "edit", number: "05", label: "Modifier le plan" },
-    { id: "admin", number: "06", label: "Administrateur" },
-    { id: "help", number: "07", label: "Points d’attention" },
+    { id: "anomalies", number: "05", label: "Analyser les anomalies" },
+    { id: "edit", number: "06", label: "Modifier le plan" },
+    { id: "admin", number: "07", label: "Administrateur" },
+    { id: "help", number: "08", label: "Points d’attention" },
   ];
   const activeIndex = sections.findIndex((item) => item.id === section);
   const previousSection = sections[Math.max(0, activeIndex - 1)]?.id ?? "start";
@@ -3683,7 +3710,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
         <div>
           <p className="eyebrow">Guide intégré</p>
           <h2>Utiliser STEF Match Center de A à Z</h2>
-          <p>Un parcours simple pour partir de votre fichier Excel, actualiser le match et utiliser chaque écran sans connaissance technique.</p>
+          <p>Importer → Contrôler → Analyser → Préparer le brief.</p>
         </div>
         <div className="guide-hero-status">
           <BookOpen size={26} />
@@ -3700,7 +3727,8 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
               key={item.id}
               type="button"
               className={section === item.id ? "guide-nav-item active" : "guide-nav-item"}
-              onClick={() => setSection(item.id)}
+              aria-current={section === item.id ? "step" : undefined}
+              onClick={() => showSection(item.id)}
             >
               <b>{item.number}</b>
               <span>{item.label}</span>
@@ -3713,8 +3741,8 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
           </div>
         </nav>
 
-        <div className="guide-content">
-          <div className="guide-progress" aria-label={`Progression du guide : étape ${activeIndex + 1} sur ${sections.length}`}>
+        <div className="guide-content" ref={guideContentRef}>
+          <div className="guide-progress" role="progressbar" aria-valuemin={1} aria-valuemax={sections.length} aria-valuenow={activeIndex + 1} aria-label={`Progression du guide : étape ${activeIndex + 1} sur ${sections.length}`}>
             <div className="guide-progress-copy"><span>Progression</span><strong>Étape {activeIndex + 1} sur {sections.length} · {sections[activeIndex]?.label}</strong></div>
             <div className="guide-progress-track"><span style={{ width: `${((activeIndex + 1) / sections.length) * 100}%` }} /></div>
           </div>
@@ -3722,16 +3750,17 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
             <GuidePanel eyebrow="01 · Démarrer" title="Le fonctionnement en une minute" icon={MousePointerClick}>
               <p>Le site transforme un fichier Excel actualisé en une lecture opérationnelle du match. Le fichier reste la source de données ; le site sert à contrôler, comprendre et agir.</p>
               <div className="guide-flow">
-                <GuideFlowStep number="1" title="Préparer" detail="Remplacer l’onglet Données par la dernière base Excel." tone="blue" />
-                <GuideFlowStep number="2" title="Importer" detail="Déposer l’Excel puis le PDF 106J dans les deux zones dédiées." tone="green" />
-                <GuideFlowStep number="3" title="Contrôler" detail="Lire le score, les alertes et les éventuels points à revoir." tone="orange" />
-                <GuideFlowStep number="4" title="Agir" detail="Utiliser Coach puis le brief équipe pour préparer et afficher les consignes avec la plage horaire choisie." tone="red" />
+                <GuideFlowStep number="1" title="Importer" detail="Chargez votre classeur complet, puis le PDF 106J si disponible." tone="blue" />
+                <GuideFlowStep number="2" title="Contrôler" detail="Vérifiez le fichier, la plage active et les indicateurs disponibles." tone="green" />
+                <GuideFlowStep number="3" title="Analyser" detail="Repérez les retards et les délais inconnus dans le Diagnostic opérationnel." tone="orange" />
+                <GuideFlowStep number="4" title="Préparer le brief" detail="Renseignez les priorités dans Coach et les consignes dans BRIEF ÉQUIPE." tone="red" />
               </div>
               <div className="guide-callout success"><CheckCircle2 size={20} /><span><strong>Règle simple :</strong> chaque fois que la base Excel change, il faut refaire un import. Le bouton Actualiser sert ensuite à relire le dernier import enregistré.</span></div>
-              <div className="guide-callout info"><Shield size={20} /><span><strong>Un espace séparé par agence :</strong> les imports et les causeries sont isolés par agence. Utilisez uniquement le code d’accès qui vous a été transmis séparément ; il n’est jamais affiché dans le guide.</span></div>
+              <div className="guide-callout info"><Shield size={20} /><span><strong>Un espace séparé par agence :</strong> Agen, Montpellier, Toulouse, Bordeaux, Lyon et Brive. À la connexion, choisissez votre agence et utilisez le code d’accès qui vous a été transmis séparément ; il n’est jamais affiché dans le guide. Vérifiez ensuite la date du dernier Excel importé.</span></div>
+              <p>Les quatre indicateurs du match sont comparés aux objectifs de la ligue active. Le diagnostic aide ensuite à repérer les situations à examiner avant de transmettre les consignes.</p>
               <div className="guide-actions">
                 <button className="primary-button" type="button" onClick={() => onNavigate("import")}><Upload size={17} /> Ouvrir l’import</button>
-                <button className="secondary-button" type="button" onClick={() => setSection("excel")}><ArrowRight size={17} /> Préparer Excel</button>
+                <button className="secondary-button" type="button" onClick={() => showSection("excel")}><ArrowRight size={17} /> Préparer Excel</button>
               </div>
             </GuidePanel>
           )}
@@ -3742,27 +3771,25 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
               <ol className="guide-steps">
                 <li><b>Ouvrez la dernière version fiable du classeur.</b><span>Utilisez la base qui contient les données opérationnelles les plus récentes.</span></li>
                 <li><b>Faites une copie du fichier.</b><span>Dans Excel : Fichier → Enregistrer sous, puis donnez un nom clair à la copie, par exemple <code>HM_58_match_2026-09-07.xlsx</code>.</span></li>
-                <li><b>Remplacez l’onglet source.</b><span>Dans la copie utilisée pour l’import, remplacez l’ancien onglet <strong>Données</strong> par l’onglet actualisé. Le nom doit rester exactement <strong>Données</strong>.</span></li>
+                <li><b>Actualisez les données source dans la copie.</b><span>Conservez l’onglet <strong>Données</strong>, ses en-têtes et ses colonnes calculées. Ne remplacez pas toute la feuille par un extrait incomplet.</span></li>
                 <li><b>Conservez la structure complète.</b><span>Ne réduisez pas le fichier aux seules premières colonnes : le site utilise les champs de données, de filtres, de poste, de voyage et de duel listés ci-dessous.</span></li>
               <li><b>Enregistrez au format .xlsx.</b><span>Le site accepte le classeur Excel <strong>.xlsx</strong> dans la zone Excel. Le rapport PDF 106J se dépose séparément dans la zone dédiée.</span></li>
               </ol>
               <div className="guide-excel-howto">
                 <div><span className="guide-subtitle">Méthode simple pour remplacer les données</span><strong>Copier la base actualisée dans l’onglet Données</strong></div>
                 <ol className="guide-steps compact">
-                  <li><b>Dans l’onglet source actualisé, cliquez dans le tableau.</b><span>Appuyez sur <kbd>Ctrl</kbd> + <kbd>A</kbd> pour sélectionner la zone de données, puis une deuxième fois si Excel ne sélectionne pas toute la feuille.</span></li>
-                  <li><b>Copiez les données.</b><span>Appuyez sur <kbd>Ctrl</kbd> + <kbd>C</kbd>.</span></li>
-                  <li><b>Allez dans l’onglet Données de la copie de travail.</b><span>Cliquez sur la cellule A1, en haut à gauche du tableau.</span></li>
-                  <li><b>Videz les anciennes lignes avant de coller.</b><span>Dans l’onglet Données, sélectionnez l’ancienne zone de données de A2 à G jusqu’à la dernière ancienne ligne, puis appuyez sur <kbd>Suppr</kbd>. Ne supprimez pas les colonnes : vous effacez leur contenu uniquement.</span></li>
-                  <li><b>Collez la nouvelle plage.</b><span>Revenez sur A1 et appuyez sur <kbd>Ctrl</kbd> + <kbd>V</kbd>. Cette étape évite que des lignes de l’ancien import restent sous le nouvel import.</span></li>
-                  <li><b>Enregistrez et contrôlez.</b><span>Appuyez sur <kbd>Ctrl</kbd> + <kbd>S</kbd>. En cas d’erreur, <kbd>Ctrl</kbd> + <kbd>Z</kbd> annule la dernière action.</span></li>
+                  <li><b>Repérez les colonnes source par leur en-tête.</b><span>Comparez l’extrait et le modèle de votre agence. L’ordre des colonnes peut varier ; ne vous fiez pas uniquement aux lettres.</span></li>
+                  <li><b>Effacez seulement les anciennes valeurs source, sous les en-têtes.</b><span>Incluez les anciennes lignes au-delà de la taille du nouvel extrait. Ne supprimez ni les colonnes ni les formules.</span></li>
+                  <li><b>Collez les nouvelles valeurs dans les colonnes correspondantes.</b><span>Commencez sous les en-têtes, sans coller une feuille entière. Gardez les dates lisibles et les Code Voyage inchangés.</span></li>
+                  <li><b>Contrôlez les calculs avant d’enregistrer.</b><span>Vérifiez que les formules couvrent les nouvelles lignes et que les tableaux de calcul du classeur sont actualisés selon votre procédure habituelle. En cas de doute, faites valider la copie par le référent du fichier.</span></li>
                 </ol>
               </div>
-              <div className="guide-clear-warning"><AlertTriangle size={21} /><div><strong>Étape indispensable avant chaque collage</strong><span>Un nouvel extrait peut contenir moins de lignes que l’ancien. Si vous ne videz pas l’ancienne zone A:G, les anciennes lignes restantes peuvent encore être lues par le site et fausser les indicateurs. Dans ce classeur, ne videz pas H:T : ces colonnes contiennent des formules et des colonnes d’aide qui doivent rester en place.</span></div></div>
-              <div className="guide-formula-note"><FileCheck2 size={20} /><div><strong>À retenir sur les colonnes H à T</strong><span>H correspond à <strong>Filtre opérateur</strong> et contient une formule. Les colonnes suivantes calculent notamment les filtres, le poste, le DZ et les duels gagnés. On remplace les données source en A:G ; on laisse les formules H:T se recalculer.</span></div></div>
-              <div className="guide-field-block"><span className="guide-subtitle">Champs attendus dans l’onglet Données</span><div className="guide-field-list">{["Opérateur", "Date/Heure de début d’opération", "Type d’opération", "N° Position", "Code Voyage", "Agence Segment", "Type Segment", "Filtre opérateur", "Filtre heure", "Poste", "Poz non zonées", "DZ", "Duels gagnés"].map((field) => <span key={field}>{field}</span>)}</div><small>Les intitulés doivent rester reconnaissables. Ne supprimez pas la ligne d’en-têtes.</small></div>
+              <div className="guide-clear-warning"><AlertTriangle size={21} /><div><strong>Ne mélangez pas ancien et nouvel extrait</strong><span>Les anciennes lignes restantes peuvent fausser les indicateurs. Effacez leurs valeurs source dans la copie, sans toucher aux formules. Si vous ne savez pas distinguer source et calcul, utilisez un classeur complet déjà actualisé plutôt qu’un collage risqué.</span></div></div>
+              <div className="guide-formula-note"><FileCheck2 size={20} /><div><strong>Les en-têtes font référence, pas les lettres</strong><span>Selon le modèle, une colonne de température peut décaler <strong>Filtre opérateur</strong> et les colonnes calculées. Préservez notamment les filtres, le poste, le DZ et les duels gagnés. Le site lit les résultats enregistrés dans Excel ; il ne recalcule pas les formules du classeur.</span></div></div>
+              <div className="guide-field-block"><span className="guide-subtitle">Champs à préserver dans l’onglet Données</span><div className="guide-field-list">{["Opérateur", "Date/Heure de début d’opération", "Type d’opération", "N° Position", "Code Voyage", "Agence Segment", "Type Segment", "Filtre opérateur", "Filtre heure", "Poste", "Poz non zonées", "DZ", "Duels gagnés", "Heure OP"].map((field) => <span key={field}>{field}</span>)}</div><small>Conservez toutes les colonnes du modèle, y compris celles qui ne sont pas listées ici, et la ligne d’en-têtes. Les intitulés doivent rester reconnaissables.</small></div>
               <figure className="guide-excel-figure">
-                <img src="/excel-donnees-original.png" alt="Capture réelle de l’onglet Données dans le classeur Excel importé" />
-                <figcaption>Capture réelle de l’onglet <strong>Données</strong> : la ligne 1 contient les en-têtes et les lignes suivantes contiennent les opérations.</figcaption>
+                <img src="/excel-donnees-original.png" alt="Exemple de l’onglet Données dans un modèle Excel antérieur" />
+                <figcaption>Exemple réel d’un modèle antérieur : la ligne 1 contient les en-têtes. Les lettres des colonnes de votre classeur peuvent être différentes ; utilisez leurs intitulés.</figcaption>
               </figure>
               <div className="guide-shortcut-grid">
                 <GuideShortcut keys={["Ctrl", "F"]} title="Rechercher" text="Trouver rapidement Données, Code Voyage ou un nom." />
@@ -3779,9 +3806,10 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
           )}
 
           {section === "import" && (
-            <GuidePanel eyebrow="03 · Importer & actualiser" title="Ce que fait chaque bouton" icon={RefreshCw}>
+            <GuidePanel eyebrow="03 · Importer et actualiser" title="Ce que fait chaque bouton" icon={RefreshCw}>
               <div className="guide-action-list">
-                <GuideAction icon={Upload} title="Contrôler et importer" tone="green" detail="L’Excel calcule le match. Le PDF 106J complète ensuite les indicateurs journaliers et le tonnage Expédition." />
+                <GuideAction icon={Upload} title="Contrôler et importer Excel" tone="green" detail="Chargez un nouveau classeur .xlsx complet : opérations, positions, voyages et analyses. Chaque modification du fichier nécessite un nouvel import." />
+                <GuideAction icon={FileCheck2} title="Importer le PDF 106J" tone="blue" detail="Après l’Excel, chargez le rapport SIE.106J pour compléter la ponctualité, les indicateurs journaliers et le tonnage Expédition. Vérifiez sa date : il ne suit pas automatiquement la plage de l’Excel." />
                 <GuideAction icon={RefreshCw} title="Actualiser" tone="blue" detail="À utiliser pour relire le dernier import déjà enregistré. Ce bouton ne va pas chercher un fichier sur votre ordinateur et ne remplace pas un nouvel import." />
                 <GuideAction icon={Clock3} title="Appliquer la plage" tone="orange" detail="À utiliser après avoir choisi le début et la fin du créneau. Les heures sont limitées aux pas de 30 minutes, par exemple 08:00 ou 08:30." />
               </div>
@@ -3789,11 +3817,12 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
               <ol className="guide-steps compact">
                 <li><b>Allez dans Import.</b><span>Le bouton se trouve dans le menu à gauche.</span></li>
                 <li><b>Sélectionnez ou déposez votre fichier .xlsx.</b><span>Vérifiez le nom affiché avant de continuer.</span></li>
-                <li><b>Cliquez sur Contrôler et importer.</b><span>Attendez le message <strong>MATCH ACTUALISÉ</strong>.</span></li>
-                <li><b>Lisez les contrôles.</b><span>Un point à contrôler n’empêche pas forcément la lecture, mais doit être compris avant une décision.</span></li>
-                <li><b>Choisissez la plage horaire.</b><span>Renseignez le début et la fin, puis cliquez sur <strong>Appliquer</strong>. Toutes les vues se recalculent avec cette plage.</span></li>
+                <li><b>Cliquez sur Contrôler et importer Excel.</b><span>Attendez <strong>MATCH ACTUALISÉ</strong> ou <strong>IMPORT PARTIEL</strong>. Le résultat se met à jour après l’import ; Actualiser permet ensuite de le relire.</span></li>
+                <li><b>Lisez les contrôles.</b><span>Un import partiel peut laisser certains indicateurs indisponibles. Vérifiez les sources manquantes et les alertes avant toute décision ; indisponible ne signifie pas zéro.</span></li>
+                <li><b>Choisissez la plage horaire.</b><span>Renseignez le début et la fin, puis cliquez sur <strong>Appliquer</strong>. Une fin plus tôt que le début traverse minuit. Contrôlez toujours les dates affichées par l’analyse : certaines sources gardent leur propre périmètre.</span></li>
               </ol>
-              <div className="guide-callout info"><RefreshCw size={20} /><span><strong>Après un redémarrage du service en ligne :</strong> les imports sont conservés uniquement si le service est bien relié à un stockage persistant. Si aucune base n’est retrouvée, réimportez le dernier Excel.</span></div>
+              <p>L’import Excel et PDF nécessite les droits d’import. Avec un accès de consultation, demandez à la personne autorisée de charger les fichiers.</p>
+              <div className="guide-callout info"><EyeOff size={20} /><span><strong>Exclure un voyage :</strong> dans Feuille de match → Statistiques du match → Lecture opérationnelle, ouvrez <strong>Voir les duels perdus</strong> ou le détail des tirs hors cible, puis utilisez l’icône œil barré. Retrouvez le voyage dans <strong>Voyages exclus de l'analyse</strong> et cliquez sur <strong>Réintégrer</strong> pour le rétablir. Le périmètre est recalculé sans modifier l’Excel. Ces actions nécessitent les droits d’import.</span></div>
               <div className="guide-actions"><button className="primary-button" type="button" onClick={() => onNavigate("import")}><Upload size={17} /> Aller à Import</button></div>
             </GuidePanel>
           )}
@@ -3801,43 +3830,98 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
           {section === "read" && (
             <GuidePanel eyebrow="04 · Lire les écrans" title="Quel écran utiliser, et pour quoi faire ?" icon={LayoutDashboard}>
               <div className="guide-screen-grid">
-                <GuideScreenCard step="01" title="Coup d’envoi" detail="Vue d’ouverture du match. Elle confirme que les données sont prêtes et donne accès au brief équipe." />
+                <GuideScreenCard step="01" title="Coup d’envoi" detail="Lancez la réunion depuis cet accueil. Vérifiez la date et la plage du match, puis ouvrez la Feuille de match ou le brief. Contrôlez les alertes avant de présenter les résultats." />
                 <GuideScreenCard step="02" title="Feuille de match" detail="La feuille de match se parcourt en quatre slides : Coup de sifflet final et collectif en chiffres, Cérémonie des performances, Statistiques du match, puis Brief équipe. Le score compare les pourcentages de passes réussies, de tirs cadrés, de duels gagnés et de possession à l’objectif de la ligue." />
-              <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. Compare le match complet, les deux mi-temps ou les quatre quarts calculés depuis la plage active. Une vue personnalisée permet aussi d’isoler une sous-plage, par exemple 1 heure, sans modifier les indicateurs du match. L’activité Réception correspond au scan de la palette." />
-                <GuideScreenCard step="04" title="Coach" detail="Vue de décision : équipe à regarder, titres par catégorie, polyvalence, sujets à travailler et prochaines actions." />
+              <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. Comparez le match complet, les deux mi-temps ou les quatre quarts calculés depuis la plage active. Une vue personnalisée permet aussi d’isoler une sous-plage, par exemple 1 heure, sans modifier les indicateurs du match." />
+                <GuideScreenCard step="04" title="Coach" detail="Repérez les alertes, distinctions et joueurs à regarder. Ouvrez une fiche pour examiner son activité. Renseignez les Priorités du chef de quai, les nouveaux joueurs du Mercato et les cartons rouges si nécessaire ; les analyses proposent des pistes, pas une cause certaine." />
                 <GuideScreenCard step="05" title="Brief équipe" detail="Vue dédiée aux consignes : SAV, EXPÉDITION / RAMASSE & EMBALLAGE et SST. La zone centrale réunit les textes et captures des deux anciens périmètres. SST est une zone indépendante, vide jusqu’à sa saisie. Chaque zone accepte du texte et des captures, avec affichage plein écran." />
               </div>
+              <section className="guide-topic"><h4>Les quatre indicateurs du score</h4><ul className="guide-reading-list">
+                <li><strong>Passes réussies.</strong> Lisez le taux de réussite issu des données horaires du classeur. Le repère Objectif zonage affiche la cible active ; il ne remplace pas la source Excel du taux.</li>
+                <li><strong>Tirs cadrés.</strong> Repérez la part des voyages de chargement éligibles dans le temps cible par position.</li>
+                <li><strong>Duels gagnés.</strong> Repérez la part des voyages de réception éligibles dans le temps cible par position ; les duels perdus donnent les voyages à examiner.</li>
+                <li><strong>Possession.</strong> Lisez la part des positions réceptionnées retrouvées en zonage sur le périmètre actif.</li>
+              </ul></section>
+              <section className="guide-topic"><h4>Feuille de match : trois carrousels à ne pas confondre</h4>
+                <p>Le carrousel principal comporte quatre sections : Coup de sifflet final, Cérémonie des performances, Statistiques du match et Brief équipe. Utilisez les flèches ou les repères de navigation.</p>
+                <p><strong>Le collectif en chiffres</strong> est un carrousel distinct : ses cartes présentent les volumes Excel, les données PDF journalières et les compléments manuels selon leur source affichée.</p>
+                <p><strong>Lecture opérationnelle</strong>, dans Statistiques du match, comporte cinq slides :</p>
+                <ol className="guide-reading-list">
+                  <li><strong>Passes réussies par heure.</strong> Comparez les taux horaires. Les voyages arrivés indiquent les codes dont la première opération connue se situe dans l’heure ; cliquez pour les consulter. Agrandir ouvre le graphique sans déplacer la carte ; X ou Échap le ferme.</li>
+                  <li><strong>Duels gagnés et analyse horaire.</strong> Repérez les voyages hors cible et comparez les temps moyens de réception par créneau.</li>
+                  <li><strong>Tirs cadrés.</strong> Consultez la part des voyages de chargement dans le temps cible et le détail des voyages hors cible.</li>
+                  <li><strong>Centres réussis.</strong> Consultez la ponctualité destination du PDF 106J. C’est un taux journalier consolidé, sans détail des voyages et indépendant de la plage Excel.</li>
+                  <li><strong>Diagnostic opérationnel.</strong> Distinguez retards confirmés et délais inconnus, puis examinez les voyages du FLOP.</li>
+                </ol>
+              </section>
               <div className="guide-legend"><span className="legend-dot green" /> Vert = acquis ou action positive <span className="legend-dot orange" /> Orange = à surveiller <span className="legend-dot red" /> Rouge = action prioritaire</div>
-              <div className="guide-callout info"><Shield size={20} /><span><strong>Réception dans l’application :</strong> le code interne <code>DECHG</code> reste inchangé pour les calculs, mais l’interface affiche <strong>Réception</strong>. Il s’agit du scan de la palette à la réception ; au déchargement, la palette est déposée en travée.</span></div>
+              <div className="guide-callout info"><Shield size={20} /><span>L’activité Réception correspond au scan de la palette. Dans Composition, choisissez Match complet, une mi-temps, un quart-temps ou une plage personnalisée, puis ouvrez une fiche joueur. La plage personnalisée ne change que cette vue, pas les KPI du match.</span></div>
+              <div className="guide-actions"><button className="primary-button" type="button" onClick={() => onNavigate("match")}><LayoutDashboard size={17} /> Ouvrir la Feuille de match</button><button className="secondary-button" type="button" onClick={() => onNavigate("composition")}><Users size={17} /> Ouvrir Composition</button><button className="secondary-button" type="button" onClick={() => onNavigate("coach")}><Dumbbell size={17} /> Ouvrir Coach</button><button className="secondary-button" type="button" onClick={() => onNavigate("tv")}><Eye size={17} /> Ouvrir le brief équipe</button></div>
+            </GuidePanel>
+          )}
+
+          {section === "anomalies" && (
+            <GuidePanel eyebrow="05 · Analyser les anomalies" title="Repérer les retards, puis vérifier les faits" icon={ListFilter}>
+              <p>Dans Feuille de match → Statistiques du match → Lecture opérationnelle, ouvrez la cinquième slide : <strong>Diagnostic opérationnel</strong>. Vérifiez la date et les heures affichées avant de comparer les résultats.</p>
+              <dl className="guide-diagnostic-definitions">
+                <div><dt>Positions hors délai</dt><dd>Positions dont le zonage a dépassé le temps autorisé. Le sous-texte rapporte ces retards aux seules positions vérifiables.</dd></div>
+                <div><dt>Délais non vérifiables</dt><dd>Positions pour lesquelles le site ne peut pas calculer un délai fiable. La couverture indique la part des positions réceptionnées dont le délai est vérifiable.</dd></div>
+                <div><dt>Premier voyage à examiner</dt><dd>Voyage qui concentre le plus grand nombre de retards confirmés. Commencez par son détail ; il ne s’agit pas d’une cause automatiquement identifiée.</dd></div>
+              </dl>
+              <section className="guide-topic"><h4>FLOP Zonage - TOP 5</h4>
+                <p>Le FLOP présente les cinq voyages ayant le plus de positions en retard de zonage. Le classement se fait par <strong>nombre de retards</strong>, pas par pourcentage.</p>
+                <div className="guide-zonage-legend" aria-label="Légende du FLOP"><span><i className="is-late" aria-hidden="true" /><strong>Rouge</strong> : en retard</span><span><i className="is-ontime" aria-hidden="true" /><strong>Vert</strong> : dans le délai</span><span><i className="is-unknown" aria-hidden="true" /><strong>Gris</strong> : délai inconnu</span></div>
+                <p>Chaque barre représente toutes les positions réceptionnées du voyage : les trois segments totalisent 100 %. Une barre très grise contient beaucoup de délais non vérifiables. Une part rouge plus grande ne signifie pas forcément un plus grand nombre de retards.</p>
+              </section>
+              <div className="guide-callout info"><CircleHelp size={20} /><span><strong>Délai impossible à calculer avec les données disponibles. Ces positions ne sont pas comptées comme des retards.</strong> Une opération de zonage peut être introuvable ou son association à la réception incertaine. Non vérifiable ne veut donc pas automatiquement dire non zoné.</span></div>
+              <section className="guide-topic"><h4>Du constat au brief</h4>
+                <ol className="guide-steps compact">
+                  <li><b>Repérez le premier voyage du FLOP.</b><span>Utilisez la flèche à droite de sa ligne pour ouvrir ses positions à examiner.</span></li>
+                  <li><b>Vérifiez les positions en retard.</b><span>Le panneau indique les positions reçues, conformes et non vérifiables, le taux d’anomalie et la couverture. La liste détaille les retards et les positions non qualifiables, avec le délai ou le motif disponible.</span></li>
+                  <li><b>Préparez la consigne après vérification terrain.</b><span>Fermez le panneau avec X ou Échap. Le bouton Voir les positions à examiner ouvre le détail global ; Qualité des données affiche les avertissements. Le site aide à examiner les faits, pas à déterminer automatiquement leur cause.</span></li>
+                </ol>
+              </section>
+              <details className="guide-topic guide-disclosure"><summary>Réception par créneau horaire : que mesure le graphique ?</summary>
+                <p>Ce graphique indique le temps moyen par position des voyages ayant commencé pendant chaque créneau horaire. Ouvrez Duels gagnés et sélectionnez un créneau pour consulter le temps, le nombre de voyages et l’objectif.</p>
+                <p>La cible dépend de la ligue. L’analyse utilise la nuit principale identifiée, c’est-à-dire celle qui comporte le plus d’opérations dans la plage retenue ; la date la plus récente départage les égalités. Un créneau sans données n’est pas un temps à zéro. Ce graphique ne mesure pas directement le temps travaillé pendant l’heure.</p>
+              </details>
+              <details className="guide-topic guide-disclosure"><summary>Réception et chargement : des périmètres différents</summary>
+                <p>Le compteur des réceptions hors cible porte sur les voyages de la nuit analysée. Le compteur des chargements hors cible utilise le TCD historique du classeur et n’est pas nécessairement limité à cette nuit.</p>
+                <p>Ne mélangez pas ces deux périmètres. N’additionnez jamais positions et voyages pour obtenir un total global d’anomalies. Les quatre KPI officiels du score restent distincts de ces analyses.</p>
+              </details>
+              <div className="guide-actions"><button className="primary-button" type="button" onClick={() => onNavigate("match")}><LayoutDashboard size={17} /> Ouvrir la Feuille de match</button><button className="secondary-button" type="button" onClick={() => onNavigate("coach")}><Dumbbell size={17} /> Préparer les priorités dans Coach</button></div>
             </GuidePanel>
           )}
 
           {section === "edit" && (
-            <GuidePanel eyebrow="05 · Modifier le plan" title="Écrire des consignes sans casser les données" icon={Edit3}>
+            <GuidePanel eyebrow="06 · Modifier le plan" title="Écrire des consignes sans casser les données" icon={Edit3}>
               <p>Les données Excel alimentent les indicateurs. Les textes du plan de jeu sont des consignes opérationnelles que vous pouvez adapter à la situation du jour.</p>
+              <p>Un accès en consultation ne permet pas d’enregistrer des consignes partagées. Si l’enregistrement est refusé, demandez un accès autorisé ; ne confondez pas une copie locale et une sauvegarde partagée.</p>
               <div className="guide-edit-grid">
                 <GuideEditCard title="Dans Feuille de match" detail="Modifier les chiffres permet de renseigner les blessures A.T et l'effectif prévu. Le carrousel Le collectif en chiffres conserve les positions calculées depuis l'Excel filtré. Le tonnage Expédition et les taux journaliers viennent du PDF 106J ; ils affichent PDF à importer tant que ce rapport n'a pas été chargé." />
-                <GuideEditCard title="Dans Coach" detail="Cliquez sur Écrire dans le tableau du coach, complétez Tactique, Priorité, Arbitrage et Revue, puis Enregistrer." />
+                <GuideEditCard title="Dans Coach" detail="Dans Priorités du chef de quai, cliquez sur Écrire. Renseignez Priorité terrain, Zone à surveiller et Équilibre d'équipe, puis Enregistrer. Ces consignes apparaissent séparément sous le brief dans la Feuille de match. Le Mercato et les cartons rouges ont leurs propres commandes d’enregistrement." />
               <GuideEditCard title="Dans le brief équipe" detail="Cliquez sur Écrire. Saisissez les consignes dans SAV, EXPÉDITION / RAMASSE & EMBALLAGE ou SST, ajoutez des captures si nécessaire, puis enregistrez. Les anciens textes et captures Expédition et Ramasse & Emballage sont réunis dans la zone centrale ; SST reste indépendant." />
               </div>
               <div className="guide-callout success"><CheckCircle2 size={20} /><span><strong>À retenir :</strong> les chiffres manuels sont mémorisés pour l’agence et le match affichés sur ce poste. Ils complètent la lecture opérationnelle sans modifier le fichier source importé.</span></div>
-              <div className="guide-callout info"><Upload size={20} /><span><strong>Ajouter une capture d’écran :</strong> dans chaque zone du brief équipe, cliquez sur <strong>Ajouter une capture d’écran</strong>, puis choisissez une image PNG, JPG ou WebP. L’image est redimensionnée automatiquement, affichée dans la zone correspondante et sauvegardée avec le texte. Chaque catégorie conserve sa propre capture.</span></div>
+              <div className="guide-callout info"><Upload size={20} /><span><strong>Ajouter des captures d’écran :</strong> après Écrire, utilisez <strong>Ajouter des captures d'écran</strong> ou <strong>Ajouter des captures</strong> dans la zone choisie. Sélectionnez des images PNG, JPG ou WebP. Les aperçus restent sous le texte et défilent dans leur propre zone. Supprimer retire une capture du brouillon ; Enregistrer valide textes et images ; Annuler abandonne les changements. En consultation, cliquez sur une image pour l’agrandir, puis fermez avec X ou Échap.</span></div>
+              <section className="guide-topic"><h4>Ce qui est partagé, ce qui reste sur ce poste</h4><p>La Causerie regroupe les consignes du brief, les priorités du Coach, le Mercato et les cartons rouges pour l’agence et la date du match. Après confirmation de sauvegarde serveur, les autres utilisateurs peuvent récupérer cette version. Les chiffres manuels de la Feuille de match restent sur ce navigateur et ne sont pas des résultats Excel.</p></section>
               <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Important :</strong> si un message indique une sauvegarde locale uniquement, le texte est conservé sur ce poste mais peut ne pas être partagé avec les autres utilisateurs.</span></div>
+              <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Conflit de sauvegarde :</strong> un autre utilisateur a enregistré une version plus récente. Votre saisie reste dans le formulaire. Copiez les consignes à conserver avant de choisir <strong>Abandonner ma saisie et charger la version serveur</strong>, puis relisez et enregistrez à nouveau. Ne considérez pas une saisie comme partagée sans confirmation.</span></div>
               <div className="guide-actions"><button className="secondary-button" type="button" onClick={() => onNavigate("coach")}><Dumbbell size={17} /> Ouvrir Coach</button><button className="primary-button" type="button" onClick={() => onNavigate("tv")}><Eye size={17} /> Ouvrir le brief équipe</button></div>
             </GuidePanel>
           )}
 
           {section === "admin" && (
-            <GuidePanel eyebrow="06 · Administrateur" title="Régler les ligues et leurs standards" icon={Settings2}>
+            <GuidePanel eyebrow="07 · Administrateur" title="Régler les ligues et leurs standards" icon={Settings2}>
               <p>L’onglet Administrateur sert à choisir un niveau de référence et à ajuster ses conditions de performance : la cible de zonage, les temps maximum de chargement et de réception, ainsi que l’objectif en pourcentage de chaque indicateur du score.</p>
               <div className="guide-action-list">
                 <GuideAction icon={Trophy} title="Choisir une ligue" tone="blue" detail="Activez Bronze, Argent, Or ou Platine. Le niveau sélectionné devient la référence affichée dans le centre de pilotage." />
                 <GuideAction icon={Target} title="Régler le zonage" tone="green" detail="Modifiez la cible en minutes directement dans le panneau de la ligue. Une valeur plus basse correspond à un standard plus exigeant." />
-                <GuideAction icon={Clock3} title="Régler le chargement" tone="orange" detail="Modifiez le temps maximum au format HH:MM:SS. Le seuil Argent proposé est 00:02:45." />
-              <GuideAction icon={Clock3} title="Régler le temps de réception" tone="blue" detail="Modifiez le temps maximum au format HH:MM:SS. Le seuil Argent proposé est 00:01:00 ; il entre dans le score opérationnel." />
-              <GuideAction icon={CheckCircle2} title="Régler l'objectif du score" tone="green" detail="Chaque indicateur qui dépasse strictement cet objectif marque un but ; chaque indicateur qui l'atteint ou reste en dessous encaisse un but. Les valeurs proposées vont de 45 % en Bronze à 70 % en Platine." />
+                <GuideAction icon={Clock3} title="Régler le chargement" tone="orange" detail="Modifiez le temps maximum par position au format HH:MM:SS. Une durée plus courte rend la cible plus exigeante." />
+              <GuideAction icon={Clock3} title="Régler le temps de réception" tone="blue" detail="Modifiez le temps maximum par position au format HH:MM:SS. Ce seuil sert à qualifier les voyages de réception selon le périmètre de chaque indicateur." />
+              <GuideAction icon={CheckCircle2} title="Régler l'objectif du score" tone="green" detail="Chaque indicateur qui dépasse strictement cet objectif marque un but ; chaque indicateur qui l'atteint ou reste en dessous encaisse un but. Vérifiez le pourcentage actuellement réglé pour la ligue." />
               </div>
-              <h3>Référentiel proposé</h3>
+              <h3>Paramètres actuels des quatre ligues</h3>
               <div className="guide-league-grid" aria-label="Référentiel visuel des ligues">
                 {guideLeagues.map((league) => (
                   <article key={league.id} className={`guide-league-card ${league.tone}`}>
@@ -3850,12 +3934,15 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                 ))}
               </div>
               <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Avant validation :</strong> les seuils sont partagés pour chaque agence, tandis que la ligue active est mémorisée sur ce poste. Les scores du match sont recalculés avec les seuils de la ligue active ; le score opérationnel repose sur quatre indicateurs.</span></div>
+              <p><strong>Changer de ligue peut modifier les résultats du diagnostic, puisque les objectifs changent.</strong> Après recalcul, le classement, le nombre de retards et les proportions des barres peuvent évoluer. Cela ne modifie jamais le fichier Excel importé.</p>
+              <p>Les paramètres sont enregistrés par agence sur le serveur, avec une copie sur ce navigateur. Leur modification nécessite les droits d’import. En cas d’erreur d’enregistrement, vérifiez le message affiché avant de considérer les nouvelles cibles comme partagées.</p>
               <div className="guide-callout info"><Settings2 size={20} /><span><strong>Bon réflexe :</strong> vérifiez la ligue active, comparez les conditions avec le niveau attendu, puis contrôlez le résultat sur plusieurs imports avant toute diffusion officielle.</span></div>
+              <div className="guide-actions"><button className="primary-button" type="button" onClick={() => onNavigate("admin")}><Settings2 size={17} /> Ouvrir Administrateur</button></div>
             </GuidePanel>
           )}
 
           {section === "help" && (
-            <GuidePanel eyebrow="07 · Points d’attention" title="Les vérifications à faire avant de partager le résultat" icon={CircleHelp}>
+            <GuidePanel eyebrow="08 · Points d’attention" title="Les vérifications à faire avant de partager le résultat" icon={CircleHelp}>
               <div className="guide-checklist">
                 <GuideCheck title="Le bon fichier a été importé" detail="Vérifiez le nom du fichier et la date de dernière donnée affichée après l’import." />
                 <GuideCheck title="La plage horaire est la bonne" detail="Le badge Plage active doit correspondre au créneau que vous voulez analyser." />
@@ -3868,16 +3955,24 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                 <GuideTrouble title="FICHIER NON IMPORTÉ" detail="Vérifiez que le fichier est bien .xlsx, que l’onglet s’appelle Données et que la ligne d’en-têtes n’a pas été supprimée." />
                 <GuideTrouble title="MATCH ACTUALISÉ avec alertes" detail="L’import a fonctionné. Ouvrez Excel, utilisez Ctrl + F ou les filtres pour retrouver les lignes signalées, puis décidez si elles doivent être corrigées." />
                 <GuideTrouble title="Aucun match après Actualiser" detail="Actualiser ne lit pas votre ordinateur. Retournez dans Import et réimportez le dernier fichier Excel complet." />
+                <GuideTrouble title="Onglet Données absent" detail="Utilisez le classeur complet contenant Données et sa ligne d’en-têtes. Ne renommez pas une feuille sans vérifier son contenu." />
+                <GuideTrouble title="Mauvaise plage horaire" detail="Contrôlez Début et Fin, cliquez sur Appliquer puis vérifiez la date de la nuit affichée. Une fin plus tôt que le début traverse minuit." />
+                <GuideTrouble title="Indicateur indisponible" detail="Lisez les sources manquantes dans Import. Ne remplacez pas une absence de résultat par zéro ; un classeur incomplet peut empêcher le calcul du score." />
+                <GuideTrouble title="Positions non qualifiables" detail="Ouvrez le détail du diagnostic. Vérifiez la réception et le zonage dans Excel : un délai inconnu n’est pas un retard confirmé." />
+                <GuideTrouble title="Voyage exclu par erreur" detail="Dans Lecture opérationnelle, ouvrez Voyages exclus de l'analyse et utilisez Réintégrer sur le code concerné, si vos droits le permettent." />
+                <GuideTrouble title="PDF 106J non importé" detail="Importez d’abord l’Excel, puis le PDF correspondant. Les taux journaliers et le tonnage Expédition peuvent être absents sans ce rapport ; vérifiez sa date." />
+                <GuideTrouble title="Résultat différent après une ligue" detail="Vérifiez les objectifs actifs. Un changement de cible peut modifier les retards et les résultats sans changer les opérations du fichier source." />
+                <GuideTrouble title="Consignes non confirmées" detail="Vérifiez le message d’enregistrement. Sauvegarde locale uniquement ne garantit pas le partage ; un conflit exige de relire la version serveur avant de ressaisir." />
               </div>
-              <div className="guide-limit-card"><strong>Limite actuelle à retenir</strong><p>La conservation des imports dépend du stockage persistant configuré sur l’hébergeur. En cas de stockage absent ou mal monté, le dernier Excel peut devoir être réimporté.</p></div>
+              <div className="guide-limit-card"><strong>Aucune donnée après un redémarrage · Render Free</strong><p>Après une mise à jour ou un redémarrage du site, les données enregistrées peuvent disparaître. Si nécessaire, réimportez votre Excel et votre PDF, puis vérifiez les consignes et les paramètres.</p><p>L’hébergement actuel ne garantit pas de stockage persistant. Aucune sauvegarde ni restauration automatique n’est promise ; conservez les fichiers sources et les consignes importantes en dehors du site.</p></div>
               <div className="guide-callout info"><CircleHelp size={20} /><span>En cas de blocage, revenez à la règle de base : conserver l’original Excel, préparer une copie avec l’onglet <strong>Données</strong> actualisé, puis refaire un import complet.</span></div>
             </GuidePanel>
           )}
           <div className="guide-step-footer">
-            <button className="secondary-button compact" type="button" onClick={() => setSection("start")} disabled={activeIndex === 0}><ArrowRight size={16} className="guide-back-icon" /> Retour au début</button>
+            <button className="secondary-button compact" type="button" onClick={() => showSection("start")} disabled={activeIndex === 0}><ArrowRight size={16} className="guide-back-icon" /> Retour au début</button>
             <div>
-              <button className="secondary-button compact" type="button" onClick={() => setSection(previousSection)} disabled={activeIndex === 0}>Étape précédente</button>
-              <button className="primary-button compact" type="button" onClick={() => setSection(nextSection)} disabled={activeIndex === sections.length - 1}>Étape suivante <ArrowRight size={16} /></button>
+              <button className="secondary-button compact" type="button" onClick={() => showSection(previousSection)} disabled={activeIndex === 0}>Étape précédente</button>
+              <button className="primary-button compact" type="button" onClick={() => showSection(nextSection)} disabled={activeIndex === sections.length - 1}>Étape suivante <ArrowRight size={16} /></button>
             </div>
           </div>
         </div>

@@ -1,0 +1,206 @@
+/* Only the two operational-analysis surfaces; no global layout overrides. */
+.operational-diagnostic-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-areas: "heading heading" "metrics metrics" "investigation investigation" "secondary secondary" "ranking ranking" "footer footer";
+  align-content: start;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  padding: 24px;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--green-field);
+  border-radius: 12px;
+  background: #f8fbff;
+  color: var(--navy-900);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+  touch-action: auto;
+}
+.operational-diagnostic-card > * { flex-shrink: 0; min-width: 0; }
+.diagnostic-heading { grid-area: heading; }
+.diagnostic-metrics { grid-area: metrics; }
+.diagnostic-investigation { grid-area: investigation; }
+.diagnostic-secondary { grid-area: secondary; }
+.diagnostic-ranking { grid-area: ranking; }
+.diagnostic-footer { grid-area: footer; }
+/* Match the existing 680px card minimum without enlarging historical slides. */
+.match-page:not(.is-celebration-mode) .operational-diagnostic-card,
+.match-page:not(.is-celebration-mode) .operational-charts-carousel .reception-quality-card { max-height: 680px; overflow-y: auto; }
+.analysis-heading { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.analysis-heading h3 { margin: 0; font-size: 20px; line-height: 1.2; }
+.analysis-heading p, .analysis-provenance { margin: 5px 0 0; color: #52657d; font-size: 13px; line-height: 1.45; }
+.analysis-heading .analysis-eyebrow { margin: 0 0 5px; color: #1d4e89; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.analysis-night, .analysis-target { font-size: 12px; line-height: 1.5; color: #1d4e89; font-weight: 700; }
+.analysis-target { flex-shrink: 0; }
+.analysis-empty { margin: 12px 0; padding: 14px 0; color: #52657d; font-size: 14px; line-height: 1.5; }
+.diagnostic-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; gap: 16px; padding: 8px 0 14px; border-bottom: 1px solid var(--line); }
+.diagnostic-metrics > div { display: flex; flex-direction: column; min-width: 0; gap: 4px; }
+.diagnostic-metrics dt { font-size: 14px; line-height: 1.3; font-weight: 700; }
+.diagnostic-metrics dd { order: -1; margin: 0; font-size: 44px; line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.diagnostic-metrics small { display: block; font-size: 12px; color: #52657d; line-height: 1.4; }
+.diagnostic-confirmed dd { color: #b72d42; }
+.diagnostic-secondary { display: flex; flex-wrap: wrap; gap: 5px 20px; color: #52657d; font-size: 12px; line-height: 1.5; }
+.diagnostic-secondary b { color: var(--navy-900); }
+.diagnostic-coverage { flex-basis: 100%; }
+.diagnostic-coverage-note { display: grid; grid-template-columns: 15px minmax(0, 1fr); align-items: start; gap: 7px; margin: 0; font-size: 12px; line-height: 1.4; color: #52657d; }
+.diagnostic-coverage-note svg { margin-top: 1px; }
+.diagnostic-ranking-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.diagnostic-ranking h4, .diagnostic-investigation h4 { font-size: 14px; margin: 0; }
+.diagnostic-ranking-heading > span { font-size: 11px; color: #52657d; }
+.diagnostic-top5 { display: grid; gap: 6px; padding: 0; margin: 0; list-style: none; }
+.diagnostic-trip-heading { display: grid; grid-template-columns: minmax(0, 1fr) 32px; align-items: center; gap: 2px 10px; font-size: 12px; line-height: 1.35; }
+.diagnostic-trip-heading > * { min-width: 0; }
+.diagnostic-trip-main { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 14px; }
+.diagnostic-trip-main b { font-size: 16px; }
+.diagnostic-trip-main > span { text-align: right; }
+.diagnostic-bar-track { display: flex; height: 10px; border-radius: 3px; margin-top: 4px; overflow: hidden; }
+.diagnostic-bar-track > span { display: block; height: 100%; flex-shrink: 0; }
+.diagnostic-segment-late { background: repeating-linear-gradient(90deg, #b72d42 0 7px, #cc475a 7px 8px); }
+.diagnostic-segment-ontime { background: #19775b; }
+.diagnostic-segment-unknown { background: repeating-linear-gradient(135deg, #b8c1cc 0 4px, #d9dfe6 4px 8px); }
+.diagnostic-legend { display: flex; flex-wrap: wrap; gap: 5px 16px; font-size: 12px; color: #52657d; margin-bottom: 12px; }
+.diagnostic-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.diagnostic-legend i { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
+.diagnostic-detail-button { display: grid; place-items: center; grid-column: 2; grid-row: 1 / 3; width: 32px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 5px; color: #1d4e89; background: white; cursor: pointer; }
+.diagnostic-investigation { border-left: 3px solid #b72d42; padding-left: 12px; }
+.diagnostic-investigation p { margin: 0; font-size: 14px; line-height: 1.5; color: #52657d; }
+.diagnostic-investigation p > strong { color: var(--navy-900); font-size: 18px; line-height: 1.3; }
+.diagnostic-footer { display: flex; align-items: start; flex-wrap: wrap; gap: 10px 18px; }
+.diagnostic-footer .secondary-button { min-height: 32px; padding: 6px 10px; font-size: 12px; font-weight: 700; }
+.diagnostic-warnings { font-size: 12px; line-height: 1.5; min-width: 0; }
+.diagnostic-warnings summary { cursor: pointer; color: #52657d; }
+.diagnostic-warnings ul { padding-left: 20px; }
+.diagnostic-method { font-size: 12px; line-height: 1.5; color: #52657d; }
+.diagnostic-method summary { cursor: pointer; font-weight: 700; }
+.diagnostic-method p { margin: 6px 0; }
+.diagnostic-detail-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin: 0; flex-shrink: 0; font-size: 12px; }
+.diagnostic-detail-stats dt { color: #52657d; }
+.diagnostic-detail-stats dd { margin: 3px 0 0; font-weight: 800; }
+.reception-hourly-analysis { flex-shrink: 0; min-width: 0; width: 100%; border-top: 1px solid var(--line); padding-top: 14px; margin-top: 14px; box-sizing: border-box; }
+.operational-charts-carousel .reception-hourly-analysis .analysis-heading h3 { font-size: 17px; color: var(--navy-900); }
+.reception-hour-chart { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 8px; padding: 10px 0 30px; }
+.reception-hour-axis { display: flex; flex-direction: column; justify-content: space-between; text-align: right; font-size: 11px; color: #52657d; }
+.reception-hour-plot { position: relative; height: 150px; background: repeating-linear-gradient(to top, #dce6f1 0 1px, transparent 1px 50%); border-bottom: 1px solid #aebed1; }
+.reception-hour-bars { display: grid; gap: 4px; height: 100%; }
+.reception-hour-button { position: relative; min-width: 0; width: 100%; height: 100%; border: 0; border-radius: 4px; padding: 0; color: var(--navy-900); background: transparent; cursor: pointer; font-family: inherit; }
+.reception-hour-bar { position: absolute; bottom: 0; left: 22%; right: 22%; height: var(--bar-height); background: #20856b; border-radius: 4px 4px 0 0; }
+.reception-hour-button.is-over-target .reception-hour-bar { background: #ba4050; }
+.reception-hour-button.is-selected { background: #1d4e8910; box-shadow: inset 0 0 0 1px #1d4e89; }
+.reception-hour-value { position: absolute; bottom: calc(var(--bar-height) + 4px); left: 0; right: 0; font-size: 12px; line-height: 1.2; font-weight: 800; }
+.reception-hour-label { position: absolute; top: calc(100% + 6px); left: 0; right: 0; font-size: 12px; line-height: 1.3; }
+.reception-hour-target { position: absolute; left: 0; right: 0; border-top: 2px dashed #1d4e89; pointer-events: none; z-index: 1; }
+.reception-hour-detail { display: flex; flex-wrap: wrap; gap: 6px 18px; min-height: 42px; font-size: 12px; line-height: 1.5; align-content: start; }
+.reception-hour-detail > span { color: #52657d; }
+.operational-charts-carousel .reception-hour-detail > strong { color: var(--navy-900); }
+.reception-hour-detail b { color: var(--navy-900); }
+.operational-zonage-dialog { width: min(860px, calc(100vw - 24px)); max-height: min(720px, calc(100dvh - 32px)); box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px; padding: 20px; color: var(--navy-900); background: #f8fbff; }
+.operational-zonage-dialog[open] { display: flex; flex-direction: column; gap: 16px; }
+.operational-zonage-dialog::backdrop { background: #071c35b8; }
+.operational-zonage-dialog header { display: flex; justify-content: space-between; align-items: start; gap: 12px; flex-shrink: 0; }
+.operational-zonage-dialog h3 { margin: 0; font-size: 19px; overflow-wrap: anywhere; }
+.operational-zonage-dialog p { margin: 5px 0 0; color: #52657d; font-size: 12px; }
+.zonage-detail-list { padding: 0; margin: 0; list-style: none; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.zonage-detail-list li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 13px; overflow-wrap: anywhere; }
+.zonage-detail-list li > div { display: grid; gap: 4px; }
+.zonage-detail-list span { color: #52657d; }
+.reception-hour-button:focus-visible, .diagnostic-detail-button:focus-visible, .operational-zonage-dialog button:focus-visible { outline: 3px solid #1d4e89; outline-offset: 3px; }
+@media (max-width: 900px) {
+  .operational-diagnostic-card { grid-template-columns: minmax(0, 1fr); grid-template-areas: "heading" "metrics" "investigation" "secondary" "ranking" "footer"; }
+}
+@media (max-width: 700px) {
+  .match-statistics-section:has(.operational-diagnostic-card) { grid-template-columns: minmax(0, 1fr); }
+  .match-statistics-section:has(.operational-diagnostic-card) .match-section-heading > div { min-width: 0; }
+  .match-statistics-section:has(.operational-diagnostic-card) .match-section-heading h2 { overflow-wrap: anywhere; }
+  .operational-diagnostic-card { padding: 16px; gap: 12px; }
+  .diagnostic-heading, .reception-hourly-analysis .analysis-heading { flex-direction: column; gap: 6px; }
+  .diagnostic-metrics { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .diagnostic-metrics > div { display: grid; grid-template-columns: minmax(64px, max-content) minmax(0, 1fr); gap: 3px 10px; }
+  .diagnostic-metrics dd { grid-column: 1; grid-row: 1 / 3; align-self: center; font-size: 32px; }
+  .diagnostic-metrics dt, .diagnostic-metrics small { grid-column: 2; }
+  .diagnostic-ranking-heading { flex-direction: column; gap: 4px; }
+  .diagnostic-trip-heading { grid-template-columns: minmax(0, 1fr) 32px; gap: 3px 8px; }
+  .diagnostic-trip-main { display: grid; gap: 2px; font-size: 13px; }
+  .diagnostic-trip-main > span { text-align: left; }
+  .diagnostic-trip-main b { font-size: 14px; }
+  .diagnostic-detail-button { height: 44px; }
+  .reception-hour-bars { gap: 2px; }
+  .reception-hour-chart { grid-template-columns: 30px minmax(0, 1fr); gap: 4px; }
+  .reception-hour-value, .reception-hour-label { font-size: 11px; }
+  .reception-hour-unit { display: none; }
+  .reception-hourly-analysis .analysis-provenance { overflow-wrap: anywhere; }
+  .operational-charts-carousel .reception-quality-card .loading-quality-pie { max-width: 100%; }
+  .operational-charts-carousel .reception-quality-card .loading-quality-heading { flex-wrap: wrap; }
+  .diagnostic-footer .secondary-button { white-space: normal; text-align: left; }
+}
+.match-page.is-celebration-mode .operational-diagnostic-card { max-height: 100%; padding: 18px; gap: 10px; }
+.match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-top5 { gap: 7px; }
+.match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-metrics { padding-block: 10px; }
+@media (max-width: 900px) {
+  .match-page.is-celebration-mode .operational-charts-carousel .operational-diagnostic-card,
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card { max-height: 680px; overflow-y: auto; }
+}
+@media (min-width: 901px) {
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card {
+    display: grid;
+    grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+    gap: 8px 20px;
+    padding: 16px;
+    align-content: start;
+    overflow-y: auto;
+  }
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card > .loading-quality-heading,
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card > .loading-quality-overview,
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card > .reception-quality-average,
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card > .duel-quality-details,
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card > .loading-quality-empty { grid-column: 1; }
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card .loading-quality-overview { grid-template-columns: minmax(90px, 140px) minmax(0, 1fr); gap: 14px; margin: 8px 0 0; width: 100%; }
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card .loading-quality-pie { width: 140px; }
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card .loading-quality-pie span { font-size: 28px; }
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card .loading-quality-legend { gap: 12px; }
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card .loading-quality-legend span { font-size: 14px; }
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card .loading-quality-legend b { font-size: 12px; }
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card .reception-hourly-analysis { grid-column: 2; grid-row: 1 / span 5; border-top: 0; border-left: 1px solid var(--line); padding: 0 0 0 18px; margin: 0; }
+  .match-page.is-celebration-mode .operational-diagnostic-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(220px, 1fr);
+    grid-template-areas: "heading heading" "metrics metrics" "investigation investigation" "ranking secondary" "ranking footer";
+    align-content: start;
+    padding: 12px;
+    gap: 8px 18px;
+  }
+  .match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-heading { grid-area: heading; }
+  .match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-metrics { grid-area: metrics; padding: 0 0 4px; }
+  .match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-ranking { grid-area: ranking; }
+  .match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-investigation { grid-area: investigation; }
+  .match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-footer { grid-area: footer; }
+  .match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-metrics > div { gap: 2px; }
+  .match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-metrics dd { font-size: 32px; }
+  .match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-top5 { gap: 4px; }
+  .match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-trip-heading { grid-template-columns: minmax(0, 1fr) 32px; gap: 6px; }
+  .match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-investigation p > strong { font-size: 18px; }
+  .match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-detail-button { height: 28px; }
+  .match-page.is-celebration-mode .operational-diagnostic-card .diagnostic-bar-track { height: 10px; margin-top: 2px; }
+}
+@media (min-width: 901px) and (max-height: 820px) {
+  .match-page.is-celebration-mode .reception-hourly-analysis .reception-hour-plot { height: 100px; }
+}
+@media (max-width: 420px) {
+  .diagnostic-metrics > div { column-gap: 4px; }
+  .diagnostic-metrics dt { font-size: 12px; }
+  .diagnostic-metrics dd { grid-row: 1; }
+  .diagnostic-metrics small { grid-column: 1 / -1; grid-row: 2; }
+  .reception-hour-value { display: none; }
+  .reception-hour-chart { padding-bottom: 44px; }
+  .reception-hour-button:nth-child(even) .reception-hour-label { top: calc(100% + 20px); }
+}
+@media (max-width: 360px) {
+  .operational-charts-carousel .loading-quality-card[aria-label="Qualité des chargements"] .loading-quality-pie,
+  .operational-charts-carousel .centers-quality-card .loading-quality-pie { max-width: 100%; }
+  .operational-charts-carousel .loading-quality-card[aria-label="Qualité des chargements"] .loading-quality-heading { flex-wrap: wrap; }
+  .operational-charts-carousel .centers-quality-details summary { flex-wrap: wrap; }
+}

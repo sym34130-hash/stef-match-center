@@ -14237,11 +14237,13 @@ body.coach-room-active .coach-room.is-coach-mode .locker-room-scene .locker-room
 /* Integrated beginner guide */
 .guide-page {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   max-width: 1500px;
   margin: 0 auto;
   padding-bottom: 30px;
 }
+.guide-page > * { min-width: 0; }
 
 .guide-hero {
   display: flex;
@@ -14262,8 +14264,8 @@ body.coach-room-active .coach-room.is-coach-mode .locker-room-scene .locker-room
 
 .guide-hero h2 {
   margin: 7px 0 10px;
-  font-size: clamp(32px, 4vw, 62px);
-  line-height: 0.98;
+  font-size: 32px;
+  line-height: 1.15;
 }
 
 .guide-hero p:not(.eyebrow) {
@@ -14278,7 +14280,8 @@ body.coach-room-active .coach-room.is-coach-mode .locker-room-scene .locker-room
   display: grid;
   align-content: center;
   justify-items: start;
-  min-width: 220px;
+  min-width: 0;
+  width: min(260px, 100%);
   max-width: 260px;
   gap: 8px;
   padding: 18px;
@@ -14325,7 +14328,8 @@ body.coach-room-active .coach-room.is-coach-mode .locker-room-scene .locker-room
 
 .guide-nav-item {
   display: grid;
-  grid-template-columns: 32px 1fr 16px;
+  grid-template-columns: 32px minmax(0, 1fr) 16px;
+  min-width: 0;
   align-items: center;
   gap: 8px;
   min-height: 42px;
@@ -14378,7 +14382,7 @@ body.coach-room-active .coach-room.is-coach-mode .locker-room-scene .locker-room
 }
 .guide-nav-tip svg { flex: 0 0 auto; color: var(--blue-stef); }
 
-.guide-content { min-width: 0; }
+.guide-content { min-width: 0; scroll-margin-top: 18px; }
 
 .guide-progress {
   display: grid;
@@ -14396,7 +14400,7 @@ body.coach-room-active .coach-room.is-coach-mode .locker-room-scene .locker-room
 .guide-progress-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2c8fdf, #48c78e); transition: width 220ms ease; }
 
 .guide-panel {
-  overflow: hidden;
+  min-width: 0;
 }
 
 .guide-panel-heading {
@@ -14407,20 +14411,22 @@ body.coach-room-active .coach-room.is-coach-mode .locker-room-scene .locker-room
   padding: clamp(20px, 3vw, 34px) clamp(20px, 3vw, 38px) 18px;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(120deg, #f8fbff, #eef7f8);
+  border-radius: 11px 11px 0 0;
 }
+.guide-panel-heading > div { min-width: 0; }
 
 .guide-panel-heading h3 {
   margin: 5px 0 0;
   color: var(--navy-950);
-  font-size: clamp(26px, 3vw, 46px);
-  line-height: 1.02;
+  font-size: 24px;
+  line-height: 1.2;
 }
 
 .guide-panel-icon {
   display: grid;
   place-items: center;
-  min-width: 52px;
-  min-height: 52px;
+  min-width: 40px;
+  min-height: 40px;
   color: #16835e;
   border: 1px solid rgba(72, 199, 142, 0.35);
   border-radius: 10px;
@@ -14432,6 +14438,7 @@ body.coach-room-active .coach-room.is-coach-mode .locker-room-scene .locker-room
   gap: 22px;
   padding: clamp(20px, 3vw, 38px);
 }
+.guide-panel-body > * { min-width: 0; }
 
 .guide-panel-body > p {
   max-width: 850px;
@@ -14496,7 +14503,7 @@ body.coach-room-active .coach-room.is-coach-mode .locker-room-scene .locker-room
 .guide-warning svg { color: var(--orange-watch); }
 
 .guide-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-.guide-actions button { width: auto; }
+.guide-actions button { width: auto; white-space: normal; }
 
 .guide-steps {
   display: grid;
@@ -14718,6 +14725,25 @@ kbd {
 
 .guide-panel-body h3 { margin: 0; color: var(--navy-950); font-size: 22px; }
 .guide-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.guide-topic { min-width: 0; padding-block: 14px; border-top: 1px solid var(--line); }
+.guide-topic h4 { margin: 0 0 10px; color: var(--navy-950); font-size: 18px; line-height: 1.35; }
+.guide-topic p, .guide-reading-list { color: var(--muted); font-size: 14px; line-height: 1.55; }
+.guide-topic p { margin: 8px 0; }
+.guide-reading-list { display: grid; gap: 10px; padding-left: 22px; margin-bottom: 0; }
+.guide-reading-list strong { color: var(--navy-950); }
+.guide-diagnostic-definitions { display: grid; gap: 16px; margin: 0; }
+.guide-diagnostic-definitions > div { padding-left: 14px; border-left: 3px solid #aebed1; }
+.guide-diagnostic-definitions > div:first-child { border-left-color: #b72d42; }
+.guide-diagnostic-definitions dt { color: var(--navy-950); font-size: 16px; font-weight: 800; }
+.guide-diagnostic-definitions dd { margin: 5px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55; }
+.guide-zonage-legend { display: flex; flex-wrap: wrap; gap: 10px 20px; margin-block: 14px; color: var(--navy-950); font-size: 14px; }
+.guide-zonage-legend > span { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.guide-zonage-legend i { width: 18px; height: 12px; border-radius: 2px; }
+.guide-zonage-legend .is-late { background: repeating-linear-gradient(90deg, #b72d42 0 7px, #cc475a 7px 8px); }
+.guide-zonage-legend .is-ontime { background: #19775b; }
+.guide-zonage-legend .is-unknown { background: repeating-linear-gradient(135deg, #b8c1cc 0 4px, #d9dfe6 4px 8px); }
+.guide-disclosure summary { color: var(--navy-950); font-size: 15px; line-height: 1.4; font-weight: 700; cursor: pointer; }
+.guide-disclosure summary:focus-visible { outline: 3px solid var(--blue-stef); outline-offset: 4px; }
 .legend-dot { width: 11px; height: 11px; border-radius: 50%; background: #16835e; }
 .legend-dot.orange { background: var(--orange-watch); }
 .legend-dot.red { background: var(--red-action); }
@@ -14775,7 +14801,7 @@ kbd {
 @media (max-width: 900px) {
   .guide-hero { flex-direction: column; }
   .guide-hero-status { max-width: none; }
-  .guide-layout { grid-template-columns: 1fr; }
+  .guide-layout { grid-template-columns: minmax(0, 1fr); }
   .guide-nav { position: static; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .guide-nav-title,
   .guide-nav-tip { grid-column: 1 / -1; }
@@ -14784,8 +14810,8 @@ kbd {
 
 @media (max-width: 620px) {
   .guide-hero { padding: 20px; }
-  .guide-hero h2 { font-size: 34px; }
-  .guide-nav { grid-template-columns: 1fr 1fr; }
+  .guide-hero h2 { font-size: 28px; }
+  .guide-nav { grid-template-columns: minmax(0, 1fr); }
   .guide-panel-heading { padding: 20px; }
   .guide-panel-body { padding: 20px; }
   .guide-progress-copy { align-items: flex-start; flex-direction: column; gap: 3px; }
@@ -16873,7 +16899,7 @@ body.tv-screen-active .app-shell.league-platine {
   scroll-padding-inline: 9%;
   scrollbar-color: rgba(29, 78, 137, 0.45) transparent;
   scrollbar-width: thin;
-  touch-action: pan-x;
+  touch-action: auto;
   overscroll-behavior-x: contain;
 }
 
@@ -17042,6 +17068,11 @@ body.tv-screen-active .app-shell.league-platine {
   .operational-charts-carousel-track::before,
   .operational-charts-carousel-track::after {
     flex-basis: 0;
+  }
+
+  /* Reserve the remaining card width so the final slide can center fully. */
+  .operational-charts-carousel-track::after {
+    flex-basis: 12%;
   }
 
   .operational-chart-slide {

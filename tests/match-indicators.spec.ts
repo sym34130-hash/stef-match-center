@@ -64,7 +64,7 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   await expect(carousel.locator('[data-indicator="temperature"] .match-indicator-target')).toHaveCSS("left", /.+/);
   await expect(carousel.locator('[data-indicator="temperature"] .match-indicator-meter-scale')).toHaveText("0%Objectif 100%100%");
   await expect(carousel.locator('[data-indicator="arrival"] .match-indicator-source')).toContainText("objectif 85%");
-  await expect(page.locator(".operational-chart-slide")).toHaveCount(4);
+  await expect(page.locator(".operational-chart-slide")).toHaveCount(5);
   const matchNavigation = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
   await matchNavigation.getByRole("button", { name: "Aller à Statistiques du match" }).click();
   await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % centres réussis" }).click();
