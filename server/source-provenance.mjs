@@ -24,8 +24,19 @@ export function parisDay(iso) {
   return `${p.year}-${p.month}-${p.day}`;
 }
 
+function normalizedAgencyId(value) {
+  return String(value ?? "").trim().toUpperCase().replace(/^0+(?=[0-9A-Z])/, "");
+}
+
 export function pdfAssociation(pdf, snapshot) {
   const date = pdfReferenceDay(pdf?.referenceDate);
+  const reportedAgency = normalizedAgencyId(pdf?.agencyCode);
+  const targetAgency = normalizedAgencyId(snapshot?.agency?.code);
+  if (reportedAgency && targetAgency && reportedAgency !== targetAgency) return {
+    status: "mismatched-agency", referenceDate: pdf?.referenceDate ?? null,
+    reportedAgency: pdf.agencyCode, targetAgency: snapshot.agency.code,
+    message: `Le PDF 106J provient de l'agence ${pdf.agencyCode}, différente de l'agence ${snapshot.agency.code} de cet espace. Aucun indicateur n'a été associé.`,
+  };
   const night = snapshot?.zonageDiagnostic?.night ?? snapshot?.anomalySummary?.night;
   const start = night?.startDate ?? parisDay(snapshot?.match?.firstOperation);
   const end = night?.endDate ?? parisDay(snapshot?.match?.lastOperation);
