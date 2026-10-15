@@ -983,7 +983,8 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
     if (requestedCriteria && (!storedCriteriaMatchesRequest || snapshotNeedsRefresh || analysisNeedsRefresh)) {
       try {
         const workbook = await readWorkbookForBuild(agencyDir);
-        const dailyIndicators = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;
+        const pdfCandidate = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;
+        const dailyIndicators = pdfCandidate && pdfAssociation(pdfCandidate, snapshot).status === "matched" ? pdfCandidate : null;
         const period = normalizeTimeRange(snapshot.match?.periodStart, snapshot.match?.periodEnd);
         const rebuilt = buildSnapshotFromWorkbook(
           workbook,
@@ -1009,7 +1010,8 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
     if (!requestedCriteria && (snapshotNeedsRefresh || analysisNeedsRefresh)) {
       try {
         const workbook = await readWorkbookForBuild(agencyDir);
-        const dailyIndicators = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;
+        const pdfCandidate = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;
+        const dailyIndicators = pdfCandidate && pdfAssociation(pdfCandidate, snapshot).status === "matched" ? pdfCandidate : null;
         const storedCriteria = normalizePerformanceCriteria(snapshot.performanceCriteria);
         const period = normalizeTimeRange(snapshot.match?.periodStart, snapshot.match?.periodEnd);
         const rebuilt = buildSnapshotFromWorkbook(
@@ -1125,6 +1127,12 @@ async function readExcludedTravelCodesForSnapshot(agencyCode, snapshot, period =
   if (!scopeKey) return normalizeTravelCodeList(snapshot?.excludedTravelCodes);
   const stored = state.scopes[scopeKey];
   if (Array.isArray(stored)) return stored;
+  const oldDate = snapshot?.match?.legacyDate;
+  if (oldDate && oldDate !== snapshot?.match?.date) {
+    const original = snapshot.match.date;
+    const oldKey = travelExclusionScopeKey({ ...snapshot, match: { ...snapshot.match, date: oldDate } }, period);
+    if (oldKey && Array.isArray(state.scopes[oldKey])) return state.scopes[oldKey];
+  }
 
   // Migrate the field that was briefly stored directly in latest.json before
   // the per-scope state file existed. Source workbooks remain untouched.
@@ -1178,6 +1186,25 @@ async function readCauserieState(agencyCode, matchDate) {
 
 async function readCauseriePlan(agencyCode, matchDate) {
   const causeriePath = path.join(dataDir, sanitizeSegment(agencyCode), "causeries", `${sanitizeSegment(matchDate)}.json`);
+  // Read-through migration: copy the historical UTC-date brief only if the new
+  // operational-date file is absent; keep the old source file intact.
+  try {
+    await fs.access(causeriePath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    const agencyDir = path.join(dataDir, sanitizeSegment(agencyCode));
+    try {
+      const current = JSON.parse(await fs.readFile(path.join(agencyDir, "latest.json"), "utf8"));
+      const former = current?.match?.legacyDate;
+      if (current?.match?.date === matchDate && former && former !== matchDate) {
+        const legacyPath = path.join(agencyDir, "causeries", `${sanitizeSegment(former)}.json`);
+        const oldPlan = await fs.readFile(legacyPath, "utf8");
+        await writeFileAtomic(causeriePath, oldPlan, "utf8");
+      }
+    } catch (migrationError) {
+      if (migrationError?.code !== "ENOENT") throw migrationError;
+    }
+  }
   try {
     const stored = JSON.parse(await fs.readFile(causeriePath, "utf8"));
     const migrated = migrateBriefLayout(stored);
