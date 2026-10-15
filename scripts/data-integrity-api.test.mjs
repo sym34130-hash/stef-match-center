@@ -27,8 +27,18 @@ const pdfTemplate = "JVBERi0xLjMKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1
 function small106jPdf(referenceDate) {
   const original = "18 septembre 2026";
   if (referenceDate.length !== original.length) throw new Error("PDF fixture needs an equally sized date");
-  const pdf = Buffer.from(pdfTemplate, "base64").toString("latin1");
+  let pdf = Buffer.from(pdfTemplate, "base64").toString("latin1");
   if (!pdf.includes(original)) throw new Error("PDF template date not found");
+  // pdf-parse 1.1.1's historical PDF.js can mishandle a pooled small Buffer.
+  // Pad the synthetic file with a legal PDF comment and update startxref,
+  // so Multer creates a dedicated (>8k) underlying ArrayBuffer.
+  const marker = "\nxref\n";
+  const idx = pdf.indexOf(marker);
+  const oldXref = pdf.match(/startxref\n(\d+)\n/);
+  if (idx < 0 || !oldXref) throw new Error("PDF fixture lacks an xref table");
+  const padding = "%" + " ".repeat(8192) + "\n";
+  pdf = pdf.slice(0, idx + 1) + padding + pdf.slice(idx + 1);
+  pdf = pdf.replace(/startxref\n\d+\n/, `startxref\n${Number(oldXref[1]) + padding.length}\n`);
   return Buffer.from(pdf.replace(original, referenceDate), "latin1");
 }
 
