@@ -3,6 +3,7 @@ import { test } from "node:test";
 import * as XLSX from "xlsx";
 import { parse106jText } from "../server/pdf-106j.mjs";
 import { buildSnapshotFromWorkbook } from "../server/match-engine.mjs";
+import { pdfAssociation, pdfReferenceDay } from "../server/source-provenance.mjs";
 
 function workbook(rows) {
   const headers = [
@@ -57,4 +58,23 @@ test("A03: un segment majoritaire différent reste un indice, pas une preuve de 
   assert.equal(result.ok, true, JSON.stringify(result.error));
   assert.equal(result.snapshot.agency.detectedCode, "05R");
   assert.ok(result.snapshot.validation.warnings.some(value => value.includes("majoritaire")));
+});
+
+test("A01: PDF 106J compatible avec les deux dates de la nuit, jamais avec un autre jour", () => {
+  const match = { zonageDiagnostic: { night: { startDate: "2026-09-17", endDate: "2026-09-18" } } };
+  assert.equal(pdfAssociation({ referenceDate: "17 septembre 2026" }, match).status, "matched");
+  assert.equal(pdfAssociation({ referenceDate: "18 septembre 2026" }, match).status, "matched");
+  assert.equal(pdfAssociation({ referenceDate: "16 septembre 2026" }, match).status, "mismatched");
+  assert.equal(pdfAssociation({ referenceDate: null }, match).status, "unverified");
+  assert.equal(pdfReferenceDay("31 février 2026"), null);
+  assert.equal(pdfReferenceDay("18 août 2026"), "2026-08-18");
+});
+
+test("A01: dates de Paris reconnues même à la frontière UTC", () => {
+  const snapshot = { match: {
+    firstOperation: "2026-09-17T22:30:00.000Z",
+    lastOperation: "2026-09-18T01:00:00.000Z",
+  } };
+  assert.equal(pdfAssociation({ referenceDate: "18 septembre 2026" }, snapshot).status, "matched");
+  assert.equal(pdfAssociation({ referenceDate: "17 septembre 2026" }, snapshot).status, "mismatched");
 });
