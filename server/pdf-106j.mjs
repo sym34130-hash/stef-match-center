@@ -72,5 +72,5 @@ function findReferenceDate(text) {
 // The Site code is explicitly printed on official InfoManager SIE.106J reports.
 // Do not infer ownership from the filename, and leave it null when absent.
 function findReportAgencyCode(text) {
-  return text.match(/\bsite\s*:\s*[^\[]*\[\s*([a-z0-9]+)\s*\]/)?.[1]?.toUpperCase() ?? null;
+  return text.match(/\bsite\s*:\s*[^[]*\[\s*([a-z0-9]+)\s*\]/)?.[1]?.toUpperCase() ?? null;
 }
