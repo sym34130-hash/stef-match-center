@@ -20,7 +20,7 @@ export function parse106jText(rawText, sourceName, options = {}) {
   // The upload timestamp belongs to the upload transaction, not the PDF parser.
   // Legacy callers without metadata retain null rather than inventing a new import date.
   const importedAt = options.uploadedAt ?? null;
-  const indicators = { sourceName, importedAt, referenceDate: findReferenceDate(text), punctuality: {}, punctualityTargets: {}, expedition: {} };
+  const indicators = { sourceName, importedAt, referenceDate: findReferenceDate(text), agencyCode: findReportAgencyCode(text), punctuality: {}, punctualityTargets: {}, expedition: {} };
 
   for (const [key, label] of PERFORMANCE_ROWS) {
     const result = findSitePercent(text, label);
@@ -67,4 +67,10 @@ function findExpeditionTonnage(text) {
 
 function findReferenceDate(text) {
   return text.match(/date de reference de calcul\s*:\s*(\d{1,2} \w+ \d{4})/)?.[1] ?? null;
+}
+
+// The Site code is explicitly printed on official InfoManager SIE.106J reports.
+// Do not infer ownership from the filename, and leave it null when absent.
+function findReportAgencyCode(text) {
+  return text.match(/\bsite\s*:\s*[^\[]*\[\s*([a-z0-9]+)\s*\]/)?.[1]?.toUpperCase() ?? null;
 }
