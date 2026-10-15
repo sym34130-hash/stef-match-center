@@ -173,7 +173,10 @@ test("A03 HTTP: confirmation signée, fichier et agence liés, aucune écriture 
     assert.equal(snapshotResult.ok, true, JSON.stringify(snapshotResult.error));
     assert.equal(snapshotResult.snapshot.match.date, "2026-09-18");
     assert.equal(snapshotResult.snapshot.match.legacyDate, "2026-09-17");
-    await fs.writeFile(path.join(agencyDir, "latest.xlsx"), midnightXlsx);
+    // Replace the Excel through the normal API, which also invalidates the
+    // in-memory workbook cache; do not directly overwrite a cached source.
+    const nextExcel = await send("01K", midnightXlsx);
+    assert.equal(nextExcel.status, 200, JSON.stringify(nextExcel.payload));
     await fs.writeFile(path.join(agencyDir, "latest.json"), JSON.stringify(snapshotResult.snapshot));
     const legacyScope = "2026-09-17|00:00|02:00";
     const currentScope = "2026-09-18|00:00|02:00";
