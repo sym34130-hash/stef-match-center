@@ -521,7 +521,11 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
 
       const initialResult = buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code);
       if (!initialResult.ok) { res.status(400).json(initialResult.error); return; }
-      const mismatch = initialResult.snapshot.agency.detectedCode && initialResult.snapshot.agency.detectedCode !== req.agency.code;
+      const agencyHint = initialResult.snapshot.validation?.agencySegmentHint ?? initialResult.snapshot.agency.detectedCode;
+      // Segments are an untrusted origin hint. Known foreign agency codes require
+      // explicit acknowledgement; unknown/non-agency segment labels do not.
+      const mismatch = agencyHint && agencyHint !== req.agency.code &&
+        agencies.some(item => item.code === agencyHint);
       if (mismatch) {
         const fingerprint = createHash("sha256").update(req.file.buffer).digest("hex");
         const signed = createHmac("sha256", importConfirmationSecret).update(`${req.agency.code}:${fingerprint}`).digest("hex");
@@ -530,10 +534,10 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
         if (!isConfirmed) {
           res.status(409).json({
             title: "AGENCE À CONFIRMER",
-            message: `Ce classeur présente majoritairement des segments ${initialResult.snapshot.agency.detectedCode}, différents de l’espace ${req.agency.code}. Les segments ne prouvent pas à eux seuls l’origine du fichier.`,
+            message: `Ce classeur présente majoritairement des segments ${agencyHint}, différents de l’espace ${req.agency.code}. Les segments ne prouvent pas à eux seuls l’origine du fichier.`,
             action: "Vérifie l’agence d’origine du classeur, puis confirme explicitement si ce fichier appartient bien à ton espace.",
             agencyConfirmation: signed,
-            detectedAgency: initialResult.snapshot.agency.detectedCode,
+            detectedAgency: agencyHint,
             targetAgency: req.agency.code,
           });
           return;
