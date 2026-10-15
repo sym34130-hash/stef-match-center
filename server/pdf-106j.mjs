@@ -10,14 +10,17 @@ const PERFORMANCE_ROWS = [
   ["temperatureReturn", "taux de prise de temperature retour ramasse"],
 ];
 
-export async function parse106jPdf(buffer, sourceName) {
+export async function parse106jPdf(buffer, sourceName, options = {}) {
   const parsed = await pdfParse(buffer);
-  return parse106jText(parsed.text, sourceName);
+  return parse106jText(parsed.text, sourceName, options);
 }
 
-export function parse106jText(rawText, sourceName) {
+export function parse106jText(rawText, sourceName, options = {}) {
   const text = normalizeText(rawText);
-  const indicators = { sourceName, importedAt: new Date().toISOString(), referenceDate: findReferenceDate(text), punctuality: {}, punctualityTargets: {}, expedition: {} };
+  // The upload timestamp belongs to the upload transaction, not the PDF parser.
+  // Legacy callers without metadata retain null rather than inventing a new import date.
+  const importedAt = options.uploadedAt ?? null;
+  const indicators = { sourceName, importedAt, referenceDate: findReferenceDate(text), punctuality: {}, punctualityTargets: {}, expedition: {} };
 
   for (const [key, label] of PERFORMANCE_ROWS) {
     const result = findSitePercent(text, label);
