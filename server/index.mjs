@@ -207,6 +207,12 @@ app.post("/api/agencies/:agencyCode/time-range", requireAgency, async (req, res)
         });
         return;
       }
+      if (result.snapshot.dailyIndicators && pdfAssociation(result.snapshot.dailyIndicators, result.snapshot).status !== "matched") {
+        const withoutPdf = buildSnapshotFromWorkbook(buffer, currentSnapshot?.sourceName ?? "match.xlsx", req.agency.code,
+          { ...period, criteria, dailyIndicators: null, excludedTravelCodes });
+        if (!withoutPdf.ok) { res.status(400).json(withoutPdf.error); return; }
+        result.snapshot = withoutPdf.snapshot;
+      }
       result.snapshot.agency.name = req.agency.name;
       await writeJsonAtomic(path.join(agencyDir, "latest.json"), result.snapshot);
       clearCompositionCache(req.agency.code);
@@ -294,6 +300,12 @@ app.post("/api/agencies/:agencyCode/travel-exclusions", requireAgency, async (re
       if (!result.ok) {
         res.status(400).json(result.error);
         return;
+      }
+      if (result.snapshot.dailyIndicators && pdfAssociation(result.snapshot.dailyIndicators, result.snapshot).status !== "matched") {
+        const withoutPdf = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code,
+          { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators: null, excludedTravelCodes: nextExcluded });
+        if (!withoutPdf.ok) { res.status(400).json(withoutPdf.error); return; }
+        result.snapshot = withoutPdf.snapshot;
       }
       result.snapshot.agency.name = req.agency.name;
       await writeTravelExclusionState(req.agency.code, state);
