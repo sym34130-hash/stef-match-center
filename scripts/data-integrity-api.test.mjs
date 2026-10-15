@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import * as XLSX from "xlsx";
+import { buildSnapshotFromWorkbook } from "../server/match-engine.mjs";
 
 function workbook(position) {
   const book = XLSX.utils.book_new();
@@ -111,6 +112,47 @@ test("A03 HTTP: confirmation signée, fichier et agence liés, aucune écriture 
     assert.equal(secondRead.status, 200);
     assert.equal((await secondRead.json()).causerieRevision, state.causerieRevision,
       "Repeated migration must not rewrite the same brief");
+
+    // A05: a legacy UTC-keyed voyage exclusion must still apply after Paris-date migration.
+    const midnightBook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(midnightBook, XLSX.utils.aoa_to_sheet([
+      ["Opérateur", "Date heure de début d'opération", "Type d'opération",
+        "N° Position", "Code Voyage", "Agence Segment", "Type Segment",
+        "Filtre opérateur", "Filtre heure", "Poste", "Poz non zonées", "DZ", "Duels gagnés"],
+      ["OP TEST", "18/09/2026 00:30:00", "DECHG", "P101", "TRIP-A", "01K", "Test", "", "", "", "", "", ""],
+      ["OP TEST", "18/09/2026 00:45:00", "DECHG", "P102", "TRIP-B", "01K", "Test", "", "", "", "", "", ""],
+    ]), "Données");
+    const midnightXlsx = XLSX.write(midnightBook, { type: "buffer", bookType: "xlsx" });
+    const snapshotResult = buildSnapshotFromWorkbook(midnightXlsx, "midnight.xlsx", "01K",
+      { start: "00:00", end: "02:00" });
+    assert.equal(snapshotResult.ok, true, JSON.stringify(snapshotResult.error));
+    assert.equal(snapshotResult.snapshot.match.date, "2026-09-18");
+    assert.equal(snapshotResult.snapshot.match.legacyDate, "2026-09-17");
+    await fs.writeFile(path.join(agencyDir, "latest.xlsx"), midnightXlsx);
+    await fs.writeFile(path.join(agencyDir, "latest.json"), JSON.stringify(snapshotResult.snapshot));
+    const legacyScope = "2026-09-17|00:00|02:00";
+    const currentScope = "2026-09-18|00:00|02:00";
+    await fs.writeFile(path.join(agencyDir, "travel-exclusions.json"), JSON.stringify({
+      version: 1, scopes: { [legacyScope]: ["TRIP-A"] },
+    }));
+    const rangeResponse = await fetch(`${base}/api/agencies/01K/time-range`, {
+      method: "POST",
+      headers: { "x-access-code": "test-01K", "Content-Type": "application/json" },
+      body: JSON.stringify({ start: "00:00", end: "02:00" }),
+    });
+    assert.equal(rangeResponse.status, 200, await rangeResponse.text().then(value => value.slice(0, 1000)));
+    // Use a fresh request for the persisted result since the response body is consumed above.
+    const currentResponse = await fetch(`${base}/api/agencies/01K/snapshot`, {
+      headers: { "x-access-code": "test-01K" },
+    });
+    assert.equal(currentResponse.status, 200);
+    const scoped = (await currentResponse.json()).snapshot;
+    assert.deepEqual(scoped.excludedTravelCodes, ["TRIP-A"]);
+    assert.equal(scoped.summary.operations, 1);
+    const scopes = JSON.parse(await fs.readFile(path.join(agencyDir, "travel-exclusions.json"), "utf8")).scopes;
+    assert.deepEqual(scopes[legacyScope], ["TRIP-A"], "Old exclusion state must remain intact");
+    assert.equal(scopes[currentScope], undefined, "Read-through must not overwrite source scope");
+
 
   } finally {
     if (proc.exitCode === null) {
