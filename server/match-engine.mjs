@@ -316,9 +316,13 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     return compositionResult;
   }
   const agencyCounts = countBy(matchRows.length > 0 ? matchRows : rows, (row) => row.agencySegment || "Non renseignée");
+  // Keep the established derived-template detectedCode contract, but surface
+  // the untrusted segment majority separately for agency confirmation.
+  const agencySegmentHint = topEntry(agencyCounts)?.key ?? null;
+  validation.agencySegmentHint = agencySegmentHint;
   const detectedAgency = isDerivedTemplate
     ? expectedAgencyCode
-    : topEntry(agencyCounts)?.key ?? expectedAgencyCode;
+    : agencySegmentHint ?? expectedAgencyCode;
   if (expectedAgencyCode && detectedAgency && detectedAgency !== expectedAgencyCode) {
     validation.warnings.push(
       `Agence majoritaire détectée : ${detectedAgency}. Espace importé : ${expectedAgencyCode}.`
