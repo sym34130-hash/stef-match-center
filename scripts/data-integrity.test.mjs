@@ -9,14 +9,14 @@ function workbook(rows) {
     "Opérateur", "Date heure de début d'opération", "Type d'opération",
     "N° Position", "Code Voyage", "Agence Segment", "Type Segment",
     "Filtre opérateur", "Filtre heure", "Poste", "Poz non zonées", "DZ",
-    "Duels gagnés", "Quart temps",
+    "Duels gagnés",
   ];
   const file = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(file, XLSX.utils.aoa_to_sheet([headers, ...rows]), "Données");
   return XLSX.write(file, { type: "buffer", bookType: "xlsx" });
 }
 function row(datetime, type = "DECHG", segment = "01K") {
-  return ["OP TEST", datetime, type, "P001", "TEST-01", segment, "Test", "", "", "", "", "", "", ""];
+  return ["OP TEST", datetime, type, "P001", "TEST-01", segment, "Test", "", "", "", "", "", ""];
 }
 
 test("A02: la date d'import PDF ne change pas à chaque lecture", () => {
