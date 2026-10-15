@@ -1,0 +1,50 @@
+name: Validate data-integrity fixes (draft PR)
+
+on:
+  push:
+    branches:
+      - fix/a01-a02-a03-a05-data-integrity
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  autonomous-tests:
+    name: Lint, build and standalone regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Build
+        run: pnpm build
+      - name: PDF and data integrity regressions
+        run: pnpm test:pdf
+      - name: Agency confirmation HTTP regression (temporary server)
+        run: node --test scripts/data-integrity-api.test.mjs
+      # import-contract.test.mjs and the complete reconciliation require the real 058 XLSX,
+      # which is deliberately excluded from this public repository.
+      - name: Install Chromium for UI regression
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Browser import and agency confirmation (desktop/mobile)
+        run: node scripts/data-integrity-browser.mjs
+      - name: Standalone unit and API checks
+        run: |
+          node --test \
+            scripts/category-ranking.test.mjs \
+            scripts/brief-layout.test.mjs \
+            scripts/kpi-duration.test.mjs \
+            scripts/api-security.test.mjs \
+            scripts/agencies.test.mjs \
+            scripts/operational-analysis.test.mjs

@@ -316,9 +316,13 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     return compositionResult;
   }
   const agencyCounts = countBy(matchRows.length > 0 ? matchRows : rows, (row) => row.agencySegment || "Non renseignée");
+  // Keep the established derived-template detectedCode contract, but surface
+  // the untrusted segment majority separately for agency confirmation.
+  const agencySegmentHint = topEntry(agencyCounts)?.key ?? null;
+  validation.agencySegmentHint = agencySegmentHint;
   const detectedAgency = isDerivedTemplate
     ? expectedAgencyCode
-    : topEntry(agencyCounts)?.key ?? expectedAgencyCode;
+    : agencySegmentHint ?? expectedAgencyCode;
   if (expectedAgencyCode && detectedAgency && detectedAgency !== expectedAgencyCode) {
     validation.warnings.push(
       `Agence majoritaire détectée : ${detectedAgency}. Espace importé : ${expectedAgencyCode}.`
@@ -624,6 +628,17 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
     .slice(0, 5);
 
   const weakRole = roleDistribution.reduce((min, current) => (current.count < min.count ? current : min), roleDistribution[0]);
+  const operationalAnalyses = buildOperationalAnalyses({ rows: matchRows, period, criteria, loadingQuality, validation });
+  const legacyDate = firstOperation ? firstOperation.toISOString().slice(0, 10) : importedAt.toISOString().slice(0, 10);
+  const localDate = firstOperation ? (() => {
+    const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit",
+    }).formatToParts(firstOperation).map(part => [part.type, part.value]));
+    return `${p.year}-${p.month}-${p.day}`;
+  })() : legacyDate;
+  // A night crossing midnight belongs to its selected Paris operating start date.
+  // Keep the former UTC date for non-destructive compatibility with persisted briefs/exclusions.
+  const operationalDate = operationalAnalyses.anomalySummary?.night?.startDate ?? localDate;
   return {
     version: 1,
     sourceName,
@@ -635,7 +650,8 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
       name: `Agence ${expectedAgencyCode || detectedAgency || ""}`.trim(),
     },
     match: {
-      date: firstOperation ? firstOperation.toISOString().slice(0, 10) : importedAt.toISOString().slice(0, 10),
+      date: operationalDate,
+      legacyDate,
       firstOperation: firstOperation?.toISOString() ?? null,
       lastOperation: lastOperation?.toISOString() ?? null,
       // This label describes the operator-selected window. The actual first
@@ -708,7 +724,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
       zonageMinutes: criteria.zonageMinutes,
     }),
     performanceCriteria: criteria,
-    ...buildOperationalAnalyses({ rows: matchRows, period, criteria, loadingQuality, validation }),
+    ...operationalAnalyses,
     validation,
     kpiDictionaryVersion: KPI_DICTIONARY_VERSION,
   };

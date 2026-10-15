@@ -4032,8 +4032,9 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
   const [details, setDetails] = useState<string[]>([]);
   const [importedSnapshot, setImportedSnapshot] = useState<Snapshot | null>(null);
   const [lastImportKind, setLastImportKind] = useState<"excel" | "pdf" | null>(null);
+  const [agencyConfirmation, setAgencyConfirmation] = useState<{ file: File; token: string; detected: string } | null>(null);
 
-  async function importFile(file: File | null, kind: "excel" | "pdf") {
+  async function importFile(file: File | null, kind: "excel" | "pdf", confirmationToken?: string) {
     if (!file) {
       setState("error");
       setMessage(kind === "excel" ? "Sélectionne un fichier Excel .xlsx." : "Sélectionne un rapport PDF 106J.");
@@ -4042,6 +4043,8 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
     }
     const formData = new FormData();
     formData.append("file", file);
+    if (confirmationToken && kind === "excel") formData.append("agencyConfirmation", confirmationToken);
+    if (!confirmationToken) setAgencyConfirmation(null);
     setState("uploading");
       setMessage(kind === "excel" ? "Contrôle du fichier Excel en cours..." : "Lecture du rapport PDF 106J en cours...");
     setDetails([]);
@@ -4052,11 +4055,18 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
         headers: { "x-access-code": session.accessCode },
         body: formData,
       });
-      let payload: { message?: string; action?: string; snapshot?: Snapshot };
+      let payload: { message?: string; action?: string; snapshot?: Snapshot; agencyConfirmation?: string; detectedAgency?: string; pdfAssociation?: { status: string; message: string } };
       try {
         payload = await response.json();
       } catch {
         payload = {};
+      }
+      if (response.status === 409 && payload.agencyConfirmation && kind === "excel") {
+        setAgencyConfirmation({ file, token: payload.agencyConfirmation, detected: payload.detectedAgency ?? "non identifiée" });
+        setState("error");
+        setMessage(payload.message ?? "Vérifie l’agence d’origine du fichier.");
+        setDetails([payload.action ?? "Confirme seulement si ce classeur appartient à ton agence."]);
+        return;
       }
       if (!response.ok || !payload.snapshot) {
         setState("error");
@@ -4064,10 +4074,11 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
         setDetails([payload.action].filter((detail): detail is string => Boolean(detail)));
         return;
       }
+      setAgencyConfirmation(null);
       setState("success");
       setLastImportKind(kind);
       setMessage(kind === "excel" ? (payload.snapshot.validation.importReadiness?.status === "partial" ? "Fichier exploitable partiellement : le score opérationnel ne peut pas être calculé. Consulte les sources manquantes ci-dessous." : "Le match est prêt.") : "Les indicateurs 106J sont prêts.");
-      setDetails(payload.snapshot.validation.warnings ?? []);
+      setDetails([...(payload.snapshot.validation.warnings ?? []), ...(payload.pdfAssociation?.status && payload.pdfAssociation.status !== "matched" ? [payload.pdfAssociation.message] : [])]);
       setImportedSnapshot(payload.snapshot);
       onImported(payload.snapshot);
     } catch (error) {
@@ -4087,7 +4098,7 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
         </div>
       </div>
       <div className="import-sources">
-        <ImportSourceDropZone file={excelFile} accept=".xlsx" icon={FileSpreadsheet} title="1. Excel du match" emptyLabel="Déposer ou sélectionner le fichier .xlsx" detail="Source des opérations, joueurs, positions et scores." inputRef={excelInputRef} onFile={(next) => { setExcelFile(next); setState("idle"); setMessage(""); }} />
+        <ImportSourceDropZone file={excelFile} accept=".xlsx" icon={FileSpreadsheet} title="1. Excel du match" emptyLabel="Déposer ou sélectionner le fichier .xlsx" detail="Source des opérations, joueurs, positions et scores." inputRef={excelInputRef} onFile={(next) => { setExcelFile(next); setAgencyConfirmation(null); setState("idle"); setMessage(""); }} />
         <ImportSourceDropZone file={pdfFile} accept=".pdf" icon={FileCheck2} title="2. PDF 106J" emptyLabel="Déposer ou sélectionner le rapport PDF 106J" detail="Taux journaliers et ligne Expédition uniquement." inputRef={pdfInputRef} onFile={(next) => { setPdfFile(next); setState("idle"); setMessage(""); }} />
       </div>
       <div className="import-actions import-source-actions">
@@ -4104,6 +4115,16 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
           </div>
         </div>
       )}
+      {agencyConfirmation && <section className="import-result error" role="alert" aria-label="Confirmation d’agence requise">
+        <AlertTriangle size={24} />
+        <div>
+          <strong>VÉRIFICATION D’AGENCE</strong>
+          <p>Agence connectée : {session.agency.name}. Agence segment majoritaire détectée : {agencyConfirmation.detected}.</p>
+          <p>Un segment majoritaire ne prouve pas l’agence propriétaire. Vérifie le classeur avant de confirmer.</p>
+          <button className="primary-button compact" type="button" onClick={() => void importFile(agencyConfirmation.file, "excel", agencyConfirmation.token)}>Je confirme que ce fichier appartient à mon agence</button>
+          <button className="secondary-button compact" type="button" onClick={() => { setAgencyConfirmation(null); setState("idle"); setMessage(""); }}>Annuler</button>
+        </div>
+      </section>}
       {importedSnapshot && (
         <div className="import-summary">
           <Fact label="Opérations" value={formatNumber(importedSnapshot.summary.operations)} />
@@ -4542,7 +4563,10 @@ function causerieStorageKey(snapshot: Snapshot) {
 
 function readLocalCauseriePlan(snapshot: Snapshot): CauseriePlan | null {
   try {
-    const saved = readStorageValue("local", causerieStorageKey(snapshot));
+    const saved = readStorageValue("local", causerieStorageKey(snapshot)) ??
+      (snapshot.match.legacyDate && snapshot.match.legacyDate !== snapshot.match.date
+        ? readStorageValue("local", `stef-causerie:${snapshot.agency.code}:${snapshot.match.legacyDate}`)
+        : null);
     if (!saved) return null;
     const stored = JSON.parse(saved);
     const normalized = normalizeCauseriePlan(stored);

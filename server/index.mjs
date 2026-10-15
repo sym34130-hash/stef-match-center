@@ -2,11 +2,12 @@ import express from "express";
 import multer from "multer";
 import path from "node:path";
 import fs from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, isTimeRangeWithin, KPI_DICTIONARY_VERSION, normalizePerformanceCriteria, normalizeSnapshotContract, normalizeTimeRange } from "./match-engine.mjs";
 import { parse106jPdf } from "./pdf-106j.mjs";
+import { pdfAssociation } from "./source-provenance.mjs";
 import { operationalAnalysisNeedsRefresh } from "./operational-analysis.mjs";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout } from "./brief-layout.mjs";
 
@@ -26,6 +27,7 @@ const agencyOperationQueues = new Map();
 const failedSessionAttempts = new Map();
 const sessionRateLimitWindowMs = 15 * 60 * 1000;
 const maxFailedSessionAttempts = 20;
+const importConfirmationSecret = randomBytes(32);
 
 const app = express();
 app.disable("x-powered-by");
@@ -206,6 +208,12 @@ app.post("/api/agencies/:agencyCode/time-range", requireAgency, async (req, res)
         });
         return;
       }
+      if (result.snapshot.dailyIndicators && pdfAssociation(result.snapshot.dailyIndicators, result.snapshot).status !== "matched") {
+        const withoutPdf = buildSnapshotFromWorkbook(buffer, currentSnapshot?.sourceName ?? "match.xlsx", req.agency.code,
+          { ...period, criteria, dailyIndicators: null, excludedTravelCodes });
+        if (!withoutPdf.ok) { res.status(400).json(withoutPdf.error); return; }
+        result.snapshot = withoutPdf.snapshot;
+      }
       result.snapshot.agency.name = req.agency.name;
       await writeJsonAtomic(path.join(agencyDir, "latest.json"), result.snapshot);
       clearCompositionCache(req.agency.code);
@@ -293,6 +301,12 @@ app.post("/api/agencies/:agencyCode/travel-exclusions", requireAgency, async (re
       if (!result.ok) {
         res.status(400).json(result.error);
         return;
+      }
+      if (result.snapshot.dailyIndicators && pdfAssociation(result.snapshot.dailyIndicators, result.snapshot).status !== "matched") {
+        const withoutPdf = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code,
+          { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators: null, excludedTravelCodes: nextExcluded });
+        if (!withoutPdf.ok) { res.status(400).json(withoutPdf.error); return; }
+        result.snapshot = withoutPdf.snapshot;
       }
       result.snapshot.agency.name = req.agency.name;
       await writeTravelExclusionState(req.agency.code, state);
@@ -484,7 +498,12 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
           return;
         }
         const workbook = await readWorkbookForBuild(agencyDir);
-        const dailyIndicators = await parse106jPdf(req.file.buffer, req.file.originalname);
+        const dailyIndicators = await parse106jPdf(req.file.buffer, req.file.originalname, { uploadedAt: new Date().toISOString() });
+        const association = pdfAssociation(dailyIndicators, currentSnapshot);
+        if (association.status !== "matched") {
+          res.status(422).json({ title: "PDF NON ASSOCIÉ", message: association.message, action: "Vérifie la date de référence du rapport et importe un PDF correspondant à la nuit du match." });
+          return;
+        }
         const period = normalizeTimeRange(currentSnapshot.match?.periodStart, currentSnapshot.match?.periodEnd);
         const excludedTravelCodes = await readExcludedTravelCodesForSnapshot(req.agency.code, currentSnapshot, period);
         const result = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code, { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators, excludedTravelCodes });
@@ -493,15 +512,43 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
           return;
         }
         result.snapshot.agency.name = req.agency.name;
-        await savePdfImport(req.agency.code, req.file.originalname, req.file.buffer);
+        await savePdfImport(req.agency.code, req.file.originalname, req.file.buffer, dailyIndicators.importedAt);
         await writeJsonAtomic(path.join(agencyDir, "latest.json"), result.snapshot);
         clearCompositionCache(req.agency.code);
         res.json({ message: "PDF 106J ACTUALISÉ", snapshot: result.snapshot });
         return;
       }
 
-      const dailyIndicators = await readLatestPdfIndicators(agencyDir);
-      const result = buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code, { dailyIndicators });
+      const initialResult = buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code);
+      if (!initialResult.ok) { res.status(400).json(initialResult.error); return; }
+      const agencyHint = initialResult.snapshot.validation?.agencySegmentHint ?? initialResult.snapshot.agency.detectedCode;
+      // Segments are an untrusted origin hint. Known foreign agency codes require
+      // explicit acknowledgement; unknown/non-agency segment labels do not.
+      const mismatch = agencyHint && agencyHint !== req.agency.code &&
+        agencies.some(item => item.code === agencyHint);
+      if (mismatch) {
+        const fingerprint = createHash("sha256").update(req.file.buffer).digest("hex");
+        const signed = createHmac("sha256", importConfirmationSecret).update(`${req.agency.code}:${fingerprint}`).digest("hex");
+        const provided = String(req.body?.agencyConfirmation ?? "");
+        const isConfirmed = /^[0-9a-f]{64}$/.test(provided) && timingSafeEqual(Buffer.from(provided, "hex"), Buffer.from(signed, "hex"));
+        if (!isConfirmed) {
+          res.status(409).json({
+            title: "AGENCE À CONFIRMER",
+            message: `Ce classeur présente majoritairement des segments ${agencyHint}, différents de l’espace ${req.agency.code}. Les segments ne prouvent pas à eux seuls l’origine du fichier.`,
+            action: "Vérifie l’agence d’origine du classeur, puis confirme explicitement si ce fichier appartient bien à ton espace.",
+            agencyConfirmation: signed,
+            detectedAgency: agencyHint,
+            targetAgency: req.agency.code,
+          });
+          return;
+        }
+      }
+      const lastPdf = await readLatestPdfIndicators(agencyDir);
+      const association = lastPdf ? pdfAssociation(lastPdf, initialResult.snapshot) : null;
+      const dailyIndicators = association?.status === "matched" ? lastPdf : null;
+      const result = dailyIndicators
+        ? buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code, { dailyIndicators })
+        : initialResult;
       if (!result.ok) {
         res.status(400).json(result.error);
         return;
@@ -527,6 +574,7 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
       clearCompositionCache(req.agency.code);
       res.json({
         message: dailyIndicators ? "MATCH ET 106J ACTUALISÉS" : "MATCH ACTUALISÉ",
+        pdfAssociation: association,
         snapshot: scopedResult.snapshot,
       });
     });
@@ -801,7 +849,7 @@ async function saveImport(agencyCode, originalName, buffer, snapshot) {
   workbookReadPromises.delete(agencyDir);
 }
 
-async function savePdfImport(agencyCode, originalName, buffer) {
+async function savePdfImport(agencyCode, originalName, buffer, uploadedAt) {
   const safeAgency = sanitizeSegment(agencyCode);
   const agencyDir = path.join(dataDir, safeAgency);
   const uploadsDir = path.join(agencyDir, "uploads");
@@ -810,13 +858,22 @@ async function savePdfImport(agencyCode, originalName, buffer) {
   const safeName = sanitizeSegment(originalName.replace(/\.pdf$/i, "")) || "indicateurs-106j";
   await writeFileAtomic(path.join(uploadsDir, `${stamp}-${safeName}.pdf`), buffer);
   await writeFileAtomic(path.join(agencyDir, "latest-106j.pdf"), buffer);
+  await writeJsonAtomic(path.join(agencyDir, "latest-106j-meta.json"), { uploadedAt, sourceName: originalName });
 }
+
 
 async function readLatestPdfIndicators(agencyDir) {
   try {
     const pdfPath = path.join(agencyDir, "latest-106j.pdf");
     const buffer = await fs.readFile(pdfPath);
-    return await parse106jPdf(buffer, "latest-106j.pdf");
+    let uploadedAt = null;
+    let sourceName = "latest-106j.pdf";
+    try {
+      const meta = JSON.parse(await fs.readFile(path.join(agencyDir, "latest-106j-meta.json"), "utf8"));
+      if (typeof meta.uploadedAt === "string" && Number.isFinite(Date.parse(meta.uploadedAt))) uploadedAt = meta.uploadedAt;
+      if (typeof meta.sourceName === "string" && meta.sourceName) sourceName = meta.sourceName;
+    } catch (error) { if (error?.code !== "ENOENT") throw error; }
+    return await parse106jPdf(buffer, sourceName, { uploadedAt });
   } catch (error) {
     if (error?.code === "ENOENT") return null;
     throw error;
@@ -909,7 +966,8 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
     if (requestedCriteria && (!storedCriteriaMatchesRequest || snapshotNeedsRefresh || analysisNeedsRefresh)) {
       try {
         const workbook = await readWorkbookForBuild(agencyDir);
-        const dailyIndicators = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;
+        const pdfCandidate = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;
+        const dailyIndicators = pdfCandidate && pdfAssociation(pdfCandidate, snapshot).status === "matched" ? pdfCandidate : null;
         const period = normalizeTimeRange(snapshot.match?.periodStart, snapshot.match?.periodEnd);
         const rebuilt = buildSnapshotFromWorkbook(
           workbook,
@@ -935,7 +993,8 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
     if (!requestedCriteria && (snapshotNeedsRefresh || analysisNeedsRefresh)) {
       try {
         const workbook = await readWorkbookForBuild(agencyDir);
-        const dailyIndicators = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;
+        const pdfCandidate = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;
+        const dailyIndicators = pdfCandidate && pdfAssociation(pdfCandidate, snapshot).status === "matched" ? pdfCandidate : null;
         const storedCriteria = normalizePerformanceCriteria(snapshot.performanceCriteria);
         const period = normalizeTimeRange(snapshot.match?.periodStart, snapshot.match?.periodEnd);
         const rebuilt = buildSnapshotFromWorkbook(
@@ -1051,6 +1110,11 @@ async function readExcludedTravelCodesForSnapshot(agencyCode, snapshot, period =
   if (!scopeKey) return normalizeTravelCodeList(snapshot?.excludedTravelCodes);
   const stored = state.scopes[scopeKey];
   if (Array.isArray(stored)) return stored;
+  const oldDate = snapshot?.match?.legacyDate;
+  if (oldDate && oldDate !== snapshot?.match?.date) {
+    const oldKey = travelExclusionScopeKey({ ...snapshot, match: { ...snapshot.match, date: oldDate } }, period);
+    if (oldKey && Array.isArray(state.scopes[oldKey])) return state.scopes[oldKey];
+  }
 
   // Migrate the field that was briefly stored directly in latest.json before
   // the per-scope state file existed. Source workbooks remain untouched.
@@ -1104,6 +1168,25 @@ async function readCauserieState(agencyCode, matchDate) {
 
 async function readCauseriePlan(agencyCode, matchDate) {
   const causeriePath = path.join(dataDir, sanitizeSegment(agencyCode), "causeries", `${sanitizeSegment(matchDate)}.json`);
+  // Read-through migration: copy the historical UTC-date brief only if the new
+  // operational-date file is absent; keep the old source file intact.
+  try {
+    await fs.access(causeriePath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    const agencyDir = path.join(dataDir, sanitizeSegment(agencyCode));
+    try {
+      const current = JSON.parse(await fs.readFile(path.join(agencyDir, "latest.json"), "utf8"));
+      const former = current?.match?.legacyDate;
+      if (current?.match?.date === matchDate && former && former !== matchDate) {
+        const legacyPath = path.join(agencyDir, "causeries", `${sanitizeSegment(former)}.json`);
+        const oldPlan = await fs.readFile(legacyPath, "utf8");
+        await writeFileAtomic(causeriePath, oldPlan, "utf8");
+      }
+    } catch (migrationError) {
+      if (migrationError?.code !== "ENOENT") throw migrationError;
+    }
+  }
   try {
     const stored = JSON.parse(await fs.readFile(causeriePath, "utf8"));
     const migrated = migrateBriefLayout(stored);

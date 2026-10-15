@@ -190,6 +190,7 @@ export type Snapshot = {
   };
   match: {
     date: string;
+    legacyDate?: string;
     firstOperation: string | null;
     lastOperation: string | null;
     timeRangeLabel: string;
@@ -229,7 +230,7 @@ export type Snapshot = {
   }>;
   dailyIndicators?: {
     sourceName: string;
-    importedAt: string;
+    importedAt: string | null;
     referenceDate: string | null;
     punctuality: Partial<Record<"arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn", number>>;
     punctualityTargets?: Partial<Record<"arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn", number>>;
