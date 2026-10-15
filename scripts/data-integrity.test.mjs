@@ -93,3 +93,15 @@ test("A03: le modèle calculé conserve l'indice agence sans altérer le contrat
   assert.equal(result.snapshot.agency.detectedCode, "01K");
   assert.equal(result.snapshot.validation.agencySegmentHint, "05R");
 });
+
+test("A01: PDF 106J d'Agen jamais associé à Montpellier, même à date identique", () => {
+  const pdf = parse106jText(`SIE.106J - Indicateurs journaliers agence 58
+    Site : STEF Transport AGEN [0058]
+    Date de référence de calcul : 11 septembre 2026
+    Expédition Tonnage T 478 +33%`, "rapport-agen.pdf", { uploadedAt: "2026-09-11T13:27:00.000Z" });
+  assert.equal(pdf.agencyCode, "0058");
+  const matchAgen = { agency: { code: "058" }, anomalySummary: { night: { startDate: "2026-09-10", endDate: "2026-09-11" } } };
+  const matchMontpellier = { ...matchAgen, agency: { code: "01K" } };
+  assert.equal(pdfAssociation(pdf, matchAgen).status, "matched");
+  assert.equal(pdfAssociation(pdf, matchMontpellier).status, "mismatched-agency");
+});
