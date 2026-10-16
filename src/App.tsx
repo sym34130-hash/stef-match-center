@@ -1960,7 +1960,7 @@ function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pe
         <div>
           <span>Déchargement</span>
           <strong>% Duels gagnés</strong>
-          <p className="loading-quality-explanation">Voyages dans la cible : temps moyen inférieur ou égal à {target}/poz.</p>
+          <p className="loading-quality-explanation">Voyages éligibles (15 positions minimum, hors activité AQ) : temps moyen inférieur ou égal à {target}/poz.</p>
         </div>
         <b>{formatNumber(total)} voyages</b>
       </div>

@@ -1,5 +1,7 @@
-// These diagnostics never feed the four official score indicators.
-export const OPERATIONAL_ANALYSIS_VERSION = 1;
+import { buildReceptionCohort } from "./reception-cohort.mjs";
+
+// Hourly reception shares the official reception cohort; other diagnostics remain descriptive.
+export const OPERATIONAL_ANALYSIS_VERSION = 2;
 const parisFormatter = new Intl.DateTimeFormat("sv-SE", {
   timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit",
   hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
@@ -39,7 +41,7 @@ export function normalizeOperationalAnalysisContract(snapshot) {
   return copy;
 }
 
-function selectNight(rows, period) {
+export function selectNight(rows, period) {
   const candidates = new Map();
   for (const row of rows) {
     const p = parts(row.startedAt);
@@ -128,25 +130,18 @@ function zonageAnalysis(rows, night, targetMinutes, reason) {
   };
 }
 
-function hourlyReception(rows, night, targetSeconds, reason) {
+function hourlyReception(rows, night, targetSeconds, reason, minimumPositions) {
   const base = { state: "indisponible", reason: reason ?? "aucun_voyage_a_duree_positive", night, targetSeconds,
     grouping: "heure_du_premier_DECHG_de_la_nuit", eligibleTravels: 0, excludedZeroDurationTravels: 0,
+    excludedSmallTravels: 0, excludedQuayRows: 0,
     unidentifiedTravelRows: 0, meanSecondsPerPosition: null, offTargetTravels: 0, offTargetPercent: null, items: [], travels: [] };
   if (!night) return base;
-  const receptions = rows.filter(row => row.operationType === "DECHG");
-  base.unidentifiedTravelRows = receptions.filter(row => !row.travelCode).length;
-  const trips = [];
-  for (const [travelCode, operations] of Map.groupBy(receptions.filter(row => row.travelCode), row => row.travelCode)) {
-    const dates = operations.map(row => +row.startedAt);
-    const start = Math.min(...dates), end = Math.max(...dates);
-    const elapsedSeconds = Math.max(0, Math.round((end - start) / 1000));
-    if (!elapsedSeconds) { base.excludedZeroDurationTravels++; continue; }
-    trips.push({ travelCode, start: new Date(start).toISOString(), end: new Date(end).toISOString(),
-      operationRows: operations.length, distinctPositions: new Set(operations.map(row => row.position)).size,
-      timePerPositionSeconds: elapsedSeconds / operations.length,
-      offTarget: elapsedSeconds / operations.length > targetSeconds, positions: operations.map(row => row.position) });
-  }
-  trips.sort((a, b) => compareCodes(a.start, b.start) || compareCodes(a.travelCode, b.travelCode));
+  const cohort = buildReceptionCohort(rows, targetSeconds, minimumPositions == null ? {} : { minimumPositions });
+  base.excludedZeroDurationTravels = cohort.excludedZeroDurationTravels;
+  base.excludedSmallTravels = cohort.excludedSmallTravels;
+  base.excludedQuayRows = cohort.excludedQuayRows;
+  base.unidentifiedTravelRows = cohort.unidentifiedTravelRows;
+  const trips = cohort.travels;
   const end = Date.parse(night.end);
   for (let start = Date.parse(night.start); start < end;) {
     const p = parts(new Date(start));
@@ -182,15 +177,15 @@ function hourlyReception(rows, night, targetSeconds, reason) {
 }
 
 /** Input rows already satisfy the official match filter (operator, active clock range, exclusions).
- * Only these analyses select one dated operating period. No global KPI is recalculated here.
+ * All reception indicators use the same selected dated period and eligibility.
  */
-export function buildOperationalAnalyses({ rows, period, criteria, loadingQuality, validation = {} }) {
+export function buildOperationalAnalyses({ rows, period, criteria, loadingQuality, validation = {}, minimumReceptionPositions }) {
   const valid = (rows ?? []).filter(row => row.startedAt instanceof Date && Number.isFinite(+row.startedAt) &&
     text(row.position) && ["DECHG", "ZONAGE", "CHG"].includes(row.operationType))
     .map(row => ({ ...row, position: text(row.position), travelCode: text(row.travelCode) }));
   const { night, selectedRows, reason } = selectNight(valid, period);
   const zonageDiagnostic = zonageAnalysis(selectedRows, night, criteria.zonageMinutes, reason);
-  const unloadingHourlyAnalysis = hourlyReception(selectedRows, night, criteria.unloadingSeconds, reason);
+  const unloadingHourlyAnalysis = hourlyReception(selectedRows, night, criteria.unloadingSeconds, reason, minimumReceptionPositions);
   const warnings = [...zonageDiagnostic.warnings];
   if (night?.otherNightOperations) warnings.push(`${night.otherNightOperations} opération(s) appartenant à d'autres périodes d'exploitation exclues du diagnostic.`);
   const invalidRows = (rows?.length ?? 0) - valid.length;
@@ -198,6 +193,8 @@ export function buildOperationalAnalyses({ rows, period, criteria, loadingQualit
   if (validation.unknownOperationRows) warnings.push(`${validation.unknownOperationRows} type(s) d'opération non reconnu(s) dans la source.`);
   if (validation.duplicateRows) warnings.push(`${validation.duplicateRows} clé(s) de doublons potentiels dans la source ; le diagnostic zonage déduplique les positions.`);
   if (unloadingHourlyAnalysis.excludedZeroDurationTravels) warnings.push(`${unloadingHourlyAnalysis.excludedZeroDurationTravels} voyage(s) de réception sans durée positive.`);
+  if (unloadingHourlyAnalysis.excludedSmallTravels) warnings.push(`${unloadingHourlyAnalysis.excludedSmallTravels} voyage(s) avec moins de 15 positions DECHG, non qualifiables pour les duels.`);
+  if (unloadingHourlyAnalysis.excludedQuayRows) warnings.push(`${unloadingHourlyAnalysis.excludedQuayRows} opération(s) AQ de quai exclues des duels de réception.`);
   if (unloadingHourlyAnalysis.unidentifiedTravelRows) warnings.push(`${unloadingHourlyAnalysis.unidentifiedTravelRows} ligne(s) DECHG sans code voyage.`);
   if (night?.otherNightOperations && loadingQuality?.sourceAvailable) warnings.push("Les chargements conservent le périmètre horaire officiel du TCD, toutes dates confondues.");
   const topTravel = zonageDiagnostic.top5[0] ?? null;

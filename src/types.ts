@@ -138,6 +138,8 @@ export type UnloadingHourlyAnalysis = {
   grouping: "heure_du_premier_DECHG_de_la_nuit";
   eligibleTravels: number;
   excludedZeroDurationTravels: number;
+  excludedSmallTravels?: number;
+  excludedQuayRows?: number;
   unidentifiedTravelRows: number;
   meanSecondsPerPosition: number | null;
   offTargetTravels: number;

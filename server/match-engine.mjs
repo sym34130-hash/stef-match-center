@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import * as XLSX from "xlsx";
-import { buildOperationalAnalyses, normalizeOperationalAnalysisContract } from "./operational-analysis.mjs";
+import { buildOperationalAnalyses, normalizeOperationalAnalysisContract, selectNight } from "./operational-analysis.mjs";
+import { buildReceptionCohort } from "./reception-cohort.mjs";
 
 const REQUIRED_COLUMNS = {
   operator: ["operateur"],
@@ -35,7 +36,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 19;
+export const KPI_DICTIONARY_VERSION = 20;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -329,6 +330,8 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     );
   }
 
+  const receptionPeriodRows = selectNight(matchRows, period).selectedRows;
+  const receptionTrips = buildReceptionCohort(receptionPeriodRows, criteria.unloadingSeconds).travels;
   const hourlyPassPerformance = buildHourlyPassPerformance(rawWorkbook, period, rows.filter((row) => !excludedTravelCodes.has(row.travelCode)));
   const snapshot = buildMatchSnapshot({
     sourceRows: rows,
@@ -343,8 +346,8 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     criteria,
     hourlyPassPerformance,
     loadingQuality: buildLoadingQualityFromTcd(rawWorkbook, period, criteria.loadingSeconds, excludedTravelCodes),
-    unloadingDuelQuality: buildUnloadingDuelQuality(rawWorkbook, period, matchRows, excludedTravelCodes, travelDestinations),
-    unloadingQuality: buildUnloadingQuality(matchRows, criteria.unloadingSeconds, travelDestinations),
+    unloadingDuelQuality: buildUnloadingDuelQuality(receptionTrips, receptionPeriodRows, travelDestinations),
+    unloadingQuality: buildUnloadingQuality(receptionTrips, criteria.unloadingSeconds, travelDestinations),
     yellowCards: buildYellowCards(rawWorkbook, period, excludedTravelCodes),
     excludedTravelCodes,
     dailyIndicators: periodInput.dailyIndicators ?? null,
@@ -994,130 +997,39 @@ function travelDestination(destinations, travelCode) {
   return destinations?.get(cleanText(travelCode).toUpperCase())?.destination ?? null;
 }
 
-function buildUnloadingDuelQuality(workbook, period, matchRows, excludedTravelCodes = new Set(), travelDestinations = new Map()) {
-  const empty = { won: 0, lost: 0, wonPercent: null, lostPercent: null, duels: [], lostDuels: [] };
-  const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "tcd ppt");
-  const sheet = sheetName ? workbook.Sheets[sheetName] : null;
-  if (!sheet) return empty;
-
-  // The Déchargement pivot is the authoritative source for this carousel card:
-  // one row per eligible reception, with the result in "Duels gagnés".
-  const anchor = Object.entries(sheet)
-    .find(([address, cell]) => !address.startsWith("!") && normalizeKey(cell?.v) === "dechargement");
-  if (!anchor) return empty;
-  const anchorCell = XLSX.utils.decode_cell(anchor[0]);
-  const headerRows = [];
-  for (let row = anchorCell.r; row <= anchorCell.r + 16; row += 1) {
-    const cells = [];
-    for (let col = anchorCell.c; col <= anchorCell.c + 14; col += 1) {
-      const address = XLSX.utils.encode_cell({ r: row, c: col });
-      const value = normalizeKey(sheet[address]?.v);
-      if (value) cells.push({ col, value });
-    }
-    if (cells.some((cell) => cell.value === "code voyage") && cells.some((cell) => cell.value === "duels gagnes") && cells.some((cell) => cell.value === "duels perdus")) {
-      headerRows.push({ row, cells });
-    }
-  }
-  const header = headerRows[0];
-  if (!header) return empty;
-  const findColumn = (predicate) => header.cells.find((cell) => predicate(cell.value))?.col;
-  const travelColumn = findColumn((value) => value === "code voyage");
-  const wonColumn = findColumn((value) => value === "duels gagnes");
-  const totalColumn = findColumn((value) => value === "duels");
-  const positionsColumn = findColumn((value) => value === "nombre de n position");
-  const endColumn = findColumn((value) => value.startsWith("max de date heure de debut d operation"));
-  const startColumn = findColumn((value) => value.startsWith("min de date heure de debut d operation"));
-  if ([travelColumn, wonColumn, totalColumn, positionsColumn, startColumn, endColumn].some((value) => value === undefined)) return empty;
-
-  const agencies = resolveUnloadingAgencies(matchRows);
-  let total = 0;
-  let won = 0;
-  const duels = [];
-  const lostDuels = [];
-  const lastRow = sheetEndRow(sheet, header.row + 1);
-  for (let row = header.row + 1; row <= lastRow; row += 1) {
-    const travel = cleanText(sheet[XLSX.utils.encode_cell({ r: row, c: travelColumn })]?.v);
-    const wonCell = sheet[XLSX.utils.encode_cell({ r: row, c: wonColumn })];
-    const wonRaw = wonCell?.v;
-    const wonValue = Number(wonRaw);
-    const totalRaw = sheet[XLSX.utils.encode_cell({ r: row, c: totalColumn })]?.v;
-    const totalValue = Number(totalRaw);
-    if (!travel || excludedTravelCodes.has(travel) || !Number.isFinite(totalValue) || totalValue <= 0 || wonRaw === "" || wonRaw === null || wonRaw === undefined || !Number.isFinite(wonValue) || (wonValue !== 0 && wonValue !== 1)) continue;
-    const start = parseExcelDate(sheet[XLSX.utils.encode_cell({ r: row, c: startColumn })]?.v);
-    if (!isInActiveTimeRange(start, period)) continue;
-    total += totalValue;
-    won += wonValue;
-    const end = parseExcelDate(sheet[XLSX.utils.encode_cell({ r: row, c: endColumn })]?.v);
-    const positions = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: positionsColumn })]?.v) ?? 0;
-    const elapsedSeconds = start && end ? Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000)) : 0;
-    const duel = {
-      travelCode: travel,
-      destination: travelDestination(travelDestinations, travel),
-      agency: agencies.get(travel) || "Non renseignée",
-      time: formatDateClock(start),
-      positions,
-      timePerPosition: formatDuration(elapsedSeconds / Math.max(positions, 1)),
-      result: wonValue === 1 ? "gagné" : "perdu",
-    };
-    duels.push(duel);
-    if (wonValue < totalValue) lostDuels.push(duel);
-  }
-  const lost = Math.max(0, total - won);
+function buildUnloadingDuelQuality(receptionTrips, receptionPeriodRows, travelDestinations = new Map()) {
+  // All carousel reception views share the active target and one operating period.
+  // Cached TCD rows may aggregate a reused voyage code across several nights.
+  const agencies = resolveUnloadingAgencies(receptionPeriodRows);
+  const duels = receptionTrips.map(trip => ({
+    travelCode: trip.travelCode,
+    destination: travelDestination(travelDestinations, trip.travelCode),
+    agency: agencies.get(trip.travelCode) || "Non renseignée",
+    time: formatDateClock(new Date(trip.start)),
+    positions: trip.operationRows,
+    timePerPosition: formatDuration(trip.timePerPositionSeconds),
+    result: trip.offTarget ? "perdu" : "gagné",
+  }));
+  const won = receptionTrips.filter(trip => !trip.offTarget).length;
+  const lost = receptionTrips.length - won;
   duels.sort(compareTimePerPositionDescending);
-  lostDuels.sort(compareTimePerPositionDescending);
   return {
     won,
     lost,
-    wonPercent: total > 0 ? percent(won, total) : null,
-    lostPercent: total > 0 ? percent(lost, total) : null,
+    wonPercent: receptionTrips.length ? percent(won, receptionTrips.length) : null,
+    lostPercent: receptionTrips.length ? percent(lost, receptionTrips.length) : null,
     duels,
-    lostDuels,
+    lostDuels: duels.filter(duel => duel.result === "perdu"),
   };
 }
 
-function buildUnloadingQuality(matchRows, configuredTargetSeconds, travelDestinations = new Map()) {
+function buildUnloadingQuality(receptionTrips, configuredTargetSeconds, travelDestinations = new Map()) {
   const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.unloadingSeconds);
-  const empty = {
-    targeted: 0,
-    offTarget: 0,
-    targetedPercent: null,
-    offTargetPercent: null,
-    targetTimePerPosition: formatDuration(targetSeconds),
-    averageTimePerPositionSeconds: null,
-    eligibleTrips: 0,
-    travels: [],
-  };
-  if (!Array.isArray(matchRows)) return empty;
-
-  const groups = new Map();
-  for (const row of matchRows) {
-    if (row.operationType !== "DECHG" || !row.travelCode) continue;
-    if (!groups.has(row.travelCode)) groups.set(row.travelCode, []);
-    groups.get(row.travelCode).push(row);
-  }
-
-  // Keep the denominator aligned with the Excel TCD: one counted position
-  // row per voyage, with the total elapsed time divided by that count.
-  const unloadingRows = Array.from(groups.entries()).map(([travelCode, rows]) => {
-    const firstOperation = minDate(rows.map((row) => row.startedAt));
-    const lastOperation = maxDate(rows.map((row) => row.startedAt));
-    const elapsedSeconds = firstOperation && lastOperation
-      ? Math.max(0, Math.round((lastOperation.getTime() - firstOperation.getTime()) / 1000))
-      : 0;
-    const timePerPositionSeconds = rows.length > 0 ? elapsedSeconds / rows.length : 0;
-    return {
-      travelCode,
-      elapsedSeconds,
-      timePerPositionSeconds,
-      eligible: rows.length > 0 && elapsedSeconds > 0,
-    };
-  }).filter((row) => row.eligible);
-
-  const targeted = unloadingRows.filter((row) => row.timePerPositionSeconds <= targetSeconds).length;
-  const total = unloadingRows.length;
-  const offTarget = Math.max(0, total - targeted);
+  const targeted = receptionTrips.filter(trip => trip.timePerPositionSeconds <= targetSeconds).length;
+  const total = receptionTrips.length;
+  const offTarget = total - targeted;
   const averageTimePerPositionSeconds = total > 0
-    ? Math.round(unloadingRows.reduce((sum, row) => sum + row.timePerPositionSeconds, 0) / total)
+    ? Math.round(receptionTrips.reduce((sum, trip) => sum + trip.timePerPositionSeconds, 0) / total)
     : null;
   return {
     targeted,
@@ -1127,7 +1039,7 @@ function buildUnloadingQuality(matchRows, configuredTargetSeconds, travelDestina
     targetTimePerPosition: formatDuration(targetSeconds),
     averageTimePerPositionSeconds,
     eligibleTrips: total,
-    travels: unloadingRows.map(({ travelCode }) => ({ travelCode, destination: travelDestination(travelDestinations, travelCode) })),
+    travels: receptionTrips.map(({ travelCode }) => ({ travelCode, destination: travelDestination(travelDestinations, travelCode) })),
   };
 }
 
