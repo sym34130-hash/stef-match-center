@@ -1,6 +1,39 @@
 # Stabilisation responsive - rapport local
 
-Validation locale terminee le 2026-10-07.
+Rapport historique : validation locale terminee le 2026-10-07. Les statuts Git et resultats ci-dessous decrivent cette intervention initiale.
+
+## Consolidation responsive et Jour/Nuit du 2026-10-16
+
+- Le patch local responsive-final-diff.patch contient 33 fichiers. Leurs 33 empreintes cibles correspondent exactement aux blobs du commit 6392dc5, deja ancetre du main courant.
+- Sur la base e0c1448, 20 fichiers restent identiques a ces cibles ; 13 ont evolue depuis. Le patch n'est pas rejoue : cela annulerait des corrections posterieures validees.
+- Les regles responsive actuelles et les controles renforces du carrousel sont conserves, notamment la visibilite et l'accessibilite par defilement de reception-hour-chart.
+- Les travaux Jour/Nuit preserves sont reportes sur cette base sans conflit. Ils neutralisent la terminologie visible et documentent les periodes deja retenues par le moteur ; aucun contrat technique ni calcul KPI n'est renomme.
+- DST : Ouvert - Accepte - Hors perimetre. Aucune correction des conversions temporelles n'est incluse.
+- Le fichier patch reste un artefact local non suivi. Cette consolidation ne comporte aucun push ni deploiement.
+
+Validation de consolidation sur une copie isolee, avec Node 22.23.3 et stockage de test temporaire :
+
+| Commande | Resultat du 2026-10-16 |
+| --- | --- |
+| pnpm lint | PASS |
+| pnpm build | PASS |
+| pnpm test | PASS : 53 tests et reconciliation Excel |
+| pnpm test:pdf | PASS : 15 tests |
+| pnpm test:deploy | PASS : smoke local, stockage temporaire |
+| node --test scripts/data-integrity-api.test.mjs | PASS : 1 test HTTP |
+| pnpm test:pdf:import avec Excel de reference et PDF 106J reel | PASS : navigateur, relecture, quatre ligues, plage, reimport et redemarrage |
+| pnpm test:ui | PASS : 124 reussis, 4 ignores, 13,2 min |
+| pnpm test:ui:responsive | PASS : 2 reussis, 3,9 min |
+| Playwright operational-analysis.spec.ts --grep jour/nuit | PASS : 3 reussis, desktop/tablette/mobile, normal et Celebration |
+| git diff --check | PASS |
+
+Les quatre tests ignores restent les exclusions desktop-only existantes. Aucune reference visuelle n'a ete remplacee et aucune regle CSS n'a ete ajoutee ou modifiee pour cette consolidation.
+
+Les 13 formats de la matrice ci-dessous passent en normal et Celebration. Les tests d'analyse couvrent aussi 768x1024, 390x844, 320x740 et 320x700. Revue ciblee des captures du diagnostic sur PC et mobile, ainsi que du rendu de jour en Celebration. La revue sur les PC professionnels reels reste recommandee.
+
+Comparaison complete de huit snapshots construits depuis le classeur Montpellier : plages 08:00-16:00, 14:00-22:00, 21:30-06:30 et 00:00-08:00, avec et sans exclusions. Hors date d'import et reformulation attendue de l'avertissement, les snapshots sont identiques a la base e0c1448 : KPI, compteurs et classements inchanges.
+
+Controle SHA-256 final : 30 fichiers de donnees locales, le patch et les deux originaux Excel/PDF inchanges ; aucun ajout ni suppression de fichier dans les donnees d'origine. Preuves locales : /tmp/stef-consolidation-AeNvMv/ (journaux, inventaire des 33 blobs, comparaisons et captures). Les sauvegardes Git precedentes sont conservees.
 
 ## Etat initial
 
