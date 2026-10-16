@@ -21439,3 +21439,37 @@ body.match-celebration-active .main-area {
     font-size: 11px;
   }
 }
+
+
+/* Longer competition names replace the old one-word league labels.
+   Preserve every league ID/theme while allowing labels to wrap responsively. */
+.top-league-badge {
+  min-width: 0;
+  max-width: min(100%, 258px);
+  white-space: normal;
+}
+.top-league-badge strong {
+  min-width: 0;
+  overflow-wrap: break-word;
+  line-height: 1.2;
+}
+.league-card-top,
+.guide-league-card-top {
+  min-width: 0;
+}
+.league-card-top strong,
+.guide-league-card-top strong,
+.administrator-active-badge strong,
+.coach-league-badge strong {
+  min-width: 0;
+  overflow-wrap: break-word;
+  line-height: 1.16;
+}
+.league-card-top strong { font-size: clamp(17px, 1.7vw, 23px); }
+.guide-league-card-top strong { font-size: clamp(17px, 2vw, 21px); }
+@media (max-width: 640px) {
+  .top-league-badge { max-width: min(100%, 195px); }
+  .top-league-badge strong { font-size: 11px; }
+  .administrator-active-badge strong { font-size: 18px; }
+  .coach-league-badge strong { font-size: 15px; }
+}
