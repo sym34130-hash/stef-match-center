@@ -59,10 +59,10 @@ try {
   browser = await chromium.launch({headless:true});
   for(const viewport of [{width:1366,height:768},{width:390,height:844}]) {
     for(const league of [
-      {id:"bronze",label:"Ligue 2",tone:"bronze",target:45,accent:"#d08a52",cardColor:"rgb(17, 103, 77)",cardBackground:"rgb(245, 210, 178)",badgeBackground:"rgb(244, 208, 176)"},
-      {id:"argent",label:"Ligue 1",tone:"silver",target:50,accent:"#8bb5dc",cardColor:"rgb(20, 88, 154)",cardBackground:"rgb(219, 233, 248)",badgeBackground:"rgb(220, 234, 250)"},
-      {id:"or",label:"Ligue des champions",tone:"gold",target:60,accent:"#d7a52f",cardColor:"rgb(52, 59, 132)",cardBackground:"rgb(247, 221, 160)",badgeBackground:"rgb(247, 223, 167)"},
-      {id:"platine",label:"Coupe du monde",tone:"platinum",target:70,accent:"#c58ee8",cardColor:"rgb(129, 84, 21)",cardBackground:"rgb(241, 220, 255)",badgeBackground:"rgb(239, 223, 255)"},
+      {id:"bronze",label:"LIGUE 2",tone:"bronze",target:45,accent:"#d08a52",cardColor:"rgb(14, 97, 69)",cardBackground:"rgb(245, 210, 178)",badgeBackground:"rgb(244, 208, 176)"},
+      {id:"argent",label:"LIGUE 1",tone:"silver",target:50,accent:"#8bb5dc",cardColor:"rgb(16, 79, 155)",cardBackground:"rgb(219, 233, 248)",badgeBackground:"rgb(220, 234, 250)"},
+      {id:"or",label:"LIGUE DES CHAMPIONS",tone:"gold",target:60,accent:"#d7a52f",cardColor:"rgb(39, 53, 130)",cardBackground:"rgb(247, 221, 160)",badgeBackground:"rgb(247, 223, 167)"},
+      {id:"platine",label:"COUPE DU MONDE",tone:"platinum",target:70,accent:"#c58ee8",cardColor:"rgb(128, 77, 18)",cardBackground:"rgb(241, 220, 255)",badgeBackground:"rgb(239, 223, 255)"},
     ]) {
       const context = await browser.newContext({viewport,reducedMotion:"reduce"});
       const page = await context.newPage();
@@ -89,9 +89,11 @@ try {
       await leagueBadge.waitFor({state:"visible"});
       assert.equal((await leagueBadge.locator("strong").textContent()).trim(),league.label,
         "League display name must follow the saved technical ID");
+      assert.equal(league.label, league.label.toLocaleUpperCase("fr-FR"),
+        "Competition labels are actual uppercase data, not merely a CSS effect");
       assert.equal(await leagueBadge.getAttribute("aria-label"),"Ligue active : "+league.label);
       const displayFont=await leagueBadge.locator("strong").evaluate(el=>getComputedStyle(el).fontFamily);
-      assert.match(displayFont,/Barlow Condensed/,"Competition display face on heading");
+      assert.match(displayFont,/Oswald/,"Competition display face on heading");
       const themeAccent=await page.locator(".app-shell").evaluate(el =>
         getComputedStyle(el).getPropertyValue("--league-accent").trim().toLowerCase());
       assert.equal(themeAccent,league.accent,"Original league theme accent must be preserved");
@@ -102,7 +104,7 @@ try {
       const allCards=page.locator(".administrator-leagues .league-card");
       assert.equal(await allCards.count(),4,"All four leagues remain available");
       const labels=await allCards.locator(".league-card-top strong").allTextContents();
-      assert.deepEqual(labels.map(s=>s.trim()),["Ligue 2","Ligue 1","Ligue des champions","Coupe du monde"]);
+      assert.deepEqual(labels.map(s=>s.trim()),["LIGUE 2","LIGUE 1","LIGUE DES CHAMPIONS","COUPE DU MONDE"]);
       const leagueCard=page.locator(".administrator-leagues .league-card." + league.tone);
       const cardInk=await leagueCard.locator(".league-card-top strong").evaluate(el =>
         getComputedStyle(el).color);
@@ -118,7 +120,7 @@ try {
       assert.equal(selectedBadgeInk,league.cardColor,"Only active competition name ink changes");
       const cardFont=await leagueCard.locator(".league-card-top strong").evaluate(el =>
         getComputedStyle(el).fontFamily);
-      assert.match(cardFont,/Barlow Condensed/,"Competition display face on admin card");
+      assert.match(cardFont,/Oswald/,"Competition display face on admin card");
       const noOverflow=await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2);
       assert.equal(noOverflow,true,"Competition name cards must not overflow viewport");
 
