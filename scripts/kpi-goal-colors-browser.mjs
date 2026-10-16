@@ -59,8 +59,10 @@ try {
   browser = await chromium.launch({headless:true});
   for(const viewport of [{width:1366,height:768},{width:390,height:844}]) {
     for(const league of [
-      {id:"argent",target:50,expected:["pass-score-bubble","possession-score-bubble"]},
-      {id:"or",target:60,expected:[...bubbles]},
+      {id:"bronze",label:"Ligue 2",target:45},
+      {id:"argent",label:"Ligue 1",target:50},
+      {id:"or",label:"Ligue des champions",target:60},
+      {id:"platine",label:"Coupe du monde",target:70},
     ]) {
       const context = await browser.newContext({viewport,reducedMotion:"reduce"});
       const page = await context.newPage();
@@ -83,13 +85,28 @@ try {
       await page.getByLabel("Code agence").selectOption("01K");
       await page.getByLabel("Code d'accès").fill(accessCode);
       await page.getByRole("button",{name:"Accéder au match",exact:true}).click();
+      const leagueBadge=page.locator(".top-league-badge");
+      await leagueBadge.waitFor({state:"visible"});
+      assert.equal((await leagueBadge.locator("strong").innerText()).trim(),league.label,
+        "League display name must follow the saved technical ID");
+      assert.equal(await leagueBadge.getAttribute("aria-label"),"Ligue active : "+league.label);
+      const badgeClipped=await leagueBadge.evaluate(element => {
+        const strong=element.querySelector("strong");
+        return !strong || strong.getBoundingClientRect().right > window.innerWidth + 1;
+      });
+      assert.equal(badgeClipped,false,"League name must not overflow the viewport on desktop/mobile");
       await page.getByRole("button",{name:"02 Feuille de match",exact:true}).click();
       const board=page.locator(".match-score-bubbles");
       await board.waitFor({state:"visible"});
       assert.equal(await board.locator(".match-score-bubble").count(),4);
       for(const kind of bubbles) {
         const card=board.locator("." + kind);
-        const conceded=league.expected.includes(kind);
+        const relevantValue=values[
+          kind === "pass-score-bubble" ? "passRate" :
+          kind === "loading-score-bubble" ? "loadingPercent" :
+          kind === "reception-score-bubble" ? "unloadingPercent" : "possessionPercent"
+        ];
+        const conceded=relevantValue <= league.target;
         const className=await card.getAttribute("class");
         assert.equal(className.includes("is-goal-conceded"),conceded,kind+" / "+league.id);
         const warnings=await card.locator(".match-score-goal-warning").allTextContents();

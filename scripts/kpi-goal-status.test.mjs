@@ -3,10 +3,10 @@ import test from "node:test";
 import { isKpiGoalConceded } from "../src/kpi-goal-status.ts";
 
 const leagues = [
-  { name: "Bronze", target: 45 },
-  { name: "Argent", target: 50 },
-  { name: "Or", target: 60 },
-  { name: "Platine", target: 70 },
+  { name: "Ligue 2", target: 45 },
+  { name: "Ligue 1", target: 50 },
+  { name: "Ligue des champions", target: 60 },
+  { name: "Coupe du monde", target: 70 },
 ];
 
 for (const { name, target } of leagues) {
