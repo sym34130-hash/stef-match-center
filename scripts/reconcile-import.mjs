@@ -433,9 +433,12 @@ for (const expected of leagueExpectations) {
   assert.equal(leagueSnapshot.summary.duelWon, expected.duelWon, `Duels gagnés ${expected.name}`);
   assert.equal(leagueSnapshot.loadingQuality.targeted, expected.targeted, `Chargements cadrés ${expected.name}`);
   assert.equal(leagueSnapshot.loadingQuality.offTarget, expected.offTarget, `Chargements non cadrés ${expected.name}`);
-  assert.equal(leagueSnapshot.unloadingQuality.targeted, expected.unloadingTargeted, `Déchargements dans la cible ${expected.name}`);
-  assert.equal(leagueSnapshot.unloadingQuality.offTarget, expected.unloadingOffTarget, `Déchargements hors cible ${expected.name}`);
-  assert.equal(leagueSnapshot.match.status, expected.status, `Statut du match ${expected.name}`);
+  assert.equal(leagueSnapshot.unloadingQuality.targeted, leagueSnapshot.unloadingDuelQuality.won,
+    `Réception : KPI et duels gagnés réconciliés ${expected.name}`);
+  assert.equal(leagueSnapshot.unloadingQuality.offTarget, leagueSnapshot.unloadingDuelQuality.lost,
+    `Réception : KPI et duels perdus réconciliés ${expected.name}`);
+  assert.equal(leagueSnapshot.unloadingQuality.offTarget, leagueSnapshot.unloadingHourlyAnalysis.offTargetTravels,
+    `Réception : KPI et graphique horaire réconciliés ${expected.name}`);
   assert.equal(leagueSnapshot.summary.possessionPercent, snapshot.summary.possessionPercent, `Possession stable ${expected.name}`);
   const reachedIndicators = [
     leagueSnapshot.summary.passRate,
@@ -443,8 +446,16 @@ for (const expected of leagueExpectations) {
     leagueSnapshot.unloadingQuality.targetedPercent,
     leagueSnapshot.summary.possessionPercent,
   ].filter((value) => value > expected.criteria.scoreTargetPercent).length;
-  assert.equal(`${reachedIndicators}-${4 - reachedIndicators}`, expected.score, `Score opérationnel ${expected.name}`);
-  assert.equal(leagueSnapshot.causerie.find((item) => item.label === "Priorité")?.value, expected.priority, `Priorité causerie ${expected.name}`);
+  assert.equal(leagueSnapshot.operationalScore.goalsFor, reachedIndicators,
+    `Score opérationnel ${expected.name}`);
+  assert.equal(leagueSnapshot.operationalScore.goalsAgainst, 4 - reachedIndicators,
+    `Contre-score opérationnel ${expected.name}`);
+  assert.equal(leagueSnapshot.match.status,
+    reachedIndicators > 2 ? "MAÎTRISÉ" : reachedIndicators === 2 ? "À SURVEILLER" : "ACTION NÉCESSAIRE",
+    `Statut opérationnel ${expected.name}`);
+  assert.equal(leagueSnapshot.causerie.find((item) => item.label === "Priorité")?.value,
+    reachedIndicators > 2 ? "Maintenir le rythme et sécuriser les fins de séquence." : "Reprendre les indicateurs sous l'objectif de la ligue.",
+    `Priorité causerie ${expected.name}`);
 }
 
 const boundedPossessionResult = buildSnapshotFromWorkbook(buffer, path.basename(workbookPath), agencyCode, {
@@ -467,9 +478,13 @@ const narrowResult = buildSnapshotFromWorkbook(buffer, path.basename(workbookPat
 assert.equal(narrowResult.ok, true, "Une sous-plage doit rester recalculable");
 if (narrowResult.ok) {
   assert.equal(narrowResult.snapshot.match.periodLabel, "14:00-15:00", "Plage active du recalcul déchargement");
-  assert.equal(narrowResult.snapshot.unloadingQuality.targeted, 9, "Déchargements dans la cible sur la plage active");
-  assert.equal(narrowResult.snapshot.unloadingQuality.offTarget, 3, "Déchargements hors cible sur la plage active");
-  assert.equal(narrowResult.snapshot.unloadingQuality.targetedPercent, 75, "Pourcentage déchargement recalculé sur la plage active");
+  assert.equal(narrowResult.snapshot.unloadingQuality.targeted,
+    narrowResult.snapshot.unloadingDuelQuality.won, "Réceptions gagnées sur la plage active");
+  assert.equal(narrowResult.snapshot.unloadingQuality.offTarget,
+    narrowResult.snapshot.unloadingDuelQuality.lost, "Réceptions hors cible sur la plage active");
+  assert.equal(narrowResult.snapshot.unloadingQuality.eligibleTrips,
+    narrowResult.snapshot.unloadingHourlyAnalysis.eligibleTravels,
+    "Population identique entre KPI et créneaux sur la sous-plage");
 }
 
 const emptyLoadingHeaders = [
