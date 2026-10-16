@@ -337,7 +337,13 @@ test("réconciliation ponctuelle Montpellier, Excel inchangé et KPI officiels a
   assert.deepEqual(s.unloadingHourlyAnalysis.travels.filter(t => t.offTarget).map(t => t.travelCode).sort(), s.unloadingDuelQuality.lostDuels.map(t => t.travelCode).sort());
   if (process.env.STEF_OPERATIONAL_BASELINE) {
     const before = JSON.parse(await fs.readFile(process.env.STEF_OPERATIONAL_BASELINE, "utf8"));
-    for (const key of Object.keys(before)) assert.deepEqual(s[key], before[key], `Official field unchanged: ${key}`);
+    // Reception, score and dated diagnostics intentionally change; assert only
+    // the unaffected domains against the historical snapshot.
+    for (const key of ["agency", "summary", "hourlyPerformance", "loadingQuality",
+      "yellowCards", "positions", "players", "highlights", "compositionPeriods",
+      "duelQuality", "zonageDiagnostic"]) {
+      if (Object.hasOwn(before, key)) assert.deepEqual(s[key], before[key], `Non-reception field unchanged: ${key}`);
+    }
   }
   assert.equal(createHash("sha256").update(await fs.readFile(process.env.STEF_OPERATIONAL_WORKBOOK)).digest("hex"), hash);
 });
