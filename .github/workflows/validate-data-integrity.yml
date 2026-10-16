@@ -45,6 +45,8 @@ jobs:
         run: node scripts/data-integrity-browser.mjs
       - name: Match-score concessions in browser (desktop/mobile)
         run: node scripts/kpi-goal-colors-browser.mjs
+      - name: Reception hourly chart positions and average in browser (desktop/mobile)
+        run: node scripts/reception-hour-volume-browser.mjs
       - name: Standalone unit and API checks
         run: |
           node --test \
