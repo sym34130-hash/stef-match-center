@@ -24,11 +24,21 @@ function workbook(position) {
 // The template is a tiny deterministic, synthetic ReportLab PDF with a valid
 // cross-reference table. Replacement dates are same-length ASCII strings.
 const pdfTemplate = "JVBERi0xLjMKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgKG9wZW5zb3VyY2UpCjEgMCBvYmoKPDwKL0YxIDIgMCBSCj4+CmVuZG9iagoyIDAgb2JqCjw8Ci9CYXNlRm9udCAvSGVsdmV0aWNhIC9FbmNvZGluZyAvV2luQW5zaUVuY29kaW5nIC9OYW1lIC9GMSAvU3VidHlwZSAvVHlwZTEgL1R5cGUgL0ZvbnQKPj4KZW5kb2JqCjMgMCBvYmoKPDwKL0NvbnRlbnRzIDcgMCBSIC9NZWRpYUJveCBbIDAgMCA2MTIgNzkyIF0gL1BhcmVudCA2IDAgUiAvUmVzb3VyY2VzIDw8Ci9Gb250IDEgMCBSIC9Qcm9jU2V0IFsgL1BERiAvVGV4dCAvSW1hZ2VCIC9JbWFnZUMgL0ltYWdlSSBdCj4+IC9Sb3RhdGUgMCAvVHJhbnMgPDwKCj4+IAogIC9UeXBlIC9QYWdlCj4+CmVuZG9iago0IDAgb2JqCjw8Ci9QYWdlTW9kZSAvVXNlTm9uZSAvUGFnZXMgNiAwIFIgL1R5cGUgL0NhdGFsb2cKPj4KZW5kb2JqCjUgMCBvYmoKPDwKL0F1dGhvciAoYW5vbnltb3VzKSAvQ3JlYXRpb25EYXRlIChEOjIwMDAwMTAxMDAwMDAwKzAwJzAwJykgL0NyZWF0b3IgKGFub255bW91cykgL0tleXdvcmRzICgpIC9Nb2REYXRlIChEOjIwMDAwMTAxMDAwMDAwKzAwJzAwJykgL1Byb2R1Y2VyIChSZXBvcnRMYWIgUERGIExpYnJhcnkgLSBcKG9wZW5zb3VyY2VcKSkgCiAgL1N1YmplY3QgKHVuc3BlY2lmaWVkKSAvVGl0bGUgKHVudGl0bGVkKSAvVHJhcHBlZCAvRmFsc2UKPj4KZW5kb2JqCjYgMCBvYmoKPDwKL0NvdW50IDEgL0tpZHMgWyAzIDAgUiBdIC9UeXBlIC9QYWdlcwo+PgplbmRvYmoKNyAwIG9iago8PAovTGVuZ3RoIDIyNgo+PgpzdHJlYW0KMSAwIDAgMSAwIDAgY20gIEJUIC9GMSAxMiBUZiAxNC40IFRMIEVUCkJUIC9GMSAxMiBUZiAxNC40IFRMIEVUCkJUIDEgMCAwIDEgNTAgNzQwIFRtIChTSUUuMTA2SiBEYXRlIGRlIHJlZmVyZW5jZSBkZSBjYWxjdWwgOiAxOCBzZXB0ZW1icmUgMjAyNikgVGogVCogRVQKQlQgMSAwIDAgMSA1MCA3MjAgVG0gKFRhdXggZGUgcG9uY3R1YWxpdGUgQXJyaXZhZ2UgJSA4MSwwMCAlKSBUaiBUKiBFVAogCmVuZHN0cmVhbQplbmRvYmoKeHJlZgowIDgKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDYxIDAwMDAwIG4gCjAwMDAwMDAwOTIgMDAwMDAgbiAKMDAwMDAwMDE5OSAwMDAwMCBuIAowMDAwMDAwMzkyIDAwMDAwIG4gCjAwMDAwMDA0NjAgMDAwMDAgbiAKMDAwMDAwMDcyMSAwMDAwMCBuIAowMDAwMDAwNzgwIDAwMDAwIG4gCnRyYWlsZXIKPDwKL0lEIApbPDFjMTc4MTk4ZmJkZmE1MWIyNTk5NWQ4OWQ0MTAyMDQzPjwxYzE3ODE5OGZiZGZhNTFiMjU5OTVkODlkNDEwMjA0Mz5dCiUgUmVwb3J0TGFiIGdlbmVyYXRlZCBQREYgZG9jdW1lbnQgLS0gZGlnZXN0IChvcGVuc291cmNlKQoKL0luZm8gNSAwIFIKL1Jvb3QgNCAwIFIKL1NpemUgOAo+PgpzdGFydHhyZWYKMTA1NgolJUVPRgo=";
-function small106jPdf(referenceDate) {
+function small106jPdf(referenceDate, agencyCode = null) {
   const original = "18 septembre 2026";
   if (referenceDate.length !== original.length) throw new Error("PDF fixture needs an equally sized date");
   let pdf = Buffer.from(pdfTemplate, "base64").toString("latin1");
   if (!pdf.includes(original)) throw new Error("PDF template date not found");
+  const originalByteLength = pdf.length;
+  if (agencyCode) {
+    // Add an agency Site line inside the valid synthetic PDF stream. Update its
+    // byte length and the cross-reference start offset; no private 106J is used.
+    const addedText = `BT 1 0 0 1 50 700 Tm (Site : STEF Transport AGEN [${agencyCode}]) Tj T* ET\n`;
+    const length = pdf.match(/\\/Length (\\d+)/);
+    if (!length || !pdf.includes("endstream")) throw new Error("PDF fixture has no editable stream");
+    pdf = pdf.replace("endstream", addedText + "endstream");
+    pdf = pdf.replace(length[0], `/Length ${Number(length[1]) + addedText.length}`);
+  }
   // pdf-parse 1.1.1's historical PDF.js can mishandle a pooled small Buffer.
   // Pad the synthetic file with a legal PDF comment and update startxref,
   // so Multer creates a dedicated (>8k) underlying ArrayBuffer.
@@ -38,7 +48,7 @@ function small106jPdf(referenceDate) {
   if (idx < 0 || !oldXref) throw new Error("PDF fixture lacks an xref table");
   const padding = "%" + " ".repeat(8192) + "\n";
   pdf = pdf.slice(0, idx + 1) + padding + pdf.slice(idx + 1);
-  pdf = pdf.replace(/startxref\n\d+\n/, `startxref\n${Number(oldXref[1]) + padding.length}\n`);
+  pdf = pdf.replace(/startxref\n\d+\n/, `startxref\n${Number(oldXref[1]) + (pdf.length - originalByteLength)}\n`);
   return Buffer.from(pdf.replace(original, referenceDate), "latin1");
 }
 
@@ -106,9 +116,9 @@ test("A03 HTTP: confirmation signée, fichier et agence liés, aucune écriture 
 
     // A01/A02: the HTTP API accepts another reference day with a warning,
     // and preserves the original upload timestamp across snapshot re-reads.
-    const sendPdf = async (referenceDate) => {
+    const sendPdf = async (referenceDate, sourceAgency = null) => {
       const form = new FormData();
-      form.append("file", new Blob([small106jPdf(referenceDate)], { type: "application/pdf" }), "106J-test.pdf");
+      form.append("file", new Blob([small106jPdf(referenceDate, sourceAgency)], { type: "application/pdf" }), "106J-test.pdf");
       const response = await fetch(`${base}/api/agencies/01K/import`, {
         method: "POST", headers: { "x-access-code": "test-01K" }, body: form,
       });
@@ -122,6 +132,15 @@ test("A03 HTTP: confirmation signée, fichier et agence liés, aucune écriture 
     const wrongReread = await fetch(`${base}/api/agencies/01K/snapshot`, { headers: { "x-access-code": "test-01K" } });
     assert.equal(wrongReread.status, 200);
     assert.equal((await wrongReread.json()).snapshot.dailyIndicators?.referenceDate, "20 septembre 2026");
+    const foreignPdf = await sendPdf("17 septembre 2026", "0058");
+    assert.equal(foreignPdf.status, 200, JSON.stringify(foreignPdf.payload));
+    assert.equal(foreignPdf.payload.pdfAssociation?.status, "mismatched-agency");
+    assert.match(foreignPdf.payload.pdfAssociation.message, /Import autorisé/i);
+    assert.equal(foreignPdf.payload.snapshot.dailyIndicators.agencyCode, "0058");
+    assert.equal(foreignPdf.payload.snapshot.agency.code, "01K", "PDF must not change the workspace agency");
+    const foreignReread = await fetch(`${base}/api/agencies/01K/snapshot`, { headers: { "x-access-code": "test-01K" } });
+    assert.equal(foreignReread.status, 200);
+    assert.equal((await foreignReread.json()).snapshot.dailyIndicators?.agencyCode, "0058");
     const correctPdf = await sendPdf("17 septembre 2026");
     assert.equal(correctPdf.status, 200, JSON.stringify(correctPdf.payload));
     const savedAt = correctPdf.payload.snapshot.dailyIndicators?.importedAt;
