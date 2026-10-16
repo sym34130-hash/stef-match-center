@@ -36,7 +36,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 20;
+export const KPI_DICTIONARY_VERSION = 21;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -136,15 +136,15 @@ export const KPI_DICTIONARY = [
   {
     id: "score.passesHourly",
     label: "Passes réussies par heure",
-    source: "X!FD:FG (source chart1)",
-    formula: "Reprise de X!FG par heure X!FF ; contrôle de cohérence EX / (EW + EX) via le bloc horaire X!EV:EZ",
-    denominator: "Lignes horaires présentes dans la table graphique Excel",
+    source: "Données : DZ / drapeau Duels gagnés, horodatage réel des opérations",
+    formula: "Nombre de lignes duels gagnés / lignes évaluables par heure réelle de début d’opération, dans la plage active à la minute et selon le seuil zonage de la ligue",
+    denominator: "Toutes les lignes de score éligibles dans chaque heure, y compris heures partielles",
     display: "Courbe horaire % passes réussies",
   },
   {
     id: "score.operational",
     label: "Score opérationnel",
-    source: "Données!R:T + TCD PPT!U + Données filtrées DECHG/ZONAGE",
+    source: "Données!R:T + TCD PPT!U + données DECHG/ZONAGE filtrées",
     formula: "Nombre des 4 indicateurs dont le pourcentage dépasse strictement l'objectif de la ligue - indicateurs atteints / indicateurs sous objectif",
     denominator: "4 indicateurs disponibles : passes réussies, tirs cadrés, duels gagnés et possession",
     display: "Score au format football",
@@ -161,8 +161,8 @@ export const KPI_DICTIONARY = [
     id: "score.possession",
     label: "Possession",
     source: "Données filtrées",
-    formula: "Positions RECEPTION uniques ayant aussi un ZONAGE / positions RECEPTION uniques, dans le même périmètre actif",
-    denominator: "Positions distinctes de réception (DECHG) du match filtré",
+    formula: "Positions DECHG uniques avec un ZONAGE le même jour de traitement ou plus tard dans la plage active / positions DECHG uniques, selon chronologie opérationnelle",
+    denominator: "Positions DECHG distinctes filtrées ; le zonage doit survenir au plus tôt à leur première réception",
     display: "Part des réceptions associées à un zonage, bornée entre 0 et 100 %",
   },
   {
@@ -332,7 +332,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
 
   const receptionPeriodRows = selectNight(matchRows, period).selectedRows;
   const receptionTrips = buildReceptionCohort(receptionPeriodRows, criteria.unloadingSeconds).travels;
-  const hourlyPassPerformance = buildHourlyPassPerformance(rawWorkbook, period, rows.filter((row) => !excludedTravelCodes.has(row.travelCode)));
+  const hourlyPassPerformance = buildHourlyPassPerformance(rawWorkbook, period, scoringRows, rows.filter((row) => !excludedTravelCodes.has(row.travelCode)));
   const snapshot = buildMatchSnapshot({
     sourceRows: rows,
     matchRows,
@@ -1130,19 +1130,30 @@ function buildOperationalScore(passRate, loadingQuality, unloadingQuality, posse
 }
 
 function buildPossessionScore(rows) {
+  // The same position must be zoned at/after its first reception. Mere
+  // membership in DECHG and ZONAGE is not proof that reception was handled.
+  // Rows are already operator/time/travel-filtered for the active match.
+  const receptions = new Map();
   const zonagePositions = new Set();
-  const receptionPositions = new Set();
+  const zones = new Map();
   for (const row of rows) {
-    if (row.operationType === "ZONAGE") zonagePositions.add(row.position);
-    if (row.operationType === "DECHG") receptionPositions.add(row.position);
+    if (row.operationType === "DECHG") {
+      const previous = receptions.get(row.position);
+      if (!previous || row.startedAt < previous) receptions.set(row.position, row.startedAt);
+    }
+    if (row.operationType === "ZONAGE") {
+      zonagePositions.add(row.position);
+      const dates = zones.get(row.position) ?? [];
+      dates.push(row.startedAt);
+      zones.set(row.position, dates);
+    }
   }
-  const zonageCount = zonagePositions.size;
-  const receptionCount = receptionPositions.size;
-  const matchedCount = [...receptionPositions].filter((position) => zonagePositions.has(position)).length;
+  const matchedCount = [...receptions].filter(([position, receivedAt]) =>
+    (zones.get(position) ?? []).some((date) => date >= receivedAt)).length;
   return {
-    percent: receptionCount > 0 ? percent(matchedCount, receptionCount) : null,
-    zonagePositions: zonageCount,
-    receptionPositions: receptionCount,
+    percent: receptions.size ? percent(matchedCount, receptions.size) : null,
+    zonagePositions: zonagePositions.size,
+    receptionPositions: receptions.size,
     matchedPositions: matchedCount,
   };
 }
@@ -1542,7 +1553,7 @@ function buildScoringRows(rows, period, targetSeconds) {
     .map((row) => ({
       ...row,
       duelWonFlag: Number.isFinite(row.dz)
-        ? (row.dz <= targetSeconds ? 1 : 0)
+        ? (Math.round(row.dz) <= targetSeconds ? 1 : 0)
         : row.duelWonFlag,
     }));
 }
@@ -1911,10 +1922,10 @@ function normalizedVolume(value, topValue) {
   return top > 0 ? volume / top : 0;
 }
 
-function buildHourlyPassPerformance(workbook, period, sourceRows = null) {
+function buildHourlyPassPerformance(workbook, period, scoringRows = null, sourceRows = null) {
   const arrivals = new Map();
   const hasArrivalSource = Array.isArray(sourceRows) && sourceRows.some((row) => row.startedAt instanceof Date);
-  // Resolve the first operation before applying any time or chart-hour filter.
+  // Arrival annotations remain separate from the success-rate denominator.
   for (const row of sourceRows ?? []) {
     if (!row.travelCode || !isExcelBlank(row.operatorFilter) || !isExcelBlank(row.unzonedFilter)) continue;
     const previous = arrivals.get(row.travelCode);
@@ -1934,47 +1945,37 @@ function buildHourlyPassPerformance(workbook, period, sourceRows = null) {
     const arrivingTravelCodes = arrivingCodesByHour.get(hour) ?? [];
     return { arrivingTravels: hasArrivalSource ? arrivingTravelCodes.length : null, arrivingTravelCodes };
   };
-  if (Array.isArray(sourceRows) && sourceRows.some((row) => Number.isFinite(row?.hourOperation))) {
-    const chartHours = readHourlyChartHours(workbook);
+
+  // Parsed workbook rows are authoritative. In particular, never restrict
+  // eligible hours to those cached in chart1 (X!FF:FG): it omits partial
+  // boundary hours and may reflect a different selected Excel time range.
+  if (Array.isArray(scoringRows)) {
     const byHour = new Map();
-    for (const row of sourceRows) {
-      if (!isExcelBlank(row.operatorFilter) || !isExcelBlank(row.unzonedFilter) || !Number.isFinite(row.hourOperation)) continue;
-      const hour = Math.round(row.hourOperation);
-      if (hour < 0 || hour > 23) continue;
-      const hourMinutes = hour * 60;
-      const inRange = period.isOvernight || period.endMinutes < period.startMinutes
-        ? hourMinutes >= period.startMinutes || hourMinutes <= period.endMinutes
-        : hourMinutes >= period.startMinutes && hourMinutes <= period.endMinutes;
-      if (!inRange || (chartHours.size > 0 && !chartHours.has(hour))) continue;
+    for (const row of scoringRows) {
+      if (!(row.startedAt instanceof Date) || !Number.isFinite(+row.startedAt)) continue;
+      if (!isInActiveTimeRange(row.startedAt, period)) continue;
+      if (row.duelWonFlag !== 0 && row.duelWonFlag !== 1) continue;
+      const minute = parisMinutes(row.startedAt);
+      if (!Number.isFinite(minute)) continue;
+      const hour = Math.floor(minute / 60);
       const current = byHour.get(hour) ?? { won: 0, total: 0 };
-      current.total += 1;
-      if (row.duelWonFlag === 1) current.won += 1;
+      current.total++;
+      if (row.duelWonFlag === 1) current.won++;
       byHour.set(hour, current);
     }
-    const values = Array.from(byHour.entries())
-      .filter(([, value]) => value.total > 0)
-      .map(([hour, value]) => ({
-        label: `${String(hour).padStart(2, "0")}h`,
-        hour,
-        won: value.won,
-        total: value.total,
-        rate: percent(value.won, value.total),
-        ...arrivalDetails(hour),
-      }));
-    values.sort((a, b) => {
-      const toOffset = (hour) => {
-        const minutes = hour * 60;
-        return period.isOvernight && minutes < period.startMinutes ? minutes + 1440 - period.startMinutes : minutes - period.startMinutes;
-      };
-      return toOffset(a.hour) - toOffset(b.hour);
-    });
-    const weightedWon = values.reduce((sum, item) => sum + item.won, 0);
-    const weightedTotal = values.reduce((sum, item) => sum + item.total, 0);
-    return {
-      items: values,
-      sourceAvailable: true,
-      totalRate: weightedTotal > 0 ? percent(weightedWon, weightedTotal) : null,
+    const values = [...byHour.entries()].map(([hour, result]) => ({
+      label: `${String(hour).padStart(2, "0")}h`,
+      hour, won: result.won, total: result.total,
+      rate: percent(result.won, result.total), ...arrivalDetails(hour),
+    }));
+    const toOffset = (hour) => {
+      const minute = hour * 60;
+      return period.isOvernight && minute < period.startMinutes ? minute + 1440 - period.startMinutes : minute - period.startMinutes;
     };
+    values.sort((a, b) => toOffset(a.hour) - toOffset(b.hour));
+    const won = values.reduce((sum, item) => sum + item.won, 0);
+    const total = values.reduce((sum, item) => sum + item.total, 0);
+    return { items: values, sourceAvailable: true, totalRate: total ? percent(won, total) : null };
   }
 
   const empty = { items: [], totalRate: null, sourceAvailable: false };
