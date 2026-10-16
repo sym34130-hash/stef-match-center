@@ -425,8 +425,8 @@ for (const expected of leagueExpectations) {
   assert.equal(leagueResult.ok, true, `${expected.name} doit être recalculable`);
   const leagueSnapshot = leagueResult.snapshot;
   assert.deepEqual(leagueSnapshot.performanceCriteria, expected.criteria, `Critères ${expected.name}`);
-  assert.equal(leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.won, 0),
-    leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.won, 0), `Graphique passes segmenté ${expected.name}`);
+  assert.ok(leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.won, 0) <=
+    leagueSnapshot.summary.duelWon, `Graphique passes segmenté ${expected.name}`);
   assert.ok(leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.total, 0) <=
     leagueSnapshot.summary.duelTotal, `Graphique limité aux segments autorisés ${expected.name}`);
   assert.equal(leagueSnapshot.loadingQuality.targeted, expected.targeted, `Chargements cadrés ${expected.name}`);
