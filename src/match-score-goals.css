@@ -1,0 +1,41 @@
+/* KPI concessions: strong contrast without changing the league theme or scores.
+   Loaded after styles.css; applies only to KPI cards whose metric concedes
+   a goal under the active league's strict > target rule. */
+.app-shell .match-score-bubble.is-goal-conceded {
+  border-color: rgba(255, 108, 129, .94);
+  background: linear-gradient(145deg, rgba(255, 69, 95, .25), rgba(39, 7, 25, .74));
+  box-shadow: inset 0 3px 0 #ff6478, 0 0 0 1px rgba(255, 100, 120, .16);
+}
+.app-shell .match-score-bubble.is-goal-conceded > strong {
+  color: #ff788a;
+  text-shadow: 0 0 14px rgba(255, 71, 101, .34);
+}
+.app-shell .match-score-bubble.is-goal-conceded > span {
+  color: #ffd4dc;
+}
+.app-shell .match-score-bubble .match-score-goal-warning {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  padding: 3px 8px;
+  border: 1px solid rgba(255, 128, 147, .48);
+  border-radius: 5px;
+  background: rgba(117, 15, 39, .5);
+  color: #ffe0e5;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: .06em;
+  line-height: 1.2;
+  text-align: center;
+  text-transform: uppercase;
+}
+@media (forced-colors: active) {
+  .app-shell .match-score-bubble.is-goal-conceded {
+    border: 3px solid Highlight;
+  }
+  .app-shell .match-score-bubble .match-score-goal-warning {
+    border: 1px solid Highlight;
+  }
+}

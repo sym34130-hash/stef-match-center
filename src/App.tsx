@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState, t
 import { createPortal } from "react-dom";
 import { ceremonyPolyvalents } from "./ceremony-selection";
 import { formatKpiDuration } from "./kpi-duration";
+import { isKpiGoalConceded } from "./kpi-goal-status";
 import { pdfSourceLabel } from "./pdf-source";
 import { qualificationReasons } from "./qualification-reasons";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout } from "../server/brief-layout.mjs";
@@ -1326,6 +1327,8 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const unloadingTarget = formatKpiDuration(snapshot.performanceCriteria?.unloadingSeconds ?? leagueConfig.unloadingSeconds);
   const scoreIndicators = operationalScoreIndicators(snapshot);
   const footballScore = buildFootballScore(snapshot, snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent);
+  const concededKpi = (value: number | null | undefined) => isKpiGoalConceded(value, footballScore.available, footballScore.targetPercent);
+  const concededKpiWarning = <em className="match-score-goal-warning">But encaissé · objectif &gt; {formatPercent(footballScore.targetPercent)}</em>;
   const thresholdReached = footballScore.available && footballScore.goalsFor > footballScore.goalsAgainst;
   const outcome = matchCeremonyOutcome(footballScore);
   const teamMotivation = teamMotivationMessage(footballScore);
@@ -1502,24 +1505,28 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
             <span>STEF MATCH CENTER</span>
             <strong>{outcome.verdict}</strong>
             <div className="match-score-bubbles" aria-label="Scores du match">
-              <div className={`match-score-bubble pass-score-bubble ${Number.isFinite(scoreIndicators.passRate) ? "" : "is-data-unavailable"}`}>
+              <div className={`match-score-bubble pass-score-bubble ${Number.isFinite(scoreIndicators.passRate) ? "" : "is-data-unavailable"} ${concededKpi(scoreIndicators.passRate) ? "is-goal-conceded" : ""}`}>
                 <span>% passes réussies</span>
                 <strong>{formatPercent(scoreIndicators.passRate)}</strong>
+                {concededKpi(scoreIndicators.passRate) && concededKpiWarning}
                 <small>Objectif zonage : {snapshot.performanceCriteria?.zonageMinutes ?? leagueConfig.zonageMinutes} min ou moins</small>
               </div>
-              <div className={`match-score-bubble loading-score-bubble ${Number.isFinite(scoreIndicators.loadingPercent) ? "" : "is-data-unavailable"}`}>
+              <div className={`match-score-bubble loading-score-bubble ${Number.isFinite(scoreIndicators.loadingPercent) ? "" : "is-data-unavailable"} ${concededKpi(scoreIndicators.loadingPercent) ? "is-goal-conceded" : ""}`}>
                 <span>% tirs cadrés</span>
                 <strong>{formatPercent(scoreIndicators.loadingPercent)}</strong>
+                {concededKpi(scoreIndicators.loadingPercent) && concededKpiWarning}
                 <small>Voyages chargés en {loadingTarget} ou moins par position</small>
               </div>
-              <div className={`match-score-bubble reception-score-bubble ${Number.isFinite(scoreIndicators.unloadingPercent) ? "" : "is-data-unavailable"}`}>
+              <div className={`match-score-bubble reception-score-bubble ${Number.isFinite(scoreIndicators.unloadingPercent) ? "" : "is-data-unavailable"} ${concededKpi(scoreIndicators.unloadingPercent) ? "is-goal-conceded" : ""}`}>
                 <span>% duels gagnés</span>
                 <strong>{formatPercent(scoreIndicators.unloadingPercent)}</strong>
+                {concededKpi(scoreIndicators.unloadingPercent) && concededKpiWarning}
                 <small>Voyages réceptionnés en {unloadingTarget} ou moins par position</small>
               </div>
-              <div className={`match-score-bubble possession-score-bubble ${Number.isFinite(scoreIndicators.possessionPercent) ? "" : "is-data-unavailable"}`}>
+              <div className={`match-score-bubble possession-score-bubble ${Number.isFinite(scoreIndicators.possessionPercent) ? "" : "is-data-unavailable"} ${concededKpi(scoreIndicators.possessionPercent) ? "is-goal-conceded" : ""}`}>
                 <span>% possession</span>
                 <strong>{formatPercent(scoreIndicators.possessionPercent)}</strong>
+                {concededKpi(scoreIndicators.possessionPercent) && concededKpiWarning}
                 <small>Positions zonées</small>
               </div>
             </div>
