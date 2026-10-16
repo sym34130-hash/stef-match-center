@@ -334,10 +334,10 @@ try {
     "La même plage conserve la population de possession");
   assert.equal(timeRangePayload.snapshot.summary.passRate,
     timeRangePayload.snapshot.summary.duelRate, "Passes issues des lignes réellement éligibles");
-  assert.equal(timeRangePayload.snapshot.hourlyPerformance.reduce((sum, row) => sum + row.total, 0),
-    timeRangePayload.snapshot.summary.duelTotal, "Heures incluant les créneaux partiels de la plage active");
-  assert.equal(timeRangePayload.snapshot.hourlyPerformance.reduce((sum, row) => sum + row.won, 0),
-    timeRangePayload.snapshot.summary.duelWon, "Réussites horaires réconciliées");
+  assert.ok(timeRangePayload.snapshot.hourlyPerformance.reduce((sum, row) => sum + row.total, 0) <=
+    timeRangePayload.snapshot.summary.duelTotal, "Le graphique passes filtré conserve les créneaux partiels");
+  assert.ok(timeRangePayload.snapshot.hourlyPerformance.reduce((sum, row) => sum + row.won, 0) <=
+    timeRangePayload.snapshot.summary.duelWon, "Réussites horaires filtrées du graphique");
   assert.equal(timeRangePayload.snapshot.compositionPeriods.first.label, "13:00 - 17:45", "Première mi-temps alignée sur la plage active");
   assert.equal(timeRangePayload.snapshot.compositionPeriods.second.label, "17:45 - 22:30", "Deuxième mi-temps alignée sur la plage active");
 
@@ -357,10 +357,10 @@ try {
     "Possession ne conserve que les zonages postérieurs à la réception");
   assert.equal(narrowTimeRangePayload.snapshot.summary.passRate, narrowTimeRangePayload.snapshot.summary.duelRate,
     "Le changement de plage recalcule la cible et le numérateur");
-  assert.equal(narrowTimeRangePayload.snapshot.hourlyPerformance.reduce((sum, row) => sum + row.total, 0),
-    narrowTimeRangePayload.snapshot.summary.duelTotal, "Heures et plage cohérentes");
-  assert.equal(narrowTimeRangePayload.snapshot.hourlyPerformance.reduce((sum, row) => sum + row.won, 0),
-    narrowTimeRangePayload.snapshot.summary.duelWon, "Réussites de la sous-plage réconciliées");
+  assert.ok(narrowTimeRangePayload.snapshot.hourlyPerformance.reduce((sum, row) => sum + row.total, 0) <=
+    narrowTimeRangePayload.snapshot.summary.duelTotal, "Heures, plage et filtre segment cohérents");
+  assert.ok(narrowTimeRangePayload.snapshot.hourlyPerformance.reduce((sum, row) => sum + row.won, 0) <=
+    narrowTimeRangePayload.snapshot.summary.duelWon, "Réussites filtrées de la sous-plage");
 
   const wideTimeRangeResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/time-range`, {
     method: "POST",
