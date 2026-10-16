@@ -2134,7 +2134,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
         <div>
           <span>Performance horaire</span>
           <strong>% passes réussies</strong>
-          <small className="performance-chart-caption">Donnée Excel Feuille de match, heure par heure</small>
+          <small className="performance-chart-caption">Opérations éligibles de la plage active · objectif zonage de la ligue</small>
         </div>
         <div className="performance-chart-actions">
           <div className="performance-chart-total">
@@ -3097,7 +3097,7 @@ function PlayerSheet({ snapshot, player, onBack, onSelect }: { snapshot: Snapsho
 
       <section className="metric-row essential">
         <Metric icon={Target} label="Indice volume" value={`${player.volumeIndex}`} detail={`Contribution équipe ${player.contributionPercent}%`} tone="primary" />
-        <Metric icon={Shirt} label="Poste dominant" value={displayRole(player.role)} detail={`${player.dominantShare}% activité dominante`} />
+        <Metric icon={Shirt} label="Poste de référence" value={displayRole(player.role)} detail={`${player.dominantShare}% de l'activité majoritaire`} />
         <Metric icon={Sparkles} label="Polyvalence" value={`${player.polyvalence}%`} detail={`${player.operationTypes} activité(s)`} />
         <Metric icon={Clock3} label="Activité" value={playerTimeRange(player)} detail="Première - dernière opération" />
       </section>
