@@ -59,10 +59,10 @@ try {
   browser = await chromium.launch({headless:true});
   for(const viewport of [{width:1366,height:768},{width:390,height:844}]) {
     for(const league of [
-      {id:"bronze",label:"LIGUE 2",tone:"bronze",target:45,accent:"#d08a52",cardColor:"rgb(14, 97, 69)",cardBackground:"rgb(245, 210, 178)",badgeBackground:"rgb(244, 208, 176)"},
-      {id:"argent",label:"LIGUE 1",tone:"silver",target:50,accent:"#8bb5dc",cardColor:"rgb(16, 79, 155)",cardBackground:"rgb(219, 233, 248)",badgeBackground:"rgb(220, 234, 250)"},
-      {id:"or",label:"LIGUE DES CHAMPIONS",tone:"gold",target:60,accent:"#d7a52f",cardColor:"rgb(39, 53, 130)",cardBackground:"rgb(247, 221, 160)",badgeBackground:"rgb(247, 223, 167)"},
-      {id:"platine",label:"COUPE DU MONDE",tone:"platinum",target:70,accent:"#c58ee8",cardColor:"rgb(128, 77, 18)",cardBackground:"rgb(241, 220, 255)",badgeBackground:"rgb(239, 223, 255)"},
+      {id:"bronze",label:"LIGUE 2",tone:"bronze",target:45,accent:"#d08a52",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(245, 210, 178)",badgeBackground:"rgb(244, 208, 176)"},
+      {id:"argent",label:"LIGUE 1",tone:"silver",target:50,accent:"#8bb5dc",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(219, 233, 248)",badgeBackground:"rgb(220, 234, 250)"},
+      {id:"or",label:"LIGUE DES CHAMPIONS",tone:"gold",target:60,accent:"#d7a52f",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(247, 221, 160)",badgeBackground:"rgb(247, 223, 167)"},
+      {id:"platine",label:"COUPE DU MONDE",tone:"platinum",target:70,accent:"#c58ee8",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(241, 220, 255)",badgeBackground:"rgb(239, 223, 255)"},
     ]) {
       const context = await browser.newContext({viewport,reducedMotion:"reduce"});
       const page = await context.newPage();
@@ -93,12 +93,24 @@ try {
         "Competition labels are actual uppercase data, not merely a CSS effect");
       assert.equal(await leagueBadge.getAttribute("aria-label"),"Ligue active : "+league.label);
       const displayFont=await leagueBadge.locator("strong").evaluate(el=>getComputedStyle(el).fontFamily);
-      assert.match(displayFont,/Oswald/,"Competition display face on heading");
+      assert.match(displayFont,/Barlow Condensed/,"Competition display face on heading");
       const themeAccent=await page.locator(".app-shell").evaluate(el =>
         getComputedStyle(el).getPropertyValue("--league-accent").trim().toLowerCase());
       assert.equal(themeAccent,league.accent,"Original league theme accent must be preserved");
-      const titleColor=await leagueBadge.locator("strong").evaluate(el=>getComputedStyle(el).color);
-      assert.equal(titleColor,league.cardColor,"Only competition name ink changes, not its backdrop");
+      const headline=await leagueBadge.locator("strong").evaluate(el=>{
+        const css=getComputedStyle(el);
+        return {
+          color:css.color,fontFamily:css.fontFamily,fontWeight:css.fontWeight,
+          fontStyle:css.fontStyle,letterSpacing:css.letterSpacing,
+          stroke:css.webkitTextStrokeWidth,shadow:css.textShadow,
+        };
+      });
+      assert.equal(headline.color,league.cardColor,"White headline glyphs in every league");
+      assert.match(headline.fontFamily,/Barlow Condensed/,"Sports-newspaper condensed title font");
+      assert.equal(headline.fontWeight,"900","Bold sports-newspaper masthead");
+      assert.equal(headline.fontStyle,"italic","Slanted press headline glyphs");
+      assert.notEqual(headline.stroke,"0px","White on light cards requires dark outline");
+      assert.notEqual(headline.shadow,"none","White on light cards requires drop shadow");
       await page.getByRole("button",{name:"ADM Administrateur",exact:true}).click();
       await page.locator(".administrator-leagues").waitFor({state:"visible"});
       const allCards=page.locator(".administrator-leagues .league-card");
@@ -108,7 +120,7 @@ try {
       const leagueCard=page.locator(".administrator-leagues .league-card." + league.tone);
       const cardInk=await leagueCard.locator(".league-card-top strong").evaluate(el =>
         getComputedStyle(el).color);
-      assert.equal(cardInk,league.cardColor,"Competition-specific TEXT color");
+      assert.equal(cardInk,league.cardColor,"Only heading ink is white; card backgrounds remain unchanged");
       const cardBackground=await leagueCard.evaluate(el => getComputedStyle(el).backgroundImage);
       assert.ok(cardBackground.includes(league.cardBackground),
         "Previous league card background MUST remain unchanged: "+league.id+": "+cardBackground);
@@ -120,7 +132,12 @@ try {
       assert.equal(selectedBadgeInk,league.cardColor,"Only active competition name ink changes");
       const cardFont=await leagueCard.locator(".league-card-top strong").evaluate(el =>
         getComputedStyle(el).fontFamily);
-      assert.match(cardFont,/Oswald/,"Competition display face on admin card");
+      assert.match(cardFont,/Barlow Condensed/,"Competition display face on admin card");
+      const cardTypography=await leagueCard.locator(".league-card-top strong").evaluate(el=>{
+        const cs=getComputedStyle(el);
+        return {style:cs.fontStyle,weight:cs.fontWeight,stroke:cs.webkitTextStrokeWidth};
+      });
+      assert.deepEqual(cardTypography,{style:"italic",weight:"900",stroke:"0.8px"});
       const noOverflow=await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2);
       assert.equal(noOverflow,true,"Competition name cards must not overflow viewport");
 

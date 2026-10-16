@@ -1,9 +1,9 @@
-/* Titles only: all historical backgrounds, gradients, medals, borders,
-   animations and active-league theme variables come from styles.css unchanged.
-   The underlying LeagueId values and all KPI thresholds remain untouched. */
+/* Competition NAMES only — inspired by bold italic sports-newspaper headlines.
+   Keep every existing card, badge, icon, background, gradient, theme variable
+   and KPI untouched. This is NOT a recreation of a publication's wordmark. */
 :root {
-  --competition-display-font: "Oswald", "Barlow Condensed", "Arial Narrow",
-    "Aptos Narrow", sans-serif;
+  --competition-display-font: "Barlow Condensed", "Arial Narrow",
+    "Franklin Gothic Medium", sans-serif;
 }
 .top-league-badge strong,
 .administrator-active-badge strong,
@@ -11,57 +11,86 @@
 .guide-league-card-top strong,
 .coach-league-badge strong {
   font-family: var(--competition-display-font);
+  font-style: italic;
   font-optical-sizing: auto;
-  font-weight: 700;
+  font-weight: 900;
   font-stretch: condensed;
   text-transform: uppercase;
-  letter-spacing: .035em;
-  font-kerning: normal;
+  letter-spacing: -.015em;
+  line-height: 1.1;
   text-wrap: balance;
-  line-height: 1.12;
   overflow-wrap: normal;
   word-break: normal;
   hyphens: none;
+
+  /* Bright masthead lettering, readable over all EXISTING light or dark
+     backgrounds. Only the glyphs are outlined/shadowed, never the cards. */
+  color: #ffffff;
+  -webkit-text-stroke: .8px #122a46;
+  paint-order: stroke fill;
+  text-shadow: 0 1px 0 rgba(8, 27, 51, .98),
+               1px 2px 0 rgba(8, 27, 51, .8),
+               0 3px 6px rgba(8, 27, 51, .52);
 }
-/* Bigger, football-broadcast style lettering without changing card layout. */
-.top-league-badge strong { font-size: clamp(13px, 1.15vw, 16px); }
-.league-card-top strong { font-size: clamp(19px, 1.85vw, 25px); }
-.guide-league-card-top strong { font-size: clamp(19px, 1.9vw, 23px); }
-.administrator-active-badge strong { font-size: clamp(21px, 2vw, 27px); }
-.coach-league-badge strong { font-size: clamp(17px, 1.55vw, 21px); }
+.top-league-badge strong {
+  font-size: clamp(14px, 1.25vw, 18px);
+}
+.league-card-top strong {
+  font-size: clamp(21px, 2vw, 27px);
+}
+.guide-league-card-top strong {
+  font-size: clamp(20px, 2vw, 25px);
+}
+.administrator-active-badge strong {
+  font-size: clamp(23px, 2.2vw, 29px);
+}
+.coach-league-badge strong {
+  font-size: clamp(19px, 1.7vw, 23px);
+}
 
-/* NAME ink only: selected for readable contrast over the original backgrounds.
-   No background, palette variable, shadow, icon or theme rule appears here. */
+/* Scoped specificity ensures historical tone-specific ink overrides only
+   affect the NAME and do not recolor siblings, badges or the page. */
 .app-shell.league-bronze .top-league-badge strong,
-.league-card.bronze .league-card-top strong,
-.guide-league-card.bronze .guide-league-card-top strong,
-.administrator-active-badge.bronze strong { color: #0e6145; }
-
 .app-shell.league-argent .top-league-badge strong,
-.league-card.silver .league-card-top strong,
-.guide-league-card.silver .guide-league-card-top strong,
-.administrator-active-badge.silver strong { color: #104f9b; }
-
 .app-shell.league-or .top-league-badge strong,
-.league-card.gold .league-card-top strong,
-.guide-league-card.gold .guide-league-card-top strong,
-.administrator-active-badge.gold strong { color: #273582; }
-
 .app-shell.league-platine .top-league-badge strong,
+.league-card.bronze .league-card-top strong,
+.league-card.silver .league-card-top strong,
+.league-card.gold .league-card-top strong,
 .league-card.platinum .league-card-top strong,
+.guide-league-card.bronze .guide-league-card-top strong,
+.guide-league-card.silver .guide-league-card-top strong,
+.guide-league-card.gold .guide-league-card-top strong,
 .guide-league-card.platinum .guide-league-card-top strong,
-.administrator-active-badge.platinum strong { color: #804d12; }
-
-/* The coaching room retains its original dark surfaces: use legible light ink. */
-.coach-league-badge.bronze strong { color: #a9f0cb; }
-.coach-league-badge.silver strong { color: #bcddff; }
-.coach-league-badge.gold strong { color: #ccd3ff; }
-.coach-league-badge.platinum strong { color: #ffe4ae; }
+.administrator-active-badge.bronze strong,
+.administrator-active-badge.silver strong,
+.administrator-active-badge.gold strong,
+.administrator-active-badge.platinum strong,
+.coach-league-badge.bronze strong,
+.coach-league-badge.silver strong,
+.coach-league-badge.gold strong,
+.coach-league-badge.platinum strong {
+  color: #ffffff;
+}
 
 @media (max-width: 640px) {
-  .top-league-badge strong { font-size: 13px; letter-spacing: .012em; }
+  .top-league-badge strong {
+    font-size: 14px;
+    letter-spacing: -.025em;
+  }
   .league-card-top strong { font-size: 22px; }
-  .guide-league-card-top strong { font-size: 20px; }
-  .administrator-active-badge strong { font-size: 21px; }
-  .coach-league-badge strong { font-size: 18px; }
+  .guide-league-card-top strong { font-size: 21px; }
+  .administrator-active-badge strong { font-size: 23px; }
+  .coach-league-badge strong { font-size: 19px; }
+}
+@media (forced-colors: active) {
+  .top-league-badge strong,
+  .administrator-active-badge strong,
+  .league-card-top strong,
+  .guide-league-card-top strong,
+  .coach-league-badge strong {
+    color: CanvasText;
+    -webkit-text-stroke: 0;
+    text-shadow: none;
+  }
 }
