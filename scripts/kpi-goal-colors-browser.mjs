@@ -59,10 +59,10 @@ try {
   browser = await chromium.launch({headless:true});
   for(const viewport of [{width:1366,height:768},{width:390,height:844}]) {
     for(const league of [
-      {id:"bronze",label:"Ligue 2",target:45},
-      {id:"argent",label:"Ligue 1",target:50},
-      {id:"or",label:"Ligue des champions",target:60},
-      {id:"platine",label:"Coupe du monde",target:70},
+      {id:"bronze",label:"Ligue 2",tone:"bronze",target:45,accent:"#168668",cardColor:"#116d52"},
+      {id:"argent",label:"Ligue 1",tone:"silver",target:50,accent:"#2779d4",cardColor:"#1555a2"},
+      {id:"or",label:"Ligue des champions",tone:"gold",target:60,accent:"#7182e8",cardColor:"#303e91"},
+      {id:"platine",label:"Coupe du monde",tone:"platinum",target:70,accent:"#c59436",cardColor:"#815415"},
     ]) {
       const context = await browser.newContext({viewport,reducedMotion:"reduce"});
       const page = await context.newPage();
@@ -90,6 +90,29 @@ try {
       assert.equal((await leagueBadge.locator("strong").innerText()).trim(),league.label,
         "League display name must follow the saved technical ID");
       assert.equal(await leagueBadge.getAttribute("aria-label"),"Ligue active : "+league.label);
+      const displayFont=await leagueBadge.locator("strong").evaluate(el=>getComputedStyle(el).fontFamily);
+      assert.match(displayFont,/Barlow Condensed/,"Competition display face on heading");
+      const themeAccent=await page.locator(".app-shell").evaluate(el =>
+        getComputedStyle(el).getPropertyValue("--league-accent").trim().toLowerCase());
+      assert.equal(themeAccent,league.accent,"Competition accent on active league");
+      const titleColor=await leagueBadge.locator("strong").evaluate(el=>getComputedStyle(el).color);
+      assert.ok(titleColor.startsWith("rgb("),"Competition label must have computed readable colour");
+      await page.getByRole("button",{name:"ADM Administrateur",exact:true}).click();
+      await page.locator(".administrator-leagues").waitFor({state:"visible"});
+      const allCards=page.locator(".administrator-leagues .league-card");
+      assert.equal(await allCards.count(),4,"All four leagues remain available");
+      const labels=await allCards.locator(".league-card-top strong").allTextContents();
+      assert.deepEqual(labels.map(s=>s.trim()),["Ligue 2","Ligue 1","Ligue des champions","Coupe du monde"]);
+      const leagueCard=allCards.locator("." + league.tone);
+      const accent=await leagueCard.evaluate(el=>
+        getComputedStyle(el).getPropertyValue("--competition-card-color").trim().toLowerCase());
+      assert.equal(accent,league.cardColor,"Competition-specific card colour");
+      const cardFont=await leagueCard.locator(".league-card-top strong").evaluate(el =>
+        getComputedStyle(el).fontFamily);
+      assert.match(cardFont,/Barlow Condensed/,"Competition display face on admin card");
+      const noOverflow=await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2);
+      assert.equal(noOverflow,true,"Competition name cards must not overflow viewport");
+
       const badgeClipped=await leagueBadge.evaluate(element => {
         const strong=element.querySelector("strong");
         return !strong || strong.getBoundingClientRect().right > window.innerWidth + 1;
