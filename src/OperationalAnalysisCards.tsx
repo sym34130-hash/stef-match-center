@@ -28,10 +28,10 @@ export function ReceptionHourlyChart({ snapshot }: { snapshot: Snapshot }) {
   const available = analysis?.state === "disponible";
   return <section className="reception-hourly-analysis" aria-label="Temps de réception par créneau">
     <header className="analysis-heading">
-      <div><h3>Temps de réception par créneau</h3><p>Moyenne des voyages déchargés éligibles commencés dans l'heure</p></div>
+      <div><h3>Temps de réception par créneau</h3><p>Moyenne des voyages réceptionnés éligibles commencés dans l'heure</p></div>
       {analysis && <span className="analysis-target">Cible {duration(analysis.targetSeconds)}/position</span>}
     </header>
-    <p className="analysis-provenance">{nightLabel(analysis?.night)} · Graphique uniquement : opération DECHG (col. C), segments AQ / ED / EX / vides (col. G), 15 positions minimum. Les KPI de duels conservent leur périmètre.</p>
+    <p className="analysis-provenance">{nightLabel(analysis?.night)} · Même périmètre que les duels gagnés (15 positions minimum, hors activité AQ).</p>
     {!available ? <p className="analysis-empty" role="status">Analyse indisponible : aucune réception exploitable sur la période retenue.</p> : <>
       <div className="reception-hour-chart" role="group" aria-label="Histogramme des temps moyens, en secondes par position">
         <div className="reception-hour-axis" aria-hidden="true"><span>{ceiling} s</span><span>{ceiling / 2} s</span><span>0 s</span></div>
