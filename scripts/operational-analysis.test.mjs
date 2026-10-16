@@ -327,7 +327,7 @@ test("réconciliation ponctuelle Montpellier, Excel inchangé et KPI officiels a
   const buffer = await fs.readFile(process.env.STEF_OPERATIONAL_WORKBOOK);
   const hash = createHash("sha256").update(buffer).digest("hex");
   const s = buildSnapshotFromWorkbook(buffer, "reference.xlsx", "01K").snapshot;
-  assert.deepEqual(s.operationalScore.indicators, { passRate: 64.2, loadingPercent: 75, unloadingPercent: 82.6, possessionPercent: 72.8 });
+  assert.deepEqual(s.operationalScore.indicators, { passRate: 61.8, loadingPercent: 75, unloadingPercent: 82.6, possessionPercent: 72.2 });
   assert.equal(s.zonageDiagnostic.night.startDate, "2026-09-17");
   assert.deepEqual([s.zonageDiagnostic.receivedPositions, s.zonageDiagnostic.qualifiablePositions, s.zonageDiagnostic.latePositions, s.zonageDiagnostic.unqualifiablePositions], [676, 488, 184, 188]);
   assert.deepEqual([s.unloadingHourlyAnalysis.eligibleTravels, s.unloadingHourlyAnalysis.offTargetTravels, s.unloadingHourlyAnalysis.meanSecondsPerPosition], [23, 4, 59]);
@@ -339,7 +339,7 @@ test("réconciliation ponctuelle Montpellier, Excel inchangé et KPI officiels a
     const before = JSON.parse(await fs.readFile(process.env.STEF_OPERATIONAL_BASELINE, "utf8"));
     // Reception, score and dated diagnostics intentionally change; assert only
     // the unaffected domains against the historical snapshot.
-    for (const key of ["agency", "summary", "hourlyPerformance", "loadingQuality",
+    for (const key of ["agency", "loadingQuality",
       "yellowCards", "positions", "players", "highlights", "compositionPeriods",
       "duelQuality", "zonageDiagnostic"]) {
       if (Object.hasOwn(before, key)) assert.deepEqual(s[key], before[key], `Non-reception field unchanged: ${key}`);

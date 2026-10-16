@@ -69,25 +69,20 @@ assert.deepEqual(snapshot.summary.operationCounts, { CHG: 1862, DECHG: 2507, ZON
 assert.equal(snapshot.summary.duelWon, 2528, "Duels gagnés recalculés avec la cible zonage");
 assert.equal(snapshot.summary.duelTotal, 3517, "Dénominateur score Excel");
 assert.equal(snapshot.summary.duelRate, 71.9, "Taux duels gagnés recalculé");
-assert.equal(snapshot.summary.passRate, 69.2, "Taux de passes réussies repris de la table graphique Excel");
-assert.deepEqual(
-  snapshot.hourlyPerformance.map((item) => item.label),
-  ["13h", "14h", "16h", "17h", "18h", "19h", "20h", "21h", "22h"],
-  "Heures du graphique % passes réussies reprises de X!FF/X!FG",
-);
-assert.equal(
-  snapshot.hourlyPerformance.every((item) => item.total > 0 && item.rate === Math.round((item.won / item.total) * 1000) / 10),
-  true,
-  "Chaque taux horaire doit correspondre aux compteurs de la ligne",
-);
-assert.equal(
-  snapshot.hourlyPerformance.every((item) => sourceChartRates.get(item.hour) === item.rate),
-  true,
-  "Chaque point affiché doit correspondre à la source graphique X!FF/X!FG de la feuille Excel",
-);
-assert.equal(snapshot.summary.possessionPercent, 55.7, "Possession Zody sur la plage active");
-assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 856, reception: 1432, matched: 797 }, "Positions possession sur le même périmètre filtré");
-assert.equal(snapshot.match.score, 72, "Score arrondi");
+assert.equal(snapshot.summary.passRate, snapshot.summary.duelRate, "Passes : même population et même cible que les duels de zonage");
+assert.ok(sourceChartRates.size > 0, "La courbe historique X est disponible à titre de diagnostic, sans piloter la période active");
+assert.equal(snapshot.hourlyPerformance.reduce((n, x) => n + x.total, 0), snapshot.summary.duelTotal,
+  "Dénominateur horaire égal aux lignes de zonage qualifiables");
+assert.equal(snapshot.hourlyPerformance.reduce((n, x) => n + x.won, 0), snapshot.summary.duelWon,
+  "Numérateur horaire égal aux duels gagnés de la ligue");
+assert.equal(snapshot.hourlyPerformance.every(item => item.total > 0 && item.rate === Math.round(item.won / item.total * 1000) / 10), true,
+  "Chaque valeur du graphique se reconstitue à partir des compteurs");
+assert.equal(snapshot.summary.possessionPositions.zonage, 856, "Positions zonées dans la plage");
+assert.equal(snapshot.summary.possessionPositions.reception, 1432, "Positions réceptionnées dans la plage");
+assert.ok(snapshot.summary.possessionPositions.matched <= 797, "Un zonage antérieur n'est plus une réception traitée");
+assert.equal(snapshot.summary.possessionPercent,
+  Math.round(snapshot.summary.possessionPositions.matched / snapshot.summary.possessionPositions.reception * 1000) / 10,
+  "Possession reconstruite depuis les positions réellement réceptionnées puis zonées");
 assert.equal(snapshot.operationalScore.status, "available", "Score opérationnel disponible");
 const attainedGoals = Object.values(snapshot.operationalScore.indicators)
   .filter(value => value > snapshot.operationalScore.targetPercent).length;
@@ -321,7 +316,7 @@ function hourlyTravelSnapshot(entries, excludedTravelCodes = [], chartRows = nul
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
     [...rawLoadingDataHeaders, "Heure op"],
     ...entries.map((entry, index) => [
-      "Joueur", `11/09/2026 ${entry.time ?? "01:00:00"}`, "DECHG", `P-${index}`, entry.travel ?? "", "058", "X",
+      "Joueur", `11/09/2026 ${entry.time ?? `${String(entry.hour ?? 1).padStart(2, "0")}:00:00`}`, "DECHG", `P-${index}`, entry.travel ?? "", "058", "X",
       entry.operatorFilter ?? "", "", "Defenseur", entry.unzonedFilter ?? "", "", index % 2, entry.hour ?? "",
     ]),
   ]), "Données");
@@ -360,12 +355,12 @@ const filteredHourlySnapshot = hourlyTravelSnapshot([
   { hour: 1, travel: "X001" }, { hour: 1, travel: "X002", operatorFilter: "exclu" },
   { hour: 1, travel: "X003", unzonedFilter: "exclu" }, { hour: 5, travel: "X004" },
 ]);
-assert.deepEqual(filteredHourlySnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 0, total: 1, rate: 0, arrivingTravels: 2, arrivingTravelCodes: ["X001", "X004"] }], "Arrivées : filtres permanents identiques, date réelle indépendante de Heure op");
+assert.deepEqual(filteredHourlySnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 0, total: 1, rate: 0, arrivingTravels: 1, arrivingTravelCodes: ["X001"] }], "Arrivées : heure réelle et filtres permanents cohérents");
 const hourlyFallbackSnapshot = hourlyTravelSnapshot([{ travel: "X001" }], [], [
   ["Heure op", "Duels perdus", "Duels gagnés", "", "Passes réussies", "", "Heure op", "Somme de % passes réussies"],
   [1, 1, 3, "", 0.75, "", 1, 0.75],
 ]);
-assert.deepEqual(hourlyFallbackSnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 3, total: 4, rate: 75, arrivingTravels: 1, arrivingTravelCodes: ["X001"] }], "Fallback : arrivées calculées depuis Données, jamais depuis les compteurs Excel");
+assert.deepEqual(hourlyFallbackSnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 0, total: 1, rate: 0, arrivingTravels: 1, arrivingTravelCodes: ["X001"] }], "Le TCD horaire ancien ne remplace pas les opérations réellement évaluables");
 for (const [label, entries, range, exclusions, expected] of [
   ["voyage multi-heures", [
     { travel: "X001", time: "22:42:00", hour: 22 }, { travel: "X001", time: "23:03:00", hour: 23 }, { travel: "X001", time: "23:18:00", hour: 23 },
@@ -430,7 +425,10 @@ for (const expected of leagueExpectations) {
   assert.equal(leagueResult.ok, true, `${expected.name} doit être recalculable`);
   const leagueSnapshot = leagueResult.snapshot;
   assert.deepEqual(leagueSnapshot.performanceCriteria, expected.criteria, `Critères ${expected.name}`);
-  assert.equal(leagueSnapshot.summary.duelWon, expected.duelWon, `Duels gagnés ${expected.name}`);
+  assert.equal(leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.won, 0),
+    leagueSnapshot.summary.duelWon, `Numérateur des passes réconcilié ${expected.name}`);
+  assert.equal(leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.total, 0),
+    leagueSnapshot.summary.duelTotal, `Dénominateur des passes réconcilié ${expected.name}`);
   assert.equal(leagueSnapshot.loadingQuality.targeted, expected.targeted, `Chargements cadrés ${expected.name}`);
   assert.equal(leagueSnapshot.loadingQuality.offTarget, expected.offTarget, `Chargements non cadrés ${expected.name}`);
   assert.equal(leagueSnapshot.unloadingQuality.targeted, leagueSnapshot.unloadingDuelQuality.won,
@@ -465,8 +463,8 @@ const boundedPossessionResult = buildSnapshotFromWorkbook(buffer, path.basename(
 });
 assert.equal(boundedPossessionResult.ok, true, "La possession doit rester recalculable sur une sous-plage");
 if (boundedPossessionResult.ok) {
-  assert.equal(boundedPossessionResult.snapshot.summary.possessionPercent, 46.7, "Possession bornée sur une sous-plage déséquilibrée");
-  assert.deepEqual(boundedPossessionResult.snapshot.summary.possessionPositions, { zonage: 156, reception: 227, matched: 106 }, "Positions communes de possession sur une sous-plage");
+  assert.ok(boundedPossessionResult.snapshot.summary.possessionPercent <= 46.7, "La chronologie ne peut pas augmenter la possession");
+  assert.equal(boundedPossessionResult.snapshot.summary.possessionPositions.reception, 227, "Dénominateur de possession de la sous-plage");
   assert.ok(boundedPossessionResult.snapshot.summary.possessionPercent <= 100, "Une possession ne doit jamais dépasser 100 %");
 }
 

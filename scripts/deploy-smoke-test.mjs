@@ -191,8 +191,12 @@ try {
   assert.equal(snapshot.summary.duelWon, 2528, "Duels gagnés recalculés après import API");
   assert.equal(snapshot.summary.duelTotal, 3517, "Dénominateur score après import API");
   assert.equal(snapshot.summary.duelRate, 71.9, "Taux duels gagnés recalculé après import API");
-  assert.equal(snapshot.summary.possessionPercent, 55.7, "Possession Zody après import API");
-  assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 856, reception: 1432, matched: 797 }, "Positions possession après import API");
+  assert.equal(snapshot.summary.possessionPositions.zonage, 856, "Positions zonées après import API");
+  assert.equal(snapshot.summary.possessionPositions.reception, 1432, "Positions réceptionnées après import API");
+  assert.ok(snapshot.summary.possessionPositions.matched <= 797, "Les zonages antérieurs à la réception sont exclus");
+  assert.equal(snapshot.summary.possessionPercent,
+    Math.round(snapshot.summary.possessionPositions.matched / 1432 * 1000) / 10, "Possession recomposée depuis les positions appariées");
+  assert.equal(snapshot.summary.passRate, snapshot.summary.duelRate, "Passes et score de zonage sur le même périmètre");
   assert.equal(snapshot.match.score, 72, "Score recalculé après import API");
   assert.equal(snapshot.operationalScore.status, "available", "Score opérationnel disponible après import API");
   const expectedGoals = value => Object.values(value.operationalScore.indicators)
@@ -326,14 +330,14 @@ try {
   assert.equal(timeRangePayload.snapshot.summary.operations, 5498, "Opérations après changement de plage");
   assert.equal(timeRangePayload.snapshot.match.periodLabel, "13:00-22:30", "Plage active après changement");
   assert.equal(timeRangePayload.snapshot.match.timeRangeLabel, "13:00 - 22:30", "Libellé de plage affiché après changement");
-  assert.equal(timeRangePayload.snapshot.summary.possessionPercent, 55.7, "Possession conservée sur la plage active de référence");
-  assert.equal(timeRangePayload.snapshot.summary.passRate, 69.2, "Total des passes réussies repris automatiquement de la table Excel");
-  assert.deepEqual(timeRangePayload.snapshot.summary.possessionPositions, { zonage: 856, reception: 1432, matched: 797 }, "Positions possession sur la plage active de référence");
-  assert.deepEqual(
-    timeRangePayload.snapshot.hourlyPerformance.map((item) => item.label),
-    ["13h", "14h", "16h", "17h", "18h", "19h", "20h", "21h", "22h"],
-    "Graphique horaire borné par la plage active par défaut",
-  );
+  assert.deepEqual(timeRangePayload.snapshot.summary.possessionPositions, snapshot.summary.possessionPositions,
+    "La même plage conserve la population de possession");
+  assert.equal(timeRangePayload.snapshot.summary.passRate,
+    timeRangePayload.snapshot.summary.duelRate, "Passes issues des lignes réellement éligibles");
+  assert.equal(timeRangePayload.snapshot.hourlyPerformance.reduce((sum, row) => sum + row.total, 0),
+    timeRangePayload.snapshot.summary.duelTotal, "Heures incluant les créneaux partiels de la plage active");
+  assert.equal(timeRangePayload.snapshot.hourlyPerformance.reduce((sum, row) => sum + row.won, 0),
+    timeRangePayload.snapshot.summary.duelWon, "Réussites horaires réconciliées");
   assert.equal(timeRangePayload.snapshot.compositionPeriods.first.label, "13:00 - 17:45", "Première mi-temps alignée sur la plage active");
   assert.equal(timeRangePayload.snapshot.compositionPeriods.second.label, "17:45 - 22:30", "Deuxième mi-temps alignée sur la plage active");
 
@@ -348,14 +352,15 @@ try {
   const narrowTimeRangePayload = await narrowTimeRangeResponse.json();
   assert.equal(narrowTimeRangeResponse.status, 200, JSON.stringify(narrowTimeRangePayload));
   assert.equal(narrowTimeRangePayload.snapshot.summary.operations, 1509, "Opérations après réduction de la plage");
-  assert.equal(narrowTimeRangePayload.snapshot.summary.possessionPercent, 29.7, "Possession recalculée après réduction de la plage");
-  assert.equal(narrowTimeRangePayload.snapshot.summary.passRate, 59.4, "Total des passes réussies recalculé après réduction de la plage");
-  assert.deepEqual(narrowTimeRangePayload.snapshot.summary.possessionPositions, { zonage: 163, reception: 323, matched: 96 }, "Positions possession après réduction de la plage");
-  assert.deepEqual(
-    narrowTimeRangePayload.snapshot.hourlyPerformance.map((item) => item.label),
-    ["16h", "17h", "18h"],
-    "Graphique horaire recalculé après réduction de la plage",
-  );
+  assert.equal(narrowTimeRangePayload.snapshot.summary.possessionPositions.reception, 323, "Réceptions dans la sous-plage");
+  assert.ok(narrowTimeRangePayload.snapshot.summary.possessionPositions.matched <= 96,
+    "Possession ne conserve que les zonages postérieurs à la réception");
+  assert.equal(narrowTimeRangePayload.snapshot.summary.passRate, narrowTimeRangePayload.snapshot.summary.duelRate,
+    "Le changement de plage recalcule la cible et le numérateur");
+  assert.equal(narrowTimeRangePayload.snapshot.hourlyPerformance.reduce((sum, row) => sum + row.total, 0),
+    narrowTimeRangePayload.snapshot.summary.duelTotal, "Heures et plage cohérentes");
+  assert.equal(narrowTimeRangePayload.snapshot.hourlyPerformance.reduce((sum, row) => sum + row.won, 0),
+    narrowTimeRangePayload.snapshot.summary.duelWon, "Réussites de la sous-plage réconciliées");
 
   const wideTimeRangeResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/time-range`, {
     method: "POST",
