@@ -3,6 +3,7 @@ import { Activity, ArrowDownToLine, ArrowUpFromLine, ChevronLeft, ChevronRight, 
 import { MercatoCarouselSection } from "./MercatoCarousel";
 import { parseMercatoEntrants, type MercatoProfiles } from "./mercato";
 import type { Snapshot } from "./types";
+import { pdfSourceLabel } from "./pdf-source";
 import "./match-indicators.css";
 
 type Props = {
@@ -35,7 +36,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   const pdf = snapshot.dailyIndicators;
   const punctuality = pdf?.punctuality;
   const punctualityTargets = pdf?.punctualityTargets;
-  const pdfDetail = pdf?.referenceDate ? `PDF 106J · ${pdf.referenceDate}` : "PDF 106J";
+  const pdfDetail = pdfSourceLabel(pdf, snapshot.agency.code);
   const metric = (value: number | undefined | null, unit: string) => typeof value === "number" && Number.isFinite(value) ? `${number.format(value)}${unit}` : null;
   const pdfMetricDetail = (key: keyof NonNullable<typeof punctuality>) => {
     const target = punctualityTargets?.[key];
