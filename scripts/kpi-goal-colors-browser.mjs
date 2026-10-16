@@ -61,8 +61,8 @@ try {
     for(const league of [
       {id:"bronze",label:"LIGUE 2",tone:"bronze",target:45,accent:"#d08a52",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(245, 210, 178)",badgeBackground:"rgb(244, 208, 176)"},
       {id:"argent",label:"LIGUE 1",tone:"silver",target:50,accent:"#8bb5dc",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(219, 233, 248)",badgeBackground:"rgb(220, 234, 250)"},
-      {id:"or",label:"LIGUE DES CHAMPIONS",tone:"gold",target:60,accent:"#d7a52f",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(247, 221, 160)",badgeBackground:"rgb(247, 223, 167)"},
-      {id:"platine",label:"COUPE DU MONDE",tone:"platinum",target:70,accent:"#c58ee8",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(241, 220, 255)",badgeBackground:"rgb(239, 223, 255)"},
+      {id:"or",label:"LDC",tone:"gold",target:60,accent:"#d7a52f",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(247, 221, 160)",badgeBackground:"rgb(247, 223, 167)"},
+      {id:"platine",label:"CDM",tone:"platinum",target:70,accent:"#c58ee8",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(241, 220, 255)",badgeBackground:"rgb(239, 223, 255)"},
     ]) {
       const context = await browser.newContext({viewport,reducedMotion:"reduce"});
       const page = await context.newPage();
@@ -93,7 +93,7 @@ try {
         "Competition labels are actual uppercase data, not merely a CSS effect");
       assert.equal(await leagueBadge.getAttribute("aria-label"),"Ligue active : "+league.label);
       const displayFont=await leagueBadge.locator("strong").evaluate(el=>getComputedStyle(el).fontFamily);
-      assert.match(displayFont,/Barlow Condensed/,"Competition display face on heading");
+      assert.match(displayFont,/Racing Sans One/,"Competition display face on heading");
       const themeAccent=await page.locator(".app-shell").evaluate(el =>
         getComputedStyle(el).getPropertyValue("--league-accent").trim().toLowerCase());
       assert.equal(themeAccent,league.accent,"Original league theme accent must be preserved");
@@ -106,9 +106,9 @@ try {
         };
       });
       assert.equal(headline.color,league.cardColor,"White headline glyphs in every league");
-      assert.match(headline.fontFamily,/Barlow Condensed/,"Sports-newspaper condensed title font");
-      assert.equal(headline.fontWeight,"900","Bold sports-newspaper masthead");
-      assert.equal(headline.fontStyle,"italic","Slanted press headline glyphs");
+      assert.match(headline.fontFamily,/Racing Sans One/,"Sports-newspaper condensed title font");
+      assert.equal(headline.fontWeight,"400","Naturally bold racing face must not synthesize heavy strokes");
+      assert.equal(headline.fontStyle,"normal","Intrinsically angled display face, no double synthetic slant");
       assert.notEqual(headline.stroke,"0px","White on light cards requires dark outline");
       assert.notEqual(headline.shadow,"none","White on light cards requires drop shadow");
       await page.getByRole("button",{name:"ADM Administrateur",exact:true}).click();
@@ -116,7 +116,7 @@ try {
       const allCards=page.locator(".administrator-leagues .league-card");
       assert.equal(await allCards.count(),4,"All four leagues remain available");
       const labels=await allCards.locator(".league-card-top strong").allTextContents();
-      assert.deepEqual(labels.map(s=>s.trim()),["LIGUE 2","LIGUE 1","LIGUE DES CHAMPIONS","COUPE DU MONDE"]);
+      assert.deepEqual(labels.map(s=>s.trim()),["LIGUE 2","LIGUE 1","LDC","CDM"]);
       const leagueCard=page.locator(".administrator-leagues .league-card." + league.tone);
       const cardInk=await leagueCard.locator(".league-card-top strong").evaluate(el =>
         getComputedStyle(el).color);
@@ -132,12 +132,17 @@ try {
       assert.equal(selectedBadgeInk,league.cardColor,"Only active competition name ink changes");
       const cardFont=await leagueCard.locator(".league-card-top strong").evaluate(el =>
         getComputedStyle(el).fontFamily);
-      assert.match(cardFont,/Barlow Condensed/,"Competition display face on admin card");
+      assert.match(cardFont,/Racing Sans One/,"Competition display face on admin card");
       const cardTypography=await leagueCard.locator(".league-card-top strong").evaluate(el=>{
         const cs=getComputedStyle(el);
         return {style:cs.fontStyle,weight:cs.fontWeight,stroke:cs.webkitTextStrokeWidth};
       });
-      assert.deepEqual(cardTypography,{style:"italic",weight:"900",stroke:"0.8px"});
+      assert.deepEqual(cardTypography,{style:"normal",weight:"400",stroke:"0.9px"});
+      const shortLabel=league.id==="or" || league.id==="platine";
+      if(shortLabel)assert.equal(league.label.length,3,"Upper tier acronyms must render with three letters");
+      const cardSize=await leagueCard.locator(".league-card-top strong").evaluate(el =>
+        parseFloat(getComputedStyle(el).fontSize));
+      assert.ok(cardSize>=27,"Short sport-title lettering must have visibly increased size");
       const noOverflow=await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2);
       assert.equal(noOverflow,true,"Competition name cards must not overflow viewport");
 

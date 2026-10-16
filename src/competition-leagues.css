@@ -1,9 +1,9 @@
-/* Competition NAMES only — inspired by bold italic sports-newspaper headlines.
+/* Competition NAMES only — original sports-newspaper-inspired display lettering.
    Keep every existing card, badge, icon, background, gradient, theme variable
    and KPI untouched. This is NOT a recreation of a publication's wordmark. */
 :root {
-  --competition-display-font: "Barlow Condensed", "Arial Narrow",
-    "Franklin Gothic Medium", sans-serif;
+  --competition-display-font: "Racing Sans One", "Barlow Condensed",
+    "Arial Narrow", "Franklin Gothic Medium", sans-serif;
 }
 .top-league-badge strong,
 .administrator-active-badge strong,
@@ -11,13 +11,16 @@
 .guide-league-card-top strong,
 .coach-league-badge strong {
   font-family: var(--competition-display-font);
-  font-style: italic;
+  /* Racing Sans One is intrinsically heavy and forward-slanted; unlike
+     regular type, it does not need a synthesized italic/bold treatment. */
+  font-style: normal;
+  font-synthesis: none;
   font-optical-sizing: auto;
-  font-weight: 900;
+  font-weight: 400;
   font-stretch: condensed;
   text-transform: uppercase;
-  letter-spacing: -.015em;
-  line-height: 1.1;
+  letter-spacing: -.04em;
+  line-height: 1.03;
   text-wrap: balance;
   overflow-wrap: normal;
   word-break: normal;
@@ -26,26 +29,26 @@
   /* Bright masthead lettering, readable over all EXISTING light or dark
      backgrounds. Only the glyphs are outlined/shadowed, never the cards. */
   color: #ffffff;
-  -webkit-text-stroke: .8px #122a46;
+  -webkit-text-stroke: .9px #122a46;
   paint-order: stroke fill;
   text-shadow: 0 1px 0 rgba(8, 27, 51, .98),
                1px 2px 0 rgba(8, 27, 51, .8),
                0 3px 6px rgba(8, 27, 51, .52);
 }
 .top-league-badge strong {
-  font-size: clamp(14px, 1.25vw, 18px);
+  font-size: clamp(17px, 1.5vw, 21px);
 }
 .league-card-top strong {
-  font-size: clamp(21px, 2vw, 27px);
+  font-size: clamp(28px, 2.6vw, 35px);
 }
 .guide-league-card-top strong {
-  font-size: clamp(20px, 2vw, 25px);
+  font-size: clamp(26px, 2.35vw, 32px);
 }
 .administrator-active-badge strong {
-  font-size: clamp(23px, 2.2vw, 29px);
+  font-size: clamp(29px, 2.6vw, 37px);
 }
 .coach-league-badge strong {
-  font-size: clamp(19px, 1.7vw, 23px);
+  font-size: clamp(23px, 2vw, 28px);
 }
 
 /* Scoped specificity ensures historical tone-specific ink overrides only
@@ -75,13 +78,13 @@
 
 @media (max-width: 640px) {
   .top-league-badge strong {
-    font-size: 14px;
-    letter-spacing: -.025em;
+    font-size: 16px;
+    letter-spacing: -.045em;
   }
-  .league-card-top strong { font-size: 22px; }
-  .guide-league-card-top strong { font-size: 21px; }
-  .administrator-active-badge strong { font-size: 23px; }
-  .coach-league-badge strong { font-size: 19px; }
+  .league-card-top strong { font-size: 29px; }
+  .guide-league-card-top strong { font-size: 27px; }
+  .administrator-active-badge strong { font-size: 29px; }
+  .coach-league-badge strong { font-size: 24px; }
 }
 @media (forced-colors: active) {
   .top-league-badge strong,
