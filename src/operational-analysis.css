@@ -213,6 +213,7 @@
   .reception-hour-button:nth-child(even) .reception-hour-label { top: calc(100% + 20px); }
 }
 @media (max-width: 360px) {
+  .reception-hour-value { font-size: 8px; letter-spacing: -.055em; }
   .operational-charts-carousel .loading-quality-card[aria-label="Qualité des chargements"] .loading-quality-pie,
   .operational-charts-carousel .centers-quality-card .loading-quality-pie { max-width: 100%; }
   .operational-charts-carousel .loading-quality-card[aria-label="Qualité des chargements"] .loading-quality-heading { flex-wrap: wrap; }
