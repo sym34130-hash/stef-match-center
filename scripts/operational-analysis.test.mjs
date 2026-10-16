@@ -18,7 +18,7 @@ const row = (operationType, position, clock, travelCode = "A", day = "2026-09-17
   operator: "Anonymous", operatorFilter: "", unzonedFilter: "", agencySegment: "01K", dz: null, duelWonFlag: 1,
 });
 const analyze = (rows, options = {}) => buildOperationalAnalyses({ rows,
-  period: normalizeTimeRange("21:30", "06:30"), criteria, loadingQuality: { sourceAvailable: false }, ...options });
+  period: normalizeTimeRange("21:30", "06:30"), criteria, loadingQuality: { sourceAvailable: false }, minimumReceptionPositions: 1, ...options });
 
 test("zonage : position répétée, code ZONAGE vide, réception attribuée sans le CHG", () => {
   const rec = row("DECHG", "P1", "22:00:00", "IN");
@@ -198,7 +198,7 @@ for (const [start, end, before, middle, after, nextDay] of [
     assert.equal(z.receivedPositions, 3); assert.equal(z.onTimePositions, 1);
     assert.equal(z.unqualifiablePositions, 2); assert.equal(z.night.otherNightOperations, 2);
     assert.deepEqual(z.travels.map(t => t.travelCode), ["ACTIVE"]);
-    assert.equal(h.eligibleTravels, 1); assert.equal(h.travels[0].operationRows, 3);
+    assert.equal(h.eligibleTravels, 0); assert.equal(h.excludedSmallTravels, 1);
     assert.equal(h.items[0].label, `${start.slice(0, 2)}h`);
     assert.equal(h.items.at(-1).end, z.night.end);
     assert.equal(h.items.reduce((sum, slot) => sum + slot.travelCount, 0), 1);
@@ -238,7 +238,7 @@ test("intégration : Excel partiel, filtres opérateur/exclusions/plage, sans AP
   const s = buildSnapshotFromWorkbook(buffer, "partial.xlsx", "01K", { start: "21:30", end: "06:30", excludedTravelCodes: ["B"] }).snapshot;
   assert.equal(s.validation.importReadiness.status, "partial"); assert.equal(s.loadingQuality.sourceAvailable, false);
   assert.deepEqual(s.zonageDiagnostic.travels.map(t => t.travelCode), ["A"]);
-  assert.equal(s.zonageDiagnostic.receivedPositions, 2); assert.equal(s.unloadingHourlyAnalysis.eligibleTravels, 1);
+  assert.equal(s.zonageDiagnostic.receivedPositions, 2); assert.equal(s.unloadingHourlyAnalysis.eligibleTravels, 0);
   const narrow = buildSnapshotFromWorkbook(buffer, "partial.xlsx", "01K", { start: "23:00", end: "00:30" }).snapshot;
   assert.deepEqual(narrow.zonageDiagnostic.travels.map(t => t.travelCode), ["B"]);
   assert.equal(narrow.unloadingHourlyAnalysis.state, "indisponible");
@@ -327,10 +327,10 @@ test("réconciliation ponctuelle Montpellier, Excel inchangé et KPI officiels a
   const buffer = await fs.readFile(process.env.STEF_OPERATIONAL_WORKBOOK);
   const hash = createHash("sha256").update(buffer).digest("hex");
   const s = buildSnapshotFromWorkbook(buffer, "reference.xlsx", "01K").snapshot;
-  assert.deepEqual(s.operationalScore.indicators, { passRate: 64.2, loadingPercent: 75, unloadingPercent: 78.4, possessionPercent: 72.8 });
+  assert.deepEqual(s.operationalScore.indicators, { passRate: 64.2, loadingPercent: 75, unloadingPercent: 82.6, possessionPercent: 72.8 });
   assert.equal(s.zonageDiagnostic.night.startDate, "2026-09-17");
   assert.deepEqual([s.zonageDiagnostic.receivedPositions, s.zonageDiagnostic.qualifiablePositions, s.zonageDiagnostic.latePositions, s.zonageDiagnostic.unqualifiablePositions], [676, 488, 184, 188]);
-  assert.deepEqual([s.unloadingHourlyAnalysis.eligibleTravels, s.unloadingHourlyAnalysis.offTargetTravels, s.unloadingHourlyAnalysis.meanSecondsPerPosition], [37, 7, 93]);
+  assert.deepEqual([s.unloadingHourlyAnalysis.eligibleTravels, s.unloadingHourlyAnalysis.offTargetTravels, s.unloadingHourlyAnalysis.meanSecondsPerPosition], [23, 4, 59]);
   assert.equal(s.unloadingHourlyAnalysis.travels.find(t => t.travelCode === "TVE100").timePerPositionSeconds, 883 / 20);
   if (process.env.STEF_OPERATIONAL_BASELINE) {
     const before = JSON.parse(await fs.readFile(process.env.STEF_OPERATIONAL_BASELINE, "utf8"));
