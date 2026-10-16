@@ -31,7 +31,7 @@ export function ReceptionHourlyChart({ snapshot }: { snapshot: Snapshot }) {
       <div><h3>Temps de réception par créneau</h3><p>Moyenne des voyages réceptionnés éligibles commencés dans l'heure</p></div>
       {analysis && <span className="analysis-target">Cible {duration(analysis.targetSeconds)}/position</span>}
     </header>
-    <p className="analysis-provenance">{nightLabel(analysis?.night)} · Même périmètre que les duels gagnés (15 positions minimum, hors activité AQ).</p>
+    <p className="analysis-provenance">{nightLabel(analysis?.night)} · Même périmètre que les duels gagnés (15 positions minimum, hors activité AQ). Hauteur : moyenne en secondes/position · Chiffres : positions distinctes.</p>
     {!available ? <p className="analysis-empty" role="status">Analyse indisponible : aucune réception exploitable sur la période retenue.</p> : <>
       <div className="reception-hour-chart" role="group" aria-label="Histogramme des temps moyens, en secondes par position">
         <div className="reception-hour-axis" aria-hidden="true"><span>{ceiling} s</span><span>{ceiling / 2} s</span><span>0 s</span></div>
@@ -42,10 +42,10 @@ export function ReceptionHourlyChart({ snapshot }: { snapshot: Snapshot }) {
               className={`reception-hour-button${slot.meanSecondsPerPosition != null && slot.meanSecondsPerPosition > analysis.targetSeconds ? " is-over-target" : ""}${selected?.start === slot.start ? " is-selected" : ""}`}
               style={{ "--bar-height": `${(slot.meanSecondsPerPosition ?? 0) / ceiling * 100}%` } as CSSProperties}
               aria-pressed={selected?.start === slot.start} aria-controls="reception-hour-detail"
-              aria-label={`${clock(slot.start)}–${clock(slot.end)} : ${duration(slot.meanSecondsPerPosition)}, ${slot.travelCount} voyage${slot.travelCount === 1 ? "" : "s"}`}
+              aria-label={`${clock(slot.start)}–${clock(slot.end)} : ${slot.state === "disponible" ? `${count(slot.distinctPositions)} position${slot.distinctPositions === 1 ? "" : "s"} distincte${slot.distinctPositions === 1 ? "" : "s"}` : "positions indisponibles"}, moyenne ${duration(slot.meanSecondsPerPosition)}, ${slot.travelCount} voyage${slot.travelCount === 1 ? "" : "s"}`}
               onClick={() => setSelectedStart(slot.start)}>
               <span className="reception-hour-bar" aria-hidden="true" />
-              <span className="reception-hour-value">{slot.meanSecondsPerPosition == null ? "—" : count(slot.meanSecondsPerPosition)}</span>
+              <span className="reception-hour-value" aria-hidden="true">{slot.state !== "disponible" || slot.meanSecondsPerPosition == null ? "—" : <>{count(slot.distinctPositions)}<span className="reception-hour-value-unit"> pos.</span></>}</span>
               <span className="reception-hour-label">{slot.label.replace(/h$/, "")}<span className="reception-hour-unit">h</span></span>
             </button>)}
           </div>
@@ -54,6 +54,7 @@ export function ReceptionHourlyChart({ snapshot }: { snapshot: Snapshot }) {
       <div id="reception-hour-detail" className="reception-hour-detail" aria-live="polite">
         <strong>{selected ? `${clock(selected.start)}–${clock(selected.end)}` : "Créneau"}</strong>
         <span>Moyenne <b>{duration(selected?.meanSecondsPerPosition)}</b></span>
+        <span>Positions distinctes <b>{selected?.state === "disponible" ? count(selected.distinctPositions) : "—"}</b></span>
         <span>Voyages <b>{count(selected?.travelCount)}</b></span>
         <span>Hors cible <b>{selected?.state === "disponible" ? count(selected.offTargetTravels) : "—"}</b></span>
         <span>Objectif <b>{duration(analysis.targetSeconds)}/position</b></span>
