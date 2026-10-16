@@ -1,4 +1,4 @@
-/* Only the two operational-analysis surfaces; no global layout overrides. */
+/* Operational analyses and contextual help; no global layout overrides. */
 .operational-diagnostic-card {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -108,6 +108,15 @@
 .zonage-detail-list li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 13px; overflow-wrap: anywhere; }
 .zonage-detail-list li > div { display: grid; gap: 4px; }
 .zonage-detail-list span { color: #52657d; }
+.qualification-help-trigger { display: inline-flex; position: relative; align-items: center; justify-content: center; vertical-align: middle; width: 1em; height: 1em; padding: 0; margin-left: 6px; border: 0; background: transparent; color: #1d4e89; font: inherit; cursor: pointer; }
+.qualification-help-trigger::after { content: ""; position: absolute; inset: -6px; }
+.qualification-help-trigger svg { flex-shrink: 0; }
+.qualification-help-popover { position: fixed; inset: auto; margin: 0; width: min(320px, calc(100% - 24px)); max-height: calc(100dvh - 24px); box-sizing: border-box; padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: #f8fbff; color: var(--navy-900); box-shadow: 0 12px 28px #07183329; overflow-y: auto; overflow-wrap: anywhere; scrollbar-width: thin; }
+.qualification-help-popover header { display: flex; align-items: start; justify-content: space-between; gap: 10px; font-size: 14px; line-height: 1.4; }
+.qualification-help-popover .icon-button { flex-shrink: 0; width: 28px; height: 28px; min-height: 0; padding: 3px; }
+.qualification-help-popover p { margin: 10px 0 0; color: #52657d; font-size: 13px; line-height: 1.5; }
+.qualification-help-popover p strong { color: var(--navy-900); }
+.guide-qualification-glossary > div:first-child { border-left-color: #aebed1; }
 .reception-hour-button:focus-visible, .diagnostic-detail-button:focus-visible, .operational-zonage-dialog button:focus-visible { outline: 3px solid #1d4e89; outline-offset: 3px; }
 @media (max-width: 900px) {
   .operational-diagnostic-card { grid-template-columns: minmax(0, 1fr); grid-template-areas: "heading" "metrics" "investigation" "secondary" "ranking" "footer"; }

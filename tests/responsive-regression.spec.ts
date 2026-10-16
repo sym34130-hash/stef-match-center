@@ -317,10 +317,10 @@ async function assertOperationalCarousel(page: Page, label: string) {
       const card = element as HTMLElement;
       const cardRect = card.getBoundingClientRect();
       const carouselViewport = card.closest(".operational-charts-carousel")?.querySelector<HTMLElement>(".operational-charts-carousel-viewport")?.getBoundingClientRect();
-      const visuals = [...card.querySelectorAll<HTMLElement>(".performance-chart, .loading-quality-pie, .diagnostic-bar-track")]
+      const visuals = [...card.querySelectorAll<HTMLElement>(".performance-chart, .loading-quality-pie, .reception-hour-chart, .diagnostic-bar-track")]
         .map((visual) => {
           const rect = visual.getBoundingClientRect();
-          return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+          return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, receptionHourly: visual.matches(".reception-hour-chart") };
         });
       const visibleText = [...card.querySelectorAll<HTMLElement>("h3, h4, strong, span, summary")]
         .filter((node) => node.getBoundingClientRect().width > 0 && node.getBoundingClientRect().height > 0).length;
@@ -341,15 +341,28 @@ async function assertOperationalCarousel(page: Page, label: string) {
     for (let visualIndex = 0; visualIndex < geometry.visuals.length; visualIndex++) {
       let visual = geometry.visuals[visualIndex];
       let cardBounds = geometry.card;
-      if (index === 4) {
-        // At low heights the diagnostic deliberately scrolls internally.
-        // Verify every bar is reachable, not only the initially visible ones.
-        const bar = activeChart.locator(".diagnostic-bar-track").nth(visualIndex);
-        await bar.scrollIntoViewIfNeeded();
-        const rect = await bar.boundingBox();
-        const root = await activeChart.locator(".operational-diagnostic-card").boundingBox();
+      if (index === 4 || visual.receptionHourly) {
+        // Both cards deliberately scroll internally. Check that each visual
+        // is fully reachable without weakening the clipping assertions below.
+        const target = visual.receptionHourly
+          ? activeChart.locator(".reception-hour-chart")
+          : activeChart.locator(".diagnostic-bar-track").nth(visualIndex);
+        if (visual.receptionHourly) {
+          // Scroll only the card, not its horizontal carousel ancestors.
+          await target.evaluate(element => {
+            const scroller = element.closest<HTMLElement>(".loading-quality-card")!;
+            const bounds = scroller.getBoundingClientRect();
+            const rect = element.getBoundingClientRect();
+            const top = bounds.top + scroller.clientTop;
+            const bottom = top + scroller.clientHeight;
+            if (rect.bottom > bottom) scroller.scrollTop += Math.ceil(rect.bottom - bottom);
+            if (rect.top < top) scroller.scrollTop -= Math.ceil(top - rect.top);
+          });
+        } else await target.scrollIntoViewIfNeeded();
+        const rect = await target.boundingBox();
+        const root = await activeChart.locator(visual.receptionHourly ? ":scope > .loading-quality-card" : ".operational-diagnostic-card").boundingBox();
         expect(rect).not.toBeNull(); expect(root).not.toBeNull();
-        visual = { left: rect!.x, right: rect!.x + rect!.width, top: rect!.y, bottom: rect!.y + rect!.height };
+        visual = { ...visual, left: rect!.x, right: rect!.x + rect!.width, top: rect!.y, bottom: rect!.y + rect!.height };
         cardBounds = { left: root!.x, right: root!.x + root!.width, top: root!.y, bottom: root!.y + root!.height };
       }
       const subpixelTolerance = 2;
@@ -359,6 +372,7 @@ async function assertOperationalCarousel(page: Page, label: string) {
       expect(visual.bottom, `${label}: visuel ${visualIndex + 1} de la slide ${index + 1} rogné en bas`).toBeLessThanOrEqual(cardBounds.bottom + subpixelTolerance);
     }
     if (index === 4) await activeChart.locator(".operational-diagnostic-card").evaluate(element => { element.scrollTop = 0; });
+    if (geometry.visuals.some(visual => visual.receptionHourly)) await activeChart.locator(":scope > .loading-quality-card").evaluate(element => { element.scrollTop = 0; });
     if (geometry.viewport) {
       expect(geometry.card.left, `${label}: carte ${index + 1} active coupée à gauche`).toBeGreaterThanOrEqual(geometry.viewport.left - 4);
       expect(geometry.card.right, `${label}: carte ${index + 1} active coupée à droite`).toBeLessThanOrEqual(geometry.viewport.right + 4);
