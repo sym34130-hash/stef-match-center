@@ -1,17 +1,17 @@
-// Shared reception-voyage calculation; eligible segment policies differ by view.
+// Shared source of truth for reception duels and hourly reception analysis.
 // A reception duel is an inbound transport voyage with at least 15 DECHG
 // position rows. AQ (quay activity) is not a transport reception duel.
 // The caller MUST supply rows scoped to one selected operating period.
 export const MIN_RECEPTION_POSITIONS = 15;
 
-export function buildReceptionCohort(rows, targetSeconds, { minimumPositions = MIN_RECEPTION_POSITIONS, includeQuay = false } = {}) {
+export function buildReceptionCohort(rows, targetSeconds, { minimumPositions = MIN_RECEPTION_POSITIONS } = {}) {
   const receptions = (rows ?? []).filter(row => row.operationType === "DECHG");
-  const excludedQuayRows = includeQuay ? 0 : receptions.filter(row => String(row.segmentType ?? "").trim().toUpperCase() === "AQ").length;
+  const excludedQuayRows = receptions.filter(row => String(row.segmentType ?? "").trim().toUpperCase() === "AQ").length;
   const unidentifiedTravelRows = receptions.filter(row => !String(row.travelCode ?? "").trim()).length;
   const groups = new Map();
   for (const row of receptions) {
     const travelCode = String(row.travelCode ?? "").trim();
-    if (!travelCode || (!includeQuay && String(row.segmentType ?? "").trim().toUpperCase() === "AQ")) continue;
+    if (!travelCode || String(row.segmentType ?? "").trim().toUpperCase() === "AQ") continue;
     if (!groups.has(travelCode)) groups.set(travelCode, []);
     groups.get(travelCode).push(row);
   }
