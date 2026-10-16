@@ -10,7 +10,7 @@ const wb = XLSX.utils.book_new();
 const headers = ["Operateur", "Date Heure de debut d operation", "Type operation", "N position", "Code voyage", "Agence segment", "Type segment", "Filtre operateur", "Filtre heure", "Poste", "Poz non zonees", "DZ", "Duels gagnes", "Heure OP"];
 const rows: Array<Array<string | number>> = [];
 for (let trip = 0; trip < 5; trip++) {
-  for (let pos = 0; pos < 3; pos++) {
+  for (let pos = 0; pos < 15; pos++) {
     rows.push(["Anonymous", `2026-09-17T22:${String(trip * 5 + pos).padStart(2, "0")}:00+02:00`, "DECHG", `P-${trip}-${pos}`, `TEST-${trip}`, "01K", "", "", "", "", "", 1 / 24, 0, 22]);
     if (pos < 2) rows.push(["Anonymous", "2026-09-17T23:00:00+02:00", "ZONAGE", `P-${trip}-${pos}`, "", "01K", "", "", "", "", "", 1 / 24, 0, 23]);
   }
@@ -117,7 +117,7 @@ test("analyses : cinq slides, rendu normal/Célébration, responsive et détails
           await target.focus(); await page.keyboard.press("Enter");
           await expect(target).toHaveAttribute("aria-pressed", "true");
           await expect(page.locator("#reception-hour-detail")).toContainText("Objectif");
-          await expect(page.locator(".reception-hourly-analysis")).toContainText("distincte du KPI officiel");
+          await expect(page.locator(".reception-hourly-analysis")).toContainText("Même périmètre que les duels gagnés");
           const collisions = await graph.locator(".reception-hour-label").evaluateAll(labels => {
             const boxes = labels.map(label => { const range = document.createRange(); range.selectNodeContents(label); return range.getBoundingClientRect(); });
             return boxes.flatMap((a, i) => boxes.slice(i + 1).filter(b => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1));
