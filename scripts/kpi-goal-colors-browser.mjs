@@ -87,7 +87,7 @@ try {
       await page.getByRole("button",{name:"Accéder au match",exact:true}).click();
       const leagueBadge=page.locator(".top-league-badge");
       await leagueBadge.waitFor({state:"visible"});
-      assert.equal((await leagueBadge.locator("strong").innerText()).trim(),league.label,
+      assert.equal((await leagueBadge.locator("strong").textContent()).trim(),league.label,
         "League display name must follow the saved technical ID");
       assert.equal(await leagueBadge.getAttribute("aria-label"),"Ligue active : "+league.label);
       const displayFont=await leagueBadge.locator("strong").evaluate(el=>getComputedStyle(el).fontFamily);
