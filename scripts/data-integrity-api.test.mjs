@@ -104,8 +104,8 @@ test("A03 HTTP: confirmation signée, fichier et agence liés, aucune écriture 
     await fs.access(path.join(root, "01K", "latest.xlsx"));
     await assert.rejects(fs.access(path.join(root, "04P", "latest.xlsx")), { code: "ENOENT" });
 
-    // A01/A02: the complete HTTP PDF import path rejects another day and
-    // preserves the real upload timestamp when rereading a matching report.
+    // A01/A02: the HTTP API accepts another reference day with a warning,
+    // and preserves the original upload timestamp across snapshot re-reads.
     const sendPdf = async (referenceDate) => {
       const form = new FormData();
       form.append("file", new Blob([small106jPdf(referenceDate)], { type: "application/pdf" }), "106J-test.pdf");
@@ -115,8 +115,13 @@ test("A03 HTTP: confirmation signée, fichier et agence liés, aucune écriture 
       return { status: response.status, payload: await response.json() };
     };
     const wrongPdf = await sendPdf("20 septembre 2026");
-    assert.equal(wrongPdf.status, 422, JSON.stringify(wrongPdf.payload));
-    await assert.rejects(fs.access(path.join(root, "01K", "latest-106j.pdf")), { code: "ENOENT" });
+    assert.equal(wrongPdf.status, 200, JSON.stringify(wrongPdf.payload));
+    assert.equal(wrongPdf.payload.pdfAssociation?.status, "mismatched");
+    assert.equal(wrongPdf.payload.snapshot.dailyIndicators.referenceDate, "20 septembre 2026");
+    await fs.access(path.join(root, "01K", "latest-106j.pdf"));
+    const wrongReread = await fetch(`${base}/api/agencies/01K/snapshot`, { headers: { "x-access-code": "test-01K" } });
+    assert.equal(wrongReread.status, 200);
+    assert.equal((await wrongReread.json()).snapshot.dailyIndicators?.referenceDate, "20 septembre 2026");
     const correctPdf = await sendPdf("17 septembre 2026");
     assert.equal(correctPdf.status, 200, JSON.stringify(correctPdf.payload));
     const savedAt = correctPdf.payload.snapshot.dailyIndicators?.importedAt;
