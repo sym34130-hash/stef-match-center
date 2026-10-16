@@ -87,6 +87,8 @@ try {
       await page.getByRole("button",{name:"Accéder au match",exact:true}).click();
       const leagueBadge=page.locator(".top-league-badge");
       await leagueBadge.waitFor({state:"visible"});
+      assert.equal(await leagueBadge.locator("span").count(),0,
+        "Active league medal/name must not be preceded by redundant standalone Ligue text");
       assert.equal((await leagueBadge.locator("strong").textContent()).trim(),league.label,
         "League display name must follow the saved technical ID");
       assert.equal(league.label, league.label.toLocaleUpperCase("fr-FR"),
