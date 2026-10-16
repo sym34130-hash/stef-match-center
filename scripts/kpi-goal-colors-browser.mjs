@@ -59,10 +59,10 @@ try {
   browser = await chromium.launch({headless:true});
   for(const viewport of [{width:1366,height:768},{width:390,height:844}]) {
     for(const league of [
-      {id:"bronze",label:"Ligue 2",tone:"bronze",target:45,accent:"#168668",cardColor:"#116d52"},
-      {id:"argent",label:"Ligue 1",tone:"silver",target:50,accent:"#2779d4",cardColor:"#1555a2"},
-      {id:"or",label:"Ligue des champions",tone:"gold",target:60,accent:"#7182e8",cardColor:"#303e91"},
-      {id:"platine",label:"Coupe du monde",tone:"platinum",target:70,accent:"#c59436",cardColor:"#815415"},
+      {id:"bronze",label:"Ligue 2",tone:"bronze",target:45,accent:"#d08a52",cardColor:"rgb(17, 103, 77)",cardBackground:"rgb(245, 210, 178)",badgeBackground:"rgb(244, 208, 176)"},
+      {id:"argent",label:"Ligue 1",tone:"silver",target:50,accent:"#8bb5dc",cardColor:"rgb(20, 88, 154)",cardBackground:"rgb(219, 233, 248)",badgeBackground:"rgb(220, 234, 250)"},
+      {id:"or",label:"Ligue des champions",tone:"gold",target:60,accent:"#d7a52f",cardColor:"rgb(52, 59, 132)",cardBackground:"rgb(247, 221, 160)",badgeBackground:"rgb(247, 223, 167)"},
+      {id:"platine",label:"Coupe du monde",tone:"platinum",target:70,accent:"#c58ee8",cardColor:"rgb(129, 84, 21)",cardBackground:"rgb(241, 220, 255)",badgeBackground:"rgb(239, 223, 255)"},
     ]) {
       const context = await browser.newContext({viewport,reducedMotion:"reduce"});
       const page = await context.newPage();
@@ -94,9 +94,9 @@ try {
       assert.match(displayFont,/Barlow Condensed/,"Competition display face on heading");
       const themeAccent=await page.locator(".app-shell").evaluate(el =>
         getComputedStyle(el).getPropertyValue("--league-accent").trim().toLowerCase());
-      assert.equal(themeAccent,league.accent,"Competition accent on active league");
+      assert.equal(themeAccent,league.accent,"Original league theme accent must be preserved");
       const titleColor=await leagueBadge.locator("strong").evaluate(el=>getComputedStyle(el).color);
-      assert.ok(titleColor.startsWith("rgb("),"Competition label must have computed readable colour");
+      assert.equal(titleColor,league.cardColor,"Only competition name ink changes, not its backdrop");
       await page.getByRole("button",{name:"ADM Administrateur",exact:true}).click();
       await page.locator(".administrator-leagues").waitFor({state:"visible"});
       const allCards=page.locator(".administrator-leagues .league-card");
@@ -104,9 +104,18 @@ try {
       const labels=await allCards.locator(".league-card-top strong").allTextContents();
       assert.deepEqual(labels.map(s=>s.trim()),["Ligue 2","Ligue 1","Ligue des champions","Coupe du monde"]);
       const leagueCard=page.locator(".administrator-leagues .league-card." + league.tone);
-      const accent=await leagueCard.evaluate(el=>
-        getComputedStyle(el).getPropertyValue("--competition-card-color").trim().toLowerCase());
-      assert.equal(accent,league.cardColor,"Competition-specific card colour");
+      const cardInk=await leagueCard.locator(".league-card-top strong").evaluate(el =>
+        getComputedStyle(el).color);
+      assert.equal(cardInk,league.cardColor,"Competition-specific TEXT color");
+      const cardBackground=await leagueCard.evaluate(el => getComputedStyle(el).backgroundImage);
+      assert.ok(cardBackground.includes(league.cardBackground),
+        "Previous league card background MUST remain unchanged: "+league.id+": "+cardBackground);
+      const selectedBadge=page.locator(".administrator-active-badge");
+      const badgeBackground=await selectedBadge.evaluate(el => getComputedStyle(el).backgroundImage);
+      assert.ok(badgeBackground.includes(league.badgeBackground),
+        "Previous admin badge background MUST remain unchanged: "+league.id+": "+badgeBackground);
+      const selectedBadgeInk=await selectedBadge.locator("strong").evaluate(el=>getComputedStyle(el).color);
+      assert.equal(selectedBadgeInk,league.cardColor,"Only active competition name ink changes");
       const cardFont=await leagueCard.locator(".league-card-top strong").evaluate(el =>
         getComputedStyle(el).fontFamily);
       assert.match(cardFont,/Barlow Condensed/,"Competition display face on admin card");
