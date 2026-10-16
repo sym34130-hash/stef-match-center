@@ -7,7 +7,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, isTimeRangeWithin, KPI_DICTIONARY_VERSION, normalizePerformanceCriteria, normalizeSnapshotContract, normalizeTimeRange } from "./match-engine.mjs";
 import { parse106jPdf } from "./pdf-106j.mjs";
-import { pdfAssociation } from "./source-provenance.mjs";
+import { pdfAssociation, canUsePdfIndicators } from "./source-provenance.mjs";
 import { operationalAnalysisNeedsRefresh } from "./operational-analysis.mjs";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout } from "./brief-layout.mjs";
 
@@ -208,7 +208,7 @@ app.post("/api/agencies/:agencyCode/time-range", requireAgency, async (req, res)
         });
         return;
       }
-      if (result.snapshot.dailyIndicators && pdfAssociation(result.snapshot.dailyIndicators, result.snapshot).status !== "matched") {
+      if (result.snapshot.dailyIndicators && !canUsePdfIndicators(pdfAssociation(result.snapshot.dailyIndicators, result.snapshot))) {
         const withoutPdf = buildSnapshotFromWorkbook(buffer, currentSnapshot?.sourceName ?? "match.xlsx", req.agency.code,
           { ...period, criteria, dailyIndicators: null, excludedTravelCodes });
         if (!withoutPdf.ok) { res.status(400).json(withoutPdf.error); return; }
@@ -302,7 +302,7 @@ app.post("/api/agencies/:agencyCode/travel-exclusions", requireAgency, async (re
         res.status(400).json(result.error);
         return;
       }
-      if (result.snapshot.dailyIndicators && pdfAssociation(result.snapshot.dailyIndicators, result.snapshot).status !== "matched") {
+      if (result.snapshot.dailyIndicators && !canUsePdfIndicators(pdfAssociation(result.snapshot.dailyIndicators, result.snapshot))) {
         const withoutPdf = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code,
           { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators: null, excludedTravelCodes: nextExcluded });
         if (!withoutPdf.ok) { res.status(400).json(withoutPdf.error); return; }
@@ -500,8 +500,8 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
         const workbook = await readWorkbookForBuild(agencyDir);
         const dailyIndicators = await parse106jPdf(req.file.buffer, req.file.originalname, { uploadedAt: new Date().toISOString() });
         const association = pdfAssociation(dailyIndicators, currentSnapshot);
-        if (association.status !== "matched") {
-          res.status(422).json({ title: "PDF NON ASSOCIÉ", message: association.message, action: "Vérifie la date de référence du rapport et importe un PDF correspondant à la nuit du match." });
+        if (!canUsePdfIndicators(association)) {
+          res.status(422).json({ title: "PDF D’UNE AUTRE AGENCE", message: association.message, action: "Importe un rapport SIE.106J provenant de cette agence." });
           return;
         }
         const period = normalizeTimeRange(currentSnapshot.match?.periodStart, currentSnapshot.match?.periodEnd);
@@ -515,7 +515,7 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
         await savePdfImport(req.agency.code, req.file.originalname, req.file.buffer, dailyIndicators.importedAt);
         await writeJsonAtomic(path.join(agencyDir, "latest.json"), result.snapshot);
         clearCompositionCache(req.agency.code);
-        res.json({ message: "PDF 106J ACTUALISÉ", snapshot: result.snapshot });
+        res.json({ message: "PDF 106J ACTUALISÉ", pdfAssociation: association, snapshot: result.snapshot });
         return;
       }
 
@@ -545,7 +545,7 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
       }
       const lastPdf = await readLatestPdfIndicators(agencyDir);
       const association = lastPdf ? pdfAssociation(lastPdf, initialResult.snapshot) : null;
-      const dailyIndicators = association?.status === "matched" ? lastPdf : null;
+      const dailyIndicators = canUsePdfIndicators(association) ? lastPdf : null;
       const result = dailyIndicators
         ? buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code, { dailyIndicators })
         : initialResult;
@@ -967,7 +967,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
       try {
         const workbook = await readWorkbookForBuild(agencyDir);
         const pdfCandidate = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;
-        const dailyIndicators = pdfCandidate && pdfAssociation(pdfCandidate, snapshot).status === "matched" ? pdfCandidate : null;
+        const dailyIndicators = pdfCandidate && canUsePdfIndicators(pdfAssociation(pdfCandidate, snapshot)) ? pdfCandidate : null;
         const period = normalizeTimeRange(snapshot.match?.periodStart, snapshot.match?.periodEnd);
         const rebuilt = buildSnapshotFromWorkbook(
           workbook,
@@ -994,7 +994,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
       try {
         const workbook = await readWorkbookForBuild(agencyDir);
         const pdfCandidate = (await readLatestPdfIndicators(agencyDir)) ?? snapshot.dailyIndicators ?? null;
-        const dailyIndicators = pdfCandidate && pdfAssociation(pdfCandidate, snapshot).status === "matched" ? pdfCandidate : null;
+        const dailyIndicators = pdfCandidate && canUsePdfIndicators(pdfAssociation(pdfCandidate, snapshot)) ? pdfCandidate : null;
         const storedCriteria = normalizePerformanceCriteria(snapshot.performanceCriteria);
         const period = normalizeTimeRange(snapshot.match?.periodStart, snapshot.match?.periodEnd);
         const rebuilt = buildSnapshotFromWorkbook(
