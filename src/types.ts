@@ -232,6 +232,7 @@ export type Snapshot = {
     sourceName: string;
     importedAt: string | null;
     referenceDate: string | null;
+    agencyCode?: string | null;
     punctuality: Partial<Record<"arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn", number>>;
     punctualityTargets?: Partial<Record<"arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn", number>>;
     expedition: { tonnage?: number };
