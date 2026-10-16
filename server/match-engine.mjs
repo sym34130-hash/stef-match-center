@@ -2064,31 +2064,6 @@ function buildHourlyPassPerformance(workbook, period, scoringRows = null, source
   };
 }
 
-function readHourlyChartHours(workbook) {
-  const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "x");
-  const sheet = sheetName ? workbook.Sheets[sheetName] : null;
-  if (!sheet) return new Set();
-  const chartHeader = Object.entries(sheet).find(([address, cell]) => !address.startsWith("!") && normalizeKey(cell?.v) === "somme de passes reussies");
-  if (!chartHeader) return new Set();
-  const chartHeaderCell = XLSX.utils.decode_cell(chartHeader[0]);
-  const range = XLSX.utils.decode_range(sheet["!ref"] ?? "A1:A1");
-  let chartHourColumn = -1;
-  for (let col = chartHeaderCell.c - 1; col >= 0; col -= 1) {
-    if (normalizeKey(sheet[XLSX.utils.encode_cell({ r: chartHeaderCell.r, c: col })]?.v) === "heure op") {
-      chartHourColumn = col;
-      break;
-    }
-  }
-  if (chartHourColumn < 0) return new Set();
-  const hours = new Set();
-  for (let row = chartHeaderCell.r + 1; row <= range.e.r; row += 1) {
-    const hour = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: chartHourColumn })]?.v);
-    const rate = parseNumber(sheet[XLSX.utils.encode_cell({ r: row, c: chartHeaderCell.c })]?.v);
-    if (Number.isFinite(hour) && Number.isFinite(rate)) hours.add(Math.round(hour));
-  }
-  return hours;
-}
-
 function statusFromScore(score) {
   if (score >= 85) return "MAÎTRISÉ";
   if (score >= 70) return "À SURVEILLER";
