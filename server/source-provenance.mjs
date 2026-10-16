@@ -46,7 +46,7 @@ export function pdfAssociation(pdf, snapshot) {
   };
   if (date !== start && date !== end) return {
     status: "mismatched", referenceDate: pdf.referenceDate,
-    message: `Le rapport 106J correspond au ${pdf.referenceDate}, hors des dates d'exploitation ${start} à ${end}.`,
+    message: `PDF 106J du ${pdf.referenceDate} : date différente de la période Excel (${start} à ${end}). Import autorisé ; ces indicateurs journaliers sont indépendants de la plage Excel.`,
   };
   return { status: "matched", referenceDate: pdf.referenceDate, message: "PDF 106J associé à la période du match." };
 }
