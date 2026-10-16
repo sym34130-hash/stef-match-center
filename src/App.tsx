@@ -137,10 +137,10 @@ class ApiError extends Error {
 }
 
 const leagueOptions: LeagueConfig[] = [
-  { id: "bronze", label: "Ligue 2", tone: "bronze", description: "Un niveau accessible pour installer les standards.", zonageMinutes: 45, loadingSeconds: 195, unloadingSeconds: 75, scoreTargetPercent: 45 },
-  { id: "argent", label: "Ligue 1", tone: "silver", description: "Le niveau de référence actuellement proposé.", zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 },
-  { id: "or", label: "Ligue des champions", tone: "gold", description: "Un niveau plus exigeant pour tirer la performance vers le haut.", zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 },
-  { id: "platine", label: "Coupe du monde", tone: "platinum", description: "Le niveau d’excellence, à confirmer sur plusieurs imports.", zonageMinutes: 20, loadingSeconds: 135, unloadingSeconds: 50, scoreTargetPercent: 70 },
+  { id: "bronze", label: "LIGUE 2", tone: "bronze", description: "Un niveau accessible pour installer les standards.", zonageMinutes: 45, loadingSeconds: 195, unloadingSeconds: 75, scoreTargetPercent: 45 },
+  { id: "argent", label: "LIGUE 1", tone: "silver", description: "Le niveau de référence actuellement proposé.", zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 },
+  { id: "or", label: "LIGUE DES CHAMPIONS", tone: "gold", description: "Un niveau plus exigeant pour tirer la performance vers le haut.", zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 },
+  { id: "platine", label: "COUPE DU MONDE", tone: "platinum", description: "Le niveau d’excellence, à confirmer sur plusieurs imports.", zonageMinutes: 20, loadingSeconds: 135, unloadingSeconds: 50, scoreTargetPercent: 70 },
 ];
 
 const zonageMinuteOptions = Array.from({ length: 120 }, (_, index) => index + 1);
@@ -3932,7 +3932,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
             <GuidePanel eyebrow="07 · Administrateur" title="Régler les ligues et leurs standards" icon={Settings2}>
               <p>L’onglet Administrateur sert à choisir un niveau de référence et à ajuster ses conditions de performance : la cible de zonage, les temps maximum de chargement et de réception, ainsi que l’objectif en pourcentage de chaque indicateur du score.</p>
               <div className="guide-action-list">
-                <GuideAction icon={Trophy} title="Choisir une ligue" tone="blue" detail="Activez Ligue 2, Ligue 1, Ligue des champions ou Coupe du monde. Le niveau sélectionné devient la référence affichée dans le centre de pilotage." />
+                <GuideAction icon={Trophy} title="Choisir une ligue" tone="blue" detail="Activez LIGUE 2, LIGUE 1, LIGUE DES CHAMPIONS ou COUPE DU MONDE. Le niveau sélectionné devient la référence affichée dans le centre de pilotage." />
                 <GuideAction icon={Target} title="Régler le zonage" tone="green" detail="Modifiez la cible en minutes directement dans le panneau de la ligue. Une valeur plus basse correspond à un standard plus exigeant." />
                 <GuideAction icon={Clock3} title="Régler le chargement" tone="orange" detail="Modifiez le temps maximum par position au format HH:MM:SS. Une durée plus courte rend la cible plus exigeante." />
               <GuideAction icon={Clock3} title="Régler le temps de réception" tone="blue" detail="Modifiez le temps maximum par position au format HH:MM:SS. Ce seuil sert à qualifier les voyages de réception selon le périmètre de chaque indicateur." />
