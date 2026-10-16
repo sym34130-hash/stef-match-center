@@ -35,11 +35,11 @@ export function ReceptionHourlyChart({ snapshot }: { snapshot: Snapshot }) {
     {!available ? <p className="analysis-empty" role="status">Analyse indisponible : aucune réception exploitable sur la période retenue.</p> : <>
       <div className="reception-hour-chart" role="group" aria-label="Histogramme des temps moyens, en secondes par position">
         <div className="reception-hour-axis" aria-hidden="true"><span>{ceiling} s</span><span>{ceiling / 2} s</span><span>0 s</span></div>
-        <div className="reception-hour-plot">
-          <div className="reception-hour-target" aria-hidden="true" style={{ bottom: `${analysis.targetSeconds / ceiling * 100}%` }} />
+        <div className="reception-hour-plot" style={{ "--target-height": `${analysis.targetSeconds / ceiling * 100}%` } as CSSProperties}>
+          <div className="reception-hour-target" aria-hidden="true" />
           <div className="reception-hour-bars" style={{ gridTemplateColumns: `repeat(${slots.length}, minmax(0, 1fr))` }}>
             {slots.map(slot => <button key={slot.start} type="button"
-              className={`reception-hour-button${slot.meanSecondsPerPosition != null && slot.meanSecondsPerPosition > analysis.targetSeconds ? " is-over-target" : ""}${selected?.start === slot.start ? " is-selected" : ""}`}
+              className={`reception-hour-button${slot.meanSecondsPerPosition != null && slot.meanSecondsPerPosition > analysis.targetSeconds ? " is-over-target" : ""}${selected?.start === slot.start ? " is-selected" : ""}${slot.state !== "disponible" || slot.meanSecondsPerPosition == null ? " is-unavailable" : ""}`}
               style={{ "--bar-height": `${(slot.meanSecondsPerPosition ?? 0) / ceiling * 100}%` } as CSSProperties}
               aria-pressed={selected?.start === slot.start} aria-controls="reception-hour-detail"
               aria-label={`${clock(slot.start)}–${clock(slot.end)} : ${slot.state === "disponible" ? `${count(slot.distinctPositions)} position${slot.distinctPositions === 1 ? "" : "s"} distincte${slot.distinctPositions === 1 ? "" : "s"}` : "positions indisponibles"}, moyenne ${duration(slot.meanSecondsPerPosition)}, ${slot.travelCount} voyage${slot.travelCount === 1 ? "" : "s"}`}
