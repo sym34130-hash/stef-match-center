@@ -4,6 +4,7 @@ import { ChevronRight, Info, ListFilter, X } from "lucide-react";
 import type { CSSProperties } from "react";
 import type { OperatingNight, Snapshot } from "./types";
 import { formatKpiDuration } from "./kpi-duration";
+import { QualificationReason } from "./QualificationReason";
 import "./operational-analysis.css";
 
 const percent = (value: number | null | undefined) => value == null ? "—" : `${value.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %`;
@@ -58,11 +59,6 @@ export function ReceptionHourlyChart({ snapshot }: { snapshot: Snapshot }) {
     </>}
   </section>;
 }
-
-const reasonLabel: Record<string, string> = {
-  receptions_contradictoires: "Réceptions contradictoires", voyage_reception_absent: "Voyage de réception absent",
-  zonage_uniquement_anterieur: "Zonage uniquement antérieur", zonage_absent: "Zonage non identifié",
-};
 
 export function OperationalDiagnosticCard({ snapshot }: { snapshot: Snapshot }) {
   const z = snapshot.zonageDiagnostic, summary = snapshot.anomalySummary;
@@ -127,7 +123,7 @@ export function OperationalDiagnosticCard({ snapshot }: { snapshot: Snapshot }) 
       {detailStats && <dl className="diagnostic-detail-stats">
         <div><dt>Réceptionnées</dt><dd>{count(detailStats.receivedPositions)}</dd></div><div><dt>Hors délai</dt><dd>{count(detailStats.latePositions)}</dd></div><div><dt>Dans le délai</dt><dd>{count(detailStats.onTimePositions)}</dd></div><div><dt>Non vérifiables</dt><dd>{count(detailStats.unqualifiablePositions)}</dd></div><div><dt>Qualifiables</dt><dd>{count(detailStats.qualifiablePositions)}</dd></div><div><dt>Taux d'anomalie</dt><dd>{percent(detailStats.anomalyRate)}</dd></div><div><dt>Couverture</dt><dd>{percent(detailStats.coverageRate)}</dd></div>
       </dl>}
-      <ul className="zonage-detail-list">{entries.map(entry => <li key={`${entry.travelCode}-${entry.position}`}><div><strong>{entry.position}</strong><span>Voyage {entry.travelCode || "—"}</span></div><div><b>{entry.classification === "hors_delai" ? "Hors délai" : "Non qualifiable"}</b><span>{entry.reason ? reasonLabel[entry.reason] ?? "Association non qualifiable" : duration(entry.delaySeconds)}</span></div></li>)}</ul>
+      <ul className="zonage-detail-list">{entries.map(entry => <li key={`${entry.travelCode}-${entry.position}`}><div><strong>{entry.position}</strong><span>Voyage {entry.travelCode || "—"}</span></div><div><b>{entry.classification === "hors_delai" ? "Hors délai" : "Non qualifiable"}</b>{entry.classification === "non_qualifiable" ? <QualificationReason reason={entry.reason} position={entry.position} /> : <span>{duration(entry.delaySeconds)}</span>}</div></li>)}</ul>
     </dialog>, document.body)}
   </section>;
 }

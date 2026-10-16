@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState, t
 import { createPortal } from "react-dom";
 import { ceremonyPolyvalents } from "./ceremony-selection";
 import { formatKpiDuration } from "./kpi-duration";
+import { qualificationReasons } from "./qualification-reasons";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout } from "../server/brief-layout.mjs";
 import {
   AlertTriangle,
@@ -3874,6 +3875,10 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                 <p>Chaque barre représente toutes les positions réceptionnées du voyage : les trois segments totalisent 100 %. Une barre très grise contient beaucoup de délais non vérifiables. Une part rouge plus grande ne signifie pas forcément un plus grand nombre de retards.</p>
               </section>
               <div className="guide-callout info"><CircleHelp size={20} /><span><strong>Délai impossible à calculer avec les données disponibles. Ces positions ne sont pas comptées comme des retards.</strong> Une opération de zonage peut être introuvable ou son association à la réception incertaine. Non vérifiable ne veut donc pas automatiquement dire non zoné.</span></div>
+              <details className="guide-topic guide-disclosure"><summary>Comprendre les motifs « Non qualifiable »</summary>
+                <p>Une position non qualifiable est une position dont le délai de zonage ne peut pas être vérifié de manière fiable avec les données disponibles. Elle n'est pas automatiquement considérée comme un retard.</p>
+                <dl className="guide-diagnostic-definitions guide-qualification-glossary">{Object.entries(qualificationReasons).map(([code, reason]) => <div key={code}><dt>{reason.label}</dt><dd>{reason.summary}</dd></div>)}</dl>
+              </details>
               <section className="guide-topic"><h4>Du constat au brief</h4>
                 <ol className="guide-steps compact">
                   <li><b>Repérez le premier voyage du FLOP.</b><span>Utilisez la flèche à droite de sa ligne pour ouvrir ses positions à examiner.</span></li>
