@@ -306,7 +306,8 @@ try {
   const refreshedLatestPayload = await refreshedLatestResponse.json();
   assert.equal(refreshedLatestResponse.status, 200, JSON.stringify(refreshedLatestPayload));
   assert.deepEqual(refreshedLatestPayload.snapshot.performanceCriteria, leagueApiExpectations[2].criteria, "Un rafraîchissement sans query conserve la ligue active");
-  assert.equal(refreshedLatestPayload.snapshot.operationalScore.goalsFor, 1, "Le rafraîchissement sans query conserve le score Platine");
+  assert.equal(refreshedLatestPayload.snapshot.operationalScore.goalsFor,
+    expectedGoals(refreshedLatestPayload.snapshot), "Le rafraîchissement sans query conserve le score recalculé Platine");
   assertFiniteJson(refreshedLatestPayload.snapshot);
 
   const timeRangeResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/time-range`, {
