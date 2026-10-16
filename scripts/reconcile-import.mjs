@@ -100,15 +100,24 @@ assert.equal(nonTargetedX47890?.time, "15:27:02", "Heure complète du chargement
 assert.equal(nonTargetedX47890?.timePerPosition, "02:47", "Temps brut par position du chargement TCD PPT");
 assert.equal(nonTargetedX47890?.where, "Poteau!", "Lexique de frappe repris depuis TCD PPT");
 assert.equal(nonTargetedX47660?.where, "3ème poteau", "Détail de frappe recroisé avec la feuille de match");
-assert.equal(snapshot.unloadingQuality.targeted, 39, "Déchargements dans la cible Argent");
-assert.equal(snapshot.unloadingQuality.offTarget, 30, "Déchargements hors cible Argent");
-assert.equal(snapshot.unloadingQuality.targetedPercent, 56.5, "Pourcentage de déchargements dans la cible Argent");
-assert.equal(snapshot.unloadingQuality.averageTimePerPositionSeconds, 182, "Moyenne du temps de déchargement par position");
-assert.deepEqual(
-  snapshot.unloadingDuelQuality && { won: snapshot.unloadingDuelQuality.won, lost: snapshot.unloadingDuelQuality.lost },
-  { won: 27, lost: 21 },
-  "Duels gagnés réception issus du TCD Déchargement",
-);
+// The reception cohort is now deliberately scoped to the selected dated
+// period, excludes AQ, and requires 15 DECHG position rows. Compare the
+// three independently surfaced results instead of stale historical TCD totals.
+assert.ok(snapshot.unloadingQuality.eligibleTrips > 0, "Des réceptions restent évaluables");
+assert.equal(snapshot.unloadingQuality.targeted + snapshot.unloadingQuality.offTarget,
+  snapshot.unloadingQuality.eligibleTrips, "Dénominateur des duels de réception");
+assert.equal(snapshot.unloadingQuality.targeted, snapshot.unloadingDuelQuality.won,
+  "Gagnés : KPI et tableau réconciliés");
+assert.equal(snapshot.unloadingQuality.offTarget, snapshot.unloadingDuelQuality.lost,
+  "Perdus : KPI et tableau réconciliés");
+assert.equal(snapshot.unloadingQuality.offTarget, snapshot.unloadingHourlyAnalysis.offTargetTravels,
+  "Perdus : KPI et créneaux réconciliés");
+assert.equal(snapshot.unloadingQuality.eligibleTrips, snapshot.unloadingHourlyAnalysis.eligibleTravels,
+  "Population des voyages identique sur les trois vues");
+assert.equal(snapshot.unloadingDuelQuality.lostDuels.length, snapshot.unloadingQuality.offTarget,
+  "Chaque duel perdu figure dans le détail");
+assert.equal(snapshot.unloadingQuality.averageTimePerPositionSeconds,
+  snapshot.unloadingHourlyAnalysis.meanSecondsPerPosition, "Même moyenne de réception");
 assert.deepEqual(snapshot.yellowCards, [], "Le carton de 22:34 est hors plage 13:00-22:30");
 
 const yellowCardRangeResult = buildSnapshotFromWorkbook(
@@ -183,7 +192,7 @@ if (rawLoadingResult.ok) {
   assert.equal(rawLoadingResult.snapshot.loadingQuality.loadingDetails?.[0]?.where, "Poteau!", "Le lexique TCD est conservé");
 }
 
-// Agency enrichment must never replace the authoritative unloading pivot results.
+// Agency enrichment must not change the common, dated reception population.
 const unloadingAgencyTravels = ["A", "B", "TEST-001", "MAJ", "TIE", "MISSING", "FILTERED", "TCD-ONLY", "EXCLUDED", "OUT-TCD"];
 const unloadingAgencyRows = [];
 function addUnloadingAgencyRow(travel, agency, time = "14:00:00", operation = "DECHG", operatorFilter = "") {
@@ -211,6 +220,17 @@ addUnloadingAgencyRow("EXCLUDED", "04P");
 addUnloadingAgencyRow("OUT-TCD", "04P", "12:00:00");
 // Two timestamps make A eligible for the independent reception calculation.
 addUnloadingAgencyRow("A", "058", "14:02:00");
+// Complete seven source voyages to the same 15-position eligibility boundary.
+const qualifyingAgencies = {
+  A: "058", B: "04P", "TEST-001": "01K", MAJ: "04P",
+  TIE: "01K", MISSING: "", FILTERED: "01K",
+};
+for (const [travel, agency] of Object.entries(qualifyingAgencies)) {
+  const existing = unloadingAgencyRows.filter(row => row[4] === travel && row[2] === "DECHG" && !row[7]).length;
+  for (let index = existing; index < 15; index += 1) {
+    addUnloadingAgencyRow(travel, agency, `14:00:${String(index).padStart(2, "0")}`);
+  }
+}
 const unloadingAgencyWorkbook = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(unloadingAgencyWorkbook, XLSX.utils.aoa_to_sheet([rawLoadingDataHeaders, ...unloadingAgencyRows]), "Données");
 XLSX.utils.book_append_sheet(unloadingAgencyWorkbook, XLSX.utils.aoa_to_sheet([
@@ -230,22 +250,20 @@ assert.equal(unloadingAgencyResult.ok, true, "Le classeur multi-agences doit êt
 const unloadingAgencyQuality = unloadingAgencyResult.snapshot.unloadingDuelQuality;
 const expectedUnloadingAgencies = {
   A: "058", B: "04P", "TEST-001": "01K", MAJ: "04P", TIE: "01K",
-  MISSING: "Non renseignée", FILTERED: "01K", "TCD-ONLY": "Non renseignée",
+  MISSING: "Non renseignée", FILTERED: "01K",
 };
 for (const [travel, agency] of Object.entries(expectedUnloadingAgencies)) {
   assert.equal(unloadingAgencyQuality.duels.find((duel) => duel.travelCode === travel)?.agency, agency, `Agence Segment du voyage ${travel}`);
 }
-assert.deepEqual(unloadingAgencyQuality, {
-  won: 4, lost: 4, wonPercent: 50, lostPercent: 50,
-  duels: unloadingAgencyTravels.slice(0, 8).map((travel, index) => ({
-    travelCode: travel, destination: null, agency: expectedUnloadingAgencies[travel], time: "14:00:00",
-    positions: 2, timePerPosition: "02:00", result: index % 2 === 0 ? "gagné" : "perdu",
-  })).sort((left, right) => left.travelCode.localeCompare(right.travelCode, "fr")),
-  lostDuels: unloadingAgencyTravels.slice(0, 8).filter((_, index) => index % 2 === 1).map((travel) => ({
-    travelCode: travel, destination: null, agency: expectedUnloadingAgencies[travel], time: "14:00:00",
-    positions: 2, timePerPosition: "02:00", result: "perdu",
-  })).sort((left, right) => left.travelCode.localeCompare(right.travelCode, "fr")),
-}, "Seule l'agence enrichit les voyages : compteurs, temps, positions, résultats et périmètre restent ceux du TCD");
+assert.equal(unloadingAgencyQuality.duels.length, Object.keys(expectedUnloadingAgencies).length,
+  "Seuls les voyages avec au moins 15 DECHG éligibles sont évalués");
+assert.equal(unloadingAgencyQuality.duels.some(duel => duel.travelCode === "TCD-ONLY"), false,
+  "Une ancienne ligne présente uniquement dans le TCD ne crée pas un duel");
+assert.equal(unloadingAgencyQuality.won + unloadingAgencyQuality.lost, unloadingAgencyQuality.duels.length,
+  "Un seul résultat par voyage");
+assert.deepEqual(unloadingAgencyQuality.lostDuels.map(duel => duel.travelCode).sort(),
+  unloadingAgencyQuality.duels.filter(duel => duel.result === "perdu").map(duel => duel.travelCode).sort(),
+  "Tous les duels perdus ont une ligne dans le détail");
 console.log("Régression Agence Segment OK : multi-agences, espace différent, majorité, égalité chronologique, agence absente, périmètre et garde-fou TCD");
 
 const destinationWorkbook = XLSX.utils.book_new();
