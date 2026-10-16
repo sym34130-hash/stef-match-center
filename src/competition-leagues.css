@@ -1,0 +1,240 @@
+/* League identity refresh — visual treatment only.
+   Historical IDs and score thresholds remain unchanged. The four competition
+   names receive an athletic display face and separate, accessible palettes. */
+:root {
+  --competition-display-font: "Barlow Condensed", "Arial Narrow", "Aptos Narrow",
+    "Franklin Gothic Medium", sans-serif;
+}
+
+/* Ligue 2: pitch emerald, Ligue 1: stadium royal blue,
+   Champions League: night-sky indigo, World Cup: trophy gold. */
+.app-shell.league-bronze {
+  --league-accent: #168668;
+  --league-deep: #0d664f;
+  --league-ink: #0b5745;
+  --league-soft: #e0f7eb;
+  --league-line: rgba(16, 138, 99, .46);
+  --league-shadow: rgba(18, 115, 82, .25);
+  --league-page-2: #174b49;
+  --league-page-3: #175f51;
+  --league-glow: rgba(91, 224, 169, .34);
+  --league-glow-soft: rgba(116, 239, 194, .13);
+  --league-glint: rgba(212, 255, 234, .8);
+}
+.app-shell.league-argent {
+  --league-accent: #2779d4;
+  --league-deep: #1456a0;
+  --league-ink: #12457f;
+  --league-soft: #e6f2ff;
+  --league-line: rgba(39, 121, 212, .44);
+  --league-shadow: rgba(30, 99, 194, .25);
+  --league-page-2: #173e7d;
+  --league-page-3: #1e61a2;
+  --league-glow: rgba(106, 181, 255, .36);
+  --league-glow-soft: rgba(154, 208, 255, .16);
+  --league-glint: rgba(225, 245, 255, .84);
+}
+.app-shell.league-or {
+  --league-accent: #7182e8;
+  --league-deep: #394ab0;
+  --league-ink: #28377d;
+  --league-soft: #e8edff;
+  --league-line: rgba(89, 104, 208, .48);
+  --league-shadow: rgba(66, 76, 188, .3);
+  --league-page-2: #222c67;
+  --league-page-3: #38357f;
+  --league-glow: rgba(132, 143, 255, .36);
+  --league-glow-soft: rgba(177, 181, 255, .16);
+  --league-glint: rgba(230, 232, 255, .87);
+}
+.app-shell.league-platine {
+  --league-accent: #c59436;
+  --league-deep: #936118;
+  --league-ink: #755015;
+  --league-soft: #fff2d8;
+  --league-line: rgba(189, 133, 34, .46);
+  --league-shadow: rgba(150, 98, 28, .3);
+  --league-page-2: #503745;
+  --league-page-3: #765327;
+  --league-glow: rgba(255, 209, 116, .38);
+  --league-glow-soft: rgba(255, 222, 157, .16);
+  --league-glint: rgba(255, 239, 203, .88);
+}
+
+/* Athletic condensed titles; text remains real text, with graceful font fallback. */
+.top-league-badge strong,
+.administrator-active-badge strong,
+.league-card-top strong,
+.guide-league-card-top strong,
+.coach-league-badge strong {
+  font-family: var(--competition-display-font);
+  font-optical-sizing: auto;
+  font-weight: 800;
+  font-stretch: condensed;
+  text-transform: uppercase;
+  letter-spacing: .025em;
+  line-height: 1.07;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: auto;
+}
+.top-league-badge {
+  column-gap: 8px;
+  max-width: min(100%, 260px);
+  padding: 7px 11px;
+}
+.top-league-badge strong {
+  color: var(--league-ink);
+  font-size: clamp(14px, 1.18vw, 17px);
+}
+.top-league-badge svg {
+  flex: 0 0 auto;
+}
+.league-card-top {
+  gap: 8px 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.league-card-top strong {
+  flex: 1 1 132px;
+  font-size: clamp(21px, 1.9vw, 26px);
+  letter-spacing: .02em;
+}
+.league-card-top .league-select-button {
+  flex: 0 0 auto;
+}
+.guide-league-card-top strong {
+  flex: 1 1 auto;
+  font-size: clamp(20px, 2.1vw, 24px);
+}
+.administrator-active-badge {
+  max-width: min(100%, 300px);
+}
+.administrator-active-badge strong {
+  font-size: clamp(24px, 2.3vw, 31px);
+  color: var(--league-ink);
+}
+.coach-league-badge strong {
+  font-size: clamp(18px, 1.8vw, 23px);
+}
+
+/* Self-contained palette per league card, independent of active league theme. */
+:is(.league-card, .guide-league-card).bronze {
+  --competition-card-color: #116d52;
+  --competition-card-soft: #d4f0e2;
+  border-top-color: #168668;
+  background: linear-gradient(125deg, #f5fffa 0%, #d4f0e2 48%, #ebfff3 100%);
+}
+:is(.league-card, .guide-league-card).silver {
+  --competition-card-color: #1555a2;
+  --competition-card-soft: #d4e8ff;
+  border-top-color: #2779d4;
+  background: linear-gradient(125deg, #f7fbff 0%, #d5e9ff 48%, #e9f4ff 100%);
+}
+:is(.league-card, .guide-league-card).gold {
+  --competition-card-color: #303e91;
+  --competition-card-soft: #dce4ff;
+  border-top-color: #6375dc;
+  background: linear-gradient(125deg, #f9fbff 0%, #dce3ff 48%, #edf0ff 100%);
+}
+:is(.league-card, .guide-league-card).platinum {
+  --competition-card-color: #815415;
+  --competition-card-soft: #f9e2ac;
+  border-top-color: #ba842c;
+  border-color: rgba(180, 126, 38, .45);
+  border-top-width: 5px;
+  background: linear-gradient(125deg, #fffcf5 0%, #f7dfa9 45%, #fff0cd 100%);
+  box-shadow: 0 0 0 2px rgba(199, 151, 58, .15), 0 18px 38px rgba(104, 65, 23, .13);
+}
+.league-card.platinum {
+  animation: none;
+}
+.league-card.platinum::before {
+  animation: none;
+  background: linear-gradient(135deg, rgba(255, 246, 211, .4), transparent 40%, rgba(183, 128, 29, .09));
+}
+.league-card.platinum::after {
+  background: linear-gradient(108deg, transparent 25%, rgba(255, 255, 255, .64) 48%, transparent 72%);
+  opacity: .45;
+}
+:is(.league-card, .guide-league-card) :is(.league-card-top, .guide-league-card-top) strong {
+  color: var(--competition-card-color);
+}
+.league-card.is-selected {
+  border-color: var(--competition-card-color, var(--blue-stef));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--competition-card-color, var(--blue-stef)) 18%, transparent);
+}
+.league-card .league-select-button {
+  border-color: color-mix(in srgb, var(--competition-card-color) 35%, white);
+  color: var(--competition-card-color);
+}
+.league-card .league-select-button:hover,
+.league-card .league-select-button:focus-visible {
+  color: #fff;
+  border-color: var(--competition-card-color);
+  background: var(--competition-card-color);
+}
+:is(.league-card.bronze, .guide-league-card.bronze) :is(.league-medal, .guide-league-medal) {
+  background: linear-gradient(145deg, #24ac84, #0b674e);
+}
+:is(.league-card.silver, .guide-league-card.silver) :is(.league-medal, .guide-league-medal) {
+  background: linear-gradient(145deg, #67b7ff, #1454a7);
+}
+:is(.league-card.gold, .guide-league-card.gold) :is(.league-medal, .guide-league-medal) {
+  background: linear-gradient(145deg, #8ba3ff, #333d97);
+}
+:is(.league-card.platinum, .guide-league-card.platinum) :is(.league-medal, .guide-league-medal) {
+  background: linear-gradient(145deg, #e9c46f, #996316);
+}
+
+/* Compact active-league trophy and coaching chips inherit competition palette. */
+.administrator-active-badge.bronze {
+  border-top-color: #168668;
+  background: linear-gradient(135deg, #f5fffa, #cdefdf);
+}
+.administrator-active-badge.silver {
+  border-top-color: #2779d4;
+  background: linear-gradient(135deg, #f6fbff, #d5e9ff);
+}
+.administrator-active-badge.gold {
+  border-top-color: #6375dc;
+  background: linear-gradient(135deg, #fafbff, #dce4ff);
+}
+.administrator-active-badge.platinum {
+  border-top-color: #ba842c;
+  background: linear-gradient(135deg, #fffdf8, #f6dda5);
+}
+.coach-league-badge.bronze {
+  color: #9ef1c9;
+  border-color: rgba(82, 218, 161, .52);
+  background: rgba(15, 115, 84, .24);
+}
+.coach-league-badge.silver {
+  color: #b7dbff;
+  border-color: rgba(113, 182, 255, .55);
+  background: rgba(30, 96, 166, .25);
+}
+.coach-league-badge.gold {
+  color: #c9d2ff;
+  border-color: rgba(154, 162, 255, .62);
+  background: rgba(56, 63, 153, .24);
+}
+.coach-league-badge.platinum {
+  color: #ffe3a5;
+  border-color: rgba(237, 187, 100, .63);
+  background: rgba(152, 91, 22, .22);
+}
+@media (max-width: 640px) {
+  .top-league-badge {
+    max-width: min(100%, 208px);
+    padding: 6px 8px;
+  }
+  .top-league-badge strong { font-size: 14px; }
+  .league-card-top strong { font-size: 23px; }
+  .guide-league-card-top strong { font-size: 21px; }
+  .administrator-active-badge strong { font-size: 23px; }
+  .coach-league-badge strong { font-size: 19px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .league-card.platinum::after { animation: none; }
+}
