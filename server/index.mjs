@@ -501,7 +501,7 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
         const dailyIndicators = await parse106jPdf(req.file.buffer, req.file.originalname, { uploadedAt: new Date().toISOString() });
         const association = pdfAssociation(dailyIndicators, currentSnapshot);
         if (!canUsePdfIndicators(association)) {
-          res.status(422).json({ title: "PDF D’UNE AUTRE AGENCE", message: association.message, action: "Importe un rapport SIE.106J provenant de cette agence." });
+          res.status(422).json({ title: "PDF 106J NON UTILISABLE", message: association.message, action: "Vérifie que le document est un rapport SIE.106J lisible." });
           return;
         }
         const period = normalizeTimeRange(currentSnapshot.match?.periodStart, currentSnapshot.match?.periodEnd);
