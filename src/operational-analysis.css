@@ -91,10 +91,13 @@
 .reception-hour-bar { position: absolute; bottom: 0; left: 22%; right: 22%; height: var(--bar-height); background: #20856b; border-radius: 4px 4px 0 0; }
 .reception-hour-button.is-over-target .reception-hour-bar { background: #ba4050; }
 .reception-hour-button.is-selected { background: #1d4e8910; box-shadow: inset 0 0 0 1px #1d4e89; }
-.reception-hour-value { position: absolute; bottom: calc(var(--bar-height) + 4px); left: 0; right: 0; font-size: 12px; line-height: 1.2; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: clip; font-variant-numeric: tabular-nums; text-align: center; }
+/* Keep the volume ABOVE both its bar AND the dashed target. Labels near
+   the threshold otherwise sit directly behind the objective marker. */
+.reception-hour-value { position: absolute; bottom: max(calc(var(--bar-height) + 6px), calc(var(--target-height) + 10px)); left: 0; right: 0; z-index: 2; font-size: 12px; line-height: 1.2; font-weight: 800; white-space: nowrap; overflow: visible; pointer-events: none; font-variant-numeric: tabular-nums; text-align: center; }
+.reception-hour-button.is-unavailable .reception-hour-value { bottom: 4px; }
 .reception-hour-value-unit { font-weight: 700; font-size: .8em; }
 .reception-hour-label { position: absolute; top: calc(100% + 6px); left: 0; right: 0; font-size: 12px; line-height: 1.3; }
-.reception-hour-target { position: absolute; left: 0; right: 0; border-top: 2px dashed #1d4e89; pointer-events: none; z-index: 1; }
+.reception-hour-target { position: absolute; bottom: var(--target-height); left: 0; right: 0; border-top: 2px dashed #1d4e89; pointer-events: none; z-index: 1; }
 .reception-hour-detail { display: flex; flex-wrap: wrap; gap: 6px 18px; min-height: 42px; font-size: 12px; line-height: 1.5; align-content: start; }
 .reception-hour-detail > span { color: #52657d; }
 .operational-charts-carousel .reception-hour-detail > strong { color: var(--navy-900); }
@@ -210,6 +213,7 @@
   .reception-hour-button:nth-child(even) .reception-hour-label { top: calc(100% + 20px); }
 }
 @media (max-width: 360px) {
+  .reception-hour-value { font-size: 8px; letter-spacing: -.055em; }
   .operational-charts-carousel .loading-quality-card[aria-label="Qualité des chargements"] .loading-quality-pie,
   .operational-charts-carousel .centers-quality-card .loading-quality-pie { max-width: 100%; }
   .operational-charts-carousel .loading-quality-card[aria-label="Qualité des chargements"] .loading-quality-heading { flex-wrap: wrap; }

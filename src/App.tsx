@@ -1037,7 +1037,6 @@ function TopBar({ snapshot, agency, activeLeague, onRefresh, onTimeRangeChange, 
       <div className="top-actions">
         <div className={`top-league-badge ${activeLeague.tone}`} aria-label={`Ligue active : ${activeLeague.label}`}>
           <LeagueIcon leagueId={activeLeague.id} size={17} />
-          <span>Ligue</span>
           <strong>{activeLeague.label}</strong>
         </div>
         {snapshot && (
