@@ -42,11 +42,17 @@ export function pdfAssociation(pdf, snapshot) {
   const end = night?.endDate ?? parisDay(snapshot?.match?.lastOperation);
   if (!date || !start || !end) return {
     status: "unverified", referenceDate: pdf?.referenceDate ?? null,
-    message: "Impossible de vérifier automatiquement la correspondance entre le PDF 106J et la date du match.",
+    message: "La date de référence du PDF 106J ne peut pas être rapprochée de la période Excel. Import autorisé : vérifie la date propre aux indicateurs PDF.",
   };
   if (date !== start && date !== end) return {
     status: "mismatched", referenceDate: pdf.referenceDate,
-    message: `Le rapport 106J correspond au ${pdf.referenceDate}, hors des dates d'exploitation ${start} à ${end}.`,
+    message: `PDF 106J du ${pdf.referenceDate} : date différente de la période Excel (${start} à ${end}). Import autorisé ; ces indicateurs journaliers sont indépendants de la plage Excel.`,
   };
-  return { status: "matched", referenceDate: pdf.referenceDate, message: "PDF associé à la nuit du match." };
+  return { status: "matched", referenceDate: pdf.referenceDate, message: "PDF 106J associé à la période du match." };
+}
+
+// A report from a different day remains a valid daily source for the selected agency.
+// Only a known different agency must prevent using the PDF figures.
+export function canUsePdfIndicators(association) {
+  return association?.status === "matched" || association?.status === "mismatched" || association?.status === "unverified";
 }
