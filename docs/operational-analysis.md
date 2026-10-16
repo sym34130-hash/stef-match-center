@@ -1,7 +1,8 @@
 # Operational analyses — contract v1
 
-These optional snapshot fields are descriptive and never feed an official KPI:
-`zonageDiagnostic`, `unloadingHourlyAnalysis`, `anomalySummary`.
+Zonage and anomaly diagnostics remain descriptive. Reception hourly analysis and
+`unloadingQuality` now share one eligible reception-voyage cohort; the existing
+operational score uses that reconciled reception KPI.
 `operationalAnalysisVersion` is separate from `KPI_DICTIONARY_VERSION`.
 Implementation: `server/operational-analysis.mjs`.
 
@@ -64,7 +65,9 @@ used late / received. It must not be copied as the definitive anomaly rate.
 
 ## Hourly reception
 
-Group DECHG rows by voyage in the selected period. Elapsed seconds = rounded
+Group DECHG rows by voyage in the selected operating period. Exclude quay activity
+(`Type Segment = AQ`) and voyages with fewer than 15 DECHG position rows, in
+line with the eligibility of the source Excel pivot. Elapsed seconds = rounded
 last-start minus first-start; divide by the DECHG row count, not distinct
 positions. Exclude nonpositive duration groups and record their count. Missing
 voyage rows are not made into an artificial trip.
@@ -74,7 +77,10 @@ unrounded voyage ratios, rounded only for display. Distinct positions are
 informational; the slot count is deduplicated across its voyages.
 Above target means strictly greater than active `unloadingSeconds`.
 The metric describes voyages started during the hour, NOT hours actually worked.
-`buildUnloadingQuality` and the official TCD lost-duel detail are unchanged.
+The headline % duels gained, lost-duel detail, and hourly chart now use the
+same cohort and active league target. The cached TCD detail is not used for the
+carousel because it can aggregate identical voyage codes across multiple dates.
+Other loading and zonage indicators retain their established definitions.
 
 ## Summary and old snapshots
 
