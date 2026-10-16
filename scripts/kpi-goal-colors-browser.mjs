@@ -59,10 +59,10 @@ try {
   browser = await chromium.launch({headless:true});
   for(const viewport of [{width:1366,height:768},{width:390,height:844}]) {
     for(const league of [
-      {id:"bronze",label:"LIGUE 2",tone:"bronze",target:45,accent:"#d08a52",cardColor:"rgb(227, 6, 19)",cardBackground:"rgb(245, 210, 178)",badgeBackground:"rgb(244, 208, 176)"},
-      {id:"argent",label:"LIGUE 1",tone:"silver",target:50,accent:"#8bb5dc",cardColor:"rgb(227, 6, 19)",cardBackground:"rgb(219, 233, 248)",badgeBackground:"rgb(220, 234, 250)"},
-      {id:"or",label:"LDC",tone:"gold",target:60,accent:"#d7a52f",cardColor:"rgb(227, 6, 19)",cardBackground:"rgb(247, 221, 160)",badgeBackground:"rgb(247, 223, 167)"},
-      {id:"platine",label:"CDM",tone:"platinum",target:70,accent:"#c58ee8",cardColor:"rgb(227, 6, 19)",cardBackground:"rgb(241, 220, 255)",badgeBackground:"rgb(239, 223, 255)"},
+      {id:"bronze",label:"LIGUE 2",tone:"bronze",target:45,accent:"#d08a52",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(245, 210, 178)",badgeBackground:"rgb(244, 208, 176)"},
+      {id:"argent",label:"LIGUE 1",tone:"silver",target:50,accent:"#8bb5dc",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(219, 233, 248)",badgeBackground:"rgb(220, 234, 250)"},
+      {id:"or",label:"LDC",tone:"gold",target:60,accent:"#d7a52f",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(247, 221, 160)",badgeBackground:"rgb(247, 223, 167)"},
+      {id:"platine",label:"CDM",tone:"platinum",target:70,accent:"#c58ee8",cardColor:"rgb(255, 255, 255)",cardBackground:"rgb(241, 220, 255)",badgeBackground:"rgb(239, 223, 255)"},
     ]) {
       const context = await browser.newContext({viewport,reducedMotion:"reduce"});
       const page = await context.newPage();
@@ -105,12 +105,12 @@ try {
           stroke:css.webkitTextStrokeWidth,shadow:css.textShadow,transform:css.transform,
         };
       });
-      assert.equal(headline.color,league.cardColor,"Solid red lettering on every league");
+      assert.equal(headline.color,league.cardColor,"White lettering on every league");
       assert.match(headline.fontFamily,/Archivo Black/,"Heavy sports-headline face");
       assert.equal(headline.fontWeight,"400","Archivo Black is intrinsically heavy");
       assert.equal(headline.fontStyle,"normal","Forward lean supplied by the CSS skew");
-      assert.equal(headline.stroke,"0px","Reference-inspired lettering must have no outline");
-      assert.equal(headline.shadow,"none","Reference-inspired lettering must have no shadow");
+      assert.equal(headline.stroke,"1px","White lettering requires a fine dark stroke over pale backgrounds");
+      assert.notEqual(headline.shadow,"none","White lettering requires a restrained text-only shadow");
       assert.match(headline.transform,/^matrix\(1, 0, -0\./,"Sports masthead must lean sharply forward");
       await page.getByRole("button",{name:"ADM Administrateur",exact:true}).click();
       await page.locator(".administrator-leagues").waitFor({state:"visible"});
@@ -121,7 +121,7 @@ try {
       const leagueCard=page.locator(".administrator-leagues .league-card." + league.tone);
       const cardInk=await leagueCard.locator(".league-card-top strong").evaluate(el =>
         getComputedStyle(el).color);
-      assert.equal(cardInk,league.cardColor,"Only heading ink is red; card backgrounds remain unchanged");
+      assert.equal(cardInk,league.cardColor,"Only heading ink is white; card backgrounds remain unchanged");
       const cardBackground=await leagueCard.evaluate(el => getComputedStyle(el).backgroundImage);
       assert.ok(cardBackground.includes(league.cardBackground),
         "Previous league card background MUST remain unchanged: "+league.id+": "+cardBackground);
@@ -140,12 +140,48 @@ try {
         const cs=getComputedStyle(el);
         return {style:cs.fontStyle,weight:cs.fontWeight,stroke:cs.webkitTextStrokeWidth};
       });
-      assert.deepEqual(cardTypography,{style:"normal",weight:"400",stroke:"0px"});
+      assert.deepEqual(cardTypography,{style:"normal",weight:"400",stroke:"1px"});
       const shortLabel=league.id==="or" || league.id==="platine";
       if(shortLabel)assert.equal(league.label.length,3,"Upper tier acronyms must render with three letters");
       const cardSize=await leagueCard.locator(".league-card-top strong").evaluate(el =>
         parseFloat(getComputedStyle(el).fontSize));
       assert.ok(cardSize>=25,"Sports-headline lettering must remain prominent");
+      // Icon and action share the first row; the title MUST occupy the
+      // full second row. Compare actual rendered rectangles, not just CSS.
+      for (const card of await allCards.all()) {
+        const layout=await card.evaluate(el=>{
+          const medal=el.querySelector(".league-medal");
+          const button=el.querySelector(".league-select-button");
+          const heading=el.querySelector(".league-card-top");
+          const title=heading?.querySelector("strong");
+          const description=el.querySelector(".league-description");
+          const bounds=node=>node.getBoundingClientRect();
+          const rect=r=>({left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height});
+          const textRange=document.createRange();
+          textRange.selectNodeContents(title);
+          return {
+            card:rect(bounds(el)),medal:rect(bounds(medal)),
+            button:rect(bounds(button)),heading:rect(bounds(heading)),
+            title:rect(bounds(title)),ink:rect(textRange.getBoundingClientRect()),
+            description:rect(bounds(description)),
+            text: title.textContent.trim(),
+            whiteSpace:getComputedStyle(title).whiteSpace,
+            grid:getComputedStyle(el).gridTemplateColumns,
+            buttonWhiteSpace:getComputedStyle(button).whiteSpace,
+          };
+        });
+        assert.equal(layout.whiteSpace,"nowrap",layout.text+" must never wrap");
+        assert.equal(layout.buttonWhiteSpace,"nowrap",layout.text+" action must never wrap");
+        assert.ok(layout.medal.right<layout.button.left,layout.text+" medal/action must be separate");
+        assert.ok(layout.title.top>=Math.max(layout.medal.bottom,layout.button.bottom)+4,
+          layout.text+" title must sit BELOW icon and action: "+JSON.stringify(layout));
+        assert.ok(layout.description.top>=layout.title.bottom+4,
+          layout.text+" description must sit BELOW the title: "+JSON.stringify(layout));
+        assert.ok(layout.ink.right <= layout.card.right-7 && layout.ink.left>=layout.card.left+7,
+          layout.text+" glyphs must stay INSIDE their card: "+JSON.stringify(layout));
+        assert.ok(layout.ink.height<=layout.title.height+2,
+          layout.text+" title must use exactly one line");
+      }
       const noOverflow=await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2);
       assert.equal(noOverflow,true,"Competition name cards must not overflow viewport");
 
