@@ -1,9 +1,13 @@
-name: Validate data-integrity fixes (draft PR)
+name: Validate data integrity and imports
 
 on:
   push:
     branches:
       - fix/a01-a02-a03-a05-data-integrity
+      - fix/allow-106j-any-date
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
