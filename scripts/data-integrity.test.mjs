@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import { parse106jText } from "../server/pdf-106j.mjs";
 import { buildSnapshotFromWorkbook } from "../server/match-engine.mjs";
 import { pdfAssociation, pdfReferenceDay, canUsePdfIndicators } from "../server/source-provenance.mjs";
+import { pdfSourceLabel } from "../src/pdf-source.ts";
 
 function workbook(rows) {
   const headers = [
@@ -94,7 +95,7 @@ test("A03: le modèle calculé conserve l'indice agence sans altérer le contrat
   assert.equal(result.snapshot.validation.agencySegmentHint, "05R");
 });
 
-test("A01: PDF 106J d'Agen jamais associé à Montpellier, même à date identique", () => {
+test("A01: un PDF 106J d'Agen sur Montpellier conserve son origine et déclenche un avertissement", () => {
   const pdf = parse106jText(`SIE.106J - Indicateurs journaliers agence 58
     Site : STEF Transport AGEN [0058]
     Date de référence de calcul : 11 septembre 2026
@@ -103,11 +104,14 @@ test("A01: PDF 106J d'Agen jamais associé à Montpellier, même à date identiq
   const matchAgen = { agency: { code: "058" }, anomalySummary: { night: { startDate: "2026-09-10", endDate: "2026-09-11" } } };
   const matchMontpellier = { ...matchAgen, agency: { code: "01K" } };
   assert.equal(pdfAssociation(pdf, matchAgen).status, "matched");
-  assert.equal(pdfAssociation(pdf, matchMontpellier).status, "mismatched-agency");
+  const foreign = pdfAssociation(pdf, matchMontpellier);
+  assert.equal(foreign.status, "mismatched-agency");
+  assert.equal(canUsePdfIndicators(foreign), true);
+  assert.match(foreign.message, /Import autorisé/i);
 });
 
 
-test("A01: date différente ou inconnue = import PDF autorisé, agence différente = rejet", () => {
+test("A01: date différente, inconnue ou agence différente = import PDF autorisé avec provenance", () => {
   const snapshot = { agency: { code: "058" }, zonageDiagnostic: { night: { startDate: "2026-09-17", endDate: "2026-09-18" } } };
   const same = pdfAssociation({ referenceDate: "17 septembre 2026", agencyCode: "0058" }, snapshot);
   assert.equal(same.status, "matched");
@@ -121,5 +125,15 @@ test("A01: date différente ou inconnue = import PDF autorisé, agence différen
   assert.equal(canUsePdfIndicators(unknownDate), true);
   const otherAgency = pdfAssociation({ referenceDate: "17 septembre 2026", agencyCode: "01K" }, snapshot);
   assert.equal(otherAgency.status, "mismatched-agency");
-  assert.equal(canUsePdfIndicators(otherAgency), false);
+  assert.equal(canUsePdfIndicators(otherAgency), true);
+  assert.match(otherAgency.message, /autre agence/i);
+});
+
+test("Source affichée : une agence PDF différente reste identifiable, même après relecture", () => {
+  assert.equal(pdfSourceLabel({ referenceDate: "11 septembre 2026", agencyCode: "0058" }, "01K"),
+    "PDF 106J · agence source 0058 (autre agence) · 11 septembre 2026");
+  assert.equal(pdfSourceLabel({ referenceDate: "11 septembre 2026", agencyCode: "0058" }, "058"),
+    "PDF 106J · agence source 0058 · 11 septembre 2026");
+  assert.equal(pdfSourceLabel({ referenceDate: null, agencyCode: null }, "01K"),
+    "PDF 106J · agence source non indiquée · date non indiquée");
 });
