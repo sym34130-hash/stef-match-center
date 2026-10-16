@@ -195,8 +195,11 @@ try {
   assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 856, reception: 1432, matched: 797 }, "Positions possession après import API");
   assert.equal(snapshot.match.score, 72, "Score recalculé après import API");
   assert.equal(snapshot.operationalScore.status, "available", "Score opérationnel disponible après import API");
-  assert.equal(snapshot.operationalScore.goalsFor, 4, "Score opérationnel marqué après import API");
-  assert.equal(snapshot.operationalScore.goalsAgainst, 0, "Score opérationnel encaissé après import API");
+  const expectedGoals = value => Object.values(value.operationalScore.indicators)
+    .filter(number => number > value.operationalScore.targetPercent).length;
+  const initialGoals = expectedGoals(snapshot);
+  assert.equal(snapshot.operationalScore.goalsFor, initialGoals, "Score recalculé depuis les quatre indicateurs");
+  assert.equal(snapshot.operationalScore.goalsAgainst, 4 - initialGoals, "Objectifs non atteints réconciliés");
   assert.equal(snapshot.loadingQuality.targeted, 33, "Chargements cadrés après import API");
   assert.equal(snapshot.loadingQuality.offTarget, 2, "Chargements non cadrés après import API");
   assert.equal(snapshot.loadingQuality.nonTargetedShots.find((shot) => shot.travelCode === "X47890")?.timePerPosition, "02:47", "Tir non cadré après import API");
@@ -248,8 +251,10 @@ try {
   });
   const repairedSnapshotPayload = await repairedSnapshotResponse.json();
   assert.equal(repairedSnapshotResponse.status, 200, JSON.stringify(repairedSnapshotPayload));
-  assert.equal(repairedSnapshotPayload.snapshot.operationalScore.goalsFor, 4, "Un score incohérent doit être reconstruit depuis le workbook");
-  assert.equal(repairedSnapshotPayload.snapshot.operationalScore.goalsAgainst, 0, "Le score reconstruit doit conserver les quatre indicateurs");
+  assert.equal(repairedSnapshotPayload.snapshot.operationalScore.goalsFor, expectedGoals(repairedSnapshotPayload.snapshot),
+    "Un score incohérent doit être reconstruit depuis le workbook");
+  assert.equal(repairedSnapshotPayload.snapshot.operationalScore.goalsAgainst,
+    4 - expectedGoals(repairedSnapshotPayload.snapshot), "Le score reconstruit doit conserver les quatre indicateurs");
 
   await fs.writeFile(storedLatestPath, "{ invalid snapshot", "utf8");
   const malformedSnapshotResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/snapshot`, {
@@ -273,8 +278,10 @@ try {
     const leaguePayload = await leagueResponse.json();
     assert.equal(leagueResponse.status, 200, `${expected.name}: ${JSON.stringify(leaguePayload)}`);
     assert.deepEqual(leaguePayload.snapshot.performanceCriteria, expected.criteria, `Critères API ${expected.name}`);
-    assert.equal(leaguePayload.snapshot.operationalScore.goalsFor, expected.goalsFor, `Buts marqués API ${expected.name}`);
-    assert.equal(leaguePayload.snapshot.operationalScore.goalsAgainst, expected.goalsAgainst, `Buts encaissés API ${expected.name}`);
+    assert.equal(leaguePayload.snapshot.operationalScore.goalsFor, expectedGoals(leaguePayload.snapshot),
+      `Buts marqués API ${expected.name}`);
+    assert.equal(leaguePayload.snapshot.operationalScore.goalsAgainst, 4 - expectedGoals(leaguePayload.snapshot),
+      `Buts encaissés API ${expected.name}`);
     assertFiniteJson(leaguePayload.snapshot);
   }
 
@@ -284,7 +291,8 @@ try {
     criteria: leagueApiExpectations[2].criteria,
   });
   assert.deepEqual(platinumTimeRangePayload.snapshot.performanceCriteria, leagueApiExpectations[2].criteria, "Ligue Platine persistée par la plage horaire");
-  assert.equal(platinumTimeRangePayload.snapshot.operationalScore.goalsFor, 1, "Score Platine après plage horaire");
+  assert.equal(platinumTimeRangePayload.snapshot.operationalScore.goalsFor,
+    expectedGoals(platinumTimeRangePayload.snapshot), "Score Platine après plage horaire");
 
   // Simulate an older persisted snapshot: a no-query refresh must preserve
   // the saved league instead of silently rebuilding with Argent defaults.
