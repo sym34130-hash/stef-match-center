@@ -140,7 +140,6 @@ export type UnloadingHourlyAnalysis = {
   excludedZeroDurationTravels: number;
   excludedSmallTravels?: number;
   excludedQuayRows?: number;
-  excludedSegmentRows?: number;
   unidentifiedTravelRows: number;
   meanSecondsPerPosition: number | null;
   offTargetTravels: number;
