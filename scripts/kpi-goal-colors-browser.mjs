@@ -96,7 +96,7 @@ try {
         assert.equal(warnings.length,conceded?1:0,kind);
         if(conceded) {
           assert.match(warnings[0],/But encaissé/i);
-          assert.ok(warnings[0].includes(`objectif > ${league.target} %`),warnings[0]);
+          assert.ok(warnings[0].includes(`objectif > ${league.target}%`),warnings[0]);
           const color=await card.locator("strong").first().evaluate(el=>getComputedStyle(el).color);
           assert.equal(color,"rgb(255, 120, 138)",kind+" bright red");
         }
