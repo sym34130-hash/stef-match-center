@@ -7,6 +7,7 @@ import os from "node:os";
 import { chromium } from "@playwright/test";
 import * as XLSX from "xlsx";
 import { buildSnapshotFromWorkbook } from "../server/match-engine.mjs";
+import { formatKpiDuration } from "../src/kpi-duration.ts";
 
 async function freePort() {
   const s = net.createServer(); s.listen(0, "127.0.0.1");
@@ -82,12 +83,12 @@ try {
     const graph=page.getByRole("group",{name:"Histogramme des temps moyens, en secondes par position"});
     await graph.waitFor({state:"visible"});
     for (const slot of slots) {
-      const b=graph.getByRole("button",{name:new RegExp(slot.distinctPositions+" positions distinctes")});
+      const b=graph.getByRole("button",{name:new RegExp("^"+slot.label.slice(0,2)+":00–")});
       const value=b.locator(".reception-hour-value");
-      assert.equal((await value.innerText()).trim(),slot.distinctPositions+" pos.");
+      assert.equal((await value.innerText()).trim(),slot.distinctPositions+(viewport.width<=700 ? "" : " pos."));
       assert.equal(await value.isVisible(),true,viewport.width+"px: count must remain visible");
       assert.equal((await b.getAttribute("aria-label")).includes("moyenne"),true);
-      assert.equal((await b.getAttribute("aria-label")).includes(slot.meanSecondsPerPosition+" s"),true);
+      assert.equal((await b.getAttribute("aria-label")).includes(formatKpiDuration(slot.meanSecondsPerPosition)),true);
     }
     const target=graph.getByRole("button",{name:/23:00–00:00/});
     await target.click();
