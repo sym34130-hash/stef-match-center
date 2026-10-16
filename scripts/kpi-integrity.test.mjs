@@ -13,7 +13,7 @@ const day = (date, clock) => `${date}T${clock}+02:00`;
 function operation(type, position, date, clock, durationSeconds, filter = "") {
   return [
     "Test", day(date, clock), type, position, "VOYAGE1", "01K",
-    "TR", filter, "", "Défenseur", "",
+    type === "DECHG" ? "EX" : "TR", filter, "", "Défenseur", "",
     durationSeconds / 86400, durationSeconds <= 1800 ? 1 : 0,
     22, // deliberately stale: hourly KPI must use timestamp, not Excel hour.
   ];
@@ -51,9 +51,10 @@ test("hourly pass score: exact minutes, partial hours, single denominator and st
   assert.equal(s.summary.duelWon, 5);
   assert.equal(s.summary.passRate, 71.4);
   assert.deepEqual(s.hourlyPerformance.map(row => [row.label,row.total,row.won]),
-    [["21h",2,2],["22h",2,1],["06h",3,2]]);
+    [["21h",1,1],["22h",1,1],["06h",2,1]]);
   assert.equal(s.operationalScore.indicators.passRate, s.summary.passRate);
-  assert.equal(s.hourlyPerformance.reduce((total,row)=>total+row.total,0),s.summary.duelTotal);
+  assert.equal(s.hourlyPerformance.reduce((total,row)=>total+row.total,0),4, "Only DECHG operations enter the chart");
+  assert.equal(s.hourlyPerformance.reduce((total,row)=>total+row.won,0),3);
   assert.equal(s.summary.possessionPositions.reception, 4);
   assert.equal(s.summary.possessionPositions.matched, 2);
   assert.equal(s.summary.possessionPercent, 50);
@@ -66,8 +67,8 @@ test("league threshold changes hourly and aggregate rates without reusing Excel 
   assert.equal(changed.summary.duelWon, 2);
   assert.equal(changed.summary.passRate, 28.6);
   assert.notEqual(changed.operationalScore.indicators.passRate, old.operationalScore.indicators.passRate);
-  assert.equal(changed.hourlyPerformance.reduce((n,r)=>n+r.won,0),2);
-  assert.equal(changed.hourlyPerformance.reduce((n,r)=>n+r.total,0),7);
+  assert.equal(changed.hourlyPerformance.reduce((n,r)=>n+r.won,0),1);
+  assert.equal(changed.hourlyPerformance.reduce((n,r)=>n+r.total,0),4);
 });
 
 test("boundary: exactly 30 minutes remains on target despite Excel float noise", () => {

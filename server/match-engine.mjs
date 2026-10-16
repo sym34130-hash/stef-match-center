@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import * as XLSX from "xlsx";
 import { buildOperationalAnalyses, normalizeOperationalAnalysisContract, selectNight } from "./operational-analysis.mjs";
 import { buildReceptionCohort } from "./reception-cohort.mjs";
+import { isHourlyPassChartRow } from "./hourly-pass-scope.mjs";
 
 const REQUIRED_COLUMNS = {
   operator: ["operateur"],
@@ -36,7 +37,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 21;
+export const KPI_DICTIONARY_VERSION = 22;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -137,8 +138,8 @@ export const KPI_DICTIONARY = [
     id: "score.passesHourly",
     label: "Passes réussies par heure",
     source: "Données : DZ / drapeau Duels gagnés, horodatage réel des opérations",
-    formula: "Nombre de lignes duels gagnés / lignes évaluables par heure réelle de début d’opération, dans la plage active à la minute et selon le seuil zonage de la ligue",
-    denominator: "Toutes les lignes de score éligibles dans chaque heure, y compris heures partielles",
+    formula: "Graphique uniquement : lignes DECHG, Type Segment AQ/ED/EX/vide, regroupées par heure de début dans la plage active ; la cible de zonage reste celle de la ligue. Le KPI passes global reste non filtré.",
+    denominator: "Lignes DECHG éligibles dont le type segment vaut AQ, ED, EX ou vide, heures partielles comprises",
     display: "Courbe horaire % passes réussies",
   },
   {
@@ -1927,7 +1928,7 @@ function buildHourlyPassPerformance(workbook, period, scoringRows = null, source
   const hasArrivalSource = Array.isArray(sourceRows) && sourceRows.some((row) => row.startedAt instanceof Date);
   // Arrival annotations remain separate from the success-rate denominator.
   for (const row of sourceRows ?? []) {
-    if (!row.travelCode || !isExcelBlank(row.operatorFilter) || !isExcelBlank(row.unzonedFilter)) continue;
+    if (!isHourlyPassChartRow(row) || !row.travelCode || !isExcelBlank(row.operatorFilter) || !isExcelBlank(row.unzonedFilter)) continue;
     const previous = arrivals.get(row.travelCode);
     if (!previous || row.startedAt < previous) arrivals.set(row.travelCode, row.startedAt);
   }
@@ -1951,8 +1952,16 @@ function buildHourlyPassPerformance(workbook, period, scoringRows = null, source
   // boundary hours and may reflect a different selected Excel time range.
   if (Array.isArray(scoringRows)) {
     const byHour = new Map();
+    let officialWon = 0;
+    let officialTotal = 0;
     for (const row of scoringRows) {
       if (!(row.startedAt instanceof Date) || !Number.isFinite(+row.startedAt)) continue;
+      if (!isInActiveTimeRange(row.startedAt, period)) continue;
+      if (row.duelWonFlag !== 0 && row.duelWonFlag !== 1) continue;
+      // This is the official KPI numerator/denominator; never segment-filter it.
+      officialTotal++;
+      if (row.duelWonFlag === 1) officialWon++;
+      if (!isHourlyPassChartRow(row)) continue;
       if (!isInActiveTimeRange(row.startedAt, period)) continue;
       if (row.duelWonFlag !== 0 && row.duelWonFlag !== 1) continue;
       const minute = parisMinutes(row.startedAt);
@@ -1974,9 +1983,7 @@ function buildHourlyPassPerformance(workbook, period, scoringRows = null, source
       return period.isOvernight && minute < firstHour ? minute + 1440 - firstHour : minute - firstHour;
     };
     values.sort((a, b) => toOffset(a.hour) - toOffset(b.hour));
-    const won = values.reduce((sum, item) => sum + item.won, 0);
-    const total = values.reduce((sum, item) => sum + item.total, 0);
-    return { items: values, sourceAvailable: true, totalRate: total ? percent(won, total) : null };
+    return { items: values, sourceAvailable: true, totalRate: officialTotal ? percent(officialWon, officialTotal) : null };
   }
 
   const empty = { items: [], totalRate: null, sourceAvailable: false };

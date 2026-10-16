@@ -1,11 +1,8 @@
-# Operational analyses — chart-only segment filter (contract v3)
+# Operational analyses — contract v1
 
-Zonage and anomaly diagnostics remain descriptive. The official `unloadingQuality`,
-lost-duel detail, and anomaly-summary reception counters still share one cohort:
-a minimum of 15 DECHG rows per voyage, excluding AQ.
-The *hourly reception chart only* uses a separately filtered cohort based
-on column C (DECHG / DÉCHARGEMENT) and column G (AQ, ED, EX, or blank).
-The operational score continues to use the unchanged official reception KPI.
+Zonage and anomaly diagnostics remain descriptive. Reception hourly analysis and
+`unloadingQuality` now share one eligible reception-voyage cohort; the existing
+operational score uses that reconciled reception KPI.
 `operationalAnalysisVersion` is separate from `KPI_DICTIONARY_VERSION`.
 Implementation: `server/operational-analysis.mjs`.
 
@@ -68,15 +65,9 @@ used late / received. It must not be copied as the definitive anomaly rate.
 
 ## Hourly reception
 
-Group DECHG rows by voyage in the selected operating period.
-The official reception KPI and the diagnostic continue excluding quay activity
-(`Type Segment = AQ`) and voyages with fewer than 15 DECHG position rows.
-For the hourly *chart only*, keep **column C = DECHG / DÉCHARGEMENT** and
-**column G = AQ / ED / EX / blank** (case and whitespace normalized).
-Exclude `LIV` and any other segment code, per operation row, *before*
-grouping by voyage. A mixed-segment voyage is measured only with its
-qualifying chart rows. The minimum 15 DECHG lines and positive elapsed
-duration still apply after filtering. Elapsed seconds = rounded
+Group DECHG rows by voyage in the selected operating period. Exclude quay activity
+(`Type Segment = AQ`) and voyages with fewer than 15 DECHG position rows, in
+line with the eligibility of the source Excel pivot. Elapsed seconds = rounded
 last-start minus first-start; divide by the DECHG row count, not distinct
 positions. Exclude nonpositive duration groups and record their count. Missing
 voyage rows are not made into an artificial trip.
@@ -86,12 +77,9 @@ unrounded voyage ratios, rounded only for display. Distinct positions are
 informational; the slot count is deduplicated across its voyages.
 Above target means strictly greater than active `unloadingSeconds`.
 The metric describes voyages started during the hour, NOT hours actually worked.
-The hourly chart and official % duels gained now deliberately use different
-segment scopes, while sharing the active night and league duration target.
-The KPI and its lost-duel detail still use the same official cohort.
-Anomaly-summary reception counts and worst-slot text still use the official
-cohort, rather than silently adopting the chart-only filter. The cached TCD
-detail is not used because it can aggregate identical codes across dates.
+The headline % duels gained, lost-duel detail, and hourly chart now use the
+same cohort and active league target. The cached TCD detail is not used for the
+carousel because it can aggregate identical voyage codes across multiple dates.
 Other loading and zonage indicators retain their established definitions.
 
 ## Summary and old snapshots

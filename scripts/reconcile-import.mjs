@@ -71,10 +71,10 @@ assert.equal(snapshot.summary.duelTotal, 3517, "Dénominateur score Excel");
 assert.equal(snapshot.summary.duelRate, 71.9, "Taux duels gagnés recalculé");
 assert.equal(snapshot.summary.passRate, snapshot.summary.duelRate, "Passes : même population et même cible que les duels de zonage");
 assert.ok(sourceChartRates.size > 0, "La courbe historique X est disponible à titre de diagnostic, sans piloter la période active");
-assert.equal(snapshot.hourlyPerformance.reduce((n, x) => n + x.total, 0), snapshot.summary.duelTotal,
-  "Dénominateur horaire égal aux lignes de zonage qualifiables");
-assert.equal(snapshot.hourlyPerformance.reduce((n, x) => n + x.won, 0), snapshot.summary.duelWon,
-  "Numérateur horaire égal aux duels gagnés de la ligue");
+assert.ok(snapshot.hourlyPerformance.reduce((n, x) => n + x.total, 0) <= snapshot.summary.duelTotal,
+  "Graphique passes limité aux déchargements segmentés, score non filtré");
+assert.ok(snapshot.hourlyPerformance.reduce((n, x) => n + x.won, 0) <= snapshot.summary.duelWon,
+  "Numérateur filtré du graphique ne peut dépasser le KPI officiel");
 assert.equal(snapshot.hourlyPerformance.every(item => item.total > 0 && item.rate === Math.round(item.won / item.total * 1000) / 10), true,
   "Chaque valeur du graphique se reconstitue à partir des compteurs");
 assert.equal(snapshot.summary.possessionPositions.zonage, 856, "Positions zonées dans la plage");
@@ -109,14 +109,14 @@ assert.equal(snapshot.unloadingQuality.targeted, snapshot.unloadingDuelQuality.w
   "Gagnés : KPI et tableau réconciliés");
 assert.equal(snapshot.unloadingQuality.offTarget, snapshot.unloadingDuelQuality.lost,
   "Perdus : KPI et tableau réconciliés");
-assert.equal(snapshot.unloadingQuality.offTarget, snapshot.anomalySummary.unloading.offTargetTravels,
-  "Perdus : KPI et diagnostic réconciliés");
-assert.equal(snapshot.unloadingQuality.eligibleTrips, snapshot.anomalySummary.unloading.eligibleTravels,
-  "Population du KPI et du diagnostic identique ; graphique volontairement distinct");
+assert.equal(snapshot.unloadingQuality.offTarget, snapshot.unloadingHourlyAnalysis.offTargetTravels,
+  "Perdus : KPI et créneaux réconciliés");
+assert.equal(snapshot.unloadingQuality.eligibleTrips, snapshot.unloadingHourlyAnalysis.eligibleTravels,
+  "Population des voyages identique sur les trois vues");
 assert.equal(snapshot.unloadingDuelQuality.lostDuels.length, snapshot.unloadingQuality.offTarget,
   "Chaque duel perdu figure dans le détail");
-assert.equal(snapshot.unloadingHourlyAnalysis.items.reduce((sum, slot) => sum + slot.travelCount, 0),
-  snapshot.unloadingHourlyAnalysis.eligibleTravels, "Déchargements affichés réconciliés par créneau");
+assert.equal(snapshot.unloadingQuality.averageTimePerPositionSeconds,
+  snapshot.unloadingHourlyAnalysis.meanSecondsPerPosition, "Même moyenne de réception");
 assert.deepEqual(snapshot.yellowCards, [], "Le carton de 22:34 est hors plage 13:00-22:30");
 
 const yellowCardRangeResult = buildSnapshotFromWorkbook(
@@ -316,7 +316,7 @@ function hourlyTravelSnapshot(entries, excludedTravelCodes = [], chartRows = nul
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
     [...rawLoadingDataHeaders, "Heure op"],
     ...entries.map((entry, index) => [
-      "Joueur", `11/09/2026 ${entry.time ?? `${String(entry.hour ?? 1).padStart(2, "0")}:00:00`}`, "DECHG", `P-${index}`, entry.travel ?? "", "058", "X",
+      "Joueur", `11/09/2026 ${entry.time ?? `${String(entry.hour ?? 1).padStart(2, "0")}:00:00`}`, "DECHG", `P-${index}`, entry.travel ?? "", "058", "EX",
       entry.operatorFilter ?? "", "", "Defenseur", entry.unzonedFilter ?? "", "", index % 2, entry.hour ?? "",
     ]),
   ]), "Données");
@@ -425,18 +425,18 @@ for (const expected of leagueExpectations) {
   assert.equal(leagueResult.ok, true, `${expected.name} doit être recalculable`);
   const leagueSnapshot = leagueResult.snapshot;
   assert.deepEqual(leagueSnapshot.performanceCriteria, expected.criteria, `Critères ${expected.name}`);
-  assert.equal(leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.won, 0),
-    leagueSnapshot.summary.duelWon, `Numérateur des passes réconcilié ${expected.name}`);
-  assert.equal(leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.total, 0),
-    leagueSnapshot.summary.duelTotal, `Dénominateur des passes réconcilié ${expected.name}`);
+  assert.ok(leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.won, 0) <=
+    leagueSnapshot.summary.duelWon, `Graphique passes segmenté ${expected.name}`);
+  assert.ok(leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.total, 0) <=
+    leagueSnapshot.summary.duelTotal, `Graphique limité aux segments autorisés ${expected.name}`);
   assert.equal(leagueSnapshot.loadingQuality.targeted, expected.targeted, `Chargements cadrés ${expected.name}`);
   assert.equal(leagueSnapshot.loadingQuality.offTarget, expected.offTarget, `Chargements non cadrés ${expected.name}`);
   assert.equal(leagueSnapshot.unloadingQuality.targeted, leagueSnapshot.unloadingDuelQuality.won,
     `Réception : KPI et duels gagnés réconciliés ${expected.name}`);
   assert.equal(leagueSnapshot.unloadingQuality.offTarget, leagueSnapshot.unloadingDuelQuality.lost,
     `Réception : KPI et duels perdus réconciliés ${expected.name}`);
-  assert.equal(leagueSnapshot.unloadingQuality.offTarget, leagueSnapshot.anomalySummary.unloading.offTargetTravels,
-    `Réception : KPI et diagnostic officiel réconciliés ${expected.name}`);
+  assert.equal(leagueSnapshot.unloadingQuality.offTarget, leagueSnapshot.unloadingHourlyAnalysis.offTargetTravels,
+    `Réception : KPI et graphique horaire réconciliés ${expected.name}`);
   assert.equal(leagueSnapshot.summary.possessionPercent, snapshot.summary.possessionPercent, `Possession stable ${expected.name}`);
   const reachedIndicators = [
     leagueSnapshot.summary.passRate,
@@ -481,8 +481,8 @@ if (narrowResult.ok) {
   assert.equal(narrowResult.snapshot.unloadingQuality.offTarget,
     narrowResult.snapshot.unloadingDuelQuality.lost, "Réceptions hors cible sur la plage active");
   assert.equal(narrowResult.snapshot.unloadingQuality.eligibleTrips,
-    narrowResult.snapshot.anomalySummary.unloading.eligibleTravels,
-    "Population identique entre KPI et diagnostic sur la sous-plage");
+    narrowResult.snapshot.unloadingHourlyAnalysis.eligibleTravels,
+    "Population identique entre KPI et créneaux sur la sous-plage");
 }
 
 const emptyLoadingHeaders = [

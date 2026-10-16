@@ -117,7 +117,7 @@ test("analyses : cinq slides, rendu normal/Célébration, responsive et détails
           await target.focus(); await page.keyboard.press("Enter");
           await expect(target).toHaveAttribute("aria-pressed", "true");
           await expect(page.locator("#reception-hour-detail")).toContainText("Objectif");
-          await expect(page.locator(".reception-hourly-analysis")).toContainText("segments AQ / ED / EX / vides");
+          await expect(page.locator(".reception-hourly-analysis")).toContainText("Même périmètre que les duels gagnés");
           const collisions = await graph.locator(".reception-hour-label").evaluateAll(labels => {
             const boxes = labels.map(label => { const range = document.createRange(); range.selectNodeContents(label); return range.getBoundingClientRect(); });
             return boxes.flatMap((a, i) => boxes.slice(i + 1).filter(b => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1));
