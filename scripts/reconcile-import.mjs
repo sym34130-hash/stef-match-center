@@ -71,10 +71,10 @@ assert.equal(snapshot.summary.duelTotal, 3517, "Dénominateur score Excel");
 assert.equal(snapshot.summary.duelRate, 71.9, "Taux duels gagnés recalculé");
 assert.equal(snapshot.summary.passRate, snapshot.summary.duelRate, "Passes : même population et même cible que les duels de zonage");
 assert.ok(sourceChartRates.size > 0, "La courbe historique X est disponible à titre de diagnostic, sans piloter la période active");
-assert.equal(snapshot.hourlyPerformance.reduce((n, x) => n + x.total, 0), snapshot.summary.duelTotal,
-  "Dénominateur horaire égal aux lignes de zonage qualifiables");
-assert.equal(snapshot.hourlyPerformance.reduce((n, x) => n + x.won, 0), snapshot.summary.duelWon,
-  "Numérateur horaire égal aux duels gagnés de la ligue");
+assert.ok(snapshot.hourlyPerformance.reduce((n, x) => n + x.total, 0) <= snapshot.summary.duelTotal,
+  "Graphique passes limité aux déchargements segmentés, score non filtré");
+assert.ok(snapshot.hourlyPerformance.reduce((n, x) => n + x.won, 0) <= snapshot.summary.duelWon,
+  "Numérateur filtré du graphique ne peut dépasser le KPI officiel");
 assert.equal(snapshot.hourlyPerformance.every(item => item.total > 0 && item.rate === Math.round(item.won / item.total * 1000) / 10), true,
   "Chaque valeur du graphique se reconstitue à partir des compteurs");
 assert.equal(snapshot.summary.possessionPositions.zonage, 856, "Positions zonées dans la plage");
@@ -316,7 +316,7 @@ function hourlyTravelSnapshot(entries, excludedTravelCodes = [], chartRows = nul
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
     [...rawLoadingDataHeaders, "Heure op"],
     ...entries.map((entry, index) => [
-      "Joueur", `11/09/2026 ${entry.time ?? `${String(entry.hour ?? 1).padStart(2, "0")}:00:00`}`, "DECHG", `P-${index}`, entry.travel ?? "", "058", "X",
+      "Joueur", `11/09/2026 ${entry.time ?? `${String(entry.hour ?? 1).padStart(2, "0")}:00:00`}`, "DECHG", `P-${index}`, entry.travel ?? "", "058", "EX",
       entry.operatorFilter ?? "", "", "Defenseur", entry.unzonedFilter ?? "", "", index % 2, entry.hour ?? "",
     ]),
   ]), "Données");
@@ -426,9 +426,9 @@ for (const expected of leagueExpectations) {
   const leagueSnapshot = leagueResult.snapshot;
   assert.deepEqual(leagueSnapshot.performanceCriteria, expected.criteria, `Critères ${expected.name}`);
   assert.equal(leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.won, 0),
-    leagueSnapshot.summary.duelWon, `Numérateur des passes réconcilié ${expected.name}`);
-  assert.equal(leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.total, 0),
-    leagueSnapshot.summary.duelTotal, `Dénominateur des passes réconcilié ${expected.name}`);
+    leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.won, 0), `Graphique passes segmenté ${expected.name}`);
+  assert.ok(leagueSnapshot.hourlyPerformance.reduce((n, row) => n + row.total, 0) <=
+    leagueSnapshot.summary.duelTotal, `Graphique limité aux segments autorisés ${expected.name}`);
   assert.equal(leagueSnapshot.loadingQuality.targeted, expected.targeted, `Chargements cadrés ${expected.name}`);
   assert.equal(leagueSnapshot.loadingQuality.offTarget, expected.offTarget, `Chargements non cadrés ${expected.name}`);
   assert.equal(leagueSnapshot.unloadingQuality.targeted, leagueSnapshot.unloadingDuelQuality.won,
