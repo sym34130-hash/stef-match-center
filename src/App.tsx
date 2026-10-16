@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState, t
 import { createPortal } from "react-dom";
 import { ceremonyPolyvalents } from "./ceremony-selection";
 import { formatKpiDuration } from "./kpi-duration";
+import { pdfSourceLabel } from "./pdf-source";
 import { qualificationReasons } from "./qualification-reasons";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout } from "../server/brief-layout.mjs";
 import {
@@ -1844,7 +1845,7 @@ function CentersQualityCard({ snapshot }: { snapshot: Snapshot }) {
   const hasData = Number.isFinite(percent);
   const successfulPercent = hasData ? Math.max(0, Math.min(100, percent as number)) : 0;
   const offTargetPercent = hasData ? 100 - successfulPercent : null;
-  const pdfDetail = pdf?.referenceDate ? `PDF 106J · ${pdf.referenceDate}` : "PDF 106J";
+  const pdfDetail = pdfSourceLabel(pdf, snapshot.agency.code);
 
   return (
     <section className="loading-quality-card centers-quality-card" aria-label="Pourcentage de centres réussis">
@@ -3810,7 +3811,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
             <GuidePanel eyebrow="03 · Importer et actualiser" title="Ce que fait chaque bouton" icon={RefreshCw}>
               <div className="guide-action-list">
                 <GuideAction icon={Upload} title="Contrôler et importer Excel" tone="green" detail="Chargez un nouveau classeur .xlsx complet : opérations, positions, voyages et analyses. Chaque modification du fichier nécessite un nouvel import." />
-                <GuideAction icon={FileCheck2} title="Importer le PDF 106J" tone="blue" detail="Après l’Excel, chargez le rapport SIE.106J pour compléter la ponctualité, les indicateurs journaliers et le tonnage Expédition. Un PDF d’une autre date est accepté ; sa date de référence reste affichée et ses résultats sont distincts de la plage Excel." />
+                <GuideAction icon={FileCheck2} title="Importer le PDF 106J" tone="blue" detail="Après l’Excel, chargez un rapport SIE.106J pour afficher ses taux journaliers et son tonnage Expédition. Un rapport d'une autre date ou agence est accepté : sa date et son agence source restent indiquées, indépendamment de la plage Excel." />
                 <GuideAction icon={RefreshCw} title="Actualiser" tone="blue" detail="À utiliser pour relire le dernier import déjà enregistré. Ce bouton ne va pas chercher un fichier sur votre ordinateur et ne remplace pas un nouvel import." />
                 <GuideAction icon={Clock3} title="Appliquer la plage" tone="orange" detail="À utiliser après avoir choisi le début et la fin du créneau. Les heures sont limitées aux pas de 30 minutes, par exemple 08:00 ou 08:30." />
               </div>
@@ -3965,7 +3966,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                 <GuideTrouble title="Indicateur indisponible" detail="Lisez les sources manquantes dans Import. Ne remplacez pas une absence de résultat par zéro ; un classeur incomplet peut empêcher le calcul du score." />
                 <GuideTrouble title="Positions non qualifiables" detail="Ouvrez le détail du diagnostic. Vérifiez la réception et le zonage dans Excel : un délai inconnu n’est pas un retard confirmé." />
                 <GuideTrouble title="Voyage exclu par erreur" detail="Dans Lecture opérationnelle, ouvrez Voyages exclus de l'analyse et utilisez Réintégrer sur le code concerné, si vos droits le permettent." />
-                <GuideTrouble title="PDF 106J non importé" detail="Importez d’abord l’Excel, puis un rapport SIE.106J de votre agence. Il peut porter une autre date : la date de référence du PDF reste indiquée avec ses chiffres." />
+                <GuideTrouble title="PDF 106J non importé" detail="Importez d'abord l'Excel, puis un rapport SIE.106J. Une autre date ou agence ne bloque pas l'import : la provenance des chiffres PDF reste affichée." />
                 <GuideTrouble title="Résultat différent après une ligue" detail="Vérifiez les objectifs actifs. Un changement de cible peut modifier les retards et les résultats sans changer les opérations du fichier source." />
                 <GuideTrouble title="Consignes non confirmées" detail="Vérifiez le message d’enregistrement. Sauvegarde locale uniquement ne garantit pas le partage ; un conflit exige de relire la version serveur avant de ressaisir." />
               </div>
@@ -4099,7 +4100,7 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
         <div>
           <p className="eyebrow">Import</p>
           <h2>Déposer le fichier, actualiser le match</h2>
-          <p>Importe séparément la source Excel du match et le rapport PDF 106J de ton agence, même s’il porte une autre date.</p>
+          <p>Importe séparément l’Excel du match et le PDF 106J de ton choix, même d'une autre date ou agence. La provenance du PDF restera affichée.</p>
         </div>
       </div>
       <div className="import-sources">
