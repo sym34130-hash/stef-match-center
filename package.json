@@ -9,7 +9,7 @@
     "dev:web": "vite",
     "lint": "eslint . --max-warnings=0",
     "build": "tsc -b && vite build",
-    "test": "node --test scripts/category-ranking.test.mjs scripts/brief-layout.test.mjs scripts/kpi-duration.test.mjs scripts/qualification-reasons.test.mjs scripts/api-security.test.mjs scripts/import-contract.test.mjs scripts/agencies.test.mjs scripts/operational-analysis.test.mjs scripts/reception-cohort.test.mjs scripts/reception-carousel-integration.test.mjs scripts/kpi-integrity.test.mjs && node scripts/reconcile-import.mjs",
+    "test": "node --test scripts/category-ranking.test.mjs scripts/brief-layout.test.mjs scripts/kpi-duration.test.mjs scripts/qualification-reasons.test.mjs scripts/api-security.test.mjs scripts/import-contract.test.mjs scripts/agencies.test.mjs scripts/operational-analysis.test.mjs scripts/reception-cohort.test.mjs scripts/reception-carousel-integration.test.mjs scripts/kpi-integrity.test.mjs scripts/kpi-goal-status.test.mjs && node scripts/reconcile-import.mjs",
     "test:pdf": "node --test scripts/pdf-106j.test.mjs scripts/data-integrity.test.mjs",
     "test:pdf:import": "node scripts/verify-pdf-import.mjs",
     "test:deploy": "node scripts/deploy-smoke-test.mjs",
