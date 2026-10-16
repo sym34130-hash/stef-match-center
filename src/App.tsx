@@ -2104,9 +2104,12 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
     setArrivalDetail({ hour, codes, left, top, width, height });
   };
   const data = snapshot.hourlyPerformance ?? [];
-  // The chart total is scoped to the displayed hourly series. The operational
-  // score is a separate four-indicator contract and must not replace it.
-  const totalPassRate = snapshot.summary.passRate ?? null;
+  // The graph is intentionally restricted to DECHG + AQ/ED/EX/blank.
+  // Its weighted total must come from the displayed chart rows, NOT from the
+  // separate official pass KPI (which retains all eligible scoring operations).
+  const chartWon = data.reduce((sum, point) => sum + (point.won ?? 0), 0);
+  const chartTotal = data.reduce((sum, point) => sum + (point.total ?? 0), 0);
+  const totalPassRate = chartTotal > 0 ? Math.round(chartWon / chartTotal * 1000) / 10 : null;
   // Keep the SVG coordinate system stable. CSS scales this native ratio on
   // every screen, so the curve and its labels stay proportional.
   const width = 1440;
@@ -2141,11 +2144,11 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
         <div>
           <span>Performance horaire</span>
           <strong>% passes réussies</strong>
-          <small className="performance-chart-caption">Opérations éligibles de la plage active · objectif zonage de la ligue</small>
+          <small className="performance-chart-caption">Graphique seulement : déchargement (C) · segments AQ, ED, EX ou vides (G) · LIV exclus. KPI du score inchangé.</small>
         </div>
         <div className="performance-chart-actions">
           <div className="performance-chart-total">
-          <small>Total</small>
+          <small>Total filtré</small>
           <b>{formatPercent(totalPassRate)}</b>
           </div>
           {large ? (
