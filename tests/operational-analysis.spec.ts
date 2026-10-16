@@ -113,10 +113,29 @@ test("analyses : cinq slides, rendu normal/Célébration, responsive et détails
           const graph = card.getByRole("group", { name: "Histogramme des temps moyens, en secondes par position" });
           await expect(graph).toBeVisible();
           await expect(graph.getByRole("button")).toHaveCount(snapshot.unloadingHourlyAnalysis!.items.length);
+          const analysis = snapshot.unloadingHourlyAnalysis!;
+          for (const [slotIndex, slot] of analysis.items.entries()) {
+            const button = graph.getByRole("button").nth(slotIndex);
+            const value = button.locator(".reception-hour-value");
+            const expected = slot.state === "disponible" && slot.meanSecondsPerPosition != null
+              ? slot.distinctPositions.toLocaleString("fr-FR") : "—";
+            await expect(value).toHaveText(slot.state === "disponible" && slot.meanSecondsPerPosition != null
+              ? `${expected} pos.` : "—");
+            if (slot.state === "disponible") {
+              await expect(button).toHaveAttribute("aria-label", new RegExp(`${slot.distinctPositions} position`));
+            }
+            // Even narrow screens display the compact count, with the exact
+            // number remaining accessible through button and selected details.
+            if (slot.state === "disponible" && (width === 390 || width === 320)) {
+              await expect(value).toBeVisible();
+            }
+          }
           const target = graph.getByRole("button").nth(Math.floor(snapshot.unloadingHourlyAnalysis!.items.length / 2));
           await target.focus(); await page.keyboard.press("Enter");
           await expect(target).toHaveAttribute("aria-pressed", "true");
           await expect(page.locator("#reception-hour-detail")).toContainText("Objectif");
+          await expect(page.locator("#reception-hour-detail")).toContainText("Positions distinctes");
+          await expect(page.locator("#reception-hour-detail")).toContainText("Moyenne");
           await expect(page.locator(".reception-hourly-analysis")).toContainText("Même périmètre que les duels gagnés");
           const collisions = await graph.locator(".reception-hour-label").evaluateAll(labels => {
             const boxes = labels.map(label => { const range = document.createRange(); range.selectNodeContents(label); return range.getBoundingClientRect(); });
