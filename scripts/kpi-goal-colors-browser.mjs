@@ -103,7 +103,7 @@ try {
       assert.equal(await allCards.count(),4,"All four leagues remain available");
       const labels=await allCards.locator(".league-card-top strong").allTextContents();
       assert.deepEqual(labels.map(s=>s.trim()),["Ligue 2","Ligue 1","Ligue des champions","Coupe du monde"]);
-      const leagueCard=allCards.locator("." + league.tone);
+      const leagueCard=page.locator(".administrator-leagues .league-card." + league.tone);
       const accent=await leagueCard.evaluate(el=>
         getComputedStyle(el).getPropertyValue("--competition-card-color").trim().toLowerCase());
       assert.equal(accent,league.cardColor,"Competition-specific card colour");
