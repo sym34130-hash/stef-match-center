@@ -1970,7 +1970,8 @@ function buildHourlyPassPerformance(workbook, period, scoringRows = null, source
     }));
     const toOffset = (hour) => {
       const minute = hour * 60;
-      return period.isOvernight && minute < period.startMinutes ? minute + 1440 - period.startMinutes : minute - period.startMinutes;
+      const firstHour = Math.floor(period.startMinutes / 60) * 60;
+      return period.isOvernight && minute < firstHour ? minute + 1440 - firstHour : minute - firstHour;
     };
     values.sort((a, b) => toOffset(a.hour) - toOffset(b.hour));
     const won = values.reduce((sum, item) => sum + item.won, 0);
@@ -2051,7 +2052,8 @@ function buildHourlyPassPerformance(workbook, period, scoringRows = null, source
   values.sort((a, b) => {
     const toOffset = (hour) => {
       const minutes = hour * 60;
-      return period.isOvernight && minutes < period.startMinutes ? minutes + 1440 - period.startMinutes : minutes - period.startMinutes;
+      const firstHour = Math.floor(period.startMinutes / 60) * 60;
+      return period.isOvernight && minutes < firstHour ? minutes + 1440 - firstHour : minutes - firstHour;
     };
     return toOffset(a.hour) - toOffset(b.hour);
   });
