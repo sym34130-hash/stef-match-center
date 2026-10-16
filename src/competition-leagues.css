@@ -16,6 +16,8 @@
   font-stretch: condensed;
   text-transform: uppercase;
   letter-spacing: .035em;
+  font-kerning: normal;
+  text-wrap: balance;
   line-height: 1.12;
   overflow-wrap: normal;
   word-break: normal;
