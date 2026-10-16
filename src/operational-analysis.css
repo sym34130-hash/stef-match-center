@@ -91,7 +91,8 @@
 .reception-hour-bar { position: absolute; bottom: 0; left: 22%; right: 22%; height: var(--bar-height); background: #20856b; border-radius: 4px 4px 0 0; }
 .reception-hour-button.is-over-target .reception-hour-bar { background: #ba4050; }
 .reception-hour-button.is-selected { background: #1d4e8910; box-shadow: inset 0 0 0 1px #1d4e89; }
-.reception-hour-value { position: absolute; bottom: calc(var(--bar-height) + 4px); left: 0; right: 0; font-size: 12px; line-height: 1.2; font-weight: 800; }
+.reception-hour-value { position: absolute; bottom: calc(var(--bar-height) + 4px); left: 0; right: 0; font-size: 12px; line-height: 1.2; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: clip; font-variant-numeric: tabular-nums; text-align: center; }
+.reception-hour-value-unit { font-weight: 700; font-size: .8em; }
 .reception-hour-label { position: absolute; top: calc(100% + 6px); left: 0; right: 0; font-size: 12px; line-height: 1.3; }
 .reception-hour-target { position: absolute; left: 0; right: 0; border-top: 2px dashed #1d4e89; pointer-events: none; z-index: 1; }
 .reception-hour-detail { display: flex; flex-wrap: wrap; gap: 6px 18px; min-height: 42px; font-size: 12px; line-height: 1.5; align-content: start; }
@@ -140,6 +141,7 @@
   .reception-hour-bars { gap: 2px; }
   .reception-hour-chart { grid-template-columns: 30px minmax(0, 1fr); gap: 4px; }
   .reception-hour-value, .reception-hour-label { font-size: 11px; }
+  .reception-hour-value-unit { display: none; }
   .reception-hour-unit { display: none; }
   .reception-hourly-analysis .analysis-provenance { overflow-wrap: anywhere; }
   .operational-charts-carousel .reception-quality-card .loading-quality-pie { max-width: 100%; }
@@ -203,7 +205,7 @@
   .diagnostic-metrics dt { font-size: 12px; }
   .diagnostic-metrics dd { grid-row: 1; }
   .diagnostic-metrics small { grid-column: 1 / -1; grid-row: 2; }
-  .reception-hour-value { display: none; }
+  .reception-hour-value { display: block; font-size: 9px; letter-spacing: -.02em; }
   .reception-hour-chart { padding-bottom: 44px; }
   .reception-hour-button:nth-child(even) .reception-hour-label { top: calc(100% + 20px); }
 }
