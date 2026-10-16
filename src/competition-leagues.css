@@ -1,6 +1,5 @@
-/* League TITLES ONLY — solid-red, heavy, forward-slanted sports masthead.
-   Lettering is original CSS typography, not a copied publication wordmark.
-   No backgrounds, gradients, medals, borders, app themes or KPI rules change. */
+/* League name typography and placement only. No changes to the original
+   gradients, card surfaces, medal backgrounds, themes, borders or KPI logic. */
 :root {
   --competition-display-font: "Archivo Black", "Barlow Condensed", "Arial Black",
     "Franklin Gothic Heavy", sans-serif;
@@ -10,11 +9,9 @@
 .league-card-top strong,
 .guide-league-card-top strong,
 .coach-league-badge strong {
-  /* Archivo Black has naturally heavy uppercase strokes. The sharp
-     skew makes a forward-leaning wordmark without relying on faux italics. */
   display: inline-block;
-  max-width: 100%;
   min-width: 0;
+  max-width: 100%;
   padding-inline: .06em .14em;
   font-family: var(--competition-display-font);
   font-style: normal;
@@ -22,25 +19,79 @@
   font-weight: 400;
   text-transform: uppercase;
   letter-spacing: -.065em;
-  line-height: 1.05;
-  text-wrap: balance;
+  line-height: 1.08;
+  white-space: nowrap;
   overflow-wrap: normal;
   word-break: normal;
   hyphens: none;
   transform: skewX(-12deg);
   transform-origin: center center;
-  color: #e30613;
-  -webkit-text-stroke: 0;
-  text-shadow: none;
+
+  /* White lettering requires a restrained dark edge over the ORIGINAL
+     pale league backgrounds. Only text is outlined/shadowed, never cards. */
+  color: #fff;
+  -webkit-text-stroke: 1px rgba(14, 37, 68, .9);
+  paint-order: stroke fill;
+  text-shadow: 1px 2px 2px rgba(7, 24, 51, .55);
 }
 .top-league-badge strong { font-size: clamp(15px, 1.25vw, 19px); }
-.league-card-top strong { font-size: clamp(25px, 2.25vw, 33px); }
 .guide-league-card-top strong { font-size: clamp(23px, 2vw, 30px); }
 .administrator-active-badge strong { font-size: clamp(27px, 2.4vw, 35px); }
 .coach-league-badge strong { font-size: clamp(21px, 1.8vw, 27px); }
 
-/* Historical tone selectors may otherwise recolor titles; these rules
-   explicitly affect only the NAME glyphs, never the card or its children. */
+/* Admin comparison cards: first row has medal LEFT, action RIGHT.
+   The full-width league title occupies its OWN second row, with the
+   description and criteria flowing below. Avoid absolute positioning. */
+.league-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 10px;
+  row-gap: 14px;
+}
+.league-card > .league-medal {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  justify-self: start;
+}
+.league-card > .league-select-button {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  justify-self: end;
+  white-space: nowrap;
+  min-width: max-content;
+  position: relative;
+  z-index: 2;
+}
+.league-card > .league-card-top {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: block;
+  min-width: 0;
+}
+.league-card > .league-description {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  min-width: 0;
+}
+.league-card > .league-values {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  min-width: 0;
+}
+.league-card > .league-target-meter {
+  grid-column: 1 / -1;
+  grid-row: 5;
+  min-width: 0;
+}
+.league-card-top strong {
+  font-size: clamp(25px, 2.25vw, 33px);
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+/* Historical tone rules can override the title ink; restrict the white
+   treatment to <strong> labels only — not buttons, descriptions or cards. */
 .app-shell.league-bronze .top-league-badge strong,
 .app-shell.league-argent .top-league-badge strong,
 .app-shell.league-or .top-league-badge strong,
@@ -61,7 +112,7 @@
 .coach-league-badge.silver strong,
 .coach-league-badge.gold strong,
 .coach-league-badge.platinum strong {
-  color: #e30613;
+  color: #fff;
 }
 @media (max-width: 640px) {
   .top-league-badge strong { font-size: 15px; }
@@ -77,5 +128,7 @@
   .guide-league-card-top strong,
   .coach-league-badge strong {
     color: CanvasText;
+    -webkit-text-stroke: 0;
+    text-shadow: none;
   }
 }
