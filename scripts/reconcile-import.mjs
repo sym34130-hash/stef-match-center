@@ -355,12 +355,12 @@ const filteredHourlySnapshot = hourlyTravelSnapshot([
   { hour: 1, travel: "X001" }, { hour: 1, travel: "X002", operatorFilter: "exclu" },
   { hour: 1, travel: "X003", unzonedFilter: "exclu" }, { hour: 5, travel: "X004" },
 ]);
-assert.deepEqual(filteredHourlySnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 0, total: 1, rate: 0, arrivingTravels: 2, arrivingTravelCodes: ["X001", "X004"] }], "Arrivées : filtres permanents identiques, date réelle indépendante de Heure op");
+assert.deepEqual(filteredHourlySnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 0, total: 1, rate: 0, arrivingTravels: 1, arrivingTravelCodes: ["X001"] }], "Arrivées : heure réelle et filtres permanents cohérents");
 const hourlyFallbackSnapshot = hourlyTravelSnapshot([{ travel: "X001" }], [], [
   ["Heure op", "Duels perdus", "Duels gagnés", "", "Passes réussies", "", "Heure op", "Somme de % passes réussies"],
   [1, 1, 3, "", 0.75, "", 1, 0.75],
 ]);
-assert.deepEqual(hourlyFallbackSnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 3, total: 4, rate: 75, arrivingTravels: 1, arrivingTravelCodes: ["X001"] }], "Fallback : arrivées calculées depuis Données, jamais depuis les compteurs Excel");
+assert.deepEqual(hourlyFallbackSnapshot.hourlyPerformance, [{ label: "01h", hour: 1, won: 0, total: 1, rate: 0, arrivingTravels: 1, arrivingTravelCodes: ["X001"] }], "Le TCD horaire ancien ne remplace pas les opérations réellement évaluables");
 for (const [label, entries, range, exclusions, expected] of [
   ["voyage multi-heures", [
     { travel: "X001", time: "22:42:00", hour: 22 }, { travel: "X001", time: "23:03:00", hour: 23 }, { travel: "X001", time: "23:18:00", hour: 23 },
