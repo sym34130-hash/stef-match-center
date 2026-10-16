@@ -34,7 +34,7 @@ function small106jPdf(referenceDate, agencyCode = null) {
     // Add an agency Site line inside the valid synthetic PDF stream. Update its
     // byte length and the cross-reference start offset; no private 106J is used.
     const addedText = `BT 1 0 0 1 50 700 Tm (Site : STEF Transport AGEN [${agencyCode}]) Tj T* ET\n`;
-    const length = pdf.match(/\\/Length (\\d+)/);
+    const length = pdf.match(/[/]Length ([0-9]+)/);
     if (!length || !pdf.includes("endstream")) throw new Error("PDF fixture has no editable stream");
     pdf = pdf.replace("endstream", addedText + "endstream");
     pdf = pdf.replace(length[0], `/Length ${Number(length[1]) + addedText.length}`);
