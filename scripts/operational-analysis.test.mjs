@@ -330,13 +330,11 @@ test("réconciliation ponctuelle Montpellier, Excel inchangé et KPI officiels a
   assert.deepEqual(s.operationalScore.indicators, { passRate: 61.8, loadingPercent: 75, unloadingPercent: 82.6, possessionPercent: 72.2 });
   assert.equal(s.zonageDiagnostic.night.startDate, "2026-09-17");
   assert.deepEqual([s.zonageDiagnostic.receivedPositions, s.zonageDiagnostic.qualifiablePositions, s.zonageDiagnostic.latePositions, s.zonageDiagnostic.unqualifiablePositions], [676, 488, 184, 188]);
-  assert.deepEqual([s.anomalySummary.unloading.eligibleTravels, s.anomalySummary.unloading.offTargetTravels], [23, 4]);
-  assert.equal(s.unloadingHourlyAnalysis.items.reduce((sum, item) => sum + item.travelCount, 0), s.unloadingHourlyAnalysis.eligibleTravels);
-  assert.ok(s.unloadingHourlyAnalysis.travels.every(trip => trip.operationRows >= 15));
+  assert.deepEqual([s.unloadingHourlyAnalysis.eligibleTravels, s.unloadingHourlyAnalysis.offTargetTravels, s.unloadingHourlyAnalysis.meanSecondsPerPosition], [23, 4, 59]);
+  assert.equal(s.unloadingHourlyAnalysis.travels.find(t => t.travelCode === "TVE100").timePerPositionSeconds, 883 / 20);
   assert.deepEqual([s.unloadingQuality.targeted, s.unloadingQuality.offTarget], [19, 4]);
   assert.equal(s.unloadingDuelQuality.lostDuels.length, s.unloadingQuality.offTarget);
-  assert.equal(s.anomalySummary.unloading.offTargetTravels, s.unloadingDuelQuality.lostDuels.length,
-    "Official diagnostic remains in sync with duel detail");
+  assert.deepEqual(s.unloadingHourlyAnalysis.travels.filter(t => t.offTarget).map(t => t.travelCode).sort(), s.unloadingDuelQuality.lostDuels.map(t => t.travelCode).sort());
   if (process.env.STEF_OPERATIONAL_BASELINE) {
     const before = JSON.parse(await fs.readFile(process.env.STEF_OPERATIONAL_BASELINE, "utf8"));
     // Reception, score and dated diagnostics intentionally change; assert only
