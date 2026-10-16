@@ -5,7 +5,7 @@ These optional snapshot fields are descriptive and never feed an official KPI:
 `operationalAnalysisVersion` is separate from `KPI_DICTIONARY_VERSION`.
 Implementation: `server/operational-analysis.mjs`.
 
-## Shared scope and dated operating night
+## Shared scope and dated operating period
 
 The engine supplies the existing match rows: valid parsed operations, operator
 filter, active clock window and explicit voyage exclusions already applied.
@@ -13,27 +13,38 @@ filter, active clock window and explicit voyage exclusions already applied.
 No new agency access logic is introduced; the constructor and cache remain
 agency-scoped. No operator names are added to analysis details.
 
-Candidate nights use real Europe/Paris dates and the active window. For an
+Candidate periods use real Europe/Paris dates and the active window. For an
 overnight window, post-midnight rows belong to the previous start date. Select
 the greatest eligible operation count, then the most recent start date on ties.
-Expose every candidate count and the operations outside the selected night.
+Expose every candidate count and the operations outside the selected period.
 This is a deterministic volume heuristic, not a confidence percentage or a
-claim that the largest night is necessarily the intended business date.
+claim that the largest period is necessarily the intended business date.
 Without dated eligible rows, return `indisponible` with a reason. A missing or
 ambiguous daylight-saving boundary also returns unavailable rather than guessing.
-Normal overnight DST transitions use actual instants, including repeated hours.
+With unambiguous source instants, overnight DST transitions use actual elapsed
+time, including repeated hours. This does not disambiguate Excel wall clocks:
+the historical date parser can shift timestamps near a DST transition and does
+not reject nonexistent or ambiguous source times. That pre-existing import
+limitation requires a separate contract decision; this wording change does not
+alter it. Missing/ambiguous period boundaries remain unavailable as above.
 
 Windows retain the official minute precision: the final minute is included in
 full. Slot start/end are ISO instants with Europe/Paris as the declared display
 zone. All intermediate slots are half-open; the final slot has
 `endInclusiveMinute: true`. Empty slots remain present with null metrics.
 The selected window defines the diagnostic scope: a first DECHG means the first
-eligible DECHG in that window and night, not an arrival time for the entire source.
+eligible DECHG in that window and period, not an arrival time for the entire source.
+
+Daytime windows (08:00-16:00, 14:00-22:00 and 00:00-08:00) retain their
+calendar date. Only a window whose end precedes its start shifts post-midnight
+operations to the previous start date. The technical names `night`,
+`otherNightOperations`, `OperatingNight` and `heure_du_premier_DECHG_de_la_nuit`
+are retained for snapshot compatibility; they also represent daytime periods.
 
 ## Chronological zonage
 
-Group by position in the selected night. Use its first eligible DECHG and first
-eligible ZONAGE at or after that reception, never a different position or night.
+Group by position in the selected period. Use its first eligible DECHG and first
+eligible ZONAGE at or after that reception, never a different position or period.
 All DECHG rows must identify the same nonempty inbound voyage. Conflicting codes
 or missing reception codes are unqualifiable and are not arbitrarily attributed.
 Repeated receptions with the same code are documented and deduplicated for counts.
@@ -53,7 +64,7 @@ used late / received. It must not be copied as the definitive anomaly rate.
 
 ## Hourly reception
 
-Group DECHG rows by voyage in the selected night. Elapsed seconds = rounded
+Group DECHG rows by voyage in the selected period. Elapsed seconds = rounded
 last-start minus first-start; divide by the DECHG row count, not distinct
 positions. Exclude nonpositive duration groups and record their count. Missing
 voyage rows are not made into an artificial trip.
@@ -74,7 +85,7 @@ voyage follows the ranking above. Messages and warnings are deterministic.
 
 Loading counts reuse the existing TCD loading result and explicitly declare
 `scope: plage_active_toutes_dates`; they are not silently assigned to the new
-selected night. Warn about this difference when other nights are present.
+selected period. Warn about this difference when other periods are present.
 Never substitute these counts for the official score.
 
 The API rebuilds missing/old analysis contracts from the agency's workbook,

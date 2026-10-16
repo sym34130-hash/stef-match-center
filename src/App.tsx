@@ -3751,6 +3751,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
           {section === "start" && (
             <GuidePanel eyebrow="01 · Démarrer" title="Le fonctionnement en une minute" icon={MousePointerClick}>
               <p>Le site transforme un fichier Excel actualisé en une lecture opérationnelle du match. Le fichier reste la source de données ; le site sert à contrôler, comprendre et agir.</p>
+              <p><strong>Un pilotage adapté à toutes les équipes</strong><br />STEF Match Center analyse les opérations réalisées en journée comme de nuit. Sélectionnez la plage horaire correspondant à votre activité pour adapter le périmètre du match et des analyses concernées.</p>
               <div className="guide-flow">
                 <GuideFlowStep number="1" title="Importer" detail="Chargez votre classeur complet, puis le PDF 106J si disponible." tone="blue" />
                 <GuideFlowStep number="2" title="Contrôler" detail="Vérifiez le fichier, la plage active et les indicateurs disponibles." tone="green" />
@@ -3889,10 +3890,10 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
               </section>
               <details className="guide-topic guide-disclosure"><summary>Réception par créneau horaire : que mesure le graphique ?</summary>
                 <p>Ce graphique indique le temps moyen par position des voyages ayant commencé pendant chaque créneau horaire. Ouvrez Duels gagnés et sélectionnez un créneau pour consulter le temps, le nombre de voyages et l’objectif.</p>
-                <p>La cible dépend de la ligue. L’analyse utilise la nuit principale identifiée, c’est-à-dire celle qui comporte le plus d’opérations dans la plage retenue ; la date la plus récente départage les égalités. Un créneau sans données n’est pas un temps à zéro. Ce graphique ne mesure pas directement le temps travaillé pendant l’heure.</p>
+                <p>La cible dépend de la ligue. L’analyse porte sur la période d’exploitation principale identifiée à partir de la plage horaire sélectionnée. Cette période peut se situer en journée ou traverser minuit. Lorsque plusieurs périodes datées sont présentes, celle comprenant le plus d’opérations éligibles est retenue ; la date la plus récente départage les égalités. Un créneau sans données n’est pas un temps à zéro. Ce graphique ne mesure pas directement le temps travaillé pendant l’heure.</p>
               </details>
               <details className="guide-topic guide-disclosure"><summary>Réception et chargement : des périmètres différents</summary>
-                <p>Le compteur des réceptions hors cible porte sur les voyages de la nuit analysée. Le compteur des chargements hors cible utilise le TCD historique du classeur et n’est pas nécessairement limité à cette nuit.</p>
+                <p>Le compteur des réceptions hors cible porte sur les voyages de la période d’exploitation analysée. Le compteur des chargements hors cible utilise le TCD historique du classeur et n’est pas nécessairement limité à cette période.</p>
                 <p>Ne mélangez pas ces deux périmètres. N’additionnez jamais positions et voyages pour obtenir un total global d’anomalies. Les quatre KPI officiels du score restent distincts de ces analyses.</p>
               </details>
               <div className="guide-actions"><button className="primary-button" type="button" onClick={() => onNavigate("match")}><LayoutDashboard size={17} /> Ouvrir la Feuille de match</button><button className="secondary-button" type="button" onClick={() => onNavigate("coach")}><Dumbbell size={17} /> Préparer les priorités dans Coach</button></div>
@@ -3962,7 +3963,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                 <GuideTrouble title="MATCH ACTUALISÉ avec alertes" detail="L’import a fonctionné. Ouvrez Excel, utilisez Ctrl + F ou les filtres pour retrouver les lignes signalées, puis décidez si elles doivent être corrigées." />
                 <GuideTrouble title="Aucun match après Actualiser" detail="Actualiser ne lit pas votre ordinateur. Retournez dans Import et réimportez le dernier fichier Excel complet." />
                 <GuideTrouble title="Onglet Données absent" detail="Utilisez le classeur complet contenant Données et sa ligne d’en-têtes. Ne renommez pas une feuille sans vérifier son contenu." />
-                <GuideTrouble title="Mauvaise plage horaire" detail="Contrôlez Début et Fin, cliquez sur Appliquer puis vérifiez la date de la nuit affichée. Une fin plus tôt que le début traverse minuit." />
+                <GuideTrouble title="Mauvaise plage horaire" detail="Après avoir appliqué la plage horaire, vérifiez la date d’exploitation et le créneau affichés. Une plage dont l’heure de fin est antérieure à l’heure de début traverse minuit." />
                 <GuideTrouble title="Indicateur indisponible" detail="Lisez les sources manquantes dans Import. Ne remplacez pas une absence de résultat par zéro ; un classeur incomplet peut empêcher le calcul du score." />
                 <GuideTrouble title="Positions non qualifiables" detail="Ouvrez le détail du diagnostic. Vérifiez la réception et le zonage dans Excel : un délai inconnu n’est pas un retard confirmé." />
                 <GuideTrouble title="Voyage exclu par erreur" detail="Dans Lecture opérationnelle, ouvrez Voyages exclus de l'analyse et utilisez Réintégrer sur le code concerné, si vos droits le permettent." />

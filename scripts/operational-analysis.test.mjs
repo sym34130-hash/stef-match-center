@@ -171,6 +171,67 @@ function workbook(rows) {
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 }
 
+for (const [start, end, before, middle, after, nextDay] of [
+  ["08:00", "16:00", "07:59:59", "12:00:00", "16:01:00", false],
+  ["14:00", "22:00", "13:59:59", "18:00:00", "22:01:00", false],
+  ["21:30", "06:30", "21:29:59", "23:00:00", "06:31:00", true],
+  ["00:00", "08:00", "23:59:59", "04:00:00", "08:01:00", false],
+]) {
+  test(`période ${start}-${end} : filtre Excel, bornes, date, voyages et créneaux`, () => {
+    const day = "2026-09-17", endDay = nextDay ? "2026-09-18" : day;
+    const buffer = workbook([
+      row("DECHG", "START", `${start}:00`, "ACTIVE", day),
+      row("ZONAGE", "START", `${start}:30`, "", day),
+      row("DECHG", "MID", middle, "ACTIVE", day),
+      row("DECHG", "END", `${end}:59`, "ACTIVE", endDay),
+      row("DECHG", "BEFORE", before, "BEFORE", day),
+      row("DECHG", "AFTER", after, "AFTER", endDay),
+      row("DECHG", "OTHER-DATE", `${start}:00`, "OTHER", "2026-09-19"),
+      row("DECHG", "OTHER-DATE-2", `${start}:01`, "OTHER", "2026-09-19"),
+      { ...row("DECHG", "FILTERED", middle, "FILTERED", day), operatorFilter: "x" },
+    ]);
+    const options = { start, end, criteria };
+    const s = buildSnapshotFromWorkbook(buffer, "day-night.xlsx", "01K", options).snapshot;
+    const z = s.zonageDiagnostic, h = s.unloadingHourlyAnalysis;
+    assert.equal(z.night.startDate, day); assert.equal(z.night.endDate, endDay);
+    assert.equal(s.validation.kpiRules.period, `${start}-${end}`);
+    assert.equal(z.receivedPositions, 3); assert.equal(z.onTimePositions, 1);
+    assert.equal(z.unqualifiablePositions, 2); assert.equal(z.night.otherNightOperations, 2);
+    assert.deepEqual(z.travels.map(t => t.travelCode), ["ACTIVE"]);
+    assert.equal(h.eligibleTravels, 1); assert.equal(h.travels[0].operationRows, 3);
+    assert.equal(h.items[0].label, `${start.slice(0, 2)}h`);
+    assert.equal(h.items.at(-1).end, z.night.end);
+    assert.equal(h.items.reduce((sum, slot) => sum + slot.travelCount, 0), 1);
+    assert.equal(new Set(h.items.map(slot => slot.start)).size, h.items.length);
+    assert.ok(s.anomalySummary.warnings.includes("2 opération(s) appartenant à d'autres périodes d'exploitation exclues du diagnostic."));
+    const excluded = buildSnapshotFromWorkbook(buffer, "day-night.xlsx", "01K", { ...options, excludedTravelCodes: ["ACTIVE", "OTHER"] }).snapshot;
+    assert.equal(excluded.zonageDiagnostic.receivedPositions, 0);
+    assert.equal(excluded.unloadingHourlyAnalysis.eligibleTravels, 0);
+  });
+}
+
+test("période de jour : volumes égaux, date récente retenue sans mélange", () => {
+  const period = normalizeTimeRange("08:00", "16:00");
+  const a = analyze([row("DECHG", "P", "09:00:00", "OLD"), row("DECHG", "Q", "09:02:00", "OLD"),
+    row("DECHG", "P", "09:00:00", "NEW", "2026-09-18"), row("DECHG", "Q", "09:02:00", "NEW", "2026-09-18")], { period });
+  assert.equal(a.zonageDiagnostic.night.startDate, "2026-09-18");
+  assert.equal(a.zonageDiagnostic.night.endDate, "2026-09-18");
+  assert.deepEqual(a.unloadingHourlyAnalysis.travels.map(t => t.travelCode), ["NEW"]);
+});
+
+test("Europe/Paris : heure d'été, heure manquante et bornes explicites", () => {
+  const rows = [row("DECHG", "P", "01:50:00", "DST", "2026-03-29", "+01:00"),
+    row("DECHG", "Q", "03:10:00", "DST", "2026-03-29", "+02:00")];
+  const a = analyze(rows);
+  assert.equal(a.zonageDiagnostic.night.startDate, "2026-03-28");
+  assert.equal(a.unloadingHourlyAnalysis.travels[0].timePerPositionSeconds, 600);
+  assert.equal(a.unloadingHourlyAnalysis.items.filter(slot => slot.label === "02h").length, 0);
+  assert.equal(a.unloadingHourlyAnalysis.items.reduce((sum, slot) => sum + slot.travelCount, 0), 1);
+  const missing = analyze(rows, { period: normalizeTimeRange("02:00", "08:00") });
+  assert.equal(missing.zonageDiagnostic.reason, "borne_horaire_ambigue_ou_inexistante");
+  assert.equal(missing.zonageDiagnostic.night, null);
+});
+
 test("intégration : Excel partiel, filtres opérateur/exclusions/plage, sans API inventée", () => {
   const buffer = workbook([row("DECHG", "P", "22:00:00", "A"), row("DECHG", "Q", "22:02:00", "A"), row("ZONAGE", "P", "22:20:00", ""),
     row("DECHG", "R", "23:00:00", "B"), { ...row("DECHG", "S", "22:01:00", "FILTERED"), operatorFilter: "x" }]);
