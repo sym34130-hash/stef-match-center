@@ -41,6 +41,51 @@ async function stats(page: Page) {
 const carousel = (page: Page) => page.getByRole("region", { name: "Graphiques de lecture opérationnelle", exact: true });
 const tab = (page: Page, name: string) => page.getByRole("tab", { name: `Afficher ${name}`, exact: true });
 
+test("jour/nuit : dates, libellés et anciens avertissements dans les deux modes", async ({ page }, info) => {
+  test.setTimeout(150_000);
+  await page.addInitScript(() => { sessionStorage.clear(); localStorage.clear(); });
+  let snapshot = fixture();
+  await page.route("**/api/agencies/01K/snapshot**", route => route.fulfill({ json: { snapshot } }));
+  for (const [start, end, date, clock] of [
+    ["08:00", "16:00", "2026-09-17", "08"], ["14:00", "22:00", "2026-09-17", "14"],
+    ["21:30", "06:30", "2026-09-17", "22"], ["00:00", "08:00", "2026-09-18", "00"],
+  ]) {
+    const source = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(source, XLSX.utils.aoa_to_sheet([headers,
+      ["Anonymous", `${date}T${clock}:00:00+02:00`, "DECHG", "DAY-P1", "DAY-TRIP", "01K", "", "", "", "", "", 1 / 24, 0, Number(clock)],
+      ["Anonymous", `${date}T${clock}:02:00+02:00`, "DECHG", "DAY-P2", "DAY-TRIP", "01K", "", "", "", "", "", 1 / 24, 0, Number(clock)],
+      ["Anonymous", `${date}T${clock}:45:00+02:00`, "ZONAGE", "DAY-P1", "", "01K", "", "", "", "", "", 1 / 24, 0, Number(clock)],
+    ]), "Données");
+    const actual = buildSnapshotFromWorkbook(XLSX.write(source, { type: "buffer", bookType: "xlsx" }), "day-night.xlsx", "01K", { start, end, criteria: defaults }).snapshot as Snapshot;
+    snapshot = { ...actual, agency: { ...actual.agency, name: "Montpellier - 01K" } };
+    // An old snapshot must not keep a nocturnal-only warning visible.
+    snapshot.anomalySummary!.warnings = ["2 opération(s) d'autres nuits exclues des nouvelles analyses."];
+    const saved = JSON.stringify(snapshot);
+    await login(page);
+    for (const mode of ["normal", "celebration"]) {
+      if (mode === "celebration") {
+        await page.getByRole("navigation", { name: "Navigation de la feuille de match" }).getByRole("button", { name: "Aller à Coup de sifflet final", exact: true }).click();
+        await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
+      }
+      await stats(page);
+      await tab(page, "% duels gagnés").click();
+      await expect(page.locator(".reception-hourly-analysis")).not.toContainText(/nuit/);
+      await expect(page.locator(".reception-hourly-analysis")).toContainText(`${start.replace(":", "h")}–${end.replace(":", "h")}`);
+      await tab(page, "Diagnostic opérationnel").click();
+      const diagnostic = page.locator(".operational-diagnostic-card");
+      await expect(diagnostic).toContainText("Période d'exploitation retenue");
+      await expect(diagnostic).toContainText("réceptions hors cible — période analysée");
+      await diagnostic.locator(".diagnostic-warnings summary").click();
+      await expect(diagnostic).toContainText("2 opération(s) appartenant à d'autres périodes d'exploitation exclues du diagnostic.");
+      await expect(diagnostic).not.toContainText(/nuit/);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+      await diagnostic.screenshot({ path: info.outputPath(`day-night-${start.replace(":", "")}-${mode}.png`) });
+      if (mode === "celebration") await page.getByRole("button", { name: "Sortir du mode Célébration", exact: true }).click();
+    }
+    expect(JSON.stringify(snapshot)).toBe(saved);
+  }
+});
+
 test("analyses : cinq slides, rendu normal/Célébration, responsive et détails clavier", async ({ page }, info) => {
   test.setTimeout(240_000);
   const snapshot = fixture(); const errors: string[] = [];

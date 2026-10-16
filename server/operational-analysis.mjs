@@ -182,7 +182,7 @@ function hourlyReception(rows, night, targetSeconds, reason) {
 }
 
 /** Input rows already satisfy the official match filter (operator, active clock range, exclusions).
- * Only these analyses select one dated operating night. No global KPI is recalculated here.
+ * Only these analyses select one dated operating period. No global KPI is recalculated here.
  */
 export function buildOperationalAnalyses({ rows, period, criteria, loadingQuality, validation = {} }) {
   const valid = (rows ?? []).filter(row => row.startedAt instanceof Date && Number.isFinite(+row.startedAt) &&
@@ -192,7 +192,7 @@ export function buildOperationalAnalyses({ rows, period, criteria, loadingQualit
   const zonageDiagnostic = zonageAnalysis(selectedRows, night, criteria.zonageMinutes, reason);
   const unloadingHourlyAnalysis = hourlyReception(selectedRows, night, criteria.unloadingSeconds, reason);
   const warnings = [...zonageDiagnostic.warnings];
-  if (night?.otherNightOperations) warnings.push(`${night.otherNightOperations} opération(s) d'autres nuits exclues des nouvelles analyses.`);
+  if (night?.otherNightOperations) warnings.push(`${night.otherNightOperations} opération(s) appartenant à d'autres périodes d'exploitation exclues du diagnostic.`);
   const invalidRows = (rows?.length ?? 0) - valid.length;
   if (invalidRows || validation.issueRows) warnings.push(`${invalidRows + (validation.issueRows ?? 0)} ligne(s) non exploitable(s) signalée(s).`);
   if (validation.unknownOperationRows) warnings.push(`${validation.unknownOperationRows} type(s) d'opération non reconnu(s) dans la source.`);

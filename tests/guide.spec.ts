@@ -64,6 +64,8 @@ test("Guide V2 : huit rubriques, progression et six agences avec/sans Excel", as
     await expect(guide).not.toContainText("GUIDE-TEST-ONLY");
     await expect(guide).not.toContainText(/STEF-(058|01K|05R|04P|R3A|04H)/);
     await expect(guide).toContainText("Agen, Montpellier, Toulouse, Bordeaux, Lyon et Brive");
+    await expect(guide).toContainText("Un pilotage adapté à toutes les équipes");
+    await expect(guide).toContainText("en journée comme de nuit");
     await expect(guide.getByRole("button", { name: "Étape précédente", exact: true })).toBeDisabled();
     for (let index = 0; index < sections.length; index++) {
       await expect(item(page, index)).toHaveAttribute("aria-current", "step");
@@ -88,6 +90,9 @@ test("Guide V2 : huit rubriques, progression et six agences avec/sans Excel", as
           await expect(summary.locator("..")).toHaveAttribute("open", "");
         }
         await expect(guide).toContainText("n’est pas un temps à zéro");
+        await expect(guide).toContainText("plus d’opérations éligibles");
+        await expect(guide).toContainText("période d’exploitation analysée");
+        await expect(guide).not.toContainText(/nuit principale|nuit analysée/);
         await expect(guide).toContainText("N’additionnez jamais positions et voyages");
         await guide.locator(".guide-panel").screenshot({ path: info.outputPath("guide-anomalies.png") });
       }
