@@ -1,4 +1,4 @@
-// Match 106J daily figures only to the selected Europe/Paris operating night.
+// Describe 106J source provenance independently of the selected Paris operational period.
 // This module is independent of HTTP and filesystem state so its rules can be tested.
 const MONTHS = new Map(Object.entries({
   janvier: 1, fevrier: 2, mars: 3, avril: 4, mai: 5, juin: 6,
@@ -35,7 +35,7 @@ export function pdfAssociation(pdf, snapshot) {
   if (reportedAgency && targetAgency && reportedAgency !== targetAgency) return {
     status: "mismatched-agency", referenceDate: pdf?.referenceDate ?? null,
     reportedAgency: pdf.agencyCode, targetAgency: snapshot.agency.code,
-    message: `Le PDF 106J provient de l'agence ${pdf.agencyCode}, différente de l'agence ${snapshot.agency.code} de cet espace. Aucun indicateur n'a été associé.`,
+    message: `PDF 106J de l'agence ${pdf.agencyCode} (date : ${pdf.referenceDate ?? "non précisée"}), différente de l'espace ${snapshot.agency.code}. Import autorisé : les chiffres affichés proviennent de cette autre agence.`,
   };
   const night = snapshot?.zonageDiagnostic?.night ?? snapshot?.anomalySummary?.night;
   const start = night?.startDate ?? parisDay(snapshot?.match?.firstOperation);
@@ -51,8 +51,8 @@ export function pdfAssociation(pdf, snapshot) {
   return { status: "matched", referenceDate: pdf.referenceDate, message: "PDF 106J associé à la période du match." };
 }
 
-// A report from a different day remains a valid daily source for the selected agency.
-// Only a known different agency must prevent using the PDF figures.
+// All readable 106J reports can be attached to the selected space; mismatches remain warnings.
+// Ownership of the agency workspace and the Excel confirmation rules do not change.
 export function canUsePdfIndicators(association) {
-  return association?.status === "matched" || association?.status === "mismatched" || association?.status === "unverified";
+  return ["matched", "mismatched", "unverified", "mismatched-agency"].includes(association?.status);
 }
