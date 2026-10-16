@@ -50,6 +50,7 @@ assert.deepEqual(slots.map(({label, operationRows, distinctPositions}) => [label
   [["22h",15,15],["23h",16,15]], "The fixture proves the position-count distinction");
 const sourceMean = slots.map(item => item.meanSecondsPerPosition);
 assert.notEqual(sourceMean[0], sourceMean[1], "Two distinct average durations remain plot heights");
+assert.ok(Math.abs(sourceMean[0]-60)<=5,"Fixture includes an average adjacent to the 60s target, as in the reported collision");
 
 const dir = await fs.mkdtemp(os.tmpdir()+"/stef-reception-volume-");
 const apiPort = await freePort(), webPort = await freePort();
@@ -82,13 +83,31 @@ try {
     await page.getByRole("tab",{name:"Afficher % duels gagnés",exact:true}).click();
     const graph=page.getByRole("group",{name:"Histogramme des temps moyens, en secondes par position"});
     await graph.waitFor({state:"visible"});
+    const targetLine=graph.locator(".reception-hour-target");
+    const targetRect=await targetLine.boundingBox();
+    assert.ok(targetRect,"Objective dashed line must exist");
+    assert.notEqual(await targetLine.evaluate(el=>getComputedStyle(el).bottom),"auto",
+      "Dashed line and labels must share the same target height");
+    const chartPlot=await graph.locator(".reception-hour-plot").boundingBox();
+    assert.ok(chartPlot,"Chart plot should have measurable bounds");
     for (const slot of slots) {
       const b=graph.getByRole("button",{name:new RegExp("^"+slot.label.slice(0,2)+":00–")});
       const value=b.locator(".reception-hour-value");
       assert.equal((await value.innerText()).trim(),slot.distinctPositions+(viewport.width<=700 ? "" : " pos."));
       assert.equal(await value.isVisible(),true,viewport.width+"px: count must remain visible");
+      const labelRect=await value.boundingBox();
+      assert.ok(labelRect,"Count label must have measurable bounds");
+      assert.ok(labelRect.y+labelRect.height <= targetRect.y-5,
+        viewport.width+"px: "+slot.label+" count must be ABOVE dashed objective, got "+
+        JSON.stringify({labelRect,targetRect,mean:slot.meanSecondsPerPosition,target:60}));
+      assert.ok(labelRect.x>=chartPlot.x-3 && labelRect.x+labelRect.width<=chartPlot.x+chartPlot.width+3,
+        viewport.width+"px: position count must not extend outside graph");
+      assert.ok(await value.evaluate(el=>el.scrollWidth<=el.clientWidth+1),
+        viewport.width+"px: position count must not be cut off");
       assert.equal((await b.getAttribute("aria-label")).includes("moyenne"),true);
       assert.equal((await b.getAttribute("aria-label")).includes(formatKpiDuration(slot.meanSecondsPerPosition)),true);
+      assert.equal(await value.evaluate(el=>getComputedStyle(el).overflowX),"visible",
+        "Reception position labels must not be text-clipped");
     }
     const target=graph.getByRole("button",{name:/23:00–00:00/});
     await target.click();
