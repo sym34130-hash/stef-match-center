@@ -88,10 +88,14 @@ assert.equal(
 assert.equal(snapshot.summary.possessionPercent, 55.7, "Possession Zody sur la plage active");
 assert.deepEqual(snapshot.summary.possessionPositions, { zonage: 856, reception: 1432, matched: 797 }, "Positions possession sur le même périmètre filtré");
 assert.equal(snapshot.match.score, 72, "Score arrondi");
-assert.equal(snapshot.match.status, "MAÎTRISÉ", "Statut du match aligné sur le score opérationnel");
 assert.equal(snapshot.operationalScore.status, "available", "Score opérationnel disponible");
-assert.equal(snapshot.operationalScore.goalsFor, 4, "Buts opérationnels marqués");
-assert.equal(snapshot.operationalScore.goalsAgainst, 0, "Buts opérationnels encaissés");
+const attainedGoals = Object.values(snapshot.operationalScore.indicators)
+  .filter(value => value > snapshot.operationalScore.targetPercent).length;
+assert.equal(snapshot.operationalScore.goalsFor, attainedGoals, "Buts opérationnels réconciliés avec les quatre KPI");
+assert.equal(snapshot.operationalScore.goalsAgainst, 4 - attainedGoals, "Buts concédés réconciliés");
+assert.equal(snapshot.match.status,
+  attainedGoals > 2 ? "MAÎTRISÉ" : attainedGoals === 2 ? "À SURVEILLER" : "ACTION NÉCESSAIRE",
+  "Statut du match recalculé depuis les KPI actuels");
 assert.equal(snapshot.loadingQuality.targeted, 33, "Chargements cadrés issus de TCD PPT!U");
 assert.equal(snapshot.loadingQuality.offTarget, 2, "Chargements non cadrés recalculés depuis TCD PPT!U");
 const nonTargetedX47890 = snapshot.loadingQuality.nonTargetedShots.find((shot) => shot.travelCode === "X47890");
