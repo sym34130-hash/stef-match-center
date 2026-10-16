@@ -49,6 +49,7 @@ jobs:
             scripts/category-ranking.test.mjs \
             scripts/brief-layout.test.mjs \
             scripts/kpi-duration.test.mjs \
+            scripts/qualification-reasons.test.mjs \
             scripts/api-security.test.mjs \
             scripts/agencies.test.mjs \
             scripts/operational-analysis.test.mjs

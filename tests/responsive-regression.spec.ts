@@ -317,7 +317,7 @@ async function assertOperationalCarousel(page: Page, label: string) {
       const card = element as HTMLElement;
       const cardRect = card.getBoundingClientRect();
       const carouselViewport = card.closest(".operational-charts-carousel")?.querySelector<HTMLElement>(".operational-charts-carousel-viewport")?.getBoundingClientRect();
-      const visuals = [...card.querySelectorAll<HTMLElement>(".performance-chart, .loading-quality-pie, .diagnostic-bar-track")]
+      const visuals = [...card.querySelectorAll<HTMLElement>(".performance-chart, .loading-quality-pie, .reception-hour-chart, .diagnostic-bar-track")]
         .map((visual) => {
           const rect = visual.getBoundingClientRect();
           return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
