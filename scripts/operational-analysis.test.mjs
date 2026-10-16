@@ -201,7 +201,7 @@ for (const [start, end, before, middle, after, nextDay] of [
     assert.equal(h.eligibleTravels, 0); assert.equal(h.excludedSmallTravels, 1);
     assert.equal(h.items[0].label, `${start.slice(0, 2)}h`);
     assert.equal(h.items.at(-1).end, z.night.end);
-    assert.equal(h.items.reduce((sum, slot) => sum + slot.travelCount, 0), 1);
+    assert.equal(h.items.reduce((sum, slot) => sum + slot.travelCount, 0), 0);
     assert.equal(new Set(h.items.map(slot => slot.start)).size, h.items.length);
     assert.ok(s.anomalySummary.warnings.includes("2 opération(s) appartenant à d'autres périodes d'exploitation exclues du diagnostic."));
     const excluded = buildSnapshotFromWorkbook(buffer, "day-night.xlsx", "01K", { ...options, excludedTravelCodes: ["ACTIVE", "OTHER"] }).snapshot;
@@ -332,6 +332,9 @@ test("réconciliation ponctuelle Montpellier, Excel inchangé et KPI officiels a
   assert.deepEqual([s.zonageDiagnostic.receivedPositions, s.zonageDiagnostic.qualifiablePositions, s.zonageDiagnostic.latePositions, s.zonageDiagnostic.unqualifiablePositions], [676, 488, 184, 188]);
   assert.deepEqual([s.unloadingHourlyAnalysis.eligibleTravels, s.unloadingHourlyAnalysis.offTargetTravels, s.unloadingHourlyAnalysis.meanSecondsPerPosition], [23, 4, 59]);
   assert.equal(s.unloadingHourlyAnalysis.travels.find(t => t.travelCode === "TVE100").timePerPositionSeconds, 883 / 20);
+  assert.deepEqual([s.unloadingQuality.targeted, s.unloadingQuality.offTarget], [19, 4]);
+  assert.equal(s.unloadingDuelQuality.lostDuels.length, s.unloadingQuality.offTarget);
+  assert.deepEqual(s.unloadingHourlyAnalysis.travels.filter(t => t.offTarget).map(t => t.travelCode).sort(), s.unloadingDuelQuality.lostDuels.map(t => t.travelCode).sort());
   if (process.env.STEF_OPERATIONAL_BASELINE) {
     const before = JSON.parse(await fs.readFile(process.env.STEF_OPERATIONAL_BASELINE, "utf8"));
     for (const key of Object.keys(before)) assert.deepEqual(s[key], before[key], `Official field unchanged: ${key}`);
