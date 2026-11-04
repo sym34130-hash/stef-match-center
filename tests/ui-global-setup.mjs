@@ -38,13 +38,16 @@ export default async function globalSetup() {
 
   if (!apiReady) throw new Error("API STEF Match Center indisponible pour le smoke test UI.");
 
+  const leagueState = await (await fetch(`${apiBaseUrl}/api/agencies/058/league-configs`, {
+    headers: { "x-access-code": "LOCAL-058-DEV" },
+  })).json();
   const leagueResponse = await fetch(`${apiBaseUrl}/api/agencies/058/league-configs`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
       "x-access-code": "LOCAL-058-DEV",
     },
-    body: JSON.stringify({ configs: defaultLeagueConfigs }),
+    body: JSON.stringify({ configs: defaultLeagueConfigs, expectedRevision: leagueState.leagueConfigRevision }),
   });
   if (!leagueResponse.ok) {
     throw new Error(`Impossible de préparer les règles de ligue UI (${leagueResponse.status}).`);

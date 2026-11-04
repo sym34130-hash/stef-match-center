@@ -13,10 +13,13 @@ const screens = [
 test.afterEach(async ({ page }, testInfo) => {
   if (!testInfo.title.startsWith("l'administrateur conserve ses règles")) return;
   const response = await page.evaluate(async () => {
+    const state = await (await fetch("/api/agencies/058/league-configs", {
+      headers: { "x-access-code": "LOCAL-058-DEV" },
+    })).json();
     const result = await fetch("/api/agencies/058/league-configs", {
       method: "PUT",
       headers: { "Content-Type": "application/json", "x-access-code": "LOCAL-058-DEV" },
-      body: JSON.stringify({ configs: [
+      body: JSON.stringify({ expectedRevision: state.leagueConfigRevision, configs: [
         { id: "bronze", zonageMinutes: 45, loadingSeconds: 195, unloadingSeconds: 75, scoreTargetPercent: 45 },
         { id: "argent", zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 },
         { id: "or", zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 },
@@ -30,6 +33,12 @@ test.afterEach(async ({ page }, testInfo) => {
 
 test("les vues principales restent lisibles sur desktop, tablette et mobile", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
+  // The third-party player is not under test; keep its iframe contract without executing its scripts.
+  await page.route("https://www.youtube-nocookie.com/embed/**", (route) => route.fulfill({
+    status: 200,
+    contentType: "text/html",
+    body: "<!doctype html><html><body></body></html>",
+  }));
   let savedCauseriePlan: Record<string, unknown> | null = null;
   let stripMercatoProfilesOnNextSave = false;
   const consoleErrors: string[] = [];
@@ -571,7 +580,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       expect(matchBubbleLayout.sameHeight).toBe(true);
       expect(matchBubbleLayout.overflow).toBe(false);
       await expect(page.locator(".match-score-bubbles").getByText("% passes réussies", { exact: true })).toBeVisible();
-      await expect(page.locator(".match-score-bubble.pass-score-bubble strong")).toHaveText("69,2%");
+      await expect(page.locator(".match-score-bubble.pass-score-bubble strong")).toHaveText("71,9%");
       await expect(page.locator(".match-score-bubbles").getByText("% tirs cadrés", { exact: true })).toBeVisible();
       await expect(page.locator(".loading-score-bubble")).toContainText("Voyages chargés en 2 min 45 ou moins par position");
       await expect(page.locator(".loading-score-bubble strong")).toHaveText("94,3%");
@@ -676,8 +685,8 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
           kpiBorderAnimation: kpiBubble ? getComputedStyle(kpiBubble).animationName : "",
         };
       });
-      // Browsers resolve min-height:auto to 0px in getComputedStyle().
-      expect(celebrationLayout.ceremonyMinHeight).toBe("0px");
+      // Lot 2 preserves intrinsic content above 900px instead of allowing compression to zero.
+      expect(celebrationLayout.ceremonyMinHeight).toBe(page.viewportSize()!.width >= 901 ? "min-content" : "0px");
       expect(celebrationLayout.kpiVisible).toBe(true);
       expect(celebrationLayout.maxKpiHeight).toBeLessThanOrEqual(352);
       if (screen.name === "desktop" || screen.name === "tablet") {
@@ -872,26 +881,19 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
       timeRangeLabel: rangeLabel,
     };
     if (request.start === "13:00" && request.end === "22:30") {
-      snapshot.summary = { ...snapshot.summary, passRate: 69.2 };
-      snapshot.hourlyPerformance = [
-        { hour: 13, won: 99, total: 245, label: "13h", rate: 40.4 },
-        { hour: 14, won: 329, total: 467, label: "14h", rate: 70.4 },
-        { hour: 15, won: 354, total: 427, label: "15h", rate: 82.9 },
-        { hour: 16, won: 263, total: 447, label: "16h", rate: 58.8 },
-        { hour: 17, won: 151, total: 288, label: "17h", rate: 52.4 },
-        { hour: 18, won: 173, total: 238, label: "18h", rate: 72.7 },
-        { hour: 19, won: 172, total: 200, label: "19h", rate: 86 },
-        { hour: 20, won: 266, total: 304, label: "20h", rate: 87.5 },
-        { hour: 21, won: 237, total: 289, label: "21h", rate: 82 },
-        { hour: 22, won: 16, total: 20, label: "22h", rate: 80 },
-      ];
+      snapshot.hourlyPerformance = baseSnapshot.hourlyPerformance;
     } else if (request.start === "16:00" && request.end === "18:00") {
-      snapshot.summary = { ...snapshot.summary, passRate: 59.4 };
+      // Controlled UI response, not a second implementation of the engine.
+      // Keep the official KPI unchanged to prove the chart reads its own counters.
       snapshot.hourlyPerformance = [
-        { hour: 16, won: 263, total: 447, label: "16h", rate: 58.8 },
-        { hour: 17, won: 151, total: 288, label: "17h", rate: 52.4 },
-        { hour: 18, won: 6, total: 7, label: "18h", rate: 85.7 },
+        { hour: 16, won: 2, total: 4, label: "16h", rate: 50 },
+        { hour: 17, won: 3, total: 4, label: "17h", rate: 75 },
+        { hour: 18, won: 1, total: 2, label: "18h", rate: 50 },
       ];
+    } else if (request.start === "22:30" && request.end === "06:00") {
+      snapshot.hourlyPerformance = [22, 23, 0].map(hour => ({
+        hour, label: `${String(hour).padStart(2, "0")}h`, won: 1, total: 2, rate: 50,
+      }));
     }
     await route.fulfill({
       status: 200,
@@ -909,8 +911,9 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   await matchNavigation.getByRole("button", { name: "Aller à Statistiques du match" }).click();
   await expect(page.locator(".performance-chart-panel")).toBeVisible();
   await expect(page.getByRole("group", { name: "Évolution horaire du pourcentage de passes réussies" })).toBeVisible();
-  await expect(page.getByText("Donnée Excel Feuille de match, heure par heure", { exact: true })).toBeVisible();
-  await expect(page.locator(".performance-chart-total b")).toHaveText("69,2%");
+  await expect(page.locator(".performance-chart-caption")).toHaveText("Graphique seulement : déchargement (C) · segments AQ, ED, EX ou vides (G) · LIV exclus. KPI du score inchangé.");
+  await expect(page.locator(".performance-chart-total small")).toHaveText("Total filtré");
+  await expect(page.locator(".performance-chart-total b")).toHaveText("59,5%");
 
   await page.locator(".time-range-control select").nth(0).selectOption("13:00");
   await page.locator(".time-range-control select").nth(1).selectOption("22:30");
@@ -920,7 +923,7 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   await expect(matchNavigation.locator(".match-carousel-count")).toHaveText("03 / 04");
   const initialHours = await page.locator(".performance-chart-hour").allTextContents();
   expect(initialHours).not.toContain("00h");
-  expect(initialHours).toEqual(["13h", "14h", "16h", "17h", "18h", "19h", "20h", "21h", "22h"]);
+  expect(initialHours).toEqual(["13h", "15h", "16h", "17h", "18h", "19h", "20h", "21h"]);
 
   await page.locator(".time-range-control select").nth(0).selectOption("16:00");
   await page.locator(".time-range-control select").nth(1).selectOption("18:00");
@@ -930,7 +933,8 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   await expect(matchNavigation.locator(".match-carousel-count")).toHaveText("03 / 04");
   await expect(page.locator(".performance-chart-hour")).toHaveText(["16h", "17h", "18h"]);
   expect(await page.locator(".performance-chart-hour").allTextContents()).not.toContain("00h");
-  await expect(page.locator(".performance-chart-total b")).toHaveText("59,4%");
+  await expect(page.locator(".performance-chart-total b")).toHaveText("60%");
+  await expect(page.locator(".pass-score-bubble strong")).toHaveText("71,9%");
 
   await page.locator(".time-range-control select").nth(0).selectOption("22:30");
   await page.locator(".time-range-control select").nth(1).selectOption("06:00");
@@ -938,6 +942,7 @@ test("la plage horaire et le graphique horaire restent explicites", async ({ pag
   await expect(page.locator(".time-range-control select").nth(0)).toHaveValue("22:30");
   await expect(page.locator(".time-range-control select").nth(1)).toHaveValue("06:00");
   await expect(matchNavigation.locator(".match-carousel-count")).toHaveText("03 / 04");
+  await expect(page.locator(".performance-chart-hour")).toHaveText(["22h", "23h", "00h"]);
 });
 
 test("le plan de jeu saisi dans Coach reste séparé sous le brief de la feuille de match", async ({ page }) => {
@@ -1069,7 +1074,7 @@ test("une ligue reste sélectionnable avant le premier import", async ({ page })
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await page.getByRole("button", { name: "ADM Administrateur", exact: true }).click();
   await page.getByRole("button", { name: "Activer", exact: true }).last().click();
-  await expect(page.locator(".administrator-active-badge strong")).toHaveText("Platine");
+  await expect(page.locator(".administrator-active-badge strong")).toHaveText("CDM");
   await expect(page.locator(".app-shell")).toHaveClass(/league-platine/);
   await expect(page.getByText("Ligue activée. Importe un match pour appliquer ses objectifs.", { exact: true })).toBeVisible();
 });
@@ -1094,14 +1099,14 @@ test("un recalcul de ligue indisponible conserve les résultats et la ligue acti
   await page.getByLabel("Code agence").selectOption("058");
   await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
   await page.getByRole("button", { name: "Accéder au match" }).click();
-  await expect(page.locator(".top-league-badge")).toContainText("Argent");
+  await expect(page.locator(".top-league-badge")).toContainText("LIGUE 1");
 
   await page.getByRole("button", { name: "ADM Administrateur", exact: true }).click();
   await page.getByRole("button", { name: "Activer", exact: true }).last().click();
 
   expect(rejectedLeagueRequest).toBe(true);
-  await expect(page.locator(".top-league-badge")).toContainText("Argent");
-  await expect(page.locator(".administrator-active-badge strong")).toHaveText("Argent");
+  await expect(page.locator(".top-league-badge")).toContainText("LIGUE 1");
+  await expect(page.locator(".administrator-active-badge strong")).toHaveText("LIGUE 1");
   await expect(page.locator(".top-status-message")).toContainText("Les résultats et la ligue actuels sont conservés.");
 
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
@@ -1111,6 +1116,10 @@ test("un recalcul de ligue indisponible conserve les résultats et la ligue acti
 test("la synchronisation ne recharge les données que si leur révision change", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "Le contrôle de polling est exécuté une fois sur desktop.");
   await page.clock.install();
+  let pendingAgencyRequests = 0;
+  page.on("request", request => { if (request.url().includes("/api/agencies/058/")) pendingAgencyRequests++; });
+  page.on("requestfinished", request => { if (request.url().includes("/api/agencies/058/")) pendingAgencyRequests--; });
+  page.on("requestfailed", request => { if (request.url().includes("/api/agencies/058/")) pendingAgencyRequests--; });
 
   const snapshotFixture = JSON.parse(readFileSync(new URL("../data/agencies/058/latest.json", import.meta.url), "utf8")) as Snapshot;
   let servedSnapshot = snapshotFixture;
@@ -1191,6 +1200,10 @@ test("la synchronisation ne recharge les données que si leur révision change",
   await expect.poll(() => leagueConfigRequests).toBe(2);
   await expect.poll(() => snapshotRequests).toBe(3);
 
+  // A request counter advances before fetch/json and the guarded sync cycle finish.
+  // Advance the next polling interval only after the previous responses settle.
+  await expect.poll(() => pendingAgencyRequests).toBe(0);
+  await page.clock.runFor(50);
   const completedSyncPolls = syncStateRequests;
   await page.clock.runFor(15_000);
   await expect.poll(() => syncStateRequests).toBe(completedSyncPolls + 1);
@@ -1237,17 +1250,17 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
   await expect(page.locator(".administrator-rule-strip select")).toHaveCount(3);
   await expect(page.locator(".league-card .league-values select")).toHaveCount(12);
   await expect(page.locator(".administrator-rule-strip")).not.toContainText("Position");
-  await expect(page.getByLabel("Cible zonage Argent")).toHaveValue("30");
-  await expect(page.getByLabel("Modifier chargement Argent")).toHaveValue("00:02:45");
-  await expect(page.getByLabel("Modifier réception Argent")).toHaveValue("00:01:00");
-  await expect(page.getByLabel("Objectif score Argent").first()).toHaveValue("50");
-  await page.getByLabel("Cible zonage Argent").selectOption("31");
-  await expect(page.getByLabel("Cible zonage Argent")).toHaveValue("31");
+  await expect(page.getByLabel("Cible zonage LIGUE 1")).toHaveValue("30");
+  await expect(page.getByLabel("Modifier chargement LIGUE 1")).toHaveValue("00:02:45");
+  await expect(page.getByLabel("Modifier réception LIGUE 1")).toHaveValue("00:01:00");
+  await expect(page.getByLabel("Objectif score LIGUE 1").first()).toHaveValue("50");
+  await page.getByLabel("Cible zonage LIGUE 1").selectOption("31");
+  await expect(page.getByLabel("Cible zonage LIGUE 1")).toHaveValue("31");
 
   await page.getByRole("button", { name: "Activer", exact: true }).last().click();
-  await expect(page.locator(".administrator-active-badge strong")).toHaveText("Platine");
+  await expect(page.locator(".administrator-active-badge strong")).toHaveText("CDM");
   await expect(page.locator(".app-shell")).toHaveClass(/league-platine/);
-  await expect(page.locator(".top-league-badge")).toContainText("Platine");
+  await expect(page.locator(".top-league-badge")).toContainText("CDM");
   const animationState = await page.evaluate(() => {
     const cards = Array.from(document.querySelectorAll<HTMLElement>(".league-card"));
     const reflections = cards.map((card) => getComputedStyle(card, "::after"));
@@ -1274,12 +1287,12 @@ test("l'administrateur conserve ses règles par agence et synchronise ses animat
   await expect(page.locator(".agency-pill")).toContainText("Agen - 058");
   await page.getByRole("button", { name: "ADM Administrateur", exact: true }).click();
   await expect(page.locator(".administrator-page")).toBeVisible();
-  await expect(page.getByLabel("Modifier zonage Argent")).toHaveValue("31");
-  await expect(page.getByLabel("Modifier chargement Argent")).toHaveValue("00:02:45");
-  await expect(page.getByLabel("Modifier réception Argent")).toHaveValue("00:01:00");
-  await expect(page.locator(".administrator-active-badge strong")).toHaveText("Platine");
+  await expect(page.getByLabel("Modifier zonage LIGUE 1")).toHaveValue("31");
+  await expect(page.getByLabel("Modifier chargement LIGUE 1")).toHaveValue("00:02:45");
+  await expect(page.getByLabel("Modifier réception LIGUE 1")).toHaveValue("00:01:00");
+  await expect(page.locator(".administrator-active-badge strong")).toHaveText("CDM");
   await expect(page.locator(".app-shell")).toHaveClass(/league-platine/);
-  await expect(page.locator(".top-league-badge")).toContainText("Platine");
+  await expect(page.locator(".top-league-badge")).toContainText("CDM");
 
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
   await expect(page.locator(".football-score-side-for strong")).toHaveText("1");
@@ -1375,6 +1388,9 @@ test("le brief équipe porte ses zones et son mode plein écran", async ({ page 
 });
 
 test("la feuille de match défile entre ses quatre sections sans empiler les vues", async ({ page }, testInfo) => {
+  await page.route("**/api/agencies/058/causerie**", route => route.fulfill({ json: {
+    plan: { mercato: "Camille Martin", mercatoProfiles: { "camille martin": "female" } },
+  } }));
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption("058");
   await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");

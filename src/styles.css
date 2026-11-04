@@ -19459,8 +19459,8 @@ body.match-celebration-active .main-area {
   .match-page.is-celebration-mode .match-ceremony.is-active {
     box-sizing: border-box;
     height: 100%;
-    min-height: 0;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    min-height: min-content;
+    grid-template-rows: auto minmax(min-content, 1fr) auto;
     gap: 10px;
     padding: 12px 18px 14px;
   }
@@ -19482,7 +19482,7 @@ body.match-celebration-active .main-area {
     grid-template-columns: minmax(230px, .42fr) minmax(0, 1.58fr);
     align-items: stretch;
     gap: 10px;
-    min-height: 0;
+    min-height: min-content;
     height: 100%;
     padding: 10px 12px;
   }
@@ -19532,6 +19532,7 @@ body.match-celebration-active .main-area {
   }
 
   .match-page.is-celebration-mode .match-ceremony.is-active .match-scoreboard {
+    min-height: min-content;
     align-content: center;
     gap: 6px;
     padding: 12px 14px;
@@ -19571,6 +19572,8 @@ body.match-celebration-active .main-area {
   .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-area {
     position: relative;
     z-index: 5;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
     min-height: 0;
     overflow: hidden;
   }
@@ -19585,21 +19588,33 @@ body.match-celebration-active .main-area {
     min-height: 0;
   }
 
+  .match-page.is-celebration-mode .match-ceremony.is-active .match-indicator-slide {
+    height: 100%;
+    min-height: 0;
+  }
+
   .match-page.is-celebration-mode .match-ceremony.is-active .match-indicators-track {
+    height: 100%;
     padding-block: 8px 12px;
   }
 
   .match-page.is-celebration-mode .match-ceremony.is-active .match-indicator-card {
-    height: 274px;
+    height: min(274px, 100%);
   }
 }
 
 /* This intermediate presentation canvas cannot fit stacked result/KPI rows.
    Give them separate columns without shrinking text or clipping card details. */
 @media (min-width: 1201px) and (max-width: 1599px) and (min-height: 821px) and (max-height: 960px) {
+  .match-page.is-celebration-mode .match-slide-viewport {
+    overflow-y: auto;
+  }
+
   .match-page.is-celebration-mode .match-ceremony.is-active {
+    height: auto;
+    min-height: 100%;
     grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(min-content, 1fr);
   }
 
   .match-page.is-celebration-mode .match-ceremony.is-active .match-ceremony-header {
@@ -19617,8 +19632,9 @@ body.match-celebration-active .main-area {
 
   .match-page.is-celebration-mode .match-ceremony.is-active .match-result-stage {
     box-sizing: border-box;
+    height: auto;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(250px, .9fr) minmax(0, 1.1fr);
+    grid-template-rows: minmax(250px, .9fr) minmax(min-content, 1.1fr);
   }
 
   .match-page.is-celebration-mode .match-ceremony.is-active .match-result-visual {
@@ -19751,7 +19767,7 @@ body.match-celebration-active .main-area {
   }
 
   .match-page.is-celebration-mode .match-ceremony.is-active {
-    grid-template-rows: auto minmax(180px, .92fr) minmax(0, 1fr);
+    grid-template-rows: auto minmax(min-content, .92fr) minmax(min-content, 1fr);
     gap: 8px;
     padding: 10px 14px 12px;
   }
@@ -19889,7 +19905,7 @@ body.match-celebration-active .main-area {
 
   .match-page.is-celebration-mode .match-ceremony.is-active .match-indicator-card {
     gap: 8px;
-    height: 190px;
+    height: min(190px, 100%);
     padding: 8px;
   }
 
@@ -19914,12 +19930,12 @@ body.match-celebration-active .main-area {
 
 @media (min-width: 901px) and (max-width: 1200px) and (max-height: 820px) {
   .match-page.is-celebration-mode .match-ceremony.is-active {
-    grid-template-rows: auto 280px minmax(0, 1fr);
+    grid-template-rows: auto minmax(280px, min-content) minmax(min-content, 1fr);
   }
 
   .match-page.is-celebration-mode .match-ceremony.is-active .match-result-stage {
-    height: 280px;
-    min-height: 280px;
+    height: auto;
+    min-height: min-content;
     box-sizing: border-box;
   }
 
@@ -20511,7 +20527,7 @@ body.match-celebration-active .main-area {
   }
 
 .match-page.is-celebration-mode .match-ceremony.is-active .match-indicator-card {
-    height: 220px;
+    height: min(220px, 100%);
   }
 }
 
@@ -21320,7 +21336,7 @@ body.match-celebration-active .main-area {
   .match-page.is-celebration-mode .match-ceremony.is-active .match-indicator-card {
     flex: 0 0 220px;
     gap: 6px;
-    height: 220px !important;
+    height: min(220px, 100%);
     padding: 10px;
   }
 

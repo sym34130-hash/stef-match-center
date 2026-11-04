@@ -289,6 +289,7 @@ const kickoffScenePlayers: Array<{
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [leagueConfigs, setLeagueConfigs] = useState<LeagueConfig[]>(leagueOptions);
+  const [leagueConfigRevision, setLeagueConfigRevision] = useState<string | null>(null);
   const [activeLeague, setActiveLeague] = useState<LeagueId>("argent");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [snapshotViewRevision, setSnapshotViewRevision] = useState(0);
@@ -318,14 +319,22 @@ export default function App() {
     setSnapshot(nextSnapshot);
   }, []);
 
-  function queueLeagueConfigSave(next: LeagueConfig[]) {
+  const loadLeagueConfigs = useCallback(async (currentSession: Session) => {
+    const state = await fetchSharedLeagueConfigs(currentSession);
+    setLeagueConfigRevision(state.leagueConfigRevision);
+    return state.configs;
+  }, []);
+
+  function queueLeagueConfigSave(next: LeagueConfig[], expectedRevision: string | null) {
     const currentSession = session;
     if (!currentSession) return Promise.reject(new Error("Session absente."));
     const save = leagueConfigSaveQueueRef.current
       .catch(() => undefined)
       .then(async () => {
-        const saved = await saveSharedLeagueConfigs(currentSession, next);
-        setLeagueConfigs(saved);
+        const saved = await saveSharedLeagueConfigs(currentSession, next, expectedRevision);
+        setLeagueConfigs(saved.configs);
+        setLeagueConfigRevision(saved.leagueConfigRevision);
+        return saved;
       });
     leagueConfigSaveQueueRef.current = save.then(() => undefined, () => undefined);
     return save;
@@ -348,7 +357,7 @@ export default function App() {
         })
         .catch(() => undefined)
         .then(() => Promise.all([
-          fetchSharedLeagueConfigs(nextSession).catch(() => readLeagueConfigs(nextSession.agency.code)),
+          loadLeagueConfigs(nextSession).catch(() => readLeagueConfigs(nextSession.agency.code)),
         ]))
         .then(([nextConfigs]) => {
           if (requestId !== snapshotRequestRef.current) return null;
@@ -377,7 +386,7 @@ export default function App() {
     } catch {
       removeStorageValue("session", "stef-match-session");
     }
-  }, [publishSnapshot]);
+  }, [publishSnapshot, loadLeagueConfigs]);
 
   useEffect(() => {
     document.body.classList.toggle("tv-screen-active", screen === "tv");
@@ -412,7 +421,7 @@ export default function App() {
 
         let nextConfigs = leagueConfigsRef.current;
         if (configsChanged) {
-          nextConfigs = await fetchSharedLeagueConfigs(session);
+          nextConfigs = await loadLeagueConfigs(session);
           if (disposed || refreshId !== backgroundRefreshRef.current || requestVersion !== snapshotRequestRef.current) return;
           leagueConfigsRef.current = nextConfigs;
           setLeagueConfigs(nextConfigs);
@@ -457,7 +466,7 @@ export default function App() {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [session, activeLeague, screen, publishSnapshot]);
+  }, [session, activeLeague, screen, publishSnapshot, loadLeagueConfigs]);
 
   async function handleLogin(agencyCode: string, accessCode: string) {
     const requestId = ++snapshotRequestRef.current;
@@ -474,7 +483,7 @@ export default function App() {
       const nextSession = { agency: payload.agency, accessCode };
       const nextLeague = readActiveLeague(agencyCode);
       const nextSyncState = await fetchAgencySyncState(nextSession).catch(() => null);
-      const nextConfigs = await fetchSharedLeagueConfigs(nextSession).catch(() => readLeagueConfigs(agencyCode));
+      const nextConfigs = await loadLeagueConfigs(nextSession).catch(() => readLeagueConfigs(agencyCode));
       let nextSnapshot: Snapshot | null = null;
       try {
         nextSnapshot = await fetchSnapshot(nextSession, configForLeague(nextConfigs, nextLeague));
@@ -699,7 +708,12 @@ export default function App() {
             )}
             {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} causerieRevision={causerieRevision} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
             {screen === "guide" && <GuideView snapshot={snapshot} leagueConfigs={leagueConfigs} onNavigate={setScreen} />}
-            {screen === "admin" && <AdministratorView agencyCode={session.agency.code} activeLeague={activeLeague} leagueConfigs={leagueConfigs} onLeagueConfigsChange={queueLeagueConfigSave} onActiveLeagueChange={applyLeague} />}
+            {screen === "admin" && <AdministratorView agencyCode={session.agency.code} activeLeague={activeLeague} leagueConfigs={leagueConfigs} leagueConfigRevision={leagueConfigRevision} onLeagueConfigsChange={queueLeagueConfigSave} onLeagueConfigsReload={async () => {
+              const state = await fetchSharedLeagueConfigs(session);
+              setLeagueConfigs(state.configs);
+              setLeagueConfigRevision(state.leagueConfigRevision);
+              return state;
+            }} onActiveLeagueChange={applyLeague} />}
             {screen === "import" && (
               <ImportView
                 session={session}
@@ -768,25 +782,27 @@ async function fetchAgencySyncState(session: Session, matchDate?: string): Promi
   return { snapshotRevision, leagueConfigRevision, causerieRevision };
 }
 
-async function fetchSharedLeagueConfigs(session: Session): Promise<LeagueConfig[]> {
+type SharedLeagueConfigState = { configs: LeagueConfig[]; leagueConfigRevision: string | null };
+
+async function fetchSharedLeagueConfigs(session: Session): Promise<SharedLeagueConfigState> {
   const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/league-configs`, {
     cache: "no-store",
     headers: { "x-access-code": session.accessCode },
   });
   const payload = await response.json();
   if (!response.ok) throw new ApiError(response.status, payload.message ?? "Les paramètres des ligues n'ont pas pu être chargés.");
-  return mergeLeagueConfigs(payload.configs, session.agency.code);
+  return { configs: mergeLeagueConfigs(payload.configs, session.agency.code), leagueConfigRevision: typeof payload.leagueConfigRevision === "string" ? payload.leagueConfigRevision : null };
 }
 
-async function saveSharedLeagueConfigs(session: Session, configs: LeagueConfig[]): Promise<LeagueConfig[]> {
+async function saveSharedLeagueConfigs(session: Session, configs: LeagueConfig[], expectedRevision: string | null): Promise<SharedLeagueConfigState> {
   const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/league-configs`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", "x-access-code": session.accessCode },
-    body: JSON.stringify({ configs }),
+    body: JSON.stringify({ configs, expectedRevision }),
   });
   const payload = await response.json();
   if (!response.ok) throw new ApiError(response.status, payload.message ?? "Les paramètres des ligues n'ont pas pu être enregistrés.");
-  return mergeLeagueConfigs(payload.configs, session.agency.code);
+  return { configs: mergeLeagueConfigs(payload.configs, session.agency.code), leagueConfigRevision: payload.leagueConfigRevision };
 }
 
 function snapshotsHaveSameData(left: Snapshot | null, right: Snapshot): boolean {
@@ -880,7 +896,7 @@ async function saveCauseriePlan(session: Session, snapshot: Snapshot, plan: Caus
   if (response.status === 409) {
     throw new CauserieConflictError(payload.message, normalizeCauseriePlan({ ...(payload.plan ?? buildEmptyCauseriePlan()), revision: payload.causerieRevision }));
   }
-  if (!response.ok) throw new Error(payload.message ?? "Causerie non enregistrée.");
+  if (!response.ok) throw new ApiError(response.status, payload.message ?? "Causerie non enregistrée.");
   const savedPlan = payload.plan as CauseriePlan;
   if (!savedPlan || typeof savedPlan !== "object") {
     throw new Error("Le serveur a renvoyé une causerie invalide. Réessaie après actualisation.");
@@ -2016,17 +2032,34 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const [selectedHour, setSelectedHour] = useState<string | null>(null);
   const expandedPanel = useRef<HTMLDialogElement>(null);
   const expandTrigger = useRef<HTMLButtonElement>(null);
+  const restoreBackgroundScroll = useRef<() => void>(() => {});
+  const openExpanded = () => {
+    const windowPosition = { top: window.scrollY, left: window.scrollX };
+    const positions: Array<{ element: HTMLElement; top: number; left: number }> = [];
+    for (let element = expandTrigger.current?.parentElement; element; element = element.parentElement) {
+      positions.push({ element, top: element.scrollTop, left: element.scrollLeft });
+    }
+    restoreBackgroundScroll.current = () => {
+      positions.forEach(({ element, top, left }) => element.scrollTo({ top, left, behavior: "instant" }));
+      window.scrollTo({ ...windowPosition, behavior: "instant" });
+    };
+    setArrivalDetail(null);
+    setExpanded(true);
+  };
   const closeExpanded = () => {
     setArrivalDetail(null);
     expandedPanel.current?.close();
     setExpanded(false);
     expandTrigger.current?.focus({ preventScroll: true });
   };
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!expanded || !expandedPanel.current) return;
     const dialog = expandedPanel.current;
+    const trigger = expandTrigger.current;
+    // Capture before mounting the portal: native dialog focus can scroll its background.
     dialog.showModal();
     dialog.querySelector<HTMLButtonElement>(".performance-chart-close")?.focus({ preventScroll: true });
+    restoreBackgroundScroll.current();
     // Lock background scrolling without removing its scrollbar or moving it.
     const lockScroll = (event: WheelEvent | TouchEvent) => {
       const target = event.target instanceof Element ? event.target : null;
@@ -2039,6 +2072,8 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
       window.removeEventListener("wheel", lockScroll);
       window.removeEventListener("touchmove", lockScroll);
       dialog.close();
+      trigger?.focus({ preventScroll: true });
+      restoreBackgroundScroll.current();
     };
   }, [expanded]);
   const [arrivalDetail, setArrivalDetail] = useState<{ hour: string; codes: string[]; left: number; top: number; width: number; height: number } | null>(null);
@@ -2073,7 +2108,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
       if (event.target instanceof Node && arrivalPanel.current?.contains(event.target)) return;
       const current = arrivalTrigger.current?.getBoundingClientRect();
       // Focus can queue a scroll event before the detail opens; ignore it if its anchor has not moved.
-      if (expandedPanel.current?.open && anchor && current && current.left === anchor.left && current.top === anchor.top) return;
+      if (anchor && current && current.left === anchor.left && current.top === anchor.top) return;
       setArrivalDetail(null);
     };
     document.addEventListener("pointerdown", outside);
@@ -2154,7 +2189,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
             <button className="secondary-button compact performance-chart-close" type="button" aria-label="Fermer le graphique agrandi" title="Fermer" onClick={closeExpanded}><XCircle size={22} /></button>
           ) : (
             <button ref={expandTrigger} className="secondary-button compact performance-chart-expand" type="button" aria-label="Agrandir le graphique" title="Agrandir le graphique"
-              onClick={() => { setArrivalDetail(null); setExpanded(true); }}><Maximize2 size={16} />Agrandir</button>
+              onClick={openExpanded}><Maximize2 size={16} />Agrandir</button>
           )}
         </div>
       </div>
@@ -2795,6 +2830,10 @@ function Coach({
         setCoachBoardFeedback({ title: "Conflit de sauvegarde", detail: error.message, tone: "error" });
         return;
       }
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        setCoachBoardFeedback({ title: "Plan non enregistré", detail: error.message, tone: "error" });
+        return;
+      }
       setCoachPlan(nextPlan);
       setCoachDraft(nextPlan);
       setCoachBoardMode("view");
@@ -2806,7 +2845,7 @@ function Coach({
       });
     } finally {
       setSavingCoachPlan(false);
-      window.setTimeout(() => setCoachBoardFeedback(null), 3400);
+      window.setTimeout(() => setCoachBoardFeedback(current => current?.tone === "error" ? current : null), 3400);
     }
   }
 
@@ -2831,6 +2870,10 @@ function Coach({
         setCoachBoardFeedback({ title: "Conflit de sauvegarde", detail: error.message, tone: "error" });
         return;
       }
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        setCoachBoardFeedback({ title: "Saisie non enregistrée", detail: error.message, tone: "error" });
+        return;
+      }
       setCoachPlan(nextPlan);
       setCoachDraft(nextPlan);
       setRedCardsDraft(nextPlan.redCards);
@@ -2843,7 +2886,7 @@ function Coach({
       });
     } finally {
       setSavingRedCards(false);
-      window.setTimeout(() => setCoachBoardFeedback(null), 3400);
+      window.setTimeout(() => setCoachBoardFeedback(current => current?.tone === "error" ? current : null), 3400);
     }
   }
 
@@ -3310,6 +3353,10 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
         setFeedback({ title: "Conflit de sauvegarde", detail: error.message, tone: "error" });
         return;
       }
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        setFeedback({ title: "Brief non enregistré", detail: error.message, tone: "error" });
+        return;
+      }
       setPlan(nextPlan);
       setPlanDraft(nextPlan);
       setPlanMode("view");
@@ -3318,7 +3365,7 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
       setFeedback({ title: "Sauvegarde locale uniquement", detail: "Le plan est conservé sur ce poste.", tone: "warning" });
     } finally {
       setSavingPlan(false);
-      window.setTimeout(() => setFeedback(null), 3400);
+      window.setTimeout(() => setFeedback(current => current?.tone === "error" ? current : null), 3400);
     }
   }
 
@@ -3336,7 +3383,7 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
             </button>
           ) : (
             <div className="tv-edit-actions">
-              <button className="tv-edit-button" type="button" onClick={() => { setPlanDraft(plan); setPlanMode("view"); }} disabled={savingPlan}>Annuler</button>
+              <button className="tv-edit-button" type="button" onClick={() => { setPlanDraft(plan); setPlanMode("view"); setFeedback(null); }} disabled={savingPlan}>Annuler</button>
               <button className="primary-button compact" type="button" onClick={saveTvPlan} disabled={savingPlan}>
                 <Save size={15} /> {savingPlan ? "Enregistrement..." : "Enregistrer"}
               </button>
@@ -3455,7 +3502,7 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
             </div>
           ))}
         </div>
-        {feedback && <p className={`tv-plan-feedback ${feedback.tone}`}>{feedback.title} · {feedback.detail}</p>}
+        {feedback && <p className={`tv-plan-feedback ${feedback.tone}`} role={feedback.tone === "error" && !conflictingPlan ? "alert" : "status"}>{feedback.title} · {feedback.detail}</p>}
         {conflictingPlan && <div role="alert"><p>Ta saisie locale est conservée. La version serveur contient une autre modification.</p><button className="secondary-button" type="button" onClick={() => {
           setPlan(conflictingPlan); setPlanDraft(conflictingPlan); setPlanMode("view"); onPlanSaved?.(conflictingPlan); setConflictingPlan(null);
         }}>Abandonner ma saisie et charger la version serveur</button></div>}
@@ -3487,21 +3534,50 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
   );
 }
 
-function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLeagueConfigs, onLeagueConfigsChange, onActiveLeagueChange }: { agencyCode: string; activeLeague: LeagueId; leagueConfigs: LeagueConfig[]; onLeagueConfigsChange: (configs: LeagueConfig[]) => Promise<void>; onActiveLeagueChange: (league: LeagueId, config?: LeagueConfig) => void }) {
+function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLeagueConfigs, leagueConfigRevision, onLeagueConfigsChange, onLeagueConfigsReload, onActiveLeagueChange }: { agencyCode: string; activeLeague: LeagueId; leagueConfigs: LeagueConfig[]; leagueConfigRevision: string | null; onLeagueConfigsChange: (configs: LeagueConfig[], expectedRevision: string | null) => Promise<SharedLeagueConfigState>; onLeagueConfigsReload: () => Promise<SharedLeagueConfigState>; onActiveLeagueChange: (league: LeagueId, config?: LeagueConfig) => void }) {
   const leagueConfigStorageKey = `stef-match-league-configs-${agencyCode}`;
   const [leagueConfigs, setLeagueConfigs] = useState(initialLeagueConfigs);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const [configSaveError, setConfigSaveError] = useState("");
   const leagueConfigsRef = useRef(initialLeagueConfigs);
   const configSaveQueueRef = useRef(Promise.resolve());
+  const draftRevisionRef = useRef(leagueConfigRevision);
+  const hasUnsavedConfigsRef = useRef(false);
+  const conflictRef = useRef(false);
+  const saveGenerationRef = useRef(0);
+  const activeLeagueRef = useRef(activeLeague);
+  const leagueNavigationRef = useRef(0);
+  useEffect(() => { activeLeagueRef.current = activeLeague; }, [activeLeague]);
   const selectedLeague = leagueConfigs.find((league) => league.id === activeLeague) ?? leagueConfigs[1];
 
   useEffect(() => {
+    // Polling must not replace a draft whose save failed or is still pending.
+    if (hasUnsavedConfigsRef.current) return;
     setLeagueConfigs(initialLeagueConfigs);
     leagueConfigsRef.current = initialLeagueConfigs;
-  }, [initialLeagueConfigs]);
+    draftRevisionRef.current = leagueConfigRevision;
+  }, [initialLeagueConfigs, leagueConfigRevision]);
+
+  async function reloadLeagueConfigs() {
+    try {
+      await configSaveQueueRef.current;
+      const state = await onLeagueConfigsReload();
+      hasUnsavedConfigsRef.current = false;
+      conflictRef.current = false;
+      draftRevisionRef.current = state.leagueConfigRevision;
+      leagueConfigsRef.current = state.configs;
+      setLeagueConfigs(state.configs);
+      setDraftValues({});
+      setConfigSaveError("");
+      writeStorageValue("local", leagueConfigStorageKey, JSON.stringify(state.configs));
+    } catch (error) {
+      setConfigSaveError(error instanceof Error ? error.message : "Les paramètres n'ont pas pu être rechargés.");
+    }
+  }
 
   function selectLeague(id: LeagueId) {
+    activeLeagueRef.current = id;
+    leagueNavigationRef.current += 1;
     const selected = leagueConfigs.find((league) => league.id === id);
     onActiveLeagueChange(id, selected);
   }
@@ -3529,20 +3605,34 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
     const normalizedValue = field === "scoreTargetPercent" ? Math.min(100, Math.max(1, Math.round(numericValue))) : Math.round(numericValue);
     const next = leagueConfigsRef.current.map((league) => league.id === id ? { ...league, [field]: normalizedValue } : league);
     leagueConfigsRef.current = next;
+    hasUnsavedConfigsRef.current = true;
+    const generation = ++saveGenerationRef.current;
+    const navigation = leagueNavigationRef.current;
     setLeagueConfigs(next);
     writeStorageValue("local", leagueConfigStorageKey, JSON.stringify(next));
     setConfigSaveError("");
     const save = configSaveQueueRef.current
       .catch(() => undefined)
-      .then(() => onLeagueConfigsChange(next));
+      .then(async () => {
+        if (conflictRef.current) throw new Error("Ta saisie est conservée. Recharge la version serveur avant de réappliquer tes changements.");
+        try {
+          const saved = await onLeagueConfigsChange(next, draftRevisionRef.current);
+          draftRevisionRef.current = saved.leagueConfigRevision;
+          if (generation === saveGenerationRef.current) hasUnsavedConfigsRef.current = false;
+          // A completed save must not supersede navigation or a newer draft.
+          if (activeLeagueRef.current === id && navigation === leagueNavigationRef.current && generation === saveGenerationRef.current) {
+            const updatedLeague = saved.configs.find((league) => league.id === id);
+            if (updatedLeague) onActiveLeagueChange(id, updatedLeague);
+          }
+        } catch (error) {
+          if (error instanceof ApiError && (error.status === 409 || error.status === 428)) conflictRef.current = true;
+          throw error;
+        }
+      });
     configSaveQueueRef.current = save.then(() => undefined, () => undefined);
     void save.catch((error) => {
       setConfigSaveError(error instanceof Error ? error.message : "Les paramètres de la ligue n'ont pas pu être partagés.");
     });
-    if (activeLeague === id) {
-      const updatedLeague = next.find((league) => league.id === id);
-      if (updatedLeague) onActiveLeagueChange(id, updatedLeague);
-    }
     setDraftValues((current) => {
       const nextDrafts = { ...current };
       delete nextDrafts[leagueDraftKey(id, field)];
@@ -3589,7 +3679,7 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
               <label><CheckCircle2 size={18} /><span>Score · objectif par indicateur</span><input aria-label={`Objectif score ${selectedLeague.label}`} type="number" min="1" max="100" step="1" value={leagueInputValue(selectedLeague.id, "scoreTargetPercent", selectedLeague.scoreTargetPercent)} onChange={(event) => setLeagueDraft(selectedLeague.id, "scoreTargetPercent", event.target.value)} onBlur={(event) => commitLeague(selectedLeague.id, "scoreTargetPercent", event.target.value)} /></label>
             </div>
             <p className="administrator-note"><Sparkles size={17} /> Les critères sont partagés pour l’agence. La ligue active recalcule les indicateurs dépendants des seuils : duels, chargements, temps de réception et score. Le taux de passes et la possession restent calculés sur la plage Excel.</p>
-            {configSaveError && <p className="form-error" role="alert">{configSaveError}</p>}
+            {configSaveError && <div role="alert"><p className="form-error">{configSaveError}</p><button type="button" className="secondary-button compact" onClick={() => void reloadLeagueConfigs()}><RefreshCw size={16} /> Recharger la version serveur (remplacer ma saisie)</button></div>}
           </div>
         </div>
       </div>

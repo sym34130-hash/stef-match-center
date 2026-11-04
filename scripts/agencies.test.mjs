@@ -14,10 +14,11 @@ const catalog = JSON.parse(await fs.readFile(path.join(root, "server/agencies.js
 
 function workbookFor(code) {
   const workbook = XLSX.utils.book_new();
+  // Excel wall-clock strings must not be shifted by the host's Date serialization.
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
     ["Opérateur", "Date/Heure de début d'opération", "Type d'opération", "N° Position", "Code Voyage", "Agence Segment", "Type Segment", "Filtre opérateur", "Filtre heure", "Poste", "Poz non zonées", "DZ", "Duels gagnés"],
-    ["TEST ONLY", new Date("2026-10-12T14:00:00Z"), "DECHG", `${code}-P1`, `${code}-TRAVEL`, code, "TEST", "", "", "", "", 30, 1],
-    ["TEST ONLY", new Date("2026-10-12T14:02:00Z"), "ZONAGE", `${code}-P1`, `${code}-TRAVEL`, code, "TEST", "", "", "", "", 30, 1],
+    ["TEST ONLY", "12/10/2026 14:00:00", "DECHG", `${code}-P1`, `${code}-TRAVEL`, code, "TEST", "", "", "", "", 30, 1],
+    ["TEST ONLY", "12/10/2026 14:02:00", "ZONAGE", `${code}-P1`, `${code}-TRAVEL`, code, "TEST", "", "", "", "", 30, 1],
   ]), "Données");
   return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 }
@@ -86,7 +87,8 @@ test("six agences : catalogue public, connexion, état vide et isolation R3A / 0
     const originalConfigs = (await (await request("04H", "league-configs")).json()).configs;
     for (const [index, code] of ["R3A", "04H"].entries()) {
       const configs = originalConfigs.map(item => ({ ...item, zonageMinutes: item.zonageMinutes + index + 1 }));
-      assert.equal((await request(code, "league-configs", json("PUT", { configs }))).status, 200);
+      const { leagueConfigRevision } = await (await request(code, "league-configs")).json();
+      assert.equal((await request(code, "league-configs", json("PUT", { configs, expectedRevision: leagueConfigRevision }))).status, 200);
       const saved = await request(code, "causerie", json("POST", { matchDate: "2026-10-12", expectedRevision: null, plan: { briefLayoutVersion: 2, attack: [code, "", ""] } }));
       assert.equal(saved.status, 200, await saved.clone().text());
       const body = new FormData();
@@ -95,6 +97,8 @@ test("six agences : catalogue public, connexion, état vide et isolation R3A / 0
       assert.equal(imported.status, 200, await imported.clone().text());
       const snapshot = (await imported.json()).snapshot;
       assert.equal(snapshot.agency.code, code);
+      assert.equal(snapshot.match.date, "2026-10-12", "La date métier reste celle de Paris quel que soit TZ");
+      assert.equal(snapshot.match.firstOperation, "2026-10-12T12:00:00.000Z", "14h à Paris en octobre, sans conversion par le fuseau du poste");
       assert.ok(snapshot.positions.some(item => item.travelCode === `${code}-TRAVEL`));
       assert.ok(snapshot.positions.every(item => item.travelCode === `${code}-TRAVEL`));
       if (code === "R3A") {

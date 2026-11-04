@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import * as XLSX from "xlsx";
 import { buildOperationalAnalyses, normalizeOperationalAnalysisContract, selectNight } from "./operational-analysis.mjs";
+import { isValidCalendarDate } from "./calendar-date.mjs";
 import { buildReceptionCohort } from "./reception-cohort.mjs";
 import { isHourlyPassChartRow } from "./hourly-pass-scope.mjs";
 
@@ -1760,6 +1761,8 @@ function parseExcelDate(value) {
       hour * 60 + minute,
     );
   }
+  const isoDate = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)/);
+  if (isoDate && !isValidCalendarDate(Number(isoDate[1]), Number(isoDate[2]), Number(isoDate[3]))) return null;
   const parsed = new Date(text);
   if (!Number.isNaN(parsed.getTime())) return parsed;
   return null;

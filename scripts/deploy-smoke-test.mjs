@@ -122,7 +122,7 @@ try {
   const saveLeagueConfigResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/league-configs`, {
     method: "PUT",
     headers: { ...leagueConfigHeaders, "Content-Type": "application/json" },
-    body: JSON.stringify({ configs: sharedLeagueConfigs }),
+    body: JSON.stringify({ configs: sharedLeagueConfigs, expectedRevision: leagueConfigPayload.leagueConfigRevision }),
   });
   assert.equal(saveLeagueConfigResponse.status, 200, await safeText(saveLeagueConfigResponse));
   const configuredSyncStateResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/sync-state`, { headers: leagueConfigHeaders });
@@ -136,7 +136,7 @@ try {
   await fetch(`${baseUrl}/api/agencies/${agencyCode}/league-configs`, {
     method: "PUT",
     headers: { ...leagueConfigHeaders, "Content-Type": "application/json" },
-    body: JSON.stringify({ configs: originalLeagueConfigs }),
+    body: JSON.stringify({ configs: originalLeagueConfigs, expectedRevision: secondLeagueConfigPayload.leagueConfigRevision }),
   });
   const restoredConfigSyncStateResponse = await fetch(`${baseUrl}/api/agencies/${agencyCode}/sync-state`, { headers: leagueConfigHeaders });
   const restoredConfigSyncState = await restoredConfigSyncStateResponse.json();
