@@ -173,7 +173,7 @@
   .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card > .duel-quality-details,
   .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card > .loading-quality-empty { grid-column: 1; }
   .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card .loading-quality-overview { grid-template-columns: minmax(90px, 140px) minmax(0, 1fr); gap: 14px; margin: 8px 0 0; width: 100%; }
-  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card .loading-quality-pie { width: 140px; }
+  .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card .loading-quality-pie { width: clamp(120px, 17vh, 140px); }
   .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card .loading-quality-pie span { font-size: 28px; }
   .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card .loading-quality-legend { gap: 12px; }
   .match-page.is-celebration-mode .operational-charts-carousel .reception-quality-card .loading-quality-legend span { font-size: 14px; }

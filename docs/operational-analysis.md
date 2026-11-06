@@ -53,6 +53,10 @@ CHG voyage codes are never used for ownership. Delay is rounded to seconds,
 compared to the active `zonageMinutes * 60` threshold; equality is within target.
 
 Counts: received = on time + late + unqualifiable; qualifiable = on time + late.
+For the local Montpellier reference (17-18 September 2026, 21:30-06:30,
+30-minute target): 676 received = 184 late + 304 on time + 188 unqualifiable;
+488 qualifiable. This is not the official possession population (677 received,
+489 followed by zonage). Neither denominator may replace the other.
 Anomaly rate = late / qualifiable; coverage = qualifiable / received.
 Null anomaly rate and unavailable state when there is no qualifiable position.
 Average excess uses only late positions and is null when none are late.
@@ -81,6 +85,10 @@ The headline % duels gained, lost-duel detail, and hourly chart now use the
 same cohort and active league target. The cached TCD detail is not used for the
 carousel because it can aggregate identical voyage codes across multiple dates.
 Other loading and zonage indicators retain their established definitions.
+The Montpellier reference has 23 eligible voyages, 4 off target, not the
+historical pivot's 37 voyages. Eligibility and the 14/15 boundary are covered
+by `scripts/reception-cohort.test.mjs` and the three-view reconciliation by
+`scripts/reception-carousel-integration.test.mjs`.
 
 ## Summary and old snapshots
 

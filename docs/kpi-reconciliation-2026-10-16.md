@@ -6,21 +6,26 @@ sans toucher aux règles de réception et au DST (anomalie historique acceptée)
 
 ### 1. Passes réussies par heure
 Le graphique n'utilise plus l'ancienne liste d'heures de `X!FF:FG` comme filtre.
-Il regroupe les **scoringRows** déjà retenues par le moteur (filtre opérateur,
+Il regroupe le sous-ensemble DECHG de type segment AQ/ED/EX/vide des
+**scoringRows** déjà retenues par le moteur (filtre opérateur,
 plage horaire exacte, lignes non zonées exclues et voyages masqués), selon
 l'heure Europe/Paris de leur horodatage réel.
 L'heure de début et l'heure de fin **partielles** comptent uniquement
 les opérations éligibles de cette partie d'heure.
 
 Invariants vérifiables:
-- somme des `hourlyPerformance[].total` = `summary.duelTotal`;
-- somme des `hourlyPerformance[].won` = `summary.duelWon`;
+- somme des `hourlyPerformance[].total` <= `summary.duelTotal`;
+- somme des `hourlyPerformance[].won` <= `summary.duelWon`;
 - `summary.passRate = summary.duelRate` pour les modèles de données pris en charge;
 - l'objectif de zonage actif détermine les gagnés, sans réutiliser un cache de TCD
   antérieur à un changement de ligue.
 
 La courbe Excel historique reste disponible comme référence documentaire,
 mais ne contrôle plus ni la sélection horaire ni le taux du score opérationnel.
+Le contrat de segmentation postérieur à cet audit est détaillé dans
+`hourly-passes-segment-scope.md`. Le total pondéré de la courbe est le
+« Total filtré », pas le KPI officiel. Les égalités historiques entre les
+deux populations ne constituent donc plus des assertions valides.
 
 ### 2. Précision des délais
 `DZ` est converti en secondes et arrondi à la seconde avant `<= objectif`.
@@ -45,6 +50,12 @@ Période 17/09/2026 21h30 → 18/09/2026 06h30, cible 30 min:
 - passes: 926 / 1 499 = 61,8 %, après prise en compte des heures de bord;
 - possession: 489 / 677 = 72,2 %, quatre positions avaient un zonage antérieur;
 - réceptions 2/5: 19 / 23 = 82,6 %, inchangé.
+- diagnostic chronologique distinct : 676 reçues, 488 qualifiables,
+  184 en retard, 304 conformes, 188 non qualifiables.
+
+La cohorte réception exige au moins 15 lignes DECHG, hors AQ, avec durée
+positive, dans une unique période datée sélectionnée. Les 37 voyages du
+TCD historique ne remplacent pas les 23 voyages de cette cohorte.
 
 Ces chiffres sont issus du contrôle de données indépendant, et ne constituent
 pas une exécution du moteur JS complet sur ce fichier privé dans le runner CI.

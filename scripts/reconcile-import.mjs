@@ -103,6 +103,51 @@ assert.equal(nonTargetedX47660?.where, "3ème poteau", "Détail de frappe recroi
 // period, excludes AQ, and requires 15 DECHG position rows. Compare the
 // three independently surfaced results instead of stale historical TCD totals.
 assert.ok(snapshot.unloadingQuality.eligibleTrips > 0, "Des réceptions restent évaluables");
+// Independent oracle for this daytime reference: raw Excel serials, no engine
+// parsing/cohort helper. Keep the dated 15-row denominator observable.
+const sourceData = XLSX.utils.sheet_to_json(sourceWorkbook.Sheets["Données"]);
+const rawMatchRows = sourceData.filter(row => {
+  const serial = row["Date/Heure de début d'opération"];
+  const minute = Math.floor((serial % 1) * 1440 + 1e-5);
+  return typeof serial === "number" && !row["Filtre opérateur"] && minute >= 780 && minute <= 1350;
+});
+const rawScoreRows = rawMatchRows.filter(row => !row["Poz non zonées"]);
+const rawSuccess = (row, minutes) => typeof row.DZ === "number"
+  ? Math.round(row.DZ * 86400) <= minutes * 60
+  : row["Duels gagnés"] === 1;
+const referencePassWon = rawScoreRows.filter(row => rawSuccess(row, snapshot.performanceCriteria.zonageMinutes)).length;
+assert.equal(rawScoreRows.length, 3517, "Dénominateur officiel contrôlé sur les lignes Excel brutes");
+assert.equal(referencePassWon, 2528, "Numérateur officiel indépendant de la courbe segmentée");
+assert.equal(snapshot.summary.passRate, Math.round(referencePassWon / rawScoreRows.length * 1000) / 10);
+const rawChartRows = rawScoreRows.filter(row => row["Type d'opération"] === "DECHG" &&
+  ["AQ", "ED", "EX", ""].includes(String(row["Type Segment"] ?? "").trim().toUpperCase()));
+const referenceChartWon = rawChartRows.filter(row => rawSuccess(row, snapshot.performanceCriteria.zonageMinutes)).length;
+assert.equal(rawChartRows.length, 111, "Courbe jour : dénominateur filtré distinct des 3517 lignes officielles");
+assert.equal(referenceChartWon, 66, "Courbe jour : 66/111 = 59,5 %, pas le KPI officiel 71,9 %");
+assert.equal(snapshot.hourlyPerformance.reduce((sum, item) => sum + item.total, 0), rawChartRows.length);
+assert.equal(snapshot.hourlyPerformance.reduce((sum, item) => sum + item.won, 0), referenceChartWon);
+const dateVolumes = new Map();
+for (const row of rawMatchRows) {
+  const date = Math.floor(row["Date/Heure de début d'opération"]);
+  dateVolumes.set(date, (dateVolumes.get(date) ?? 0) + 1);
+}
+const selectedDate = [...dateVolumes].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
+const rawReceptions = new Map();
+for (const row of rawMatchRows) {
+  if (Math.floor(row["Date/Heure de début d'opération"]) !== selectedDate ||
+    row["Type d'opération"] !== "DECHG" || row["Type Segment"] === "AQ" || !row["Code Voyage"]) continue;
+  const group = rawReceptions.get(row["Code Voyage"]) ?? [];
+  group.push(row["Date/Heure de début d'opération"]);
+  rawReceptions.set(row["Code Voyage"], group);
+}
+const referenceReceptions = [...rawReceptions.values()].filter(dates => dates.length >= 15 && Math.max(...dates) > Math.min(...dates));
+const referenceWon = referenceReceptions.filter(dates =>
+  Math.round((Math.max(...dates) - Math.min(...dates)) * 86400) / dates.length <= snapshot.performanceCriteria.unloadingSeconds).length;
+assert.equal(referenceReceptions.length, 50, "Référence jour : 50 voyages datés admissibles, pas le TCD historique");
+assert.equal(referenceWon, 29, "Référence jour : 29 voyages dans la cible, calculés sur les séries Excel brutes");
+assert.equal(snapshot.unloadingQuality.eligibleTrips, referenceReceptions.length);
+assert.equal(snapshot.unloadingQuality.targeted, referenceWon);
+assert.equal(snapshot.unloadingQuality.targetedPercent, Math.round(referenceWon / referenceReceptions.length * 1000) / 10);
 assert.equal(snapshot.unloadingQuality.targeted + snapshot.unloadingQuality.offTarget,
   snapshot.unloadingQuality.eligibleTrips, "Dénominateur des duels de réception");
 assert.equal(snapshot.unloadingQuality.targeted, snapshot.unloadingDuelQuality.won,
@@ -153,7 +198,7 @@ const rawLoadingDataHeaders = [
 ];
 const rawLoadingDataRows = Array.from({ length: 15 }, (_, index) => [
   "Joueur",
-  new Date(Date.UTC(2026, 8, 11, 14, 0, index)),
+  `11/09/2026 14:00:${String(index).padStart(2, "0")}`,
   "CHG",
   String(index + 1),
   "RAW-001",
@@ -169,8 +214,8 @@ const rawLoadingDataRows = Array.from({ length: 15 }, (_, index) => [
 const rawLoadingTcdRows = [
   ["Chargement"],
   ["Code Voyage", "Min. de Date/Heure de début d'opération", "Max. de Date/Heure de début d'opération", "Nombre de N° Position", "TC", "", "TC/poz", "Commentaire"],
-  ["RAW-001", new Date(Date.UTC(2026, 8, 11, 14, 0)), new Date(Date.UTC(2026, 8, 11, 14, 1)), 15, 0.015, 0.001, 0.5, 2],
-  ["RAW-002", new Date(Date.UTC(2026, 8, 11, 14, 2)), new Date(Date.UTC(2026, 8, 11, 14, 3)), 14, 0.015, 0.001, 0.001, "Orbite lunaire"],
+  ["RAW-001", "11/09/2026 14:00:00", "11/09/2026 14:01:00", 15, 0.015, 0.001, 0.5, 2],
+  ["RAW-002", "11/09/2026 14:02:00", "11/09/2026 14:03:00", 14, 0.015, 0.001, 0.001, "Orbite lunaire"],
 ];
 const rawLoadingWorkbook = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(rawLoadingWorkbook, XLSX.utils.aoa_to_sheet([rawLoadingDataHeaders, ...rawLoadingDataRows]), "Données");
@@ -192,7 +237,7 @@ if (rawLoadingResult.ok) {
 }
 
 // Agency enrichment must not change the common, dated reception population.
-const unloadingAgencyTravels = ["A", "B", "TEST-001", "MAJ", "TIE", "MISSING", "FILTERED", "TCD-ONLY", "EXCLUDED", "OUT-TCD"];
+const unloadingAgencyTravels = ["A", "B", "TEST-001", "MAJ", "TIE", "MISSING", "FILTERED", "TCD-ONLY", "EXCLUDED", "OUT-TCD", "BELOW-15"];
 const unloadingAgencyRows = [];
 function addUnloadingAgencyRow(travel, agency, time = "14:00:00", operation = "DECHG", operatorFilter = "") {
   unloadingAgencyRows.push([
@@ -217,6 +262,10 @@ for (let index = 0; index < 3; index += 1) {
 }
 addUnloadingAgencyRow("EXCLUDED", "04P");
 addUnloadingAgencyRow("OUT-TCD", "04P", "12:00:00");
+for (let index = 1; index < 15; index += 1) {
+  addUnloadingAgencyRow("EXCLUDED", "04P", `14:00:${String(index).padStart(2, "0")}`);
+  addUnloadingAgencyRow("OUT-TCD", "04P", `12:00:${String(index).padStart(2, "0")}`);
+}
 // Two timestamps make A eligible for the independent reception calculation.
 addUnloadingAgencyRow("A", "058", "14:02:00");
 // Complete seven source voyages to the same 15-position eligibility boundary.
@@ -225,10 +274,21 @@ const qualifyingAgencies = {
   TIE: "01K", MISSING: "", FILTERED: "01K",
 };
 for (const [travel, agency] of Object.entries(qualifyingAgencies)) {
-  const existing = unloadingAgencyRows.filter(row => row[4] === travel && row[2] === "DECHG" && !row[7]).length;
+  if (travel === "TIE") {
+    // Eight rows per agency; the earliest DECHG is 01K at 14:01.
+    for (const tiedAgency of ["04P", "01K"]) {
+      for (let index = 0; index < 7; index += 1) addUnloadingAgencyRow(travel, tiedAgency, `14:06:${String(index).padStart(2, "0")}`);
+    }
+    continue;
+  }
+  const existing = unloadingAgencyRows.filter(row => row[4] === travel && row[2] === "DECHG" && !row[7] &&
+    row[1] >= "11/09/2026 13:00:00" && row[1] <= "11/09/2026 15:00:00").length;
   for (let index = existing; index < 15; index += 1) {
     addUnloadingAgencyRow(travel, agency, `14:00:${String(index).padStart(2, "0")}`);
   }
+}
+for (let index = 0; index < 14; index += 1) {
+  addUnloadingAgencyRow("BELOW-15", "01K", `14:00:${String(index).padStart(2, "0")}`);
 }
 const unloadingAgencyWorkbook = XLSX.utils.book_new();
 XLSX.utils.book_append_sheet(unloadingAgencyWorkbook, XLSX.utils.aoa_to_sheet([rawLoadingDataHeaders, ...unloadingAgencyRows]), "Données");
@@ -258,8 +318,16 @@ assert.equal(unloadingAgencyQuality.duels.length, Object.keys(expectedUnloadingA
   "Seuls les voyages avec au moins 15 DECHG éligibles sont évalués");
 assert.equal(unloadingAgencyQuality.duels.some(duel => duel.travelCode === "TCD-ONLY"), false,
   "Une ancienne ligne présente uniquement dans le TCD ne crée pas un duel");
+assert.equal(unloadingAgencyQuality.duels.some(duel => duel.travelCode === "BELOW-15"), false,
+  "Quatorze positions DECHG admissibles restent sous le seuil de réception");
+for (const excluded of ["EXCLUDED", "OUT-TCD"]) {
+  assert.equal(unloadingAgencyQuality.duels.some(duel => duel.travelCode === excluded), false,
+    `${excluded} : quinze positions ne contournent ni l'exclusion ni la plage active`);
+}
 assert.equal(unloadingAgencyQuality.won + unloadingAgencyQuality.lost, unloadingAgencyQuality.duels.length,
   "Un seul résultat par voyage");
+assert.equal(unloadingAgencyQuality.won, 7, "Les sept voyages sources ont un ratio de réception inférieur à 60 secondes");
+assert.equal(unloadingAgencyQuality.lost, 0, "Les drapeaux alternés du TCD ne remplacent pas le calcul daté de réception");
 assert.deepEqual(unloadingAgencyQuality.lostDuels.map(duel => duel.travelCode).sort(),
   unloadingAgencyQuality.duels.filter(duel => duel.result === "perdu").map(duel => duel.travelCode).sort(),
   "Tous les duels perdus ont une ligne dans le détail");
@@ -503,7 +571,7 @@ const emptyLoadingHeaders = [
 ];
 const emptyLoadingRows = Array.from({ length: 20 }, (_, index) => [
   "Joueur",
-  new Date(Date.UTC(2026, 7, 13, 14, 0, index)),
+  `13/08/2026 14:00:${String(index).padStart(2, "0")}`,
   "DECHG",
   String(index + 1),
   "V001",

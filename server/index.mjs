@@ -10,6 +10,8 @@ import { parse106jPdf } from "./pdf-106j.mjs";
 import { pdfAssociation, canUsePdfIndicators } from "./source-provenance.mjs";
 import { operationalAnalysisNeedsRefresh } from "./operational-analysis.mjs";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout } from "./brief-layout.mjs";
+import { isValidCalendarDate } from "./calendar-date.mjs";
+import { authAttemptKey, boundedAuthText, createAuthAttemptLimiter, MAX_AGENCY_CODE_LENGTH, MAX_ACCESS_CODE_LENGTH } from "./auth-attempts.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,13 +22,13 @@ const dataDir = process.env.STEF_DATA_DIR
 const agenciesPath = path.join(__dirname, "agencies.json");
 const port = Number(process.env.PORT ?? 4174);
 const uploadLimitMb = readEnvNumber("STEF_UPLOAD_LIMIT_MB", 20);
+const jsonBodyLimitMiB = 14;
+const maxCaptureDataUrlLength = 260_000;
 const compositionRangeCache = new Map();
 const compositionRangeCacheLimit = 64;
 const workbookReadPromises = new Map();
 const agencyOperationQueues = new Map();
-const failedSessionAttempts = new Map();
-const sessionRateLimitWindowMs = 15 * 60 * 1000;
-const maxFailedSessionAttempts = 20;
+const failedSessionAttempts = createAuthAttemptLimiter();
 const importConfirmationSecret = randomBytes(32);
 
 const app = express();
@@ -41,7 +43,8 @@ app.use(securityHeaders);
 
 // A plan can contain several resized captures; keep the JSON body bounded but
 // large enough for the client-side gallery limit.
-app.use(express.json({ limit: "14mb" }));
+// Application clients send uncompressed JSON; reject encoded bodies before decoding.
+app.use(express.json({ limit: jsonBodyLimitMiB * 1024 * 1024, inflate: false }));
 
 const agencies = await loadAgencies();
 
@@ -88,8 +91,8 @@ app.post("/api/session", (req, res) => {
 
 app.get("/api/agencies/:agencyCode/league-configs", requireAgency, async (req, res) => {
   try {
-    const configs = await readLeagueConfigs(req.agency.code);
-    res.set("Cache-Control", "no-store, max-age=0").json({ configs });
+    const state = await withAgencyLock(req.agency.code, () => readLeagueConfigState(req.agency.code));
+    res.set("Cache-Control", "no-store, max-age=0").json(state);
   } catch (error) {
     respondInternalError(res, `league-configs:${req.agency.code}`, error);
   }
@@ -118,14 +121,23 @@ app.put("/api/agencies/:agencyCode/league-configs", requireAgency, async (req, r
     res.status(403).json({ title: "PARAMÈTRES NON MODIFIÉS", message: "Ce code d'accès permet uniquement de consulter les résultats." });
     return;
   }
+  if (req.body?.expectedRevision !== null && typeof req.body?.expectedRevision !== "string") {
+    res.status(428).json({ message: "Recharge les paramètres des ligues avant de les enregistrer : leur révision est nécessaire." });
+    return;
+  }
   try {
     const configs = normalizeLeagueConfigs(req.body?.configs);
     await withAgencyLock(req.agency.code, async () => {
+      const current = await readLeagueConfigState(req.agency.code);
+      if (req.body.expectedRevision !== current.leagueConfigRevision) {
+        res.status(409).json({ ...current, message: "Les paramètres ont été modifiés par un autre utilisateur. Ta saisie est conservée ; recharge la version serveur avant de réappliquer tes changements." });
+        return;
+      }
       const agencyDir = path.join(dataDir, sanitizeSegment(req.agency.code));
       await fs.mkdir(agencyDir, { recursive: true });
       await writeJsonAtomic(path.join(agencyDir, "league-configs.json"), configs);
+      res.json({ message: "PARAMÈTRES DES LIGUES ACTUALISÉS", ...await readLeagueConfigState(req.agency.code) });
     });
-    res.json({ message: "PARAMÈTRES DES LIGUES ACTUALISÉS", configs });
   } catch (error) {
     res.status(400).json({ title: "PARAMÈTRES INVALIDES", message: error instanceof Error ? error.message : "Les paramètres n'ont pas pu être enregistrés." });
   }
@@ -436,7 +448,17 @@ app.post("/api/agencies/:agencyCode/causerie", requireAgency, async (req, res) =
     return;
   }
 
+  const attachments = req.body?.plan?.attachments;
+  const malformedAttachments = attachments != null && (typeof attachments !== "object" || Array.isArray(attachments)
+    || ["attack", "midfield", "defense"].some(zone => {
+      const value = attachments[zone];
+      return value != null && typeof value !== "string" && (!Array.isArray(value) || value.some(image => typeof image !== "string"));
+    }));
   const layout = migrateBriefLayout(req.body?.plan);
+  if (malformedAttachments || Object.values(layout.attachments).some(images => images.some(image => !isValidCapture(image)))) {
+    res.status(400).json({ title: "BRIEF NON ENREGISTRÉ", message: "Une capture est invalide ou dépasse la taille autorisée de 260 000 caractères. Réduis sa taille ou ajoute une nouvelle image. Le plan précédent est conservé." });
+    return;
+  }
   const oversizedZone = ["attack", "midfield", "defense"].find((zone) =>
     layout[zone].filter(Boolean).join("\n").length > BRIEF_TEXT_LIMITS[zone]
     || layout.attachments[zone].length > BRIEF_CAPTURE_LIMITS[zone]);
@@ -613,6 +635,10 @@ if (existsSync(distDir)) {
 }
 
 app.use((error, _req, res, next) => {
+  if (error?.type === "encoding.unsupported") {
+    res.status(415).json({ title: "FORMAT NON PRIS EN CHARGE", message: "Les requêtes JSON compressées ne sont pas acceptées. Envoie un contenu JSON non compressé." });
+    return;
+  }
   if (error?.type === "entity.parse.failed") {
     res.status(400).json({ title: "REQUÊTE INVALIDE", message: "Le contenu JSON envoyé est invalide." });
     return;
@@ -620,7 +646,7 @@ app.use((error, _req, res, next) => {
   if (error?.type === "entity.too.large") {
     res.status(413).json({
       title: "REQUÊTE TROP VOLUMINEUSE",
-      message: "Le contenu envoyé dépasse la limite autorisée de 10 Mo.",
+      message: `Le contenu envoyé dépasse la limite autorisée de ${jsonBodyLimitMiB} Mio.`,
       action: "Réduis le nombre ou la taille des captures, puis réessaie.",
     });
     return;
@@ -679,10 +705,13 @@ function readEnvNumber(name, fallback) {
 }
 
 function findAgency(agencyCode, accessCode) {
+  const code = boundedAuthText(agencyCode, MAX_AGENCY_CODE_LENGTH);
+  const credential = boundedAuthText(accessCode, MAX_ACCESS_CODE_LENGTH);
+  if (code === null || credential === null) return undefined;
   return agencies.find(
     (agency) =>
-      String(agency.code).toUpperCase() === String(agencyCode ?? "").trim().toUpperCase() &&
-      String(agency.accessCode) === String(accessCode ?? "").trim()
+      String(agency.code).toUpperCase() === code.toUpperCase() &&
+      String(agency.accessCode) === credential
   );
 }
 
@@ -723,32 +752,19 @@ function securityHeaders(req, res, next) {
 
 function sessionAttemptKey(req, agencyCode) {
   // Express resolves the client from the trusted proxy hop, not the untrusted first header entry.
-  const ip = req.ip || "unknown";
-  return `${ip}:${String(agencyCode ?? "").trim().toUpperCase() || "unknown"}`;
+  return authAttemptKey(req.ip, agencyCode);
 }
 
 function isSessionRateLimited(key) {
-  const entry = failedSessionAttempts.get(key);
-  if (!entry) return false;
-  if (entry.resetAt <= Date.now()) {
-    failedSessionAttempts.delete(key);
-    return false;
-  }
-  return entry.count >= maxFailedSessionAttempts;
+  return failedSessionAttempts.isLimited(key);
 }
 
 function registerFailedSessionAttempt(key) {
-  const now = Date.now();
-  const current = failedSessionAttempts.get(key);
-  if (!current || current.resetAt <= now) {
-    failedSessionAttempts.set(key, { count: 1, resetAt: now + sessionRateLimitWindowMs });
-    return;
-  }
-  failedSessionAttempts.set(key, { count: current.count + 1, resetAt: current.resetAt });
+  failedSessionAttempts.register(key);
 }
 
 function clearFailedSessionAttempts(key) {
-  failedSessionAttempts.delete(key);
+  failedSessionAttempts.clear(key);
 }
 
 const DEFAULT_LEAGUE_CONFIGS = [
@@ -787,6 +803,13 @@ async function readLeagueConfigs(agencyCode) {
     if (error?.code === "ENOENT") return DEFAULT_LEAGUE_CONFIGS.map((config) => ({ ...config }));
     throw error;
   }
+}
+
+async function readLeagueConfigState(agencyCode) {
+  return {
+    configs: await readLeagueConfigs(agencyCode),
+    leagueConfigRevision: await readFileRevision(path.join(dataDir, sanitizeSegment(agencyCode), "league-configs.json")),
+  };
 }
 
 async function readFileRevision(filePath) {
@@ -1256,8 +1279,20 @@ function normalizeAttachments(value, limit = 12) {
   return values
     .filter((item) => typeof item === "string")
     .map((item) => item.trim())
-    .filter((image) => /^data:image\/(jpeg|png|webp);base64,/.test(image) && image.length <= 260_000)
+    .filter((image) => /^data:image\/(jpeg|png|webp);base64,/.test(image) && image.length <= maxCaptureDataUrlLength)
     .slice(0, limit);
+}
+
+function isValidCapture(value) {
+  const image = value.trim();
+  if (image.length > maxCaptureDataUrlLength) return false;
+  const match = image.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]*={0,2})$/);
+  if (!match) return false;
+  const bytes = Buffer.from(match[2], "base64");
+  if (!bytes.length || bytes.toString("base64") !== match[2]) return false;
+  if (match[1] === "png") return bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  if (match[1] === "jpeg") return bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+  return bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
 }
 
 function limitMultilineText(value, maxLength) {
@@ -1270,7 +1305,8 @@ function limitText(value, maxLength) {
 
 function sanitizeDate(value) {
   const text = String(value ?? "").trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+  const parts = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return parts && isValidCalendarDate(Number(parts[1]), Number(parts[2]), Number(parts[3])) ? text : "";
 }
 
 function sanitizeSegment(value) {

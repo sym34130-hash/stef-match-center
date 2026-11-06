@@ -40,3 +40,14 @@ réception et de score existants.
 
 Le fichier Excel privé n'est pas ajouté au dépôt ; la comparaison des valeurs
 affichées avec un import réel reste un contrôle métier après le redéploiement.
+
+## Validation des références
+
+Sur la fixture jour `HM 058 A V11.xlsx`, plage 13:00-22:30 et cible 30 min,
+les séries Excel brutes donnent 66/111 = 59,5 % dans le sous-ensemble du
+graphique, contre 2528/3517 = 71,9 % pour le KPI officiel. Ces valeurs ne
+doivent pas être échangées dans les tests UI. Les heures sans ligne admissible
+ne sont pas recréées depuis le TCD historique. Les contrôles indépendants
+figurent dans `scripts/reconcile-import.mjs` ; les fixtures synthétiques de
+`scripts/hourly-pass-chart-scope.test.mjs` couvrent aussi les segments rejetés,
+les exclusions et les critères actifs. Le DST reste ouvert, accepté et hors périmètre.

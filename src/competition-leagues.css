@@ -1,5 +1,21 @@
 /* League name typography and placement only. No changes to the original
    gradients, card surfaces, medal backgrounds, themes, borders or KPI logic. */
+@font-face {
+  font-family: "Archivo Black";
+  src: url("/fonts/ArchivoBlack-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Barlow Condensed";
+  src: url("/fonts/BarlowCondensed-BlackItalic.ttf") format("truetype");
+  font-style: italic;
+  font-weight: 900;
+  font-display: swap;
+}
+
 :root {
   --competition-display-font: "Archivo Black", "Barlow Condensed", "Arial Black",
     "Franklin Gothic Heavy", sans-serif;

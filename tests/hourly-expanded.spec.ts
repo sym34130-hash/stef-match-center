@@ -28,7 +28,9 @@ test("graphique agrandi : modal, créneau, voyages, focus et géométrie conserv
   const expand = page.getByRole("button", { name: "Agrandir le graphique", exact: true });
   const dialog = page.getByRole("dialog", { name: "Graphique Performance horaire agrandi", exact: true });
   const sizes = info.project.name === "desktop"
-    ? [[1366,768],[1440,900],[1536,864],[1600,900],[1920,1080],[2560,1440],[1024,768],[768,1024],[390,844]]
+    ? [[1366,768],[1440,900],[1536,864],[1600,900],[1920,1080],[2560,1440],
+      [1366,650],[1536,720],[1920,800],[1920,900],[1024,768],[1180,640],[2560,800],
+      [1536,1024],[820,1180],[768,1024],[390,844],[360,800],[320,740]]
     : [[info.project.use.viewport!.width, info.project.use.viewport!.height]];
   let maxDelta = 0;
   const geometry = () => page.evaluate(() => {
@@ -49,10 +51,13 @@ test("graphique agrandi : modal, créneau, voyages, focus et géométrie conserv
       await normalTrigger.click();
       await expect(page.getByRole("dialog", {name:"Voyages arrivés à 01h",exact:true}).locator("li")).toHaveText(codes);
       if (width !== 1366 || mode !== "normal") await page.keyboard.press("Escape");
-      await expand.scrollIntoViewIfNeeded();
+      // Place the trigger clear of the sticky navigator BEFORE measuring.
+      // Otherwise Playwright scrolls to make the covered button clickable.
+      await expand.evaluate(element => element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" }));
       await expand.focus();
       await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       const before = await geometry();
+      const scrollContainersBefore = await page.evaluate(() => [...document.querySelectorAll("*")].filter(e => e.scrollTop || e.scrollLeft).map(e => [e.className, e.scrollTop, e.scrollLeft]));
       const scrollBefore = await page.evaluate(() => [scrollX,scrollY]);
       const carouselBefore = await page.locator(".operational-charts-carousel-viewport").evaluate((e) => e.scrollLeft);
       const labelsBefore = await normal.locator("text").allTextContents();
@@ -61,6 +66,7 @@ test("graphique agrandi : modal, créneau, voyages, focus et géométrie conserv
       await expect(dialog).toHaveAttribute("aria-modal","true");
       await expect(page.locator(".hourly-arrivals-detail")).toHaveCount(0);
       const openedGeometry = await geometry();
+      expect(await page.evaluate(() => [...document.querySelectorAll("*")].filter(e => e.scrollTop || e.scrollLeft).map(e => [e.className, e.scrollTop, e.scrollLeft])), "scroll des conteneurs conservé à l'ouverture").toEqual(scrollContainersBefore);
       const openedDelta = Math.max(...openedGeometry.flatMap((rect,i) => rect.map((v,j) => Math.abs(v-before[i][j]))));
       maxDelta=Math.max(maxDelta,openedDelta);
       expect(openedDelta, "arrière-plan inchangé à l'ouverture").toBeLessThan(0.25);

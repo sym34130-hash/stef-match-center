@@ -33,6 +33,15 @@ const matchSlides = [
 test.describe.configure({ mode: "serial", timeout: 8 * 60_000 });
 
 test.beforeEach(async ({ page }) => {
+  // Eight base indicators; Mercato adds a ninth only with explicit entrants.
+  // Dedicated Mercato tests retain the nine-card case.
+  await page.route("**/api/agencies/058/causerie**", async route => {
+    if (route.request().method() !== "GET") return route.continue();
+    const response = await route.fetch();
+    const body = await response.json();
+    body.plan = { ...body.plan, mercato: "", mercatoProfiles: {} };
+    await route.fulfill({ response, json: body });
+  });
   // Stabilize only import metadata used by the visual header, not KPI data.
   await page.route("**/api/agencies/058/snapshot**", async (route) => {
     const response = await route.fetch();
@@ -289,6 +298,19 @@ async function assertBriefSlide(page: Page, slideIndex: number, viewport: Viewpo
   if (slideIndex === 0) {
     await assertVisibleWithin(active, [".match-result-stage", ".match-indicators-area"], "slide Brief 1");
     await assertIndicatorCarousel(page, `slide Brief 1 ${viewport.name}`);
+    if (viewport.name === "1536x864") {
+      const scrollAccess = await page.locator(".match-slide-viewport").evaluate((viewportElement) => {
+        const viewport = viewportElement as HTMLElement;
+        const stage = viewport.querySelector<HTMLElement>(".match-result-stage")!;
+        const initial = viewport.scrollTop;
+        viewport.scrollTop = viewport.scrollHeight;
+        const bottomVisible = stage.getBoundingClientRect().bottom <= viewport.getBoundingClientRect().bottom + 1;
+        const scrolled = viewport.scrollTop > initial;
+        viewport.scrollTop = initial;
+        return { bottomVisible, scrolled };
+      });
+      expect(scrollAccess, "le bas de la slide Brief reste accessible par défilement").toEqual({ bottomVisible: true, scrolled: true });
+    }
   } else if (slideIndex === 1) {
     await assertVisibleWithin(active, [".category-awards-stage", ".award-card"], "slide Brief 2");
   } else if (slideIndex === 2) {
@@ -384,18 +406,22 @@ async function assertIndicatorCarousel(page: Page, label: string) {
   const carousel = page.locator(".match-page .match-indicators");
   const viewport = carousel.locator(".match-indicators-viewport");
   const navigation = carousel.locator(".match-indicators-navigation");
+  expect(await carousel.locator(".match-indicators-track > .match-indicator-slide").evaluateAll(cards =>
+    cards.map(card => card.getAttribute("data-indicator")))).toEqual([
+    "performance", "injuries", "tonnage", "positions", "arrival", "departure", "destination", "temperature",
+  ]);
   await expect(viewport).toBeVisible();
   await viewport.focus();
   await page.keyboard.press("End");
-  await expect(navigation.locator("> span")).toHaveText("9 / 9");
+  await expect(navigation.locator("> span")).toHaveText("8 / 8");
   await expect(carousel.getByRole("button", { name: "Indicateurs suivants", exact: true })).toBeDisabled();
   await expect(carousel.getByRole("button", { name: "Indicateurs précédents", exact: true })).not.toBeDisabled();
   await carousel.getByRole("button", { name: "Indicateurs précédents", exact: true }).click();
-  await expect(navigation.locator("> span")).not.toHaveText("9 / 9");
+  await expect(navigation.locator("> span")).not.toHaveText("8 / 8");
   await expect(carousel.getByRole("button", { name: "Indicateurs suivants", exact: true })).not.toBeDisabled();
   await viewport.focus();
   await page.keyboard.press("Home");
-  await expect(navigation.locator("> span")).toHaveText(/1(?:–2)? \/ 9/);
+  await expect(navigation.locator("> span")).toHaveText(/1(?:–2)? \/ 8/);
   await assertNoHorizontalOverflow(page, { name: label, width: page.viewportSize()?.width ?? 0, height: page.viewportSize()?.height ?? 0, reference: false });
 }
 
@@ -427,6 +453,10 @@ async function assertSlideGeometry(active: Locator, label: string, viewport: Vie
   const geometry = await active.evaluate((element) => {
     const root = element as HTMLElement;
     const style = getComputedStyle(root);
+    const bounds = root.getBoundingClientRect();
+    const outside = [...root.querySelectorAll<HTMLElement>("button, .match-result-stage, .match-scoreboard, .match-indicators-area, .match-indicators-navigation")]
+      .map(child => ({ className: child.className, bottom: child.getBoundingClientRect().bottom - bounds.bottom }))
+      .filter(child => child.bottom > 1);
     return {
       scrollWidth: root.scrollWidth,
       clientWidth: root.clientWidth,
@@ -434,11 +464,15 @@ async function assertSlideGeometry(active: Locator, label: string, viewport: Vie
       clientHeight: root.clientHeight,
       overflowX: style.overflowX,
       overflowY: style.overflowY,
+      outside,
+      parentOverflowY: root.parentElement ? getComputedStyle(root.parentElement).overflowY : null,
     };
   });
   expect(geometry.scrollWidth, `${label}: contenu horizontal coupé à ${viewport.name}`).toBeLessThanOrEqual(geometry.clientWidth + 1);
   if (!options.allowPageVerticalScroll || geometry.overflowY !== "visible") {
-    expect(geometry.scrollHeight, `${label}: contenu vertical coupé à ${viewport.name}`).toBeLessThanOrEqual(geometry.clientHeight + 1);
+    if (geometry.scrollHeight > geometry.clientHeight + 1) console.log(`[height-contract] ${label} ${viewport.name} ${JSON.stringify(geometry)}`);
+    // Keep failures and the same tolerance, but audit the remaining viewports too.
+    expect.soft(geometry.scrollHeight, `${label}: contenu vertical coupé à ${viewport.name}`).toBeLessThanOrEqual(geometry.clientHeight + 1);
   }
 }
 

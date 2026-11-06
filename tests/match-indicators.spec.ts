@@ -53,10 +53,11 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   await expect(value("arrival")).toHaveText("80%");
   await expect(value("departure")).toHaveText("64,1%");
   await expect(page.locator(".match-score-bubbles").getByText("% duels gagnés", { exact: true })).toBeVisible();
-  await expect(page.locator(".match-score-bubble.reception-score-bubble strong")).toHaveText("56,5%");
+  // Raw daytime workbook reconciliation: 29/50 reception voyages, not the old pivot's 39/69.
+  await expect(page.locator(".match-score-bubble.reception-score-bubble strong")).toHaveText("58%");
   await expect(page.getByLabel("KPI intégrés au score")).toContainText("% possession");
   await expect(page.locator(".match-score-bubbles").getByText("% passes réussies", { exact: true })).toBeVisible();
-  await expect(page.locator(".match-score-bubble.pass-score-bubble strong")).toHaveText("69,2%");
+  await expect(page.locator(".match-score-bubble.pass-score-bubble strong")).toHaveText("71,9%");
   await expect(value("temperature")).toHaveText("92,19%");
   await expect(carousel.locator('[data-indicator="arrival"] .match-indicator-card')).toHaveClass(/is-below-target/);
   await expect(carousel.locator('[data-indicator="temperature"] .match-indicator-card')).toHaveClass(/is-below-target/);
