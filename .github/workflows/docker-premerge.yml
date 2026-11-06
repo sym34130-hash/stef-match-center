@@ -1,0 +1,80 @@
+name: Validate production Docker image
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-premerge:
+    name: Build and smoke-test production container
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image from production Dockerfile
+        run: docker build --pull -t stef-match-center:premerge .
+
+      - name: Start isolated container and verify HTTP, assets and storage
+        env:
+          STEF_AGENCIES_JSON: '[{"code":"TST","name":"Agence CI fictive","accessCode":"ci-only-not-a-secret","canImport":true}]'
+        run: |
+          set -euo pipefail
+          container_id=$(docker run -d --publish 127.0.0.1:4174:4174 \
+            --env NODE_ENV=production \
+            --env PORT=4174 \
+            --env STEF_DATA_DIR=/data/agencies \
+            --env STEF_UPLOAD_LIMIT_MB=20 \
+            --env STEF_AGENCIES_JSON="$STEF_AGENCIES_JSON" \
+            stef-match-center:premerge)
+          trap 'docker logs "$container_id"; docker rm -f "$container_id" >/dev/null' EXIT
+
+          ready=0
+          for attempt in $(seq 1 30); do
+            test "$(docker inspect --format='{{.State.Running}}' "$container_id")" = true
+            if curl --fail --silent --output /dev/null http://127.0.0.1:4174/api/health; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+
+          base=http://127.0.0.1:4174
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' "$base/api/health")" = 200
+          curl --fail --silent "$base/api/health" | jq -e '.ok == true and .agencies == 1 and .storage == "configured-path" and .uploadLimitMb == 20'
+          curl --fail --silent "$base/api/agencies" | jq -e '.agencies | length == 1'
+          curl --fail --silent "$base/api/agencies" | jq -e '.agencies[0].code == "TST"'
+
+          html=$(curl --fail --silent "$base/")
+          printf '%s' "$html" | grep -q '<title>STEF Match Center</title>'
+          script_path=$(printf '%s' "$html" | grep -oE 'src="/assets/[^" ]+\.js"' | head -1 | cut -d '"' -f 2)
+          stylesheet_path=$(printf '%s' "$html" | grep -oE 'href="/assets/[^" ]+\.css"' | head -1 | cut -d '"' -f 2)
+          test -n "$script_path" && test -n "$stylesheet_path"
+          test "$(curl --fail --silent --output /dev/null --write-out '%{http_code}' "$base$script_path")" = 200
+          test "$(curl --fail --silent --output /dev/null --write-out '%{http_code}' "$base$stylesheet_path")" = 200
+          for font in ArchivoBlack-Regular.ttf BarlowCondensed-BlackItalic.ttf; do
+            test "$(curl --fail --silent --output /dev/null --write-out '%{http_code}' "$base/fonts/$font")" = 200
+          done
+
+          curl --fail --silent --head "$base/" | grep -qi '^content-security-policy:'
+          docker exec "$container_id" sh -eu -c '
+            test "$NODE_ENV" = production
+            test "$PORT" = 4174
+            test "$STEF_DATA_DIR" = /data/agencies
+            test "$STEF_UPLOAD_LIMIT_MB" = 20
+            test -s /app/public/fonts/ArchivoBlack-OFL.txt
+            test -s /app/public/fonts/BarlowCondensed-OFL.txt
+            mkdir -p "$STEF_DATA_DIR"
+            touch "$STEF_DATA_DIR/.ci-write-check"
+            test -f "$STEF_DATA_DIR/.ci-write-check"
+          '
+          test "$(docker inspect --format='{{.State.Running}}' "$container_id")" = true
+          if docker logs "$container_id" 2>&1 | grep -E 'uncaughtException|UnhandledPromiseRejection|Error:|ERR_'; then
+            exit 1
+          fi
