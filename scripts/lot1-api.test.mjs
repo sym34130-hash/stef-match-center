@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import fs from "node:fs/promises";
+import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -179,5 +180,37 @@ test("1F: limite JSON effective de 14 Mio et message 413 cohérent", async () =>
     assert.equal(over.status, 413);
     assert.match((await over.json()).message, /14 Mio/);
     assert.deepEqual(await fs.readdir(directory), []);
+  });
+});
+
+test("5S: imports multipart invalides, trop volumineux et interrompus préservent les données", async () => {
+  await withApi(async ({ base, directory }) => {
+    const endpoint = `${base}/api/agencies/TEST/import`;
+    const upload = async (name, content) => {
+      const body = new FormData();
+      body.append("file", new Blob([content]), name);
+      return fetch(endpoint, { method: "POST", headers: { "x-access-code": accessCode }, body });
+    };
+
+    assert.equal((await upload("invalid.txt", "not an Excel file")).status, 400);
+    assert.equal((await upload("too-large.xlsx", Buffer.alloc(21 * 1024 * 1024))).status, 413);
+
+    const aborted = http.request(endpoint, {
+      method: "POST",
+      headers: {
+        "x-access-code": accessCode,
+        "Content-Type": "multipart/form-data; boundary=aborted-upload",
+        "Content-Length": 1024 * 1024,
+      },
+    });
+    aborted.on("error", () => {});
+    const closed = new Promise(resolve => aborted.once("close", resolve));
+    await new Promise(resolve => aborted.once("socket", socket => socket.once("connect", resolve)));
+    await new Promise(resolve => aborted.write("--aborted-upload\r\nContent-Disposition: form-data; name=\"file\"; filename=\"partial.xlsx\"\r\n\r\npartial", resolve));
+    aborted.destroy();
+    await closed;
+
+    assert.equal((await fetch(`${base}/api/health`)).status, 200);
+    assert.deepEqual(await fs.readdir(directory), [], "Rejected and aborted imports must not create agency files");
   });
 });
