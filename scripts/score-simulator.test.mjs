@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SCORE_INDICATORS, simulateScoreSelection } from "../src/score-simulator.ts";
+import { COMMON_SCORE_INDICATORS, SCORE_INDICATORS, eligibleScoreIndicatorIds, simulateScoreSelection } from "../src/score-simulator.ts";
 
 const ids = SCORE_INDICATORS.map(({ id }) => id);
 const values = { passRate: 50, loadingPercent: 60, unloadingPercent: 50.1, possessionPercent: 49.9 };
@@ -50,4 +50,31 @@ test("D1 : reject selection and score threshold abnormalities", () => {
     assert.equal(simulateScoreSelection(values, target, ids).status, "unavailable");
   }
   assert.equal(simulateScoreSelection(undefined, 50, ids).status, "unavailable");
+});
+
+test("D1: a declared no-zoning agency excludes zoning KPIs without inventing two conceded goals", () => {
+  const withZoning = eligibleScoreIndicatorIds("with-zoning");
+  assert.deepEqual(withZoning, ids);
+  const withoutZoning = eligibleScoreIndicatorIds("without-zoning");
+  assert.deepEqual(withoutZoning, ["loadingPercent", "unloadingPercent"]);
+  assert.deepEqual(withoutZoning, COMMON_SCORE_INDICATORS);
+  const noZoningDay = { ...values, passRate: null, possessionPercent: 0 };
+  const official = simulateScoreSelection(noZoningDay, 50, withZoning);
+  assert.equal(official.status, "unavailable", "Historical four-KPI method cannot compute if passRate is absent");
+  const adapted = simulateScoreSelection(noZoningDay, 50, withoutZoning);
+  assert.equal(adapted.status, "available");
+  assert.equal(adapted.reached, 2);
+  assert.equal(adapted.missed, 0);
+  assert.equal(adapted.ratioPercent, 100);
+  assert.deepEqual(noZoningDay, { ...values, passRate: null, possessionPercent: 0 },
+    "Simulation must never rewrite the source KPIs");
+});
+
+test("D1: non-applicable is not synonymous with unavailable data", () => {
+  const withoutZoning = eligibleScoreIndicatorIds("without-zoning");
+  const noLoading = simulateScoreSelection({ ...values, loadingPercent: null }, 50, withoutZoning);
+  assert.equal(noLoading.status, "unavailable", "Genuine absent data in an applicable KPI stays unavailable");
+  assert.deepEqual(noLoading.unavailable, ["loadingPercent"]);
+  const common = simulateScoreSelection(values, 50, COMMON_SCORE_INDICATORS);
+  assert.deepEqual([common.reached, common.missed], [2, 0]);
 });
