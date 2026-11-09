@@ -228,6 +228,45 @@ try {
     assert.equal(await addToggle.getAttribute("aria-expanded"), null); // native details
     await addToggle.click();
     assert.match(await scopePanel.innerText(), /Cette exclusion agit seulement/);
+    // Long operational motives must wrap without horizontal clipping in both
+    // normal statistics and the fixed-height celebration/TV layout.
+    const reasonField = scopePanel.getByLabel("Motif de l'exclusion").first();
+    const longReason = "Double déchargement exceptionnel avec plusieurs opérateurs, un retour quai imprévu et des temps à vérifier avant toute comparaison.";
+    await reasonField.fill(longReason);
+    const assertReasonVisible = async () => {
+      const geometry = await reasonField.evaluate(field => {
+        const input = field.getBoundingClientRect();
+        const editor = field.closest(".reception-scope-editor").getBoundingClientRect();
+        const panel = field.closest(".reception-scope-control").getBoundingClientRect();
+        const scroll = field.closest(".reception-scope-expanded");
+        return {
+          input: { left: input.left, right: input.right, top: input.top, bottom: input.bottom },
+          editor: { left: editor.left, right: editor.right },
+          panel: { left: panel.left, right: panel.right },
+          scrollHeight: field.scrollHeight, clientHeight: field.clientHeight,
+          width: field.clientWidth,
+          expandedScrollable: scroll.scrollHeight > scroll.clientHeight,
+        };
+      });
+      assert.ok(geometry.input.left >= geometry.editor.left - 2, "The motive must not be clipped on the left");
+      assert.ok(geometry.input.right <= geometry.editor.right + 2, "The motive must not be clipped on the right");
+      assert.ok(geometry.input.left >= geometry.panel.left - 2 && geometry.input.right <= geometry.panel.right + 2,
+        "No horizontal overflow outside the exclusion panel");
+      assert.ok(geometry.width >= 160, "The motive textarea must remain wide enough to read");
+      assert.ok(geometry.scrollHeight <= geometry.clientHeight + 3,
+        "A reasonably long motive must expand to show all its lines: " + JSON.stringify(geometry));
+      return geometry;
+    };
+    await assertReasonVisible();
+    const matchPage = page.locator(".match-page");
+    const originalCelebration = await matchPage.evaluate(el => el.classList.contains("is-celebration-mode"));
+    if (!originalCelebration) await matchPage.evaluate(el => el.classList.add("is-celebration-mode"));
+    await reasonField.scrollIntoViewIfNeeded();
+    const tvGeometry = await assertReasonVisible();
+    assert.ok(tvGeometry.expandedScrollable || tvGeometry.input.bottom <= viewport.height,
+      "The motive must be accessible in TV mode, including by scrolling the panel");
+    if (!originalCelebration) await matchPage.evaluate(el => el.classList.remove("is-celebration-mode"));
+    await reasonField.fill("Double déchargement atypique");
     await scopePanel.getByLabel("Voyage concerné").selectOption("TRIP-001");
     await scopePanel.getByLabel("Motif de l'exclusion").first().fill("Double déchargement atypique");
     await scopePanel.getByRole("button", { name: "Exclure ce voyage de la réception" }).click();
@@ -303,7 +342,14 @@ try {
     assert.equal(beforeLoading.loadingQuality.targetedPercent, 50);
     await scopePanel.locator(".reception-scope-add > summary").click();
     await scopePanel.getByLabel("Voyage concerné").selectOption("CHG-SLOW");
-    await scopePanel.getByLabel("Motif de l'exclusion").fill("Chargement exceptionnel");
+    const loadingReason = scopePanel.getByLabel("Motif de l'exclusion");
+    await loadingReason.fill("Chargement exceptionnel : retour au quai pour contrôle exceptionnel du chargement sur la plage active.");
+    assert.ok(await loadingReason.evaluate(field => {
+      const rect = field.getBoundingClientRect();
+      const editor = field.closest(".reception-scope-editor").getBoundingClientRect();
+      return rect.left >= editor.left - 2 && rect.right <= editor.right + 2 && field.scrollHeight <= field.clientHeight + 3;
+    }), "CHG motive must fit the form without clipping");
+    await loadingReason.fill("Chargement exceptionnel");
     await scopePanel.getByRole("button", { name: "Exclure ce voyage du chargement" }).click();
     await page.waitForFunction(() => document.querySelector(".reception-scope-total")?.textContent?.includes("1 exclusion"), null, { timeout: 15000 });
     const afterLoading = await readSnapshot();

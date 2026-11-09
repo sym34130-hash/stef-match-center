@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { CheckCircle2, ChevronDown, EyeOff, Plus, RefreshCw, TriangleAlert } from "lucide-react";
 import type { Snapshot } from "./types";
 
@@ -19,6 +19,13 @@ type Props = {
 };
 
 type ExclusionEntry = { code: string; reason: string; updatedAt: string | null; kind: "travel" | "client" | "loading" };
+
+function expandReasonField(event: FormEvent<HTMLTextAreaElement>) {
+  const field = event.currentTarget;
+  field.style.height = "auto";
+  // Reasons wrap while typing; cap excessive growth without hiding the text.
+  field.style.height = `${field.scrollHeight + 28}px`;
+}
 
 function formatExclusionDate(value: string | null) {
   if (!value || !Number.isFinite(Date.parse(value))) return null;
@@ -135,7 +142,7 @@ export function ReceptionScopeControls({ scope, loadingScope, canEdit, pending, 
                   </label>
                   <label>
                     Motif de l'exclusion
-                    <input value={loadingReason} onChange={event => setLoadingReason(event.target.value)} disabled={busy} maxLength={240}
+                    <textarea value={loadingReason} onChange={event => setLoadingReason(event.target.value)} disabled={busy} maxLength={240} rows={3} onInput={expandReasonField}
                       placeholder="Ex. Chargement exceptionnel" />
                   </label>
                   <button type="button" className="secondary-button compact reception-scope-exclude"
@@ -158,7 +165,7 @@ export function ReceptionScopeControls({ scope, loadingScope, canEdit, pending, 
                     </label>
                     <label>
                       Motif de l'exclusion
-                      <input value={travelReason} onChange={event => setTravelReason(event.target.value)} disabled={busy} maxLength={240}
+                      <textarea value={travelReason} onChange={event => setTravelReason(event.target.value)} disabled={busy} maxLength={240} rows={3} onInput={expandReasonField}
                         placeholder="Ex. Double déchargement" />
                     </label>
                     <button type="button" className="secondary-button compact reception-scope-exclude"
@@ -180,7 +187,7 @@ export function ReceptionScopeControls({ scope, loadingScope, canEdit, pending, 
                         </label>
                         <label>
                           Motif de l'exclusion
-                          <input value={clientReason} onChange={event => setClientReason(event.target.value)} disabled={busy} maxLength={240}
+                          <textarea value={clientReason} onChange={event => setClientReason(event.target.value)} disabled={busy} maxLength={240} rows={3} onInput={expandReasonField}
                             placeholder="Ex. Client de tri hors périmètre" />
                         </label>
                         <button type="button" className="secondary-button compact reception-scope-exclude"
