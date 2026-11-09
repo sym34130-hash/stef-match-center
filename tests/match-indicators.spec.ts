@@ -358,3 +358,36 @@ test("le carrousel reste cadré du petit mobile au grand écran et dans chaque l
     await page.locator(".match-indicators").screenshot({ path: testInfo.outputPath(`kpi-${league}.png`) });
   }
 });
+
+test("Lot A: le brief peut masquer des cartes et choisir le tonnage Distribution sans changer les KPI", async ({ page }) => {
+  await page.route("**/api/agencies/058/snapshot**", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.snapshot.dailyIndicators = {
+      ...dailyIndicators,
+      distribution: { tonnage: 255 },
+    };
+    await route.fulfill({ response, json: body });
+  });
+  await page.route("**/api/agencies/058/causerie**", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        plan: {
+          mercato: "",
+          visibleIndicators: ["tonnage", "positions"],
+          tonnageActivity: "distribution",
+        },
+      }),
+    });
+  });
+  await login(page);
+  const carousel = page.locator(".match-indicators");
+  await expect(carousel.locator(".match-indicator-card")).toHaveCount(2);
+  await expect(carousel.locator('[data-indicator="tonnage"] .match-indicator-value')).toHaveText("255 t");
+  await expect(carousel.locator('[data-indicator="tonnage"] .match-indicator-source')).toContainText("Distribution");
+  await expect(carousel.locator('[data-indicator="performance"]')).toHaveCount(0);
+  await expect(page.locator(".match-score-bubble.pass-score-bubble strong")).toHaveText("71,9%");
+});
