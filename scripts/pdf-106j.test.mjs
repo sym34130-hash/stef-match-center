@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parse106jText } from "../server/pdf-106j.mjs";
 
-test("106J: uniquement les cellules Site et le tonnage Expedition", () => {
+test("106J: cellules Site et tonnages Expedition / Distribution séparés", () => {
   const result = parse106jText(`SIE.106J Date de référence de calcul :11 septembre 2026
     DistributionTonnageT255+11%-1%+4% PositionsNB739+7%
     ExpéditionTonnageT478+33%+11%+2% PositionsNB1 477+14% TotalTonnageT734+22%
