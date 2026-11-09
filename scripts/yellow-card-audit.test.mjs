@@ -76,7 +76,7 @@ function awardedList(count) {
   }));
 }
 
-test("Lot C : 14 cartons attribués contre 18 cas température complets -> 4 à vérifier, jamais ajoutés d'office", () => {
+test("Lot C : 14 cartons listés contre 18 cas température complets -> 4 absents de la synthèse", () => {
   const workbook = matrixWorkbook();
   const audit = auditYellowCards(workbook, awardedList(14), period);
   assert.equal(audit.sourceAvailable, true);
@@ -107,16 +107,37 @@ test("Lot C : exclusions globales et fenêtre horaire portent aussi sur les cand
   assert.equal(auditYellowCards(workbook, [], daytime).matrix.temperatureCandidates, 0);
 });
 
-test("Lot C : intégration du snapshot — 14 attribués, 4 candidats en audit, KPI non modifiés", () => {
+test("Lot C : intégration du snapshot — 18 attribués, dont 4 récupérés, KPI non modifiés", () => {
   const xlsx = XLSX.write(matrixWorkbook(), { type: "buffer", bookType: "xlsx" });
   const result = buildSnapshotFromWorkbook(xlsx, "lot-c-synthetique.xlsx", "058",
     { start: "21:00", end: "06:30" });
   assert.equal(result.ok, true, JSON.stringify(result.error));
   const snapshot = result.snapshot;
-  assert.equal(snapshot.yellowCards.length, 14);
-  assert.equal(snapshot.yellowCardAudit.byReason.temperature, 14);
+  assert.equal(snapshot.yellowCards.length, 18);
+  assert.deepEqual(snapshot.yellowCards.slice(14).map(card => card.travelCode), ["TRP-15", "TRP-16", "TRP-17", "TRP-18"]);
+  assert.equal(new Set(snapshot.yellowCards.map(card => `${card.playerName}|${card.travelCode}|${card.reason}`)).size, 18);
+  assert.equal(snapshot.yellowCardAudit.byReason.temperature, 18);
   assert.equal(snapshot.yellowCardAudit.matrix.unlistedCandidates.length, 4);
-  assert.ok(snapshot.validation.warnings.some(message => message.includes("4 cas potentiel")));
+  assert.ok(snapshot.validation.warnings.some(message => message.includes("4 carton(s)") && message.includes("réintégré(s)")));
   assert.equal(snapshot.summary.operations, 1);
   assert.equal(snapshot.summary.positions, 1);
+});
+
+
+test("Lot C : aucun doublon si la synthèse contient déjà les 18 cartons", () => {
+  const xlsx = XLSX.write(matrixWorkbook({ awarded: 18 }), { type: "buffer", bookType: "xlsx" });
+  const result = buildSnapshotFromWorkbook(xlsx, "lot-c-complet.xlsx", "058", { start: "21:00", end: "06:30" });
+  assert.equal(result.ok, true, JSON.stringify(result.error));
+  assert.equal(result.snapshot.yellowCards.length, 18);
+  assert.equal(result.snapshot.yellowCardAudit.byReason.temperature, 18);
+  assert.equal(result.snapshot.yellowCardAudit.matrix.unlistedCandidates.length, 0);
+});
+
+test("Lot C : une vraie faute de chargement est comptée, pas le libellé fixe", () => {
+  const xlsx = XLSX.write(matrixWorkbook({ awarded: 0, temperature: 0, loading: true }), { type: "buffer", bookType: "xlsx" });
+  const result = buildSnapshotFromWorkbook(xlsx, "lot-c-chargement.xlsx", "058", { start: "21:00", end: "06:30" });
+  assert.equal(result.ok, true, JSON.stringify(result.error));
+  assert.equal(result.snapshot.yellowCards.length, 1);
+  assert.equal(result.snapshot.yellowCards[0].reason, "Chargement à quai");
+  assert.equal(result.snapshot.yellowCardAudit.byReason.loading, 1);
 });
