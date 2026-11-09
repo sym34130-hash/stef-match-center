@@ -167,3 +167,18 @@ Les anciens boutons « Masquer » des tableaux de chargement/réception, qui app
 Le filtre client nécessite une colonne client exploitable dans l'onglet `Données` ; aucune attribution à partir de la destination/du segment n'est inventée. Les graphiques horaires de passes et le diagnostic de zonage ne sont pas encore munis d'un filtre dédié, faute d'un périmètre de calcul indépendant validé. Les taux consolidés PDF 106J n'exposent pas de voyages individuels.
 
 Les règles de calcul restent conditionnées aux fichiers Excel/PDF effectivement présents dans l'agence. Sur Render Free, les exclusions enregistrées dans le stockage local sont aussi soumises au risque de perte au redéploiement.
+
+
+### Lot C (étape 1) — contrôle de cohérence des cartons jaunes
+
+Le **décompte officiel affiché** provient de `Feuille de match!AK:AN` dans l'Excel importé, filtré par plage horaire et exclusions globales. Les colonnes contiennent Nom, Heure carton, Faute et Voyage. Ce compteur ne déduit **jamais** un carton des seuls libellés du TCD intermédiaire (la colonne `TCD PPT!Y` contient un texte « Chargement à quai » même pour des lignes qui ne sont pas des fautes attribuées).
+
+Le Lot C compare les cartons attribués aux deux matrices intermédiaires :
+- `X!II:IM` : cas potentiels « Pas de prise de temp » avec opérateur, voyage et horaire exploitables ;
+- `TCD PPT!P:Y` : cas de « Chargement à quai » pour lesquels la colonne `X` (Attaquant calculé) est renseignée, **pas** la seule colonne `Y`.
+
+Les candidats complets absents de la liste finale sont présentés **« à vérifier »** dans le Coach et signalés par un avertissement d'import ; ils ne sont pas ajoutés aux cartons réellement attribués, ni utilisés pour modifier les KPI du score. L'interface ventile les cartons confirmés par motif.
+
+Sur le classeur d'exemple `Matrice QFC.xlsx` (non commité dans le dépôt), la feuille finale comporte **14 cartons jaunes** pour température, tandis que la matrice `X` comporte **18 cas avec opérateur et horaire** ; les quatre cas supplémentaires nécessitent validation métier. Le fichier source n'est jamais enregistré dans la PR.
+
+**Non inclus dans cette étape :** calcul autonome des sanctions à partir des opérations brutes, compteur jours sans AT et suivi des litiges. Ces fonctions demandent une validation métier spécifique. L'évolution n'a aucun impact sur les exclusions ciblées des Lots A/B ni sur les quatre KPI du score.
