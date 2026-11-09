@@ -208,7 +208,6 @@ try {
     await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % duels gagnés" }).click();
     const scopePanel = page.locator(".reception-scope-control");
     const excludedRows = scopePanel.locator(".reception-scope-exclusion");
-    const count = scopePanel.locator(".reception-scope-total");
     const addToggle = scopePanel.locator(".reception-scope-add > summary");
 
     // The list is intentionally visible WITHOUT expanding the add form.
