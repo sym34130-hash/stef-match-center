@@ -40,7 +40,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 25;
+export const KPI_DICTIONARY_VERSION = 26;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -345,14 +345,30 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   const hourlyPassPerformance = buildHourlyPassPerformance(rawWorkbook, period, scoringRows, rows.filter((row) => !excludedTravelCodes.has(row.travelCode)));
   const scopedLoadingQuality = buildLoadingQualityFromTcd(rawWorkbook, period, criteria.loadingSeconds, excludedTravelCodes,
     new Set(loadingExclusions.map(item => item.code)));
-  // Lot C: read awarded cards only from the final match-sheet list, then
-  // cross-check the intermediate matrices without automatically penalizing
-  // anyone on the basis of a candidate or a static heading.
-  const yellowCards = buildYellowCards(rawWorkbook, period, excludedTravelCodes);
-  const yellowCardAudit = auditYellowCards(rawWorkbook, yellowCards, period, excludedTravelCodes);
-  if (yellowCardAudit.matrix.unlistedCandidates.length > 0) {
+  // Lot C: calculated matrix infractions are awarded even when Excel's
+  // final display omits them. Reconcile by operator, travel and reason with
+  // multiplicity, so a card present in both sources is not double-counted.
+  // Static TCD labels without a calculated attacker never qualify.
+  const listedYellowCards = buildYellowCards(rawWorkbook, period, excludedTravelCodes);
+  const reconciliation = auditYellowCards(rawWorkbook, listedYellowCards, period, excludedTravelCodes);
+  const recoveredYellowCards = reconciliation.matrix.unlistedCandidates.map((candidate) => ({
+    playerName: candidate.playerName,
+    time: candidate.time,
+    reason: candidate.category === "temperature" ? "Pas de prise de temp" : "Chargement à quai",
+    travelCode: candidate.travelCode,
+  }));
+  const yellowCards = [...listedYellowCards, ...recoveredYellowCards];
+  const yellowCardAudit = {
+    ...reconciliation,
+    byReason: {
+      temperature: reconciliation.byReason.temperature + recoveredYellowCards.filter(card => card.reason === "Pas de prise de temp").length,
+      loading: reconciliation.byReason.loading + recoveredYellowCards.filter(card => card.reason === "Chargement à quai").length,
+      other: reconciliation.byReason.other,
+    },
+  };
+  if (recoveredYellowCards.length > 0) {
     validation.warnings.push(
-      `Cartons jaunes : ${yellowCardAudit.matrix.unlistedCandidates.length} cas potentiel(s) présent(s) dans la matrice mais absent(s) de la liste finale Excel. Contrôle nécessaire : ces cas ne sont pas comptés automatiquement.`,
+      `Cartons jaunes : ${recoveredYellowCards.length} carton(s) calculé(s) dans la matrice et absent(s) de la synthèse Excel, réintégré(s) au décompte sans doublon.`,
     );
   }
   const snapshot = buildMatchSnapshot({
