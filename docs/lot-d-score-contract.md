@@ -20,6 +20,8 @@ Une partie du Lot D est **déjà disponible** dans l'écran Administrateur : par
 - Ajouter un encart « Simuler les KPI du score » dans **Administrateur**, sans remplacer le tableau des standards existant.
 - Afficher les quatre KPI du match et leurs valeurs réellement calculées selon la ligue active.
 - Autoriser une **sélection temporaire de 1 à 4 KPI**, pour montrer combien atteignent leur objectif et leur taux de réussite **sur les seuls KPI sélectionnés**.
+- Permettre de déclarer **dans le simulateur seulement** le profil d'activité « Avec zonage » ou « Sans zonage ». Sans zonage, passes et possession sont **non applicables** (ni objectifs ratés ni données manquantes), seuls chargement et réception sont éligibles. Ce profil n'est **pas** détecté sur le constat d'une seule journée sans zonage et n'est **pas** enregistré pour l'agence.
+- Présenter un troisième résultat **« Socle commun : Chargement + Réception »** pour comparer un périmètre provisoire partagé entre agences avec et sans zonage. Le calcul n'est disponible que si les deux indicateurs sont effectivement mesurables ; sinon afficher « Indisponible ». Ne pas traiter automatiquement ces deux KPI comme universellement applicables à toutes les agences.
 - Garder en parallèle le **score officiel à quatre KPI** et afficher un avertissement de non-comparabilité des scénarios à périmètre réduit.
 - Ne calculer aucune simulation sur un snapshot non synchronisé avec la ligue ou si un KPI sélectionné est manquant : afficher « Indisponible », jamais un score fictif.
 - Ne modifier **ni** le score officiel, **ni** le classement, **ni** les paramètres par ligue, **ni** les imports, **ni** les fichiers d'agence. Aucune écriture serveur, localStorage ou API pour le scénario.
@@ -29,12 +31,13 @@ Une partie du Lot D est **déjà disponible** dans l'écran Administrateur : par
 
 La sélection de KPI et les éventuelles pondérations modifient la signification d'un score de match. Avant toute évolution officielle :
 
-1. Décider si les **quatre critères doivent rester communs** pour toutes les plateformes, ou si les plateformes peuvent choisir les leurs. Deux scores basés sur des dénominateurs différents ne doivent pas être comparés sans normalisation.
-2. Définir une métrique comparable entre plateformes (ex. pourcentage de conformité sur les quatre KPI communs) et distinguer les KPI optionnels, utiles uniquement au diagnostic local.
-3. Définir une version de barème et un historique de l'agence, conservant la règle de chaque match pour les analyses temporelles.
-4. Spécifier les droits, les validations, le comportement lorsqu'une donnée manque et l'impact sur les ligues et le classement.
+1. Référencer les activités réellement pratiquées **par agence** : avec/sans zonage ; distinguer « non applicable à l'activité » de « applicable mais donnée manquante », sur un paramètre déclaré et validé (jamais inféré du seul Excel du jour).
+2. Décider si les **quatre critères doivent rester communs** pour toutes les plateformes, ou si les plateformes peuvent choisir les leurs. Deux scores basés sur des dénominateurs différents ne doivent pas être comparés sans normalisation.
+3. Définir une métrique comparable entre plateformes (ex. pourcentage de conformité sur les quatre KPI communs) et distinguer les KPI optionnels, utiles uniquement au diagnostic local.
+4. Définir une version de barème et un historique de l'agence, conservant la règle de chaque match pour les analyses temporelles.
+5. Spécifier les droits, les validations, le comportement lorsqu'une donnée manque et l'impact sur les ligues et le classement.
 
-**Recommandation de cadrage :** conserver les quatre KPI obligatoires pour le score officiel et autoriser des analyses complémentaires configurables. Le simulateur D1 permet de tester des arbitrages métiers sans altérer le référentiel commun.
+**Recommandation de cadrage :** les quatre KPI ne peuvent pas être considérés « obligatoires » pour toutes les agences dès lors que certaines ne pratiquent pas le zonage. Conserver le score officiel actuel **inchangé en D1**, tester l'option à deux KPI hors zonage et définir **un barème officiel par profil métier**, avec un **socle commun de comparaison** séparé. Ne jamais décréter un score 2–0 officiellement comparable à un score 4–0 sans méthode et version de référentiel.
 
 ## Conditions de livraison
 
