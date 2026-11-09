@@ -254,7 +254,7 @@ try {
         "No horizontal overflow outside the exclusion panel");
       assert.ok(geometry.width >= 160, "The motive textarea must remain wide enough to read");
       assert.ok(geometry.scrollHeight <= geometry.clientHeight + 3,
-        "A reasonably long motive must expand to show all its lines");
+        "A reasonably long motive must expand to show all its lines: " + JSON.stringify(geometry));
       return geometry;
     };
     await assertReasonVisible();
