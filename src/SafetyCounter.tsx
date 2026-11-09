@@ -29,6 +29,7 @@ function dateLabel(value: string | null): string {
 export function SafetyCounter({ session }: { session: Session }) {
   const [state, setState] = useState<SafetyState | null>(null);
   const [draftDate, setDraftDate] = useState("");
+  const [draftRevision, setDraftRevision] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -46,7 +47,7 @@ export function SafetyCounter({ session }: { session: Session }) {
     if (!response.ok) throw new Error(payload.message ?? "La sécurité de l'agence est indisponible.");
     const next = payload as SafetyState;
     setState(next);
-    if (resetDraft) setDraftDate(next.lastAccidentDate ?? "");
+    if (resetDraft) { setDraftDate(next.lastAccidentDate ?? ""); setDraftRevision(next.revision); }
     setError(null);
     return next;
   }, [url, session.accessCode]);
@@ -58,6 +59,7 @@ export function SafetyCounter({ session }: { session: Session }) {
     setError(null);
     setNotice(null);
     setDraftDate("");
+    setDraftRevision(null);
     setReason("");
 
     const load = async (resetDraft = false) => {
@@ -71,7 +73,7 @@ export function SafetyCounter({ session }: { session: Session }) {
         if (disposed) return;
         const next = payload as SafetyState;
         setState(next);
-        if (resetDraft) setDraftDate(next.lastAccidentDate ?? "");
+        if (resetDraft) { setDraftDate(next.lastAccidentDate ?? ""); setDraftRevision(next.revision); }
         setError(null);
       } catch (failure) {
         if (!disposed) setError(failure instanceof Error ? failure.message : "Lecture impossible.");
@@ -107,7 +109,7 @@ export function SafetyCounter({ session }: { session: Session }) {
       const response = await fetch(url, {
         method: "PUT",
         headers: { "Content-Type": "application/json", "x-access-code": session.accessCode },
-        body: JSON.stringify({ lastAccidentDate: draftDate, reason, expectedRevision: state.revision }),
+        body: JSON.stringify({ lastAccidentDate: draftDate, reason, expectedRevision: draftRevision }),
       });
       const payload = await response.json();
       if (!response.ok) {
@@ -119,6 +121,7 @@ export function SafetyCounter({ session }: { session: Session }) {
       }
       setState(payload as SafetyState);
       setDraftDate(payload.lastAccidentDate ?? "");
+      setDraftRevision(payload.revision);
       setReason("");
       setNotice("Date enregistrée et compteur actualisé pour cette agence.");
     } catch (failure) {
@@ -149,7 +152,7 @@ export function SafetyCounter({ session }: { session: Session }) {
         {state?.asOfDate && <span>Au {dateLabel(state.asOfDate)}</span>}
         <button type="button" onClick={() => {
           setNotice(null);
-          void refresh().catch(failure => setError(failure instanceof Error ? failure.message : "Lecture impossible."));
+          void refresh(true).catch(failure => setError(failure instanceof Error ? failure.message : "Lecture impossible."));
         }}>Actualiser</button>
       </div>
       {error && <p className="safety-counter-error" role="alert">{error}</p>}
