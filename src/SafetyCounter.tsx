@@ -123,7 +123,7 @@ export function SafetyCounter({ session }: { session: Session }) {
       setDraftDate(payload.lastAccidentDate ?? "");
       setDraftRevision(payload.revision);
       setReason("");
-      setNotice("Date enregistrée et compteur actualisé pour cette agence.");
+      setNotice("Date enregistrée temporairement. Pense à la ressaisir si le serveur perd ses données.");
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Enregistrement impossible.");
     } finally {
@@ -155,6 +155,11 @@ export function SafetyCounter({ session }: { session: Session }) {
           void refresh(true).catch(failure => setError(failure instanceof Error ? failure.message : "Lecture impossible."));
         }}>Actualiser</button>
       </div>
+      <p className="safety-counter-temporary-note">
+        Donnée temporaire : en cas de redéploiement ou de réinitialisation du serveur, la date du dernier accident
+        et son historique peuvent être perdus. Il faudra alors renseigner à nouveau la date.
+        Le compteur affichera « Non renseigné » tant qu&apos;elle est absente.
+      </p>
       {error && <p className="safety-counter-error" role="alert">{error}</p>}
       {notice && <p className="safety-counter-notice" role="status"><CheckCircle2 size={16} />{notice}</p>}
       {session.agency.canImport && (
@@ -175,7 +180,7 @@ export function SafetyCounter({ session }: { session: Session }) {
               <small>La date est partagée avec les autres utilisateurs autorisés de l'agence. Toute modification est historisée.</small>
             </form>
           ) : (
-            <p>Enregistrement désactivé tant qu'un stockage durable n'est pas validé sur le serveur.</p>
+            <p>La saisie a été désactivée par l'administrateur du serveur.</p>
           )}
         </details>
       )}
