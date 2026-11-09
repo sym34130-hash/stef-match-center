@@ -39,7 +39,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 23;
+export const KPI_DICTIONARY_VERSION = 24;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -207,6 +207,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   const criteria = normalizePerformanceCriteria(periodInput.criteria);
   const excludedTravelCodes = normalizeTravelCodes(periodInput.excludedTravelCodes);
   const receptionExclusions = normalizeReceptionExclusions(periodInput.receptionExclusions);
+  const loadingExclusions = normalizeReceptionExclusions({ travels: periodInput.loadingExclusions }).travels;
   const parsed = parseWorkbookSource(buffer);
   if (!parsed.ok) return parsed;
 
@@ -231,6 +232,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     `criteria-${criteria.zonageMinutes}-${criteria.loadingSeconds}-${criteria.unloadingSeconds}-${criteria.scoreTargetPercent}`,
     `excluded-${Array.from(excludedTravelCodes).sort().join(",")}`,
     `reception-excluded-${JSON.stringify(receptionExclusions)}`,
+    `loading-excluded-${JSON.stringify(loadingExclusions)}`,
     `106j-${periodInput.dailyIndicators?.importedAt ?? "none"}`,
     compositionOnly ? "composition" : "snapshot",
   ].join("|");
@@ -340,6 +342,8 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     { clientColumnPresent: columnMap.triClient !== undefined });
   const receptionTrips = buildReceptionCohort(receptionSelection.rows, criteria.unloadingSeconds).travels;
   const hourlyPassPerformance = buildHourlyPassPerformance(rawWorkbook, period, scoringRows, rows.filter((row) => !excludedTravelCodes.has(row.travelCode)));
+  const scopedLoadingQuality = buildLoadingQualityFromTcd(rawWorkbook, period, criteria.loadingSeconds, excludedTravelCodes,
+    new Set(loadingExclusions.map(item => item.code)));
   const snapshot = buildMatchSnapshot({
     sourceRows: rows,
     matchRows,
@@ -352,7 +356,12 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     period,
     criteria,
     hourlyPassPerformance,
-    loadingQuality: buildLoadingQualityFromTcd(rawWorkbook, period, criteria.loadingSeconds, excludedTravelCodes),
+    loadingQuality: scopedLoadingQuality,
+    loadingScope: {
+      excludedTravels: loadingExclusions,
+      availableTravels: scopedLoadingQuality.availableTravels,
+      effectiveExcluded: loadingExclusions.filter(item => scopedLoadingQuality.availableTravels.includes(item.code)).length,
+    },
     unloadingDuelQuality: buildUnloadingDuelQuality(receptionTrips, receptionSelection.rows, travelDestinations),
     unloadingQuality: buildUnloadingQuality(receptionTrips, criteria.unloadingSeconds, travelDestinations),
     yellowCards: buildYellowCards(rawWorkbook, period, excludedTravelCodes),
@@ -581,7 +590,7 @@ export function normalizeSnapshotContract(snapshot) {
   };
 }
 
-function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period, criteria, hourlyPassPerformance, loadingQuality, unloadingDuelQuality, unloadingQuality, yellowCards, dailyIndicators, excludedTravelCodes, receptionScope, receptionExcludedCodes }) {
+function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period, criteria, hourlyPassPerformance, loadingQuality, unloadingDuelQuality, unloadingQuality, yellowCards, dailyIndicators, excludedTravelCodes, receptionScope, receptionExcludedCodes, loadingScope }) {
   const importedAt = new Date();
   const firstOperation = minDate(matchRows.map((row) => row.startedAt));
   const lastOperation = maxDate(matchRows.map((row) => row.startedAt));
@@ -659,6 +668,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
     importedAt: importedAt.toISOString(),
     excludedTravelCodes: Array.from(excludedTravelCodes ?? []).sort((left, right) => left.localeCompare(right, "fr")),
     receptionScope,
+    loadingScope,
     agency: {
       code: expectedAgencyCode || detectedAgency || "AGENCE",
       detectedCode: detectedAgency,
@@ -818,7 +828,7 @@ function formatDuration(totalSeconds) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds, excludedTravelCodes = new Set()) {
+function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds, excludedTravelCodes = new Set(), loadingExcludedCodes = new Set()) {
   const targetSeconds = normalizePositiveInteger(configuredTargetSeconds, DEFAULT_PERFORMANCE_CRITERIA.loadingSeconds);
   const empty = {
     sourceAvailable: false,
@@ -830,6 +840,7 @@ function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds, e
     averageTimePerPositionSeconds: null,
     loadingDetails: [],
     nonTargetedShots: [],
+    availableTravels: [],
   };
   const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "tcd ppt");
   const sheet = sheetName ? workbook.Sheets[sheetName] : null;
@@ -877,6 +888,7 @@ function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds, e
 
   const loadingDetails = [];
   const loadingDurations = [];
+  const availableTravels = new Set();
   const lastRow = sheetEndRow(sheet, header.row + 1);
   for (let row = header.row + 1; row <= lastRow; row += 1) {
     const travel = cleanText(sheet[XLSX.utils.encode_cell({ r: row, c: travelColumn })]?.v);
@@ -886,6 +898,8 @@ function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds, e
     if (!travel || excludedTravelCodes.has(travel) || !Number.isFinite(positions) || positions < 15 || !Number.isFinite(timePerPositionSeconds) || timePerPositionSeconds <= 0) continue;
     const start = parseExcelDate(sheet[XLSX.utils.encode_cell({ r: row, c: startColumn })]?.v);
     if (!isInActiveTimeRange(start, period)) continue;
+    availableTravels.add(travel);
+    if (loadingExcludedCodes.has(travel)) continue;
     const result = timePerPositionSeconds <= targetSeconds ? "cadré" : "non cadré";
     const rawWhere = commentColumn === undefined ? "" : cleanText(sheet[XLSX.utils.encode_cell({ r: row, c: commentColumn })]?.v);
     const sourceDetail = loadingDetailsByTravel.get(travel);
@@ -916,6 +930,7 @@ function buildLoadingQualityFromTcd(workbook, period, configuredTargetSeconds, e
     averageTimePerPositionSeconds,
     loadingDetails,
     nonTargetedShots: loadingDetails.filter((detail) => detail.result === "non cadré"),
+    availableTravels: Array.from(availableTravels).sort((a, b) => a.localeCompare(b, "fr")),
   };
 }
 

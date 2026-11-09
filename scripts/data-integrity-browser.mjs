@@ -52,6 +52,12 @@ try {
       "Filtre opérateur", "Filtre heure", "Poste", "Poz non zonées", "DZ", "Duels gagnés", "Client de tri"],
     ["OP TEST", "17/09/2026 22:00:00", "DECHG", "P001", "TRIP-001", "05R", "Test", "", "", "", "", "", "", "TRI TEST"],
   ]), "Données");
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([
+    ["Chargement"],
+    ["Code Voyage", "Min. de Date/Heure de début d'opération", "Nombre de N° Position", "TC", "TC/poz", "Commentaire"],
+    ["CHG-OK", "17/09/2026 22:00:00", 15, 90 / 86400, 90 / 86400, ""],
+    ["CHG-SLOW", "17/09/2026 22:20:00", 15, 200 / 86400, 200 / 86400, ""],
+  ]), "TCD PPT");
   const buffer = XLSX.write(book, { type: "buffer", bookType: "xlsx" });
   browser = await chromium.launch({ headless: true });
   for (const viewport of [{ width: 1366, height: 768 }, { width: 390, height: 844 }]) {
@@ -209,14 +215,19 @@ try {
     assert.equal(await scopePanel.evaluate(element => Boolean(element.closest(".operational-charts-carousel"))), false,
       "The exclusion controls must sit outside the horizontally swiping chart");
     const excludedRows = scopePanel.locator(".reception-scope-exclusion");
+    const collapseToggle = scopePanel.locator(".reception-scope-collapse-summary");
     const addToggle = scopePanel.locator(".reception-scope-add > summary");
+    assert.equal(await scopePanel.getAttribute("open"), null, "Management must start collapsed");
+    const compactHeight = await scopePanel.evaluate(element => element.getBoundingClientRect().height);
+    assert.ok(compactHeight <= 85, `Collapsed manager must not shrink the charts (${compactHeight}px)`);
+    await collapseToggle.click();
 
     // The list is intentionally visible WITHOUT expanding the add form.
     await scopePanel.getByText("Aucune exclusion active sur ce match.").waitFor({ state: "visible" });
     assert.equal(await excludedRows.count(), 0);
     assert.equal(await addToggle.getAttribute("aria-expanded"), null); // native details
     await addToggle.click();
-    assert.match(await scopePanel.innerText(), /Une exclusion modifie uniquement/);
+    assert.match(await scopePanel.innerText(), /Cette exclusion agit seulement/);
     await scopePanel.getByLabel("Voyage concerné").selectOption("TRIP-001");
     await scopePanel.getByLabel("Motif de l'exclusion").first().fill("Double déchargement atypique");
     await scopePanel.getByRole("button", { name: "Exclure ce voyage de la réception" }).click();
@@ -231,8 +242,16 @@ try {
     await travelRow.getByText("Double déchargement atypique").waitFor({ state: "visible" });
     assert.equal(await travelRow.isVisible(), true);
     assert.match(await travelRow.innerText(), /Exclu le/);
-    // Closing the edit form must NOT hide the excluded voyage or its motif.
+    // Closing the edit form keeps the audit row visible. The OUTER panel can
+    // still be collapsed while it contains an excluded voyage.
     await addToggle.click();
+    assert.equal(await travelRow.isVisible(), true);
+    await collapseToggle.click();
+    assert.equal(await scopePanel.getAttribute("open"), null, "Even with a voyage excluded, full collapse must work");
+    assert.equal(await travelRow.isVisible(), false);
+    assert.match(await collapseToggle.innerText(), /1 exclusion active/);
+    assert.ok(await scopePanel.evaluate(element => element.getBoundingClientRect().height) <= 85);
+    await collapseToggle.click();
     assert.equal(await travelRow.isVisible(), true);
     assert.equal(await travelRow.getByText("Double déchargement atypique").isVisible(), true);
     const contrast = await travelRow.evaluate(element => ({
@@ -264,6 +283,10 @@ try {
     await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
     await page.getByRole("navigation", { name: "Navigation de la feuille de match" })
       .getByRole("button", { name: "Aller à Statistiques du match" }).click();
+    assert.equal(await page.locator(".reception-scope-control").getAttribute("open"), null,
+      "After reload, the manager remains compact even with exclusions");
+    assert.match(await page.locator(".reception-scope-collapse-summary").innerText(), /1 exclusion active/);
+    await page.locator(".reception-scope-collapse-summary").click();
     const reloadedRow = page.locator(".reception-scope-exclusion").filter({ hasText: "TRI TEST" });
     await reloadedRow.getByText("Client de tri hors périmètre").waitFor({ state: "visible" });
     assert.equal(await page.locator(".reception-scope-add").getAttribute("open"), null);
@@ -272,7 +295,39 @@ try {
     await reloadedRow.getByRole("button", { name: "Réintégrer le client TRI TEST en réception" }).click();
     await page.waitForFunction(() => document.querySelector(".reception-scope-total")?.textContent?.includes("0 exclusion"), null, { timeout: 15000 });
     assert.deepEqual((await readSnapshot()).receptionScope.excludedClients, []);
-    console.log(`Browser: scoped reception voyage, tri client, restore, audit at ${viewport.width}px: OK`);
+    // Both activities use the same expandable container, but separate scopes.
+    await page.getByRole("tab", { name: "Chargement 0" }).click();
+    await page.locator(".reception-scope-current").getByText("Aucune exclusion active sur ce match.").waitFor({ state: "visible" });
+    const beforeLoading = await readSnapshot();
+    assert.deepEqual(beforeLoading.loadingScope.availableTravels, ["CHG-OK", "CHG-SLOW"]);
+    assert.equal(beforeLoading.loadingQuality.targetedPercent, 50);
+    await scopePanel.locator(".reception-scope-add > summary").click();
+    await scopePanel.getByLabel("Voyage concerné").selectOption("CHG-SLOW");
+    await scopePanel.getByLabel("Motif de l'exclusion").fill("Chargement exceptionnel");
+    await scopePanel.getByRole("button", { name: "Exclure ce voyage du chargement" }).click();
+    await page.waitForFunction(() => document.querySelector(".reception-scope-total")?.textContent?.includes("1 exclusion"), null, { timeout: 15000 });
+    const afterLoading = await readSnapshot();
+    assert.equal(afterLoading.loadingQuality.targetedPercent, 100);
+    assert.equal(afterLoading.operationalScore.indicators.loadingPercent, 100);
+    assert.equal(afterLoading.summary.operations, beforeLoading.summary.operations);
+    assert.equal(afterLoading.summary.positions, beforeLoading.summary.positions);
+    assert.equal(afterLoading.summary.passRate, beforeLoading.summary.passRate);
+    assert.equal(afterLoading.unloadingQuality.targetedPercent, beforeLoading.unloadingQuality.targetedPercent);
+    const loadingRow = scopePanel.locator(".reception-scope-exclusion").filter({ hasText: "CHG-SLOW" });
+    await loadingRow.getByText("Chargement exceptionnel").waitFor({ state: "visible" });
+    await scopePanel.locator(".reception-scope-collapse-summary").click();
+    assert.equal(await scopePanel.getAttribute("open"), null, "CHG exclusions must remain retractable");
+    assert.match(await scopePanel.locator(".reception-scope-collapse-summary").innerText(), /1 exclusion active/);
+    await scopePanel.locator(".reception-scope-collapse-summary").click();
+    await loadingRow.getByRole("button", { name: "Réintégrer le voyage CHG-SLOW en chargement" }).click();
+    await page.waitForFunction(() => document.querySelector(".reception-scope-total")?.textContent?.includes("0 exclusion"), null, { timeout: 15000 });
+    assert.equal((await readSnapshot()).loadingQuality.targetedPercent, 50);
+    assert.deepEqual((await readSnapshot()).loadingScope.excludedTravels, []);
+    const loadingState = JSON.parse(await fs.readFile(path.join(root, "01K", "loading-exclusions.json"), "utf8"));
+    assert.equal(Object.values(loadingState.scopes)[0].history.length, viewport.width === 1366 ? 2 : 4);
+    await scopePanel.locator(".reception-scope-collapse-summary").click();
+    assert.equal(await scopePanel.getAttribute("open"), null);
+    console.log(`Browser: CHG/DECHG scoped exclusions, compact panel, restore and audit at ${viewport.width}px: OK`);
     assert.deepEqual(errors, [], `Unexpected React errors at ${viewport.width}px`);
     console.log(`Browser: login, upload, agency confirmation, completed import at ${viewport.width}px: OK`);
     await page.close();

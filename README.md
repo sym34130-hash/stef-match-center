@@ -154,10 +154,16 @@ active.
 Ces règles doivent rester validées avec les utilisateurs terrain avant usage officiel.
 
 
-## Lot B — exclusions de réception
+## Lot B — gestion rétractable des exclusions par activité
 
-Dans « Statistiques du match », un bloc autonome placé **au-dessus du carrousel de graphiques** affiche le tableau **« Exclusions actives »** y reste visible même quand le formulaire est fermé, avec le code voyage/client, le motif et la date. Le bouton **« Réintégrer »** est disponible sur chaque ligne. Pour ajouter une règle, ouvre séparément **« Ajouter une exclusion »**. Un accès d'édition permet de choisir un voyage actif ou, si l'Excel le permet, un client de tri identifié, de saisir un motif, de l'exclure et de le réintégrer. La sélection est conservée par agence, journée et plage horaire, avec un historique des modifications.
+Dans **02 Feuille de match → Statistiques du match**, le bandeau « Gestion des exclusions » est **replié par défaut**, y compris lorsqu'un voyage est exclu. Il affiche seulement le nombre total de règles actives pour préserver toute la largeur et la hauteur des graphiques. Il reste librement déployable/repliable à tout moment ; ses deux onglets **Réception** et **Chargement** affichent chacun les voyages ou clients concernés, avec leur motif, leur date et leur action « Réintégrer ». Le formulaire « Ajouter une exclusion » est lui aussi repliable.
 
-Ce nouveau filtre n'est **pas** l'exclusion globale d'un voyage déjà disponible dans l'application : il ne cible que les duels gagnés de réception et leur courbe horaire. Le sous-KPI de réception du score est recalculé ; les passes, chargements, possession, joueurs et volumes ne changent pas.
+Les exclusions sont ciblées, séparées et réversibles par agence, date et plage horaire :
+- **Réception** : voyage DECHG ou client de tri explicitement identifié dans l'Excel ; recalcul des duels de réception et de la courbe horaire. Le taux de réception du score peut évoluer, sans modifier les chargements, passes, possession ou joueurs.
+- **Chargement** : voyage CHG issu du **TCD PPT** éligible dans la plage active ; recalcul des tirs cadrés et du sous-indicateur de chargement du score, sans modifier la réception, les passes, la possession ou les joueurs.
 
-Pour filtrer un client, l'onglet `Données` doit contenir une colonne identifiant explicitement le client (par exemple `Client de tri`). Sinon aucune attribution client n'est déduite et le filtre client est indisponible. Le filtre voyage reste accessible.
+Les anciens boutons « Masquer » des tableaux de chargement/réception, qui appliquaient une exclusion globale, sont retirés pour ne plus créer d'exclusion involontaire dans les autres KPI. Les exclusions globales historiques restent accessibles et réintégrables dans un panneau distinct, fermé par défaut.
+
+Le filtre client nécessite une colonne client exploitable dans l'onglet `Données` ; aucune attribution à partir de la destination/du segment n'est inventée. Les graphiques horaires de passes et le diagnostic de zonage ne sont pas encore munis d'un filtre dédié, faute d'un périmètre de calcul indépendant validé. Les taux consolidés PDF 106J n'exposent pas de voyages individuels.
+
+Les règles de calcul restent conditionnées aux fichiers Excel/PDF effectivement présents dans l'agence. Sur Render Free, les exclusions enregistrées dans le stockage local sont aussi soumises au risque de perte au redéploiement.

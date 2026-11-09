@@ -21637,3 +21637,42 @@ body.match-celebration-active .main-area {
   .reception-scope-restore { width: 100%; }
   .reception-scope-list { max-height: 300px; }
 }
+
+
+/* Lot B: the entire management zone stays collapsed by default even with exclusions. */
+.reception-scope-control > .reception-scope-collapse-summary {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px; min-height: 46px;
+  list-style: none; cursor: pointer; background: #e7f3fb; color: #103c59;
+  font-size: 13px; font-weight: 900;
+}
+.reception-scope-control > .reception-scope-collapse-summary::-webkit-details-marker { display: none; }
+.reception-scope-control > .reception-scope-collapse-summary:hover { background: #d5eaf7; }
+.reception-scope-collapse-title { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
+.reception-scope-collapse-count { white-space: nowrap; border-radius: 7px; background: #15536f; padding: 5px 9px; color: #fff; font-size: 11px; }
+.reception-scope-collapse-chevron { flex: none; transition: transform 150ms ease; }
+.reception-scope-control[open] > .reception-scope-collapse-summary .reception-scope-collapse-chevron { transform: rotate(180deg); }
+.reception-scope-control > .reception-scope-collapse-summary:focus-visible { outline: 3px solid #167492; outline-offset: -3px; }
+.reception-scope-expanded { display: grid; gap: 0; min-width: 0; }
+@media (max-width: 640px) {
+ .reception-scope-control > .reception-scope-collapse-summary { padding: 10px; min-height: 42px; }
+ .reception-scope-collapse-count { font-size: 10px; }
+}
+
+
+/* Compact scoped activity chooser; preserves the fixed chart width. */
+.reception-scope-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 14px 0; }
+.reception-scope-tabs button {
+  min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  border: 1px solid #9ebbd0; border-radius: 8px; cursor: pointer;
+  background: #edf5fa; color: #16364f; font-size: 13px; font-weight: 900;
+}
+.reception-scope-tabs button[aria-selected="true"] { border-color: #124d6a; background: #124d6a; color: #fff; }
+.reception-scope-tabs button span {
+  display: inline-grid; place-items: center; min-width: 20px; min-height: 20px;
+  padding: 2px 5px; background: rgba(255,255,255,.2); border: 1px solid currentColor;
+  border-radius: 99px; font-size: 10px;
+}
+.reception-scope-tabs button:not([aria-selected="true"]) span { background: #fff; }
+.reception-scope-tabs button:focus-visible { outline: 3px solid #167492; outline-offset: 3px; }
+.reception-scope-tabs button:disabled { opacity: .65; cursor: wait; }
+@media (max-width:640px) { .reception-scope-tabs { padding: 10px 10px 0; } }

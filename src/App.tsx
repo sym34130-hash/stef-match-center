@@ -49,7 +49,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { Agency, Highlight, Player, Snapshot } from "./types";
 import { MatchIndicatorsCarousel } from "./MatchIndicatorsCarousel";
-import { ReceptionScopeControls, type ReceptionExclusionChange } from "./ReceptionScopeControls";
+import { ReceptionScopeControls, type ReceptionExclusionChange, type LoadingExclusionChange } from "./ReceptionScopeControls";
 import { KickoffMusicControl } from "./KickoffMusicControl";
 import { OperationalDiagnosticCard, ReceptionHourlyChart } from "./OperationalAnalysisCards";
 import { parseMercatoEntrants, type MercatoProfile, type MercatoProfiles } from "./mercato";
@@ -717,6 +717,17 @@ export default function App() {
                     throw error;
                   }
                 }}
+                onLoadingExclusionChange={async (code, excluded, reason) => {
+                  if (!session) throw new Error("Session absente.");
+                  try {
+                    const nextSnapshot = await updateLoadingExclusion(session, code, excluded, reason);
+                    publishSnapshot(nextSnapshot);
+                    setStatusMessage("");
+                  } catch (error) {
+                    setStatusMessage(error instanceof Error ? error.message : "Les exclusions de chargement n'ont pas pu être actualisées.");
+                    throw error;
+                  }
+                }}
               />
             )}
             {screen === "composition" && snapshot && <Composition snapshot={snapshot} session={session} onPlayer={openPlayer} />}
@@ -879,6 +890,18 @@ async function updateReceptionExclusion(session: Session, kind: "travel" | "clie
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message ?? "Les exclusions de réception n'ont pas pu être enregistrées.");
   if (!payload.snapshot || typeof payload.snapshot !== "object") throw new Error("Le recalcul de réception a échoué.");
+  return payload.snapshot;
+}
+
+async function updateLoadingExclusion(session: Session, code: string, excluded: boolean, reason: string): Promise<Snapshot> {
+  const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/loading-exclusions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-access-code": session.accessCode },
+    body: JSON.stringify({ code, excluded, reason }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message ?? "L'exclusion de chargement n'a pas pu être enregistrée.");
+  if (!payload.snapshot || typeof payload.snapshot !== "object") throw new Error("Recalcul des KPI de chargement impossible.");
   return payload.snapshot;
 }
 
@@ -1357,7 +1380,7 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
   );
 }
 
-function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlayer, onCoach, onComposition, onTravelExclusionChange, onReceptionExclusionChange }: { snapshot: Snapshot; session: Session; causerieRevision: string | null; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void; onTravelExclusionChange: (travelCode: string, excluded: boolean) => Promise<void>; onReceptionExclusionChange: ReceptionExclusionChange }) {
+function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlayer, onCoach, onComposition, onTravelExclusionChange, onReceptionExclusionChange, onLoadingExclusionChange }: { snapshot: Snapshot; session: Session; causerieRevision: string | null; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void; onTravelExclusionChange: (travelCode: string, excluded: boolean) => Promise<void>; onReceptionExclusionChange: ReceptionExclusionChange; onLoadingExclusionChange: LoadingExclusionChange }) {
   const [celebrationMode, setCelebrationMode] = useState(false);
   const [thresholdPulse, setThresholdPulse] = useState(false);
   const [editingKpis, setEditingKpis] = useState(false);
@@ -1372,6 +1395,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const [slideDirection, setSlideDirection] = useState<"next" | "previous">("next");
   const [pendingTravelCode, setPendingTravelCode] = useState<string | null>(null);
   const [pendingReceptionCode, setPendingReceptionCode] = useState<string | null>(null);
+  const [pendingLoadingCode, setPendingLoadingCode] = useState<string | null>(null);
   const slideViewportRef = useRef<HTMLDivElement | null>(null);
   const slideTouchStart = useRef<{ x: number; y: number } | null>(null);
   const slideLabels = ["Coup de sifflet final", "Cérémonie des performances", "Statistiques du match", "Brief équipe"];
@@ -1482,6 +1506,15 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
       await onReceptionExclusionChange(kind, code, excluded, reason);
     } finally {
       setPendingReceptionCode(null);
+    }
+  }
+
+  async function handleLoadingExclusionChange(code: string, excluded: boolean, reason: string) {
+    setPendingLoadingCode(code);
+    try {
+      await onLoadingExclusionChange(code, excluded, reason);
+    } finally {
+      setPendingLoadingCode(null);
     }
   }
 
@@ -1842,8 +1875,9 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         </div>
 
         <div className="match-stat-grid">
-          <ReceptionScopeControls scope={snapshot.receptionScope} canEdit={session.agency.canImport}
-            pending={pendingReceptionCode} onChange={handleReceptionExclusionChange} />
+          <ReceptionScopeControls scope={snapshot.receptionScope} loadingScope={snapshot.loadingScope}
+            canEdit={session.agency.canImport} pending={pendingReceptionCode} pendingLoading={pendingLoadingCode}
+            onChange={handleReceptionExclusionChange} onLoadingChange={handleLoadingExclusionChange} />
           <OperationalChartsCarousel
             snapshot={snapshot}
             canEditTravelScope={session.agency.canImport}
@@ -1881,12 +1915,12 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
     {
       id: "reception-time",
       label: "% duels gagnés",
-      content: <ReceptionQualityCard snapshot={snapshot} canEditTravelScope={canEditTravelScope} onToggleTravel={onToggleTravel} pendingTravelCode={pendingTravelCode} />,
+      content: <ReceptionQualityCard snapshot={snapshot} />,
     },
     {
       id: "loading",
       label: "% tirs cadrés",
-      content: <LoadingQualityCard snapshot={snapshot} canEditTravelScope={canEditTravelScope} onToggleTravel={onToggleTravel} pendingTravelCode={pendingTravelCode} />,
+      content: <LoadingQualityCard snapshot={snapshot} />,
     },
     {
       id: "centers",
@@ -1944,8 +1978,8 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
   return (
     <section className="operational-charts-carousel" aria-label="Carrousel de lecture opérationnelle">
       {snapshot.excludedTravelCodes && snapshot.excludedTravelCodes.length > 0 && (
-        <details className="travel-exclusion-panel" open>
-          <summary><EyeOff size={15} /> Voyages exclus de l'analyse <span>{formatNumber(snapshot.excludedTravelCodes.length)}</span></summary>
+        <details className="travel-exclusion-panel">
+          <summary><EyeOff size={15} /> Exclusions globales historiques <span>{formatNumber(snapshot.excludedTravelCodes.length)}</span></summary>
           <div className="travel-exclusion-list">
             {snapshot.excludedTravelCodes.map((travelCode) => (
               <button
@@ -2069,7 +2103,7 @@ function CentersQualityCard({ snapshot }: { snapshot: Snapshot }) {
 }
 
 
-function LoadingQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null }) {
+function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
   const quality = snapshot.loadingQuality;
   if (!quality) return null;
   const loadingTarget = formatReadableDuration(snapshot.performanceCriteria?.loadingSeconds ?? 165);
@@ -2109,12 +2143,12 @@ function LoadingQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pend
           <summary>Voir les tirs non cadrés <span>{formatNumber(quality.nonTargetedShots.length)}</span></summary>
           <div className="loading-quality-table-wrap">
           <div className="loading-quality-table" role="table" aria-label="Détails des tirs non cadrés">
-            <div className={`loading-quality-table-row is-head ${canEditTravelScope ? "has-travel-action" : ""}`} role="row">
-              <span>Voyage</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Frappe</span><span>Résultat</span>{canEditTravelScope && <span>Action</span>}
+            <div className="loading-quality-table-row is-head" role="row">
+              <span>Voyage</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Frappe</span><span>Résultat</span>
             </div>
             {quality.nonTargetedShots.map((shot) => (
-              <div className={`loading-quality-table-row ${canEditTravelScope ? "has-travel-action" : ""}`} role="row" key={`${shot.travelCode}-${shot.time}`}>
-                <span>{shot.travelCode}</span><span>{shot.time}</span><span>{shot.positions}</span><span>{shot.timePerPosition}</span><span>{shot.where}</span><span><i className="loading-result-dot is-off-target" title="Non cadré" aria-label="Non cadré" /></span>{canEditTravelScope && <span className="travel-action-cell"><button type="button" className="travel-visibility-button" disabled={pendingTravelCode === shot.travelCode} onClick={() => void onToggleTravel(shot.travelCode, true)} aria-label={`Masquer le voyage ${shot.travelCode}`} title={`Masquer le voyage ${shot.travelCode}`}><EyeOff size={14} /></button></span>}
+              <div className="loading-quality-table-row" role="row" key={`${shot.travelCode}-${shot.time}`}>
+                <span>{shot.travelCode}</span><span>{shot.time}</span><span>{shot.positions}</span><span>{shot.timePerPosition}</span><span>{shot.where}</span><span><i className="loading-result-dot is-off-target" title="Non cadré" aria-label="Non cadré" /></span>
               </div>
             ))}
           </div>
@@ -2125,7 +2159,7 @@ function LoadingQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pend
   );
 }
 
-function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null }) {
+function ReceptionQualityCard({ snapshot }: { snapshot: Snapshot }) {
   const quality = snapshot.unloadingQuality;
   const duelQuality = snapshot.unloadingDuelQuality;
   if (!quality) return null;
@@ -2169,12 +2203,12 @@ function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pe
           {duelQuality.lostDuels.length > 0 ? (
             <div className="duel-quality-table-wrap">
               <div className="duel-quality-table" role="table" aria-label="Duels perdus">
-                <div className={`duel-quality-table-row is-head ${canEditTravelScope ? "has-travel-action" : ""}`} role="row">
-                  <span>Voyage</span><span>Destination</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>{canEditTravelScope && <span>Action</span>}
+                <div className="duel-quality-table-row is-head" role="row">
+                  <span>Voyage</span><span>Destination</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>
                 </div>
                 {duelQuality.lostDuels.map((duel) => (
-                  <div className={`duel-quality-table-row ${canEditTravelScope ? "has-travel-action" : ""}`} role="row" key={`${duel.travelCode}-${duel.time}`}>
-                    <span>{duel.travelCode}</span><span className="duel-destination" title={duel.destination ?? undefined}>{duel.destination || "—"}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className="duel-result duel-result-perdu">perdu</span>{canEditTravelScope && <span className="travel-action-cell"><button type="button" className="travel-visibility-button" disabled={pendingTravelCode === duel.travelCode} onClick={() => void onToggleTravel(duel.travelCode, true)} aria-label={`Masquer le voyage ${duel.travelCode}`} title={`Masquer le voyage ${duel.travelCode}`}><EyeOff size={14} /></button></span>}
+                  <div className="duel-quality-table-row" role="row" key={`${duel.travelCode}-${duel.time}`}>
+                    <span>{duel.travelCode}</span><span className="duel-destination" title={duel.destination ?? undefined}>{duel.destination || "—"}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className="duel-result duel-result-perdu">perdu</span>
                   </div>
                 ))}
               </div>
