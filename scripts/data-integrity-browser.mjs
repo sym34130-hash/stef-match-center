@@ -116,6 +116,7 @@ try {
     });
     await page.reload();
     await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".match-indicator-card").length === 2, null, { timeout: 15000 });
     await page.locator('[data-indicator="tonnage"] .match-indicator-value').waitFor({ state: "visible", timeout: 15000 });
     assert.equal(await page.locator(".match-indicator-card").count(), 2, "Only two KPI cards should be visible");
     assert.equal(await page.locator('[data-indicator="tonnage"] .match-indicator-value').innerText(), "255 t");
