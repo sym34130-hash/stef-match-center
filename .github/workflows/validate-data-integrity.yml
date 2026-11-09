@@ -68,4 +68,5 @@ jobs:
             scripts/accident-free-days.test.mjs \
             scripts/safety-api.test.mjs \
             scripts/yellow-card-audit.test.mjs \
+            scripts/score-simulator.test.mjs \
             scripts/kpi-goal-status.test.mjs
