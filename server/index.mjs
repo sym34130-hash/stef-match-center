@@ -204,11 +204,12 @@ app.post("/api/agencies/:agencyCode/time-range", requireAgency, async (req, res)
       const criteria = readRequestedPerformanceCriteria(req.body?.criteria) ?? currentSnapshot?.performanceCriteria;
       const excludedTravelCodes = await readExcludedTravelCodesForSnapshot(req.agency.code, currentSnapshot, period);
       const receptionExclusions = await readReceptionExclusionsForSnapshot(req.agency.code, currentSnapshot, period);
+      const loadingExclusions = await readLoadingExclusionsForSnapshot(req.agency.code, currentSnapshot, period);
       const result = buildSnapshotFromWorkbook(
         buffer,
         currentSnapshot?.sourceName ?? "match.xlsx",
         req.agency.code,
-        { ...period, criteria, dailyIndicators: currentSnapshot?.dailyIndicators ?? null, excludedTravelCodes, receptionExclusions },
+        { ...period, criteria, dailyIndicators: currentSnapshot?.dailyIndicators ?? null, excludedTravelCodes, receptionExclusions, loadingExclusions },
       );
       if (!result.ok) {
         res.status(400).json(result.error);
@@ -224,7 +225,7 @@ app.post("/api/agencies/:agencyCode/time-range", requireAgency, async (req, res)
       }
       if (result.snapshot.dailyIndicators && !canUsePdfIndicators(pdfAssociation(result.snapshot.dailyIndicators, result.snapshot))) {
         const withoutPdf = buildSnapshotFromWorkbook(buffer, currentSnapshot?.sourceName ?? "match.xlsx", req.agency.code,
-          { ...period, criteria, dailyIndicators: null, excludedTravelCodes, receptionExclusions });
+          { ...period, criteria, dailyIndicators: null, excludedTravelCodes, receptionExclusions, loadingExclusions });
         if (!withoutPdf.ok) { res.status(400).json(withoutPdf.error); return; }
         result.snapshot = withoutPdf.snapshot;
       }
@@ -280,6 +281,7 @@ app.post("/api/agencies/:agencyCode/travel-exclusions", requireAgency, async (re
 
       const state = await readTravelExclusionState(req.agency.code);
       const receptionExclusions = await readReceptionExclusionsForSnapshot(req.agency.code, currentSnapshot);
+      const loadingExclusions = await readLoadingExclusionsForSnapshot(req.agency.code, currentSnapshot);
       const currentExcluded = new Set(await readExcludedTravelCodesForSnapshot(req.agency.code, currentSnapshot));
       const knownTravelCodes = new Set([
         ...(currentSnapshot.positions ?? []).map((position) => normalizeTravelCode(position.travelCode)),
@@ -312,6 +314,7 @@ app.post("/api/agencies/:agencyCode/travel-exclusions", requireAgency, async (re
           dailyIndicators: currentSnapshot.dailyIndicators ?? null,
           excludedTravelCodes: nextExcluded,
           receptionExclusions,
+          loadingExclusions,
         },
       );
       if (!result.ok) {
@@ -320,7 +323,7 @@ app.post("/api/agencies/:agencyCode/travel-exclusions", requireAgency, async (re
       }
       if (result.snapshot.dailyIndicators && !canUsePdfIndicators(pdfAssociation(result.snapshot.dailyIndicators, result.snapshot))) {
         const withoutPdf = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code,
-          { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators: null, excludedTravelCodes: nextExcluded, receptionExclusions });
+          { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators: null, excludedTravelCodes: nextExcluded, receptionExclusions, loadingExclusions });
         if (!withoutPdf.ok) { res.status(400).json(withoutPdf.error); return; }
         result.snapshot = withoutPdf.snapshot;
       }
@@ -638,7 +641,8 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
         const period = normalizeTimeRange(currentSnapshot.match?.periodStart, currentSnapshot.match?.periodEnd);
         const excludedTravelCodes = await readExcludedTravelCodesForSnapshot(req.agency.code, currentSnapshot, period);
         const receptionExclusions = await readReceptionExclusionsForSnapshot(req.agency.code, currentSnapshot, period);
-        const result = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code, { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators, excludedTravelCodes, receptionExclusions });
+      const loadingExclusions = await readLoadingExclusionsForSnapshot(req.agency.code, currentSnapshot, period);
+        const result = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code, { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators, excludedTravelCodes, receptionExclusions, loadingExclusions });
         if (!result.ok) {
           res.status(400).json(result.error);
           return;
@@ -689,7 +693,8 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
       result.snapshot.agency.name = req.agency.name;
       const excludedTravelCodes = await readExcludedTravelCodesForSnapshot(req.agency.code, result.snapshot);
       const receptionExclusions = await readReceptionExclusionsForSnapshot(req.agency.code, result.snapshot);
-      const scopedResult = excludedTravelCodes.length > 0 || receptionExclusions.travels.length > 0 || receptionExclusions.clients.length > 0
+      const loadingExclusions = await readLoadingExclusionsForSnapshot(req.agency.code, result.snapshot);
+      const scopedResult = excludedTravelCodes.length > 0 || receptionExclusions.travels.length > 0 || receptionExclusions.clients.length > 0 || loadingExclusions.length > 0
         ? buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code, {
             start: result.snapshot.match.periodStart,
             end: result.snapshot.match.periodEnd,
@@ -697,6 +702,7 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
             dailyIndicators,
             excludedTravelCodes,
             receptionExclusions,
+            loadingExclusions,
           })
         : result;
       if (!scopedResult.ok) {
@@ -1071,12 +1077,14 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
     const agency = agencies.find((item) => String(item.code).toUpperCase() === String(agencyCode).toUpperCase());
     const persistedExcludedTravelCodes = await readExcludedTravelCodesForSnapshot(agencyCode, snapshot);
     const persistedReceptionExclusions = await readReceptionExclusionsForSnapshot(agencyCode, snapshot);
+    const persistedLoadingExclusions = await readLoadingExclusionsForSnapshot(agencyCode, snapshot);
     let shouldPersistRebuiltSnapshot = false;
     const exclusionsChanged = !sameTravelCodeList(snapshot.excludedTravelCodes, persistedExcludedTravelCodes);
     const previousReceptionExclusions = normalizeReceptionExclusions({
       travels: snapshot.receptionScope?.excludedTravels, clients: snapshot.receptionScope?.excludedClients,
     });
     const receptionScopeChanged = JSON.stringify(previousReceptionExclusions) !== JSON.stringify(persistedReceptionExclusions);
+    const loadingScopeChanged = JSON.stringify(normalizeLoadingRules(snapshot.loadingScope?.excludedTravels)) !== JSON.stringify(persistedLoadingExclusions);
     const operationalScoreNeedsRefresh = operationalScoreContractNeedsRefresh(snapshot);
     const punctuality = snapshot.dailyIndicators?.punctuality;
     const dailyIndicatorTargetsNeedRefresh = Boolean(
@@ -1099,7 +1107,8 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
       operationalScoreNeedsRefresh ||
       dailyIndicatorTargetsNeedRefresh ||
       exclusionsChanged ||
-      receptionScopeChanged;
+      receptionScopeChanged ||
+      loadingScopeChanged;
 
     const storedCriteriaMatchesRequest = requestedCriteria
       ? Object.entries(requestedCriteria).every(([key, value]) => snapshot.performanceCriteria?.[key] === value)
@@ -1114,7 +1123,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
           workbook,
           snapshot.sourceName || "match.xlsx",
           agency?.code || agencyCode,
-          { ...period, criteria: requestedCriteria, dailyIndicators, excludedTravelCodes: persistedExcludedTravelCodes, receptionExclusions: persistedReceptionExclusions },
+          { ...period, criteria: requestedCriteria, dailyIndicators, excludedTravelCodes: persistedExcludedTravelCodes, receptionExclusions: persistedReceptionExclusions, loadingExclusions: persistedLoadingExclusions },
         );
         if (rebuilt.ok) {
           snapshot = rebuilt.snapshot;
@@ -1142,7 +1151,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
           workbook,
           snapshot.sourceName || "match.xlsx",
           agency?.code || agencyCode,
-          { ...period, criteria: storedCriteria, dailyIndicators, excludedTravelCodes: persistedExcludedTravelCodes, receptionExclusions: persistedReceptionExclusions },
+          { ...period, criteria: storedCriteria, dailyIndicators, excludedTravelCodes: persistedExcludedTravelCodes, receptionExclusions: persistedReceptionExclusions, loadingExclusions: persistedLoadingExclusions },
         );
         if (rebuilt.ok) {
           snapshot = rebuilt.snapshot;
@@ -1290,6 +1299,49 @@ async function readReceptionExclusionsForSnapshot(agencyCode, snapshot, period =
   return normalizeReceptionExclusions(scopedToSnapshot && snapshot?.receptionScope
     ? { travels: snapshot.receptionScope.excludedTravels, clients: snapshot.receptionScope.excludedClients }
     : null);
+}
+
+// CHG-only filters have independent agency/date/range state and never alter
+// historic global voyage rules or the reception-only selection.
+function loadingExclusionStatePath(agencyCode) {
+  return path.join(dataDir, sanitizeSegment(agencyCode), "loading-exclusions.json");
+}
+function normalizeLoadingRules(items) {
+  return normalizeReceptionExclusions({ travels: items }).travels;
+}
+async function readLoadingExclusionState(agencyCode) {
+  try {
+    const parsed = JSON.parse(await fs.readFile(loadingExclusionStatePath(agencyCode), "utf8"));
+    const scopes = parsed && typeof parsed.scopes === "object" && !Array.isArray(parsed.scopes) ? parsed.scopes : {};
+    return { version: 1, scopes: Object.fromEntries(Object.entries(scopes).map(([key, value]) => [key, {
+      travels: normalizeLoadingRules(value?.travels),
+      history: Array.isArray(value?.history) ? value.history.slice(-200) : [],
+    }])) };
+  } catch (error) {
+    if (error?.code === "ENOENT") return { version: 1, scopes: {} };
+    throw error;
+  }
+}
+async function writeLoadingExclusionState(agencyCode, state) {
+  await writeJsonAtomic(loadingExclusionStatePath(agencyCode), {
+    version: 1,
+    scopes: Object.fromEntries(Object.entries(state.scopes ?? {}).map(([key, value]) => [key, {
+      travels: normalizeLoadingRules(value?.travels),
+      history: Array.isArray(value?.history) ? value.history.slice(-200) : [],
+    }])),
+  });
+}
+async function readLoadingExclusionsForSnapshot(agencyCode, snapshot, period = null) {
+  const state = await readLoadingExclusionState(agencyCode);
+  const key = travelExclusionScopeKey(snapshot, period);
+  if (key && state.scopes[key]) return normalizeLoadingRules(state.scopes[key].travels);
+  const oldDate = snapshot?.match?.legacyDate;
+  if (oldDate && oldDate !== snapshot?.match?.date) {
+    const oldKey = travelExclusionScopeKey({ ...snapshot, match: { ...snapshot.match, date: oldDate } }, period);
+    if (oldKey && state.scopes[oldKey]) return normalizeLoadingRules(state.scopes[oldKey].travels);
+  }
+  const samePeriod = !period || (period.start === snapshot?.match?.periodStart && period.end === snapshot?.match?.periodEnd);
+  return normalizeLoadingRules(samePeriod ? snapshot?.loadingScope?.excludedTravels : []);
 }
 
 async function readExcludedTravelCodesForSnapshot(agencyCode, snapshot, period = null) {
