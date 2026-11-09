@@ -62,6 +62,65 @@ export function ReceptionScopeControls({ scope, canEdit, pending, onChange }: Pr
 
   return (
     <section className="reception-scope-control" aria-label="Exclusions ciblées de réception">
+      {canEdit && (
+        <details className="reception-scope-add">
+          <summary><Plus size={18} aria-hidden="true" /><span>Ajouter une exclusion</span><ChevronDown size={18} aria-hidden="true" className="reception-scope-chevron" /></summary>
+          <div className="reception-scope-body">
+            <p className="reception-scope-explanation">
+              Une exclusion modifie uniquement les duels de réception et leur graphique horaire. Les opérations, joueurs, chargements, passes et possession restent inchangés.
+            </p>
+            <div className="reception-scope-editors">
+              <div className="reception-scope-editor">
+                <strong>Exclure un voyage atypique</strong>
+                <label>
+                  Voyage concerné
+                  <select value={availableTravels.includes(travel) ? travel : ""} onChange={event => setTravel(event.target.value)} disabled={busy || !availableTravels.length}>
+                    <option value="">Sélectionner un voyage</option>
+                    {availableTravels.map(code => <option key={code} value={code}>{code}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Motif de l'exclusion
+                  <input value={travelReason} onChange={event => setTravelReason(event.target.value)} disabled={busy} maxLength={240}
+                    placeholder="Ex. Double déchargement" />
+                </label>
+                <button type="button" className="secondary-button compact reception-scope-exclude" disabled={!travel || !travelReason.trim() || busy}
+                  onClick={() => void apply("travel", travel, true, travelReason)}>
+                  <EyeOff size={15} aria-hidden="true" /> Exclure ce voyage de la réception
+                </button>
+              </div>
+              <div className="reception-scope-editor">
+                <strong>Exclure un client de tri</strong>
+                {scope.clientColumnPresent ? (
+                  <>
+                    {availableClients.length ? (
+                      <>
+                        <label>
+                          Client identifié dans l'Excel
+                          <select value={availableClients.some(item => item.code === client) ? client : ""} onChange={event => setClient(event.target.value)} disabled={busy}>
+                            <option value="">Sélectionner un client</option>
+                            {availableClients.map(item => <option key={item.code} value={item.code}>{item.code} · {item.travels} voyage(s)</option>)}
+                          </select>
+                        </label>
+                        <label>
+                          Motif de l'exclusion
+                          <input value={clientReason} onChange={event => setClientReason(event.target.value)} disabled={busy} maxLength={240}
+                            placeholder="Ex. Client de tri hors périmètre" />
+                        </label>
+                        <button type="button" className="secondary-button compact reception-scope-exclude" disabled={!client || !clientReason.trim() || busy}
+                          onClick={() => void apply("client", client, true, clientReason)}>
+                          <EyeOff size={15} aria-hidden="true" /> Exclure ce client de la réception
+                        </button>
+                      </>
+                    ) : <p>Aucun autre client identifiable dans la plage active.</p>}
+                  </>
+                ) : <p>Le fichier Excel n'identifie pas les clients de tri. Tu peux néanmoins exclure un voyage directement.</p>}
+              </div>
+            </div>
+          </div>
+        </details>
+      )}
+
       <div className="reception-scope-current" aria-label="Exclusions actives">
         <div className="reception-scope-current-header">
           <div className="reception-scope-title">
@@ -124,64 +183,6 @@ export function ReceptionScopeControls({ scope, canEdit, pending, onChange }: Pr
         {feedback && <p className="reception-scope-feedback" role="status">{feedback}</p>}
       </div>
 
-      {canEdit && (
-        <details className="reception-scope-add">
-          <summary><Plus size={18} aria-hidden="true" /><span>Ajouter une exclusion</span><ChevronDown size={18} aria-hidden="true" className="reception-scope-chevron" /></summary>
-          <div className="reception-scope-body">
-            <p className="reception-scope-explanation">
-              Une exclusion modifie uniquement les duels de réception et leur graphique horaire. Les opérations, joueurs, chargements, passes et possession restent inchangés.
-            </p>
-            <div className="reception-scope-editors">
-              <div className="reception-scope-editor">
-                <strong>Exclure un voyage atypique</strong>
-                <label>
-                  Voyage concerné
-                  <select value={availableTravels.includes(travel) ? travel : ""} onChange={event => setTravel(event.target.value)} disabled={busy || !availableTravels.length}>
-                    <option value="">Sélectionner un voyage</option>
-                    {availableTravels.map(code => <option key={code} value={code}>{code}</option>)}
-                  </select>
-                </label>
-                <label>
-                  Motif de l'exclusion
-                  <input value={travelReason} onChange={event => setTravelReason(event.target.value)} disabled={busy} maxLength={240}
-                    placeholder="Ex. Double déchargement" />
-                </label>
-                <button type="button" className="secondary-button compact reception-scope-exclude" disabled={!travel || !travelReason.trim() || busy}
-                  onClick={() => void apply("travel", travel, true, travelReason)}>
-                  <EyeOff size={15} aria-hidden="true" /> Exclure ce voyage de la réception
-                </button>
-              </div>
-              <div className="reception-scope-editor">
-                <strong>Exclure un client de tri</strong>
-                {scope.clientColumnPresent ? (
-                  <>
-                    {availableClients.length ? (
-                      <>
-                        <label>
-                          Client identifié dans l'Excel
-                          <select value={availableClients.some(item => item.code === client) ? client : ""} onChange={event => setClient(event.target.value)} disabled={busy}>
-                            <option value="">Sélectionner un client</option>
-                            {availableClients.map(item => <option key={item.code} value={item.code}>{item.code} · {item.travels} voyage(s)</option>)}
-                          </select>
-                        </label>
-                        <label>
-                          Motif de l'exclusion
-                          <input value={clientReason} onChange={event => setClientReason(event.target.value)} disabled={busy} maxLength={240}
-                            placeholder="Ex. Client de tri hors périmètre" />
-                        </label>
-                        <button type="button" className="secondary-button compact reception-scope-exclude" disabled={!client || !clientReason.trim() || busy}
-                          onClick={() => void apply("client", client, true, clientReason)}>
-                          <EyeOff size={15} aria-hidden="true" /> Exclure ce client de la réception
-                        </button>
-                      </>
-                    ) : <p>Aucun autre client identifiable dans la plage active.</p>}
-                  </>
-                ) : <p>Le fichier Excel n'identifie pas les clients de tri. Tu peux néanmoins exclure un voyage directement.</p>}
-              </div>
-            </div>
-          </div>
-        </details>
-      )}
     </section>
   );
 }
