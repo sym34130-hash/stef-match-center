@@ -82,12 +82,10 @@ try {
     assert.match(await safety.locator(".match-indicator-value").innerText(), /À renseigner/);
 
     const geometryBefore = await page.locator(".match-indicator-card").first().evaluate(el => {
-      const rect = el.getBoundingClientRect();
-      return { height: rect.height, width: rect.width };
+      return { height: el.offsetHeight, width: el.offsetWidth };
     });
     const geometrySafety = await safety.locator(".match-indicator-card.is-safety").evaluate(el => {
-      const rect = el.getBoundingClientRect();
-      return { height: rect.height, width: rect.width, innerWidth: el.clientWidth,
+      return { height: el.offsetHeight, width: el.offsetWidth, innerWidth: el.clientWidth,
         hasOverflowY: el.scrollHeight > el.clientHeight + 2 };
     });
     assert.ok(Math.abs(geometrySafety.width - geometryBefore.width) < 4,
@@ -111,7 +109,7 @@ try {
     await page.waitForFunction(expected => {
       const node = document.querySelector('[data-indicator="accident-free-days"] .match-indicator-value');
       return node?.textContent?.trim() === expected;
-    }, String(saved.counter.days), { timeout: 15000 });
+    }, new Intl.NumberFormat("fr-FR").format(saved.counter.days), { timeout: 15000 });
     assert.match(await safety.locator(".safety-card-last-date").innerText(), /01\/10\/2026/);
 
     const after = await safety.locator(".match-indicator-card.is-safety").evaluate(el => ({
