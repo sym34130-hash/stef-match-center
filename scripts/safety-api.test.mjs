@@ -26,7 +26,7 @@ async function withApi(writesEnabled, check) {
     cwd: root,
     env: { ...process.env, NODE_ENV: "production", PORT: String(port),
       STEF_BIND_HOST: "127.0.0.1", STEF_DATA_DIR: directory,
-      STEF_SAFETY_WRITES_ENABLED: writesEnabled ? "true" : "false",
+      ...(writesEnabled === null ? {} : { STEF_SAFETY_WRITES_ENABLED: writesEnabled ? "true" : "false" }),
       STEF_AGENCIES_JSON: JSON.stringify(config) },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -129,7 +129,7 @@ test("C2 API : date manuelle par agence, lecture partagée, historique, révisio
   });
 });
 
-test("C2 API : saisie verrouillée par défaut sur l'hébergement de production", async () => {
+test("C2 API : saisie verrouillée uniquement si désactivée explicitement", async () => {
   await withApi(false, async ({ request, directory }) => {
     const initial = await (await request()).json();
     assert.equal(initial.editable, false);
@@ -137,5 +137,42 @@ test("C2 API : saisie verrouillée par défaut sur l'hébergement de production"
       { expectedRevision: null, lastAccidentDate: "2024-02-29" });
     assert.equal(denied.status, 503);
     assert.deepEqual(await fs.readdir(directory), []);
+  });
+});
+
+test("C2 API : production sans stockage persistant, date à ressaisir après perte du fichier", async () => {
+  await withApi(null, async ({ request, directory }) => {
+    const initial = await (await request()).json();
+    assert.equal(initial.editable, true, "La production autorise la date manuelle par défaut");
+    assert.equal(initial.counter.status, "unavailable");
+    assert.equal(initial.counter.days, null);
+
+    const response = await request("SEC", "safety-writer-only", "PUT", {
+      expectedRevision: initial.revision,
+      lastAccidentDate: "2024-02-29",
+    });
+    assert.equal(response.status, 200);
+    const saved = await response.json();
+    assert.equal(saved.lastAccidentDate, "2024-02-29");
+    assert.equal(saved.history.length, 1);
+    assert.equal(saved.counter.status, "available");
+
+    // Simulate an ephemeral Render filesystem reset without claiming
+    // that the former accident never happened.
+    await fs.rm(path.join(directory, "SEC", "safety.json"));
+    const afterReset = await (await request()).json();
+    assert.equal(afterReset.editable, true);
+    assert.equal(afterReset.lastAccidentDate, null);
+    assert.equal(afterReset.counter.status, "unavailable");
+    assert.equal(afterReset.counter.days, null);
+    assert.equal(afterReset.history.length, 0);
+    assert.equal(afterReset.revision, null);
+
+    const reentry = await request("SEC", "safety-writer-only", "PUT", {
+      expectedRevision: null,
+      lastAccidentDate: "2024-02-29",
+    });
+    assert.equal(reentry.status, 200, "La date peut être saisie de nouveau après réinitialisation");
+    assert.equal((await reentry.json()).lastAccidentDate, "2024-02-29");
   });
 });
