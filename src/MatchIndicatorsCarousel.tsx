@@ -4,6 +4,7 @@ import { MercatoCarouselSection } from "./MercatoCarousel";
 import { parseMercatoEntrants, type MercatoProfiles } from "./mercato";
 import type { Snapshot } from "./types";
 import { pdfSourceLabel } from "./pdf-source";
+import { resolveTonnageActivity } from "../server/brief-layout.mjs";
 import "./match-indicators.css";
 
 type Props = {
@@ -15,13 +16,15 @@ type Props = {
   staffDetail: string;
   mercato: string | null;
   mercatoProfiles: MercatoProfiles;
+  visibleIndicatorIds?: string[];
+  tonnageActivity?: "auto" | "expedition" | "distribution";
 };
 
 const number = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 type PunctualityKey = "arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn";
 
-export function MatchIndicatorsCarousel({ snapshot, performance, motivation, injuries, staffPercent, staffDetail, mercato, mercatoProfiles }: Props) {
+export function MatchIndicatorsCarousel({ snapshot, performance, motivation, injuries, staffPercent, staffDetail, mercato, mercatoProfiles, visibleIndicatorIds, tonnageActivity }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const geometry = useRef({ pitch: 296, width: 280, centers: 2, first: 0 });
@@ -34,6 +37,9 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   const mercatoEntrants = useMemo(() => parseMercatoEntrants(mercato ?? ""), [mercato]);
   const hasMercato = mercatoEntrants.length > 0;
   const pdf = snapshot.dailyIndicators;
+  const tonnageSection = resolveTonnageActivity(tonnageActivity, snapshot.match.periodStart, snapshot.match.periodEnd);
+  const tonnageValue = tonnageSection === "distribution" ? pdf?.distribution?.tonnage : pdf?.expedition.tonnage;
+  const tonnageLabel = tonnageSection === "distribution" ? "Distribution" : "Expédition";
   const punctuality = pdf?.punctuality;
   const punctualityTargets = pdf?.punctualityTargets;
   const pdfDetail = pdfSourceLabel(pdf, snapshot.agency.code);
@@ -45,13 +51,13 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   const cards: Array<{ id: string; label: string; value: string | null; detail: string; icon: LucideIcon; accent: string; percent?: number; targetKey?: PunctualityKey }> = [
     { id: "performance", label: "Performance d'équipe", value: performance, detail: motivation, icon: Users, accent: "#91d7c0" },
     { id: "injuries", label: "NB DE BLESSURES (A.T)", value: injuries.trim() ? number.format(Number(injuries)) : null, detail: "Accidents du travail · saisie manuelle", icon: ShieldPlus, accent: "#e1c58e" },
-    { id: "tonnage", label: "Tonnage", value: metric(pdf?.expedition.tonnage, " t"), detail: `Expédition · ${pdfDetail}`, icon: Weight, accent: "#98d6d6" },
+    { id: "tonnage", label: "Tonnage", value: metric(tonnageValue, " t"), detail: `${tonnageLabel} · ${pdfDetail}`, icon: Weight, accent: "#98d6d6" },
     { id: "positions", label: "Positions", value: metric(snapshot.summary.positions, ""), detail: `Excel · plage ${snapshot.match.timeRangeLabel}`, icon: Package, accent: "#a8c9f0" },
     { id: "arrival", label: "Ponctualité arrivage", value: metric(punctuality?.arrivalPunctuality, "%"), detail: pdfMetricDetail("arrivalPunctuality"), icon: ArrowDownToLine, accent: "#a4cbee", percent: punctuality?.arrivalPunctuality, targetKey: "arrivalPunctuality" },
     { id: "departure", label: "Ponctualité départ", value: metric(punctuality?.departurePunctuality, "%"), detail: pdfMetricDetail("departurePunctuality"), icon: ArrowUpFromLine, accent: "#b9c6ed", percent: punctuality?.departurePunctuality, targetKey: "departurePunctuality" },
     { id: "destination", label: "Ponctualité destination", value: metric(punctuality?.destinationPunctuality, "%"), detail: pdfMetricDetail("destinationPunctuality"), icon: Flag, accent: "#a4d5c8", percent: punctuality?.destinationPunctuality, targetKey: "destinationPunctuality" },
     { id: "temperature", label: "Température retour ramasse", value: metric(punctuality?.temperatureReturn, "%"), detail: pdfMetricDetail("temperatureReturn"), icon: Thermometer, accent: "#dcc0d7", percent: punctuality?.temperatureReturn, targetKey: "temperatureReturn" },
-  ];
+  ].filter((card) => !visibleIndicatorIds || visibleIndicatorIds.includes(card.id));
   const itemCount = cards.length + (hasMercato ? 1 : 0);
   useEffect(() => {
     const viewport = viewportRef.current;
