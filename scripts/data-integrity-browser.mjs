@@ -52,6 +52,12 @@ try {
       "Filtre opérateur", "Filtre heure", "Poste", "Poz non zonées", "DZ", "Duels gagnés", "Client de tri"],
     ["OP TEST", "17/09/2026 22:00:00", "DECHG", "P001", "TRIP-001", "05R", "Test", "", "", "", "", "", "", "TRI TEST"],
   ]), "Données");
+  XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([
+    ["Chargement"],
+    ["Code Voyage", "Min. de Date/Heure de début d'opération", "Nombre de N° Position", "TC", "TC/poz", "Commentaire"],
+    ["CHG-OK", "17/09/2026 22:00:00", 15, 90 / 86400, 90 / 86400, ""],
+    ["CHG-SLOW", "17/09/2026 22:20:00", 15, 200 / 86400, 200 / 86400, ""],
+  ]), "TCD PPT");
   const buffer = XLSX.write(book, { type: "buffer", bookType: "xlsx" });
   browser = await chromium.launch({ headless: true });
   for (const viewport of [{ width: 1366, height: 768 }, { width: 390, height: 844 }]) {
@@ -292,9 +298,36 @@ try {
     // Both activities use the same expandable container, but separate scopes.
     await page.getByRole("tab", { name: "Chargement 0" }).click();
     await page.locator(".reception-scope-current").getByText("Aucune exclusion active sur ce match.").waitFor({ state: "visible" });
-    await page.locator(".reception-scope-collapse-summary").click();
-    assert.equal(await page.locator(".reception-scope-control").getAttribute("open"), null);
-    console.log(`Browser: compact multi-activity exclusions, restore and audit at ${viewport.width}px: OK`);
+    const beforeLoading = await readSnapshot();
+    assert.deepEqual(beforeLoading.loadingScope.availableTravels, ["CHG-OK", "CHG-SLOW"]);
+    assert.equal(beforeLoading.loadingQuality.targetedPercent, 50);
+    await scopePanel.locator(".reception-scope-add > summary").click();
+    await scopePanel.getByLabel("Voyage concerné").selectOption("CHG-SLOW");
+    await scopePanel.getByLabel("Motif de l'exclusion").fill("Chargement exceptionnel");
+    await scopePanel.getByRole("button", { name: "Exclure ce voyage du chargement" }).click();
+    await page.waitForFunction(() => document.querySelector(".reception-scope-total")?.textContent?.includes("1 exclusion"), null, { timeout: 15000 });
+    const afterLoading = await readSnapshot();
+    assert.equal(afterLoading.loadingQuality.targetedPercent, 100);
+    assert.equal(afterLoading.operationalScore.indicators.loadingPercent, 100);
+    assert.equal(afterLoading.summary.operations, beforeLoading.summary.operations);
+    assert.equal(afterLoading.summary.positions, beforeLoading.summary.positions);
+    assert.equal(afterLoading.summary.passRate, beforeLoading.summary.passRate);
+    assert.equal(afterLoading.unloadingQuality.targetedPercent, beforeLoading.unloadingQuality.targetedPercent);
+    const loadingRow = scopePanel.locator(".reception-scope-exclusion").filter({ hasText: "CHG-SLOW" });
+    await loadingRow.getByText("Chargement exceptionnel").waitFor({ state: "visible" });
+    await scopePanel.locator(".reception-scope-collapse-summary").click();
+    assert.equal(await scopePanel.getAttribute("open"), null, "CHG exclusions must remain retractable");
+    assert.match(await scopePanel.locator(".reception-scope-collapse-summary").innerText(), /1 exclusion active/);
+    await scopePanel.locator(".reception-scope-collapse-summary").click();
+    await loadingRow.getByRole("button", { name: "Réintégrer le voyage CHG-SLOW en chargement" }).click();
+    await page.waitForFunction(() => document.querySelector(".reception-scope-total")?.textContent?.includes("0 exclusion"), null, { timeout: 15000 });
+    assert.equal((await readSnapshot()).loadingQuality.targetedPercent, 50);
+    assert.deepEqual((await readSnapshot()).loadingScope.excludedTravels, []);
+    const loadingState = JSON.parse(await fs.readFile(path.join(root, "01K", "loading-exclusions.json"), "utf8"));
+    assert.equal(Object.values(loadingState.scopes)[0].history.length, viewport.width === 1366 ? 2 : 4);
+    await scopePanel.locator(".reception-scope-collapse-summary").click();
+    assert.equal(await scopePanel.getAttribute("open"), null);
+    console.log(`Browser: CHG/DECHG scoped exclusions, compact panel, restore and audit at ${viewport.width}px: OK`);
     assert.deepEqual(errors, [], `Unexpected React errors at ${viewport.width}px`);
     console.log(`Browser: login, upload, agency confirmation, completed import at ${viewport.width}px: OK`);
     await page.close();
