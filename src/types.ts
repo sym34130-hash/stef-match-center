@@ -249,6 +249,26 @@ export type Snapshot = {
     reason: string;
     travelCode: string;
   }>;
+  yellowCardAudit?: {
+    source: string;
+    sourceAvailable: boolean;
+    byReason: { temperature: number; loading: number; other: number };
+    matrix: {
+      temperatureAvailable: boolean;
+      loadingAvailable: boolean;
+      temperatureCandidates: number | null;
+      loadingCandidates: number | null;
+      incompleteTemperature: number | null;
+      incompleteLoading: number | null;
+      unlistedCandidates: Array<{
+        category: "temperature" | "loading";
+        playerName: string;
+        travelCode: string;
+        time: string;
+        source: string;
+      }>;
+    };
+  };
   dailyIndicators?: {
     sourceName: string;
     importedAt: string | null;
