@@ -125,7 +125,10 @@ try {
     });
 
     const assertTonnage = async (distribution, expedition, cardCount) => {
-      await page.waitForFunction(expected => document.querySelectorAll(".match-indicator-card").length === expected, cardCount, { timeout: 15000 });
+      // The nine optional cards retain their saved count; the separate A.T.
+      // day-counter is a fixed tenth vignette inside the same carousel.
+      await page.waitForFunction(expected => document.querySelectorAll(".match-indicator-card").length === expected + 1, cardCount, { timeout: 15000 });
+      assert.equal(await page.locator('[data-indicator="accident-free-days"] .match-indicator-card.is-safety').count(), 1);
       assert.equal(await page.locator('[data-indicator="tonnage-distribution"]').count(), distribution === null ? 0 : 1);
       assert.equal(await page.locator('[data-indicator="tonnage-expedition"]').count(), expedition === null ? 0 : 1);
       if (distribution !== null) {
