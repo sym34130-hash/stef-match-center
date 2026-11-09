@@ -66,7 +66,7 @@ test("conflit UI : saisie conservée et abandon explicite avant relecture", asyn
   await page.getByRole("button", { name: "05 BRIEF ÉQUIPE", exact: true }).click();
   await expect(page.locator(".tv-plan-column.attack .tv-plan-content")).toHaveText("Initial");
   await page.getByRole("button", { name: "Écrire", exact: true }).click();
-  const input = page.getByLabel("SAV, contenu du brief");
+  const input = page.getByLabel("Service client, contenu du brief");
   await input.fill("Brouillon local B");
   plan = { ...plan, attack: ["Consigne A"] }; revision = "R2";
   await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
@@ -90,7 +90,7 @@ test("lightbox : focus, inert, Tab, Shift+Tab, Escape et retour au déclencheur"
   await page.goto("/"); await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
   await page.getByRole("button", { name: "Accéder au match", exact: true }).click();
   await page.getByRole("button", { name: "05 BRIEF ÉQUIPE", exact: true }).click();
-  const trigger = page.getByRole("button", { name: "Agrandir la capture SAV 1", exact: true });
+  const trigger = page.getByRole("button", { name: "Agrandir la capture Service client 1", exact: true });
   await trigger.click();
   const close = page.getByRole("button", { name: "Fermer la capture agrandie", exact: true });
   await expect(close).toBeFocused();
