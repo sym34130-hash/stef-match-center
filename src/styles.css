@@ -21676,3 +21676,71 @@ body.match-celebration-active .main-area {
 .reception-scope-tabs button:focus-visible { outline: 3px solid #167492; outline-offset: 3px; }
 .reception-scope-tabs button:disabled { opacity: .65; cursor: wait; }
 @media (max-width:640px) { .reception-scope-tabs { padding: 10px 10px 0; } }
+
+
+/* Lot B: prevent clipped motive fields in nested grids and constrained
+   full-screen statistics. All 3 motive inputs can display multiline text. */
+.reception-scope-control,
+.reception-scope-expanded,
+.reception-scope-add,
+.reception-scope-body,
+.reception-scope-editors,
+.reception-scope-editor,
+.reception-scope-editor label {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.reception-scope-body,
+.reception-scope-editor,
+.reception-scope-editor label {
+  grid-template-columns: minmax(0, 1fr);
+}
+.reception-scope-editor :is(select, textarea) {
+  display: block;
+  box-sizing: border-box;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+.reception-scope-editor textarea {
+  min-height: 84px;
+  max-height: 220px;
+  padding: 11px 12px;
+  border: 1px solid #789eb5;
+  border-radius: 7px;
+  background: #fff;
+  color: #102d45;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  resize: vertical;
+}
+.reception-scope-editor textarea::placeholder {
+  color: #526f86;
+  opacity: 1;
+  font-weight: 500;
+}
+.match-page.is-celebration-mode .match-stat-grid {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+.match-page.is-celebration-mode .reception-scope-control[open] .reception-scope-expanded {
+  /* In fixed-height/TV mode, scroll the expanded form instead of letting the
+     slide's overflow:hidden crop the reason field or action buttons. */
+  max-height: min(43vh, 400px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+@media (max-width: 640px) {
+  .reception-scope-editor textarea { min-height: 96px; }
+  .match-page.is-celebration-mode .reception-scope-control[open] .reception-scope-expanded {
+    max-height: min(48vh, 420px);
+  }
+}
