@@ -532,7 +532,8 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
         }
         const period = normalizeTimeRange(currentSnapshot.match?.periodStart, currentSnapshot.match?.periodEnd);
         const excludedTravelCodes = await readExcludedTravelCodesForSnapshot(req.agency.code, currentSnapshot, period);
-        const result = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code, { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators, excludedTravelCodes });
+        const receptionExclusions = await readReceptionExclusionsForSnapshot(req.agency.code, currentSnapshot, period);
+        const result = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code, { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators, excludedTravelCodes, receptionExclusions });
         if (!result.ok) {
           res.status(400).json(result.error);
           return;
@@ -582,13 +583,15 @@ app.post("/api/agencies/:agencyCode/import", requireAgency, upload.single("file"
 
       result.snapshot.agency.name = req.agency.name;
       const excludedTravelCodes = await readExcludedTravelCodesForSnapshot(req.agency.code, result.snapshot);
-      const scopedResult = excludedTravelCodes.length > 0
+      const receptionExclusions = await readReceptionExclusionsForSnapshot(req.agency.code, result.snapshot);
+      const scopedResult = excludedTravelCodes.length > 0 || receptionExclusions.travels.length > 0 || receptionExclusions.clients.length > 0
         ? buildSnapshotFromWorkbook(req.file.buffer, req.file.originalname, req.agency.code, {
             start: result.snapshot.match.periodStart,
             end: result.snapshot.match.periodEnd,
             criteria: result.snapshot.performanceCriteria,
             dailyIndicators,
             excludedTravelCodes,
+            receptionExclusions,
           })
         : result;
       if (!scopedResult.ok) {
