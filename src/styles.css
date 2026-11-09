@@ -21705,7 +21705,7 @@ body.match-celebration-active .main-area {
 }
 .reception-scope-editor textarea {
   min-height: 84px;
-  max-height: 220px;
+  max-height: none;
   padding: 11px 12px;
   border: 1px solid #789eb5;
   border-radius: 7px;
@@ -21716,7 +21716,7 @@ body.match-celebration-active .main-area {
   font-weight: 700;
   line-height: 1.5;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
   resize: vertical;
