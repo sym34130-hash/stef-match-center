@@ -4,6 +4,7 @@ import { once } from "node:events";
 import fs from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
+import path from "node:path";
 import { chromium } from "@playwright/test";
 import * as XLSX from "xlsx";
 import { buildSnapshotFromWorkbook } from "../server/match-engine.mjs";
@@ -119,6 +120,8 @@ try {
     assert.deepEqual(errors, [], viewport.width + "px : no frontend JS errors");
     console.log(`Safety counter vignette ${viewport.width}px: compact layout, date saved, days recalculated`);
     await page.close();
+    // Each viewport starts from an intentionally missing ephemeral safety date.
+    await fs.rm(path.join(folder, "01K", "safety.json"), { force: true });
   }
 } finally {
   if (browser) await browser.close();
