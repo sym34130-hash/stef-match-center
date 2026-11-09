@@ -1,0 +1,58 @@
+/* Lot C2 — standalone agency safety block. This must not shrink the KPI carousel. */
+.safety-counter {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 14px 0;
+  padding: clamp(14px, 2.2vw, 24px);
+  color: #eef4ff;
+  background: #0c2035;
+  border: 1px solid #405a73;
+  border-radius: 15px;
+}
+.safety-counter-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+}
+.safety-counter-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.safety-counter-title svg { flex-shrink: 0; color: #9fe1c4; }
+.safety-counter-title h3 { margin: 0 0 3px; font-size: clamp(15px, 1.5vw, 20px); color: #ffffff; }
+.safety-counter-title p { margin: 0; color: #c7d9e8; font-size: 12px; line-height: 1.45; }
+.safety-counter-value { display: flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
+.safety-counter-value strong { font-size: clamp(22px, 3vw, 40px); color: #bff2d9; line-height: 1; overflow-wrap: anywhere; }
+.safety-counter-value span { font-size: 15px; font-weight: 700; }
+.safety-counter-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 17px; color: #d5e3ee; font-size: 12px; }
+.safety-counter-meta b { color: #ffffff; }
+.safety-counter-meta button { margin-left: auto; color: #b4e9fc; border: 1px solid #6288a6; border-radius: 6px; background: transparent; padding: 5px 9px; cursor: pointer; }
+.safety-counter-editor, .safety-counter-history { border-top: 1px solid #3f5972; padding-top: 9px; }
+.safety-counter-editor summary, .safety-counter-history summary { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #d9ebfb; font-size: 12px; font-weight: 700; }
+.safety-counter-editor form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 7px 12px; padding-top: 13px; max-width: 800px; }
+.safety-counter-editor label { font-size: 12px; align-self: end; color: #d2e2f1; }
+.safety-counter-editor input { width: 100%; min-width: 0; border: 1px solid #8aacc1; background: #ffffff; color: #0a1b2f; border-radius: 7px; padding: 10px 11px; font: inherit; box-sizing: border-box; }
+.safety-counter-editor button { grid-column: 1 / -1; justify-self: start; border: 0; border-radius: 7px; background: #b9ecd2; color: #092a22; font-weight: 800; padding: 10px 16px; cursor: pointer; }
+.safety-counter-editor button:disabled { opacity: .6; cursor: not-allowed; }
+.safety-counter-editor small { grid-column: 1 / -1; font-size: 11px; line-height: 1.5; color: #d0deeb; }
+.safety-counter-editor > p, .safety-counter-error, .safety-counter-notice { margin: 8px 0 0; font-size: 12px; line-height: 1.5; }
+.safety-counter-error { color: #ffd0c7; }
+.safety-counter-notice { color: #bef3d0; display: flex; align-items: center; gap: 7px; }
+.safety-counter-history ul { padding-left: 19px; margin: 9px 0 0; max-height: 180px; overflow-y: auto; }
+.safety-counter-history li { margin: 8px 0; line-height: 1.4; font-size: 12px; }
+.safety-counter-history small { display: block; color: #c5d7e6; }
+@media (max-width: 600px) {
+  .safety-counter-value { width: 100%; justify-content: flex-start; }
+  .safety-counter-meta button { margin-left: 0; }
+  .safety-counter-editor form { grid-template-columns: minmax(0, 1fr); }
+}
+
+.safety-counter-temporary-note {
+  margin: 0;
+  padding: 9px 11px;
+  border-left: 3px solid #e1c58e;
+  background: #203348;
+  color: #f2e7cf;
+  font-size: 12px;
+  line-height: 1.5;
+}
