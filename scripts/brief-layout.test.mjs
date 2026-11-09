@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, migrateBriefLayout, normalizeBriefIndicators, normalizeTonnageActivity, resolveTonnageActivity } from "../server/brief-layout.mjs";
+import { BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, migrateBriefLayout, normalizeBriefIndicators } from "../server/brief-layout.mjs";
 
 test("Brief ancien : fusion des textes sans mutation de la source", () => {
   const before = { attack: ["A"], midfield: ["B"], defense: ["C"], coach: { tactic: "inchangé" }, mercato: "inchangé" };
@@ -48,18 +48,25 @@ test("Brief absent : SST et captures restent vides", () => {
   assert.deepEqual(migrated.attachments.defense, []);
 });
 
-test("Brief: visibilité canonique, protection contre une sélection vide", () => {
+test("Brief : les deux tonnages sont visibles par défaut", () => {
+  assert.deepEqual(BRIEF_INDICATOR_IDS, [
+    "performance", "injuries", "tonnage-distribution", "tonnage-expedition",
+    "positions", "arrival", "departure", "destination", "temperature",
+  ]);
   assert.deepEqual(normalizeBriefIndicators(undefined), BRIEF_INDICATOR_IDS);
-  assert.deepEqual(normalizeBriefIndicators(["tonnage", "unknown", "arrival", "tonnage"]), ["tonnage", "arrival"]);
   assert.deepEqual(normalizeBriefIndicators([]), BRIEF_INDICATOR_IDS);
+  assert.deepEqual(normalizeBriefIndicators(["unknown"]), BRIEF_INDICATOR_IDS);
 });
 
-test("Brief: tonnage de nuit automatique et sélection explicite", () => {
-  assert.equal(resolveTonnageActivity("auto", "21:30", "06:30"), "distribution");
-  assert.equal(resolveTonnageActivity("auto", "00:00", "08:00"), "distribution");
-  assert.equal(resolveTonnageActivity("auto", "13:00", "22:30"), "expedition");
-  assert.equal(resolveTonnageActivity("expedition", "21:30", "06:30"), "expedition");
-  assert.equal(resolveTonnageActivity("distribution", "13:00", "22:30"), "distribution");
-  assert.equal(resolveTonnageActivity("auto", undefined, undefined), "expedition");
-  assert.equal(normalizeTonnageActivity("other"), "auto");
+test("Brief : les deux cartes Tonnage sont masquables indépendamment", () => {
+  assert.deepEqual(normalizeBriefIndicators(["tonnage-distribution", "positions"]), ["tonnage-distribution", "positions"]);
+  assert.deepEqual(normalizeBriefIndicators(["tonnage-expedition", "positions"]), ["tonnage-expedition", "positions"]);
+  assert.deepEqual(normalizeBriefIndicators(["tonnage-expedition", "tonnage-distribution"]), ["tonnage-distribution", "tonnage-expedition"]);
+  assert.deepEqual(normalizeBriefIndicators(["positions"]), ["positions"]);
+});
+
+test("Brief : compatibilité avec l'ancien identifiant tonnage", () => {
+  assert.deepEqual(normalizeBriefIndicators(["tonnage", "positions"]), ["tonnage-distribution", "tonnage-expedition", "positions"]);
+  assert.deepEqual(normalizeBriefIndicators(["tonnage", "tonnage-expedition", "arrival"]), ["tonnage-distribution", "tonnage-expedition", "arrival"]);
+  assert.deepEqual(normalizeBriefIndicators(["arrival", "positions"]), ["positions", "arrival"]);
 });
