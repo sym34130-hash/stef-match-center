@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout } from "../server/brief-layout.mjs";
+import { BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, migrateBriefLayout, normalizeBriefIndicators, normalizeTonnageActivity, resolveTonnageActivity } from "../server/brief-layout.mjs";
 
 test("Brief ancien : fusion des textes sans mutation de la source", () => {
   const before = { attack: ["A"], midfield: ["B"], defense: ["C"], coach: { tactic: "inchangé" }, mercato: "inchangé" };
@@ -46,4 +46,20 @@ test("Brief absent : SST et captures restent vides", () => {
   assert.equal(migrated.briefLayoutVersion, 2);
   assert.deepEqual(migrated.defense, []);
   assert.deepEqual(migrated.attachments.defense, []);
+});
+
+test("Brief: visibilité canonique, protection contre une sélection vide", () => {
+  assert.deepEqual(normalizeBriefIndicators(undefined), BRIEF_INDICATOR_IDS);
+  assert.deepEqual(normalizeBriefIndicators(["tonnage", "unknown", "arrival", "tonnage"]), ["tonnage", "arrival"]);
+  assert.deepEqual(normalizeBriefIndicators([]), BRIEF_INDICATOR_IDS);
+});
+
+test("Brief: tonnage de nuit automatique et sélection explicite", () => {
+  assert.equal(resolveTonnageActivity("auto", "21:30", "06:30"), "distribution");
+  assert.equal(resolveTonnageActivity("auto", "00:00", "08:00"), "distribution");
+  assert.equal(resolveTonnageActivity("auto", "13:00", "22:30"), "expedition");
+  assert.equal(resolveTonnageActivity("expedition", "21:30", "06:30"), "expedition");
+  assert.equal(resolveTonnageActivity("distribution", "13:00", "22:30"), "distribution");
+  assert.equal(resolveTonnageActivity("auto", undefined, undefined), "expedition");
+  assert.equal(normalizeTonnageActivity("other"), "auto");
 });
