@@ -85,7 +85,7 @@
 }
 .score-simulator-comparison {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 .score-simulator-result {
@@ -124,4 +124,44 @@
 @media (max-width: 650px) {
   .score-simulator-choices, .score-simulator-comparison { grid-template-columns: minmax(0, 1fr); }
   .score-simulator-choice { padding: 10px; }
+}
+
+.score-simulator-profile {
+  display: grid;
+  gap: 5px;
+  max-width: 480px;
+}
+.score-simulator-profile label { color: #f5faff; font-size: 12px; font-weight: 800; }
+.score-simulator-profile select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 39px;
+  padding: 7px 11px;
+  border-radius: 6px;
+  border: 1px solid #8bb7d0;
+  background: #24435d;
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+}
+.score-simulator-profile small { color: #d5e7f5; font-size: 11px; line-height: 1.4; }
+.score-simulator-choice.is-not-applicable {
+  background: #25394a;
+  border-color: #536b7d;
+  cursor: default;
+}
+.score-simulator-choice.is-not-applicable span { color: #d1dfed; }
+.score-simulator-choice.is-not-applicable strong {
+  color: #d1dfed;
+  white-space: normal;
+  font-size: 11px;
+}
+.score-simulator-result.is-common {
+  border-color: #87b5d6;
+  background: #234a65;
+}
+@media (min-width: 651px) and (max-width: 1050px) {
+  .score-simulator-comparison { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .score-simulator-result.is-common { grid-column: 1 / -1; }
 }
