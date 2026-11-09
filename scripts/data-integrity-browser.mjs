@@ -233,7 +233,10 @@ try {
     assert.deepEqual(clientFiltered.receptionScope.excludedClients.map(item => item.code), ["TRI TEST"]);
     assert.equal(clientFiltered.summary.operations, baselineReception.summary.operations);
     const state = JSON.parse(await fs.readFile(path.join(root, "01K", "reception-exclusions.json"), "utf8"));
-    assert.equal(Object.values(state.scopes)[0].history.length, viewport.width === 1366 ? 3 : 6);
+    assert.equal(Object.values(state.scopes)[0].history.length, viewport.width === 1366 ? 3 : 7);
+    await scopePanel.getByRole("button", { name: "Réintégrer en réception" }).click();
+    await page.waitForFunction(() => document.querySelector(".reception-scope-control > summary strong")?.textContent?.includes("0 exclusion"), null, { timeout: 15000 });
+    assert.deepEqual((await readSnapshot()).receptionScope.excludedClients, []);
     console.log(`Browser: scoped reception voyage, tri client, restore, audit at ${viewport.width}px: OK`);
     assert.deepEqual(errors, [], `Unexpected React errors at ${viewport.width}px`);
     console.log(`Browser: login, upload, agency confirmation, completed import at ${viewport.width}px: OK`);
