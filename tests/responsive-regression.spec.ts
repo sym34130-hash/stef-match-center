@@ -408,20 +408,20 @@ async function assertIndicatorCarousel(page: Page, label: string) {
   const navigation = carousel.locator(".match-indicators-navigation");
   expect(await carousel.locator(".match-indicators-track > .match-indicator-slide").evaluateAll(cards =>
     cards.map(card => card.getAttribute("data-indicator")))).toEqual([
-    "performance", "injuries", "tonnage", "positions", "arrival", "departure", "destination", "temperature",
+    "performance", "injuries", "tonnage-distribution", "tonnage-expedition", "positions", "arrival", "departure", "destination", "temperature",
   ]);
   await expect(viewport).toBeVisible();
   await viewport.focus();
   await page.keyboard.press("End");
-  await expect(navigation.locator("> span")).toHaveText("8 / 8");
+  await expect(navigation.locator("> span")).toHaveText("9 / 9");
   await expect(carousel.getByRole("button", { name: "Indicateurs suivants", exact: true })).toBeDisabled();
   await expect(carousel.getByRole("button", { name: "Indicateurs précédents", exact: true })).not.toBeDisabled();
   await carousel.getByRole("button", { name: "Indicateurs précédents", exact: true }).click();
-  await expect(navigation.locator("> span")).not.toHaveText("8 / 8");
+  await expect(navigation.locator("> span")).not.toHaveText("9 / 9");
   await expect(carousel.getByRole("button", { name: "Indicateurs suivants", exact: true })).not.toBeDisabled();
   await viewport.focus();
   await page.keyboard.press("Home");
-  await expect(navigation.locator("> span")).toHaveText(/1(?:–2)? \/ 8/);
+  await expect(navigation.locator("> span")).toHaveText(/1(?:–2)? \/ 9/);
   await assertNoHorizontalOverflow(page, { name: label, width: page.viewportSize()?.width ?? 0, height: page.viewportSize()?.height ?? 0, reference: false });
 }
 
