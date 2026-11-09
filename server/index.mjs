@@ -378,7 +378,7 @@ app.post("/api/agencies/:agencyCode/reception-exclusions", requireAgency, async 
         res.status(409).json({ title: "ANALYSE À ACTUALISER", message: "Actualise le match avant de modifier les exclusions de réception." });
         return;
       }
-      if (kind === "client" && !reception.clientColumnPresent) {
+      if (kind === "client" && !reception.clientColumnPresent && excluded) {
         res.status(422).json({
           title: "CLIENTS DE TRI NON IDENTIFIABLES",
           message: "Le fichier Excel ne possède pas de colonne Client de tri exploitable. Aucun voyage ne sera exclu par supposition.",
