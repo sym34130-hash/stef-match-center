@@ -1,6 +1,6 @@
 # Lot C — sécurité et litiges : contrat de préparation
 
-Statut : **foundation only / not production-ready**. L'implémentation actuelle de cette branche introduit uniquement un calcul calendaire pur, sans donnée réelle, API, écran ni mise en production.
+Statut : **implémenté et sous recette, non déployé en production**. La saisie manuelle, l'API et le stockage de test sont disponibles dans la PR #31. Les écritures de production restent verrouillées tant qu'un stockage durable n'est pas confirmé.
 
 ## Situation constatée dans le dépôt
 
@@ -8,6 +8,17 @@ Statut : **foundation only / not production-ready**. L'implémentation actuelle 
 - Sa valeur est saisie manuellement et enregistrée en `localStorage` par **agence et date du match**. Elle n'est ni partagée entre navigateurs ni une date certifiée de dernier accident.
 - Le modèle `dailyIndicators` importé du PDF 106J ne contient pas de date de dernier accident ni de référentiel des litiges.
 - Ne pas déduire l'absence d'accident du nombre de blessures d'une journée, ni fabriquer un total à partir de données manquantes.
+
+## Implémentation de la saisie manuelle (PR #31)
+
+- Interface « Jours sans accident du travail » située sous le carrousel « Le collectif en chiffres » : compteur visible en lecture, formulaire rétractable et historique pour un responsable ayant le droit `canImport`.
+- Endpoint `GET /api/agencies/:agencyCode/safety` : lecture avec authentification agence, jours calculés au serveur selon la date civile Europe/Paris et état explicite « Non renseigné ».
+- Endpoint `PUT /api/agencies/:agencyCode/safety` : date manuelle valide et non future, révision obligatoire, refus des écritures concurrentes (409), motif de correction obligatoire lorsqu'une date est déjà enregistrée, et historique par agence.
+- Stockage serveur `<STEF_DATA_DIR>/<agency>/safety.json`, séparé du snapshot Excel/PDF et des chiffres de blessure A.T. locaux du navigateur.
+- **Verrou de sécurité :** en `NODE_ENV=production`, l'édition est bloquée (503) sauf si `STEF_SAFETY_WRITES_ENABLED=true` est explicitement configuré après vérification du stockage persistant et des sauvegardes. La présence d'un chemin `STEF_DATA_DIR` seule n'est PAS une preuve de persistance. Ne jamais activer cette variable sur un disque Render Free éphémère.
+- Rafraîchissement de l'affichage toutes les 60 secondes tant que l'onglet est visible, ainsi qu'au retour à la page, permettant le changement de jour.
+- Les événements d'audit enregistrent la date précédente, nouvelle date, motif, horodatage et la catégorie de session autorisée ; **les codes de connexion ne sont pas enregistrés**. Sans identité nominative dans l'authentification existante, l'auteur individuel ne peut pas être identifié : une identité nominative nécessite une évolution distincte des comptes.
+- L'API ne modifie aucun import ni les neuf cartes personnalisables du Lot A.
 
 ## C2 — compteur de jours sans accident du travail
 
