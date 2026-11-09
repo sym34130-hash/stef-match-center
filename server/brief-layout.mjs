@@ -21,7 +21,7 @@ export function normalizeTonnageActivity(value) {
 export function resolveTonnageActivity(value, start, end) {
   const selected = normalizeTonnageActivity(value);
   if (selected !== "auto") return selected;
-  const valid = /^([01]\\d|2[0-3]):[0-5]\\d$/;
+  const valid = /^([01]\d|2[0-3]):[0-5]\d$/;
   if (typeof start !== "string" || typeof end !== "string" || !valid.test(start) || !valid.test(end)) return "expedition";
   return end < start || Number(start.slice(0, 2)) < 8 ? "distribution" : "expedition";
 }
