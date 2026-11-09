@@ -12,5 +12,3 @@ export function migrateBriefLayout(plan: unknown): {
 
 export const BRIEF_INDICATOR_IDS: string[];
 export function normalizeBriefIndicators(value: unknown): string[];
-export function normalizeTonnageActivity(value: unknown): "auto" | "expedition" | "distribution";
-export function resolveTonnageActivity(value: unknown, start: string | undefined, end: string | undefined): "expedition" | "distribution";
