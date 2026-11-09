@@ -49,7 +49,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { Agency, Highlight, Player, Snapshot } from "./types";
 import { MatchIndicatorsCarousel } from "./MatchIndicatorsCarousel";
-import { ReceptionScopeControls, type ReceptionExclusionChange } from "./ReceptionScopeControls";
+import { ReceptionScopeControls, type ReceptionExclusionChange, type LoadingExclusionChange } from "./ReceptionScopeControls";
 import { KickoffMusicControl } from "./KickoffMusicControl";
 import { OperationalDiagnosticCard, ReceptionHourlyChart } from "./OperationalAnalysisCards";
 import { parseMercatoEntrants, type MercatoProfile, type MercatoProfiles } from "./mercato";
@@ -717,6 +717,17 @@ export default function App() {
                     throw error;
                   }
                 }}
+                onLoadingExclusionChange={async (code, excluded, reason) => {
+                  if (!session) throw new Error("Session absente.");
+                  try {
+                    const nextSnapshot = await updateLoadingExclusion(session, code, excluded, reason);
+                    publishSnapshot(nextSnapshot);
+                    setStatusMessage("");
+                  } catch (error) {
+                    setStatusMessage(error instanceof Error ? error.message : "Les exclusions de chargement n'ont pas pu être actualisées.");
+                    throw error;
+                  }
+                }}
               />
             )}
             {screen === "composition" && snapshot && <Composition snapshot={snapshot} session={session} onPlayer={openPlayer} />}
@@ -879,6 +890,18 @@ async function updateReceptionExclusion(session: Session, kind: "travel" | "clie
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message ?? "Les exclusions de réception n'ont pas pu être enregistrées.");
   if (!payload.snapshot || typeof payload.snapshot !== "object") throw new Error("Le recalcul de réception a échoué.");
+  return payload.snapshot;
+}
+
+async function updateLoadingExclusion(session: Session, code: string, excluded: boolean, reason: string): Promise<Snapshot> {
+  const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/loading-exclusions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-access-code": session.accessCode },
+    body: JSON.stringify({ code, excluded, reason }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message ?? "L'exclusion de chargement n'a pas pu être enregistrée.");
+  if (!payload.snapshot || typeof payload.snapshot !== "object") throw new Error("Recalcul des KPI de chargement impossible.");
   return payload.snapshot;
 }
 
@@ -1357,7 +1380,7 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
   );
 }
 
-function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlayer, onCoach, onComposition, onTravelExclusionChange, onReceptionExclusionChange }: { snapshot: Snapshot; session: Session; causerieRevision: string | null; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void; onTravelExclusionChange: (travelCode: string, excluded: boolean) => Promise<void>; onReceptionExclusionChange: ReceptionExclusionChange }) {
+function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlayer, onCoach, onComposition, onTravelExclusionChange, onReceptionExclusionChange, onLoadingExclusionChange }: { snapshot: Snapshot; session: Session; causerieRevision: string | null; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void; onTravelExclusionChange: (travelCode: string, excluded: boolean) => Promise<void>; onReceptionExclusionChange: ReceptionExclusionChange; onLoadingExclusionChange: LoadingExclusionChange }) {
   const [celebrationMode, setCelebrationMode] = useState(false);
   const [thresholdPulse, setThresholdPulse] = useState(false);
   const [editingKpis, setEditingKpis] = useState(false);
@@ -1372,6 +1395,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const [slideDirection, setSlideDirection] = useState<"next" | "previous">("next");
   const [pendingTravelCode, setPendingTravelCode] = useState<string | null>(null);
   const [pendingReceptionCode, setPendingReceptionCode] = useState<string | null>(null);
+  const [pendingLoadingCode, setPendingLoadingCode] = useState<string | null>(null);
   const slideViewportRef = useRef<HTMLDivElement | null>(null);
   const slideTouchStart = useRef<{ x: number; y: number } | null>(null);
   const slideLabels = ["Coup de sifflet final", "Cérémonie des performances", "Statistiques du match", "Brief équipe"];
@@ -1482,6 +1506,15 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
       await onReceptionExclusionChange(kind, code, excluded, reason);
     } finally {
       setPendingReceptionCode(null);
+    }
+  }
+
+  async function handleLoadingExclusionChange(code: string, excluded: boolean, reason: string) {
+    setPendingLoadingCode(code);
+    try {
+      await onLoadingExclusionChange(code, excluded, reason);
+    } finally {
+      setPendingLoadingCode(null);
     }
   }
 
@@ -1842,8 +1875,9 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         </div>
 
         <div className="match-stat-grid">
-          <ReceptionScopeControls scope={snapshot.receptionScope} canEdit={session.agency.canImport}
-            pending={pendingReceptionCode} onChange={handleReceptionExclusionChange} />
+          <ReceptionScopeControls scope={snapshot.receptionScope} loadingScope={snapshot.loadingScope}
+            canEdit={session.agency.canImport} pending={pendingReceptionCode} pendingLoading={pendingLoadingCode}
+            onChange={handleReceptionExclusionChange} onLoadingChange={handleLoadingExclusionChange} />
           <OperationalChartsCarousel
             snapshot={snapshot}
             canEditTravelScope={session.agency.canImport}
