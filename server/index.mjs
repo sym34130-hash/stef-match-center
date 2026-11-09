@@ -1283,7 +1283,11 @@ async function readReceptionExclusionsForSnapshot(agencyCode, snapshot, period =
     const oldKey = travelExclusionScopeKey({ ...snapshot, match: { ...snapshot.match, date: previousDate } }, period);
     if (oldKey && state.scopes[oldKey]) return normalizeReceptionExclusions(state.scopes[oldKey]);
   }
-  return normalizeReceptionExclusions(snapshot?.receptionScope
+  // A persisted snapshot is a fallback only for its OWN operating scope.
+  // Never carry selected filters into an unrelated time range.
+  const scopedToSnapshot = !period ||
+    (period.start === snapshot?.match?.periodStart && period.end === snapshot?.match?.periodEnd);
+  return normalizeReceptionExclusions(scopedToSnapshot && snapshot?.receptionScope
     ? { travels: snapshot.receptionScope.excludedTravels, clients: snapshot.receptionScope.excludedClients }
     : null);
 }
