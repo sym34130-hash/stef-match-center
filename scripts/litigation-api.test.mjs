@@ -39,6 +39,10 @@ async function withServer(writes, run) {
       method, headers: { "x-access-code": access, "Content-Type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+  const readSafety = (agency = "LIT", access = "write-lit") =>
+    fetch(`${base}/${agency}/safety`, {
+      headers: { "x-access-code": access },
+    });
   try {
     let ready = false;
     for (let i = 0; i < 100; i++) {
@@ -47,7 +51,7 @@ async function withServer(writes, run) {
       await new Promise(resolve => setTimeout(resolve, 50));
     }
     assert.ok(ready, logs);
-    await run({ directory, request });
+    await run({ directory, request, readSafety });
     assert.equal(logs.includes("write-lit"), false);
   } finally {
     if (child.exitCode === null) {
@@ -148,9 +152,11 @@ test("C3 : aucun litige inventé, CRUD sans suppression, statuts et historique",
 });
 
 test("C3 : écritures interdites sur une production sans stockage garanti", async () => {
-  await withServer(false, async ({ request, directory }) => {
+  await withServer(false, async ({ request, readSafety, directory }) => {
     const initial = await (await request()).json();
     assert.equal(initial.editable, false);
+    const safety = await (await readSafety()).json();
+    assert.equal(safety.editable, true, "Temporary safety date allowed by default must not unlock litigation writes");
     assert.equal((await request("LIT", "write-lit", "PUT",
       { expectedRevision: null, record: litige })).status, 503);
     assert.deepEqual(await fs.readdir(directory), []);
