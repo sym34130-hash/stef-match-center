@@ -122,16 +122,16 @@ try {
         assert.equal(await simulator.getByRole("checkbox").count(), 4);
         const officialScore = simulator.locator(".score-simulator-result").first();
         const simulatedScore = simulator.locator(".score-simulator-result.is-preview");
-        assert.match(await officialScore.innerText(), /2\\s*[–-]\\s*2/, "Official four-KPI score remains 2–2");
-        assert.match(await simulatedScore.innerText(), /2 \\/ 4/);
+        assert.ok((await officialScore.innerText()).includes("2 – 2"), "Official four-KPI score remains 2–2");
+        assert.ok((await simulatedScore.innerText()).includes("2 / 4"));
         await simulator.getByLabel("Possession").uncheck();
-        assert.match(await simulatedScore.innerText(), /2 \\/ 3/, "Remove a missed KPI: denominator must change");
+        assert.ok((await simulatedScore.innerText()).includes("2 / 3"), "Remove a missed KPI: denominator must change");
         await simulator.getByLabel("Passes réussies").uncheck();
-        assert.match(await simulatedScore.innerText(), /2 \\/ 2/, "Both selected KPI are strictly above threshold");
-        assert.match(await officialScore.innerText(), /2\\s*[–-]\\s*2/, "Simulated selections never change official score");
+        assert.ok((await simulatedScore.innerText()).includes("2 / 2"), "Both selected KPI are strictly above threshold");
+        assert.ok((await officialScore.innerText()).includes("2 – 2"), "Simulated selections never change official score");
         await simulator.getByRole("button", { name: "Rétablir les 4 KPI" }).click();
         assert.equal(await simulator.locator('input[type="checkbox"]:checked').count(), 4);
-        assert.match(await simulatedScore.innerText(), /2 \\/ 4/);
+        assert.ok((await simulatedScore.innerText()).includes("2 / 4"));
         const overflow = await simulator.evaluate(el => el.scrollWidth > el.clientWidth + 2);
         assert.equal(overflow, false, "Lot D1 simulator must fit desktop/mobile width");
       }
