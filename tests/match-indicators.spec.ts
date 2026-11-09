@@ -4,6 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 const dailyIndicators = {
   sourceName: "SIE.106J.pdf", importedAt: "2026-09-11T12:00:00Z", referenceDate: "11 septembre 2026",
   expedition: { tonnage: 478, positions: 9999 },
+  distribution: { tonnage: 255 },
   punctuality: { arrivalPunctuality: 80, departurePunctuality: 64.1, destinationPunctuality: 62, temperatureReturn: 92.19 },
   punctualityTargets: { arrivalPunctuality: 85, departurePunctuality: 85, destinationPunctuality: 85, temperatureReturn: 100 },
 };
@@ -47,8 +48,9 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   const viewport = page.locator(".match-indicators-viewport");
   const carousel = page.locator(".match-indicators");
   const value = (id: string) => carousel.locator(`[data-indicator="${id}"] .match-indicator-value`);
-  await expect(carousel.locator(".match-indicator-card")).toHaveCount(8);
-  await expect(value("tonnage")).toHaveText("478 t");
+  await expect(carousel.locator(".match-indicator-card")).toHaveCount(9);
+  await expect(value("tonnage-expedition")).toHaveText("478 t");
+  await expect(value("tonnage-distribution")).toHaveText("255 t");
   await expect(value("positions")).toHaveText(new Intl.NumberFormat("fr-FR").format(excelPositions));
   await expect(value("arrival")).toHaveText("80%");
   await expect(value("departure")).toHaveText("64,1%");
@@ -91,8 +93,8 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   await page.getByRole("button", { name: "Annuler", exact: true }).click();
   await expect(value("injuries")).toHaveText("2");
 
-  await carousel.getByRole("button", { name: "Afficher Tonnage", exact: true }).click();
-  await expect(carousel.locator('[data-indicator="tonnage"]')).toHaveAttribute("data-featured", "");
+  await carousel.getByRole("button", { name: "Afficher Tonnage Expédition", exact: true }).click();
+  await expect(carousel.locator('[data-indicator="tonnage-expedition"]')).toHaveAttribute("data-featured", "");
   await expect.poll(() => viewport.evaluate((el) => el.scrollLeft)).toBeGreaterThan(500);
   await carousel.screenshot({ path: testInfo.outputPath("kpi-pdf.png") });
   const dimensions = await carousel.locator(".match-indicator-card").evaluateAll((cards) => cards.map((card) => ({
@@ -105,7 +107,7 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
 
   // Intermediate scroll positions must give intermediate depths, not a class toggle.
   const depth = await viewport.evaluate(async (el) => {
-    const target = el.querySelector('[data-indicator="tonnage"]') as HTMLElement;
+    const target = el.querySelector('[data-indicator="tonnage-expedition"]') as HTMLElement;
     const before = Number(target.style.getPropertyValue("--indicator-scale"));
     el.scrollLeft += 80;
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
@@ -173,14 +175,16 @@ test("le carrousel distingue un PDF absent, une valeur nulle et un indicateur ab
   await login(page);
   const value = (id: string) => page.locator(`[data-indicator="${id}"] .match-indicator-value`);
   await expect(value("arrival")).toHaveText("PDF à importer");
-  await expect(value("tonnage")).toHaveText("PDF à importer");
-  pdf = { ...dailyIndicators, expedition: { tonnage: 0 }, punctuality: { arrivalPunctuality: 0 } };
+  await expect(value("tonnage-expedition")).toHaveText("PDF à importer");
+  await expect(value("tonnage-distribution")).toHaveText("PDF à importer");
+  pdf = { ...dailyIndicators, distribution: {}, expedition: { tonnage: 0 }, punctuality: { arrivalPunctuality: 0 } };
   await page.reload();
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
-  await expect(value("tonnage")).toHaveText("0 t");
+  await expect(value("tonnage-expedition")).toHaveText("0 t");
+  await expect(value("tonnage-distribution")).toHaveText("Indisponible");
   await expect(value("arrival")).toHaveText("0%");
   await expect(value("departure")).toHaveText("Indisponible");
-  await expect(page.locator(".match-indicator-card")).toHaveCount(8);
+  await expect(page.locator(".match-indicator-card")).toHaveCount(9);
 });
 
 test("le carrousel KPI revient depuis la dernière vignette sur un écran très large", async ({ page }) => {
@@ -200,11 +204,11 @@ test("le carrousel KPI revient depuis la dernière vignette sur un écran très 
   await viewport.focus();
   await page.keyboard.press("End");
   await expect(carousel.getByRole("button", { name: "Indicateurs suivants", exact: true })).toBeDisabled();
-  await expect(carousel.locator(".match-indicators-navigation > span")).toHaveText("9 / 9");
+  await expect(carousel.locator(".match-indicators-navigation > span")).toHaveText("10 / 10");
   const endScroll = await viewport.evaluate((element) => element.scrollLeft);
   await carousel.getByRole("button", { name: "Indicateurs précédents", exact: true }).click();
   await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeLessThan(endScroll - 20);
-  await expect(carousel.locator(".match-indicators-navigation > span")).toHaveText("7–8 / 9");
+  await expect(carousel.locator(".match-indicators-navigation > span")).toHaveText("8–9 / 10");
   await expect(carousel.getByRole("button", { name: "Indicateurs suivants", exact: true })).not.toBeDisabled();
 });
 
@@ -265,11 +269,11 @@ test("le Mercato occupe la première vignette KPI et affiche le profil sélectio
   await login(page);
   const carousel = page.locator(".match-indicators");
   const viewport = page.locator(".match-indicators-viewport");
-  await expect(carousel.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(9);
+  await expect(carousel.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(10);
   await page.getByRole("button", { name: "Afficher le Mercato", exact: true }).click();
   await expect(page.locator(".mercato-carousel-card")).toBeVisible();
   const visibleIndicators = await viewport.evaluate((el) => el.clientWidth >= 640 ? 2 : 1);
-  await expect(page.locator(".match-indicators-navigation > span")).toHaveText(visibleIndicators === 2 ? "1–2 / 9" : "1 / 9");
+  await expect(page.locator(".match-indicators-navigation > span")).toHaveText(visibleIndicators === 2 ? "1–2 / 10" : "1 / 10");
   await expect(viewport.locator(".match-indicators-track > .match-indicator-slide").first()).toHaveAttribute("data-indicator", "mercato");
   const activeMercatoSlide = page.locator('.mercato-kpi-slide:not([aria-hidden="true"])');
   await expect(activeMercatoSlide.locator(".mercato-kpi-flocage")).toHaveText("CAMILLE MARTIN");
@@ -295,7 +299,7 @@ test("le Mercato occupe la première vignette KPI et affiche le profil sélectio
   await expect(nextMercatoSlide.locator(".mercato-kpi-profile")).toHaveText("Homme");
   await expect(nextMercatoSlide.locator(".mercato-kpi-photo")).toHaveAttribute("data-profile", "male");
   await page.getByRole("button", { name: "Indicateurs suivants", exact: true }).click();
-  await expect(page.locator(".match-indicators-navigation > span")).toHaveText(visibleIndicators === 2 ? "2–3 / 9" : "2 / 9");
+  await expect(page.locator(".match-indicators-navigation > span")).toHaveText(visibleIndicators === 2 ? "2–3 / 10" : "2 / 10");
   await expect(viewport.locator('[data-indicator="performance"]')).toHaveAttribute("data-featured", "");
 });
 
@@ -352,9 +356,56 @@ test("le carrousel reste cadré du petit mobile au grand écran et dans chaque l
     await page.locator(`.league-card.${tone} .league-select-button`).click();
     await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
     await expect(page.locator(`.app-shell.league-${league}`)).toBeVisible();
-    await expect(page.locator('[data-indicator="tonnage"] .match-indicator-value')).toHaveText("478 t");
+    await expect(page.locator('[data-indicator="tonnage-expedition"] .match-indicator-value')).toHaveText("478 t");
+    await expect(page.locator('[data-indicator="tonnage-distribution"] .match-indicator-value')).toHaveText("255 t");
     await page.locator(".match-indicators").getByRole("button", { name: "Afficher Ponctualité arrivage", exact: true }).click();
     await expect(page.locator('[data-indicator="arrival"]')).toHaveAttribute("data-featured", "");
     await page.locator(".match-indicators").screenshot({ path: testInfo.outputPath(`kpi-${league}.png`) });
   }
+});
+
+test("Lot A: Distribution et Expédition sont deux cartes indépendantes, en journée comme de nuit", async ({ page }) => {
+  let selected = ["tonnage-distribution", "tonnage-expedition", "positions"];
+  let isNight = false;
+  await page.route("**/api/agencies/058/snapshot**", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.snapshot.dailyIndicators = dailyIndicators;
+    body.snapshot.match.periodStart = isNight ? "21:30" : "13:00";
+    body.snapshot.match.periodEnd = isNight ? "06:30" : "22:30";
+    await route.fulfill({ response, json: body });
+  });
+  await page.route("**/api/agencies/058/causerie**", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ plan: { mercato: "", visibleIndicators: selected } }),
+    });
+  });
+  await login(page);
+  const carousel = page.locator(".match-indicators");
+  const assertTonnages = async (distribution: boolean, expedition: boolean, count: number) => {
+    await expect(carousel.locator(".match-indicator-card")).toHaveCount(count);
+    if (distribution) await expect(carousel.locator('[data-indicator="tonnage-distribution"] .match-indicator-value')).toHaveText("255 t");
+    else await expect(carousel.locator('[data-indicator="tonnage-distribution"]')).toHaveCount(0);
+    if (expedition) await expect(carousel.locator('[data-indicator="tonnage-expedition"] .match-indicator-value')).toHaveText("478 t");
+    else await expect(carousel.locator('[data-indicator="tonnage-expedition"]')).toHaveCount(0);
+  };
+  await assertTonnages(true, true, 3);
+
+  isNight = true;
+  await page.reload();
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  await assertTonnages(true, true, 3);
+
+  selected = ["tonnage-distribution", "positions"];
+  await page.reload();
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  await assertTonnages(true, false, 2);
+
+  selected = ["tonnage-expedition", "positions"];
+  await page.reload();
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  await assertTonnages(false, true, 2);
+  await expect(page.locator(".match-score-bubble.pass-score-bubble strong")).toHaveText("71,9%");
 });

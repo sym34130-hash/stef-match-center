@@ -140,9 +140,37 @@ Les destinations ne participent à aucun calcul KPI.
 
 ## Cartes du carrousel journalier
 
-Huit cartes de base : performance d'équipe, blessures, tonnage, positions,
-ponctualités arrivage/départ/destination et température retour ramasse.
-Une carte Mercato supplémentaire apparaît uniquement si le brief contient
-au moins un entrant. Le contrat est donc huit cartes sans Mercato, neuf avec
-Mercato, pas neuf systématiquement. La recette responsive utilise une fixture
-sans entrant ; les tests Mercato conservent explicitement le cas à neuf cartes.
+Neuf cartes de base : performance d'équipe, blessures, tonnage Distribution,
+tonnage Expédition, positions, ponctualités arrivage/départ/destination et
+température retour ramasse. Une carte Mercato supplémentaire apparaît uniquement
+si le brief contient au moins un entrant. Le contrat est donc neuf cartes sans
+Mercato, dix avec Mercato (en l'absence de personnalisation).
+Les deux tonnages s'affichent quelle que soit la plage horaire ; chaque carte peut
+être masquée indépendamment. La recette responsive et les tests Mercato
+utilisent ces effectifs révisés.
+
+
+## Lot A — Affichage des indicateurs du brief et tonnage 106J
+
+Le parseur 106J conserve séparément `expedition.tonnage` (valeur historique)
+et `distribution.tonnage` (nouvelle donnée). Les valeurs ne sont pas
+additionnées ni substituées l'une à l'autre. En l'absence de la ligne demandée,
+l'indicateur est indisponible, sans conversion en zéro.
+
+Deux cartes indépendantes affichent systématiquement les sections « Distribution »
+et « Expédition » du PDF 106J, en journée comme de nuit, sans sélection automatique
+de source selon la plage horaire. Les deux sections peuvent être masquées
+individuellement dans les préférences d'affichage du brief ; une ligne absente
+reste indisponible et n'est jamais remplacée par l'autre ligne.
+
+`visibleIndicators` conserve la liste des cartes autorisées pendant le brief.
+Les anciennes causeries affichent les neuf cartes par défaut. Une carte au
+minimum est conservée. Le masquage n'affecte aucun KPI, score, export ni
+calcul, et ne supprime aucune information des sources. Les choix ne sont
+appliqués qu'au carrousel « Le collectif en chiffres » ; les cartes Mercato
+restent dépendantes de la présence d'entrants.
+
+Compatibilité : l'ancien identifiant de visibilité `tonnage` est migré en
+`tonnage-distribution` + `tonnage-expedition` lorsqu'il était actif.
+S'il était masqué, les deux cartes restent masquées. Le champ historique
+`tonnageActivity`, devenu inutile, n'est plus appliqué.

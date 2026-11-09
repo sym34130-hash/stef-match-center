@@ -20,7 +20,7 @@ export function parse106jText(rawText, sourceName, options = {}) {
   // The upload timestamp belongs to the upload transaction, not the PDF parser.
   // Legacy callers without metadata retain null rather than inventing a new import date.
   const importedAt = options.uploadedAt ?? null;
-  const indicators = { sourceName, importedAt, referenceDate: findReferenceDate(text), agencyCode: findReportAgencyCode(text), punctuality: {}, punctualityTargets: {}, expedition: {} };
+  const indicators = { sourceName, importedAt, referenceDate: findReferenceDate(text), agencyCode: findReportAgencyCode(text), punctuality: {}, punctualityTargets: {}, expedition: {}, distribution: {} };
 
   for (const [key, label] of PERFORMANCE_ROWS) {
     const result = findSitePercent(text, label);
@@ -30,10 +30,12 @@ export function parse106jText(rawText, sourceName, options = {}) {
     }
   }
 
-  const tonnage = findExpeditionTonnage(text);
+  const tonnage = findActivityTonnage(text, "expedition");
   if (tonnage !== null) indicators.expedition.tonnage = tonnage;
+  const distributionTonnage = findActivityTonnage(text, "distribution");
+  if (distributionTonnage !== null) indicators.distribution.tonnage = distributionTonnage;
 
-  if (Object.keys(indicators.punctuality).length === 0 && Object.keys(indicators.expedition).length === 0) {
+  if (Object.keys(indicators.punctuality).length === 0 && Object.keys(indicators.expedition).length === 0 && Object.keys(indicators.distribution).length === 0) {
     throw new Error("Le PDF ne contient pas les indicateurs attendus du rapport SIE.106J.");
   }
   if (Object.keys(indicators.punctualityTargets).length === 0) delete indicators.punctualityTargets;
@@ -58,8 +60,9 @@ function findSitePercent(text, label) {
   return { value, target: Number.isFinite(target) && target >= 0 && target <= 100 ? target : null };
 }
 
-function findExpeditionTonnage(text) {
-  const match = text.match(/expedition\s*tonnage\s*t\s*(\d+(?: \d{3})*(?:[.,]\d+)?)(?=\s*(?:[+-]|positions|$))/);
+function findActivityTonnage(text, activity) {
+  // The activity label is supplied by our code, not by the untrusted PDF.
+  const match = text.match(new RegExp(activity + "\\s*tonnage\\s*t\\s*(\\d+(?: \\d{3})*(?:[.,]\\d+)?)(?=\\s*(?:[+-]|positions|$))"));
   if (!match) return null;
   const value = Number(match[1].replace(/\s/g, "").replace(",", "."));
   return Number.isFinite(value) ? value : null;

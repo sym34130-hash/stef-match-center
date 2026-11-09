@@ -146,12 +146,12 @@ for (const screen of ["Brief équipe", "Feuille de match"]) {
     }
     await expect(page.locator(".tv-plan-column.attack .tv-plan-content")).toHaveText("Texte sauvegardé");
     await page.getByRole("button", { name: "Écrire", exact: true }).click();
-    const field = page.getByLabel("SAV, contenu du brief");
+    const field = page.getByLabel("Service client, contenu du brief");
     await field.fill("Brouillon non enregistré");
     await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText("Une capture dépasse");
     await expect(field).toHaveValue("Brouillon non enregistré");
-    await expect(page.getByRole("button", { name: "Supprimer la capture SAV 1", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Supprimer la capture Service client 1", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Annuler", exact: true }).click();
     await expect(page.locator(".tv-plan-column.attack .tv-plan-content")).toHaveText("Texte sauvegardé");
   });

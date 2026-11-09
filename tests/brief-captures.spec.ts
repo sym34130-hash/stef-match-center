@@ -41,7 +41,7 @@ test("captures du brief : texte prioritaire, galerie indépendante et édition c
         if (screen === "fullscreen") await page.getByRole("button", { name: "Mode plein écran", exact: true }).click();
       }
       await page.getByRole("button", { name: "Écrire", exact: true }).click();
-      for (const label of ["SAV", "EXPÉDITION / RAMASSE & EMBALLAGE", "SST"]) {
+      for (const label of ["Service client", "EXPÉDITION / RAMASSE & EMBALLAGE", "SST"]) {
         const column = page.locator(".tv-plan-column").filter({ has: page.getByLabel(`${label}, contenu du brief`) });
         await column.evaluate((element) => Promise.all(element.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => undefined))));
         while (await column.locator(".tv-plan-image-item").count()) await column.getByRole("button", { name: /^Supprimer la capture/ }).last().click();
@@ -80,16 +80,16 @@ test("captures du brief : texte prioritaire, galerie indépendante et édition c
           }
         }
       }
-      await page.getByLabel("SAV, capture d'écran").setInputFiles([image,image,image]);
+      await page.getByLabel("Service client, capture d'écran").setInputFiles([image,image,image]);
       await expect(page.locator(".tv-plan-image-item")).toHaveCount(3);
       await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
       await expect(page.getByRole("button", { name: "Écrire", exact: true })).toBeVisible();
       await expect(page.locator(".tv-plan-image-gallery img")).toHaveCount(3);
       await expect(page.locator(".tv-plan-content").first()).toContainText("Consigne 1");
       await page.getByRole("button", { name: "Écrire", exact: true }).click();
-      const original = await page.getByLabel("SAV, contenu du brief").inputValue();
-      await page.getByLabel("SAV, contenu du brief").fill("Modification annulée");
-      await page.getByRole("button", { name: "Supprimer la capture SAV 1", exact: true }).click();
+      const original = await page.getByLabel("Service client, contenu du brief").inputValue();
+      await page.getByLabel("Service client, contenu du brief").fill("Modification annulée");
+      await page.getByRole("button", { name: "Supprimer la capture Service client 1", exact: true }).click();
       await page.getByRole("button", { name: "Annuler", exact: true }).click();
       await expect(page.locator(".tv-plan-content").first()).toHaveText(original);
       await expect(page.locator(".tv-plan-image-gallery img")).toHaveCount(3);

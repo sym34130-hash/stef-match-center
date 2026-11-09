@@ -78,6 +78,97 @@ try {
     const after = await fetch(`http://127.0.0.1:${apiPort}/api/agencies/01K/snapshot`,
       { headers: { "x-access-code": "INTEGRATION-01K" } });
     assert.equal(after.status, 200, "Confirmed import must persist the snapshot");
+    // Lot A: the two 106J tonnages are distinct, regardless of operating period.
+    const importedSnapshot = (await after.json()).snapshot;
+    const causerieUrl = `http://127.0.0.1:${apiPort}/api/agencies/01K/causerie`;
+    const causerieHeaders = { "x-access-code": "INTEGRATION-01K" };
+    const matchDate = encodeURIComponent(importedSnapshot.match.date);
+    const readBrief = async () => {
+      const response = await fetch(`${causerieUrl}?matchDate=${matchDate}`, { headers: causerieHeaders });
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+    const currentPlan = await readBrief();
+    const savePlanResponse = await fetch(causerieUrl, {
+      method: "POST",
+      headers: { ...causerieHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        matchDate: importedSnapshot.match.date,
+        expectedRevision: currentPlan.causerieRevision,
+        plan: { visibleIndicators: ["tonnage-distribution", "tonnage-expedition", "positions"] },
+      }),
+    });
+    assert.equal(savePlanResponse.status, 200, "Brief preferences must be persisted by the API");
+    const savedPlan = (await savePlanResponse.json()).plan;
+    assert.deepEqual(savedPlan.visibleIndicators, ["tonnage-distribution", "tonnage-expedition", "positions"]);
+
+    // Synthetic PDF indicators are injected only into this isolated browser test.
+    await page.route("**/api/agencies/01K/snapshot**", async route => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.snapshot.dailyIndicators = {
+        sourceName: "synthetic-106j.pdf",
+        agencyCode: "01K",
+        referenceDate: "17 septembre 2026",
+        importedAt: null,
+        expedition: { tonnage: 478 },
+        distribution: { tonnage: 255 },
+        punctuality: {},
+      };
+      await route.fulfill({ response, json: body });
+    });
+
+    const assertTonnage = async (distribution, expedition, cardCount) => {
+      await page.waitForFunction(expected => document.querySelectorAll(".match-indicator-card").length === expected, cardCount, { timeout: 15000 });
+      assert.equal(await page.locator('[data-indicator="tonnage-distribution"]').count(), distribution === null ? 0 : 1);
+      assert.equal(await page.locator('[data-indicator="tonnage-expedition"]').count(), expedition === null ? 0 : 1);
+      if (distribution !== null) {
+        assert.equal(await page.locator('[data-indicator="tonnage-distribution"] .match-indicator-value').innerText(), distribution);
+      }
+      if (expedition !== null) {
+        assert.equal(await page.locator('[data-indicator="tonnage-expedition"] .match-indicator-value').innerText(), expedition);
+      }
+    };
+
+    await page.reload();
+    await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+    await assertTonnage("255 t", "478 t", 3);
+    assert.equal(await page.locator('[data-indicator="performance"]').count(), 0);
+    console.log(`Browser: both 106J tonnages displayed together at ${viewport.width}px: OK`);
+
+    const navigation = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
+    await navigation.getByRole("button", { name: "Aller à Brief équipe" }).click();
+    const brief = page.locator(".match-brief-slide .tv-action");
+    await brief.getByRole("button", { name: "Écrire" }).click();
+    assert.equal((await brief.locator(".tv-plan-column.attack > b").textContent()).trim(), "Service client");
+    const toggle = (label) => brief.locator(".tv-brief-indicator-options label").filter({ hasText: label }).locator("input");
+    await toggle("Tonnage Distribution").uncheck();
+    await toggle("Ponctualité arrivage").check();
+    await brief.getByRole("button", { name: "Enregistrer", exact: true }).click();
+    await brief.getByRole("button", { name: "Écrire" }).waitFor({ state: "visible" });
+    let updated = await readBrief();
+    assert.deepEqual(updated.plan.visibleIndicators, ["tonnage-expedition", "positions", "arrival"]);
+    await navigation.getByRole("button", { name: "Aller à Coup de sifflet final" }).click();
+    await assertTonnage(null, "478 t", 3);
+    await page.reload();
+    await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+    await assertTonnage(null, "478 t", 3);
+
+    // Reverse the selection to prove both toggles work independently.
+    await navigation.getByRole("button", { name: "Aller à Brief équipe" }).click();
+    await brief.getByRole("button", { name: "Écrire" }).click();
+    await toggle("Tonnage Distribution").check();
+    await toggle("Tonnage Expédition").uncheck();
+    await brief.getByRole("button", { name: "Enregistrer", exact: true }).click();
+    await brief.getByRole("button", { name: "Écrire" }).waitFor({ state: "visible" });
+    updated = await readBrief();
+    assert.deepEqual(updated.plan.visibleIndicators, ["tonnage-distribution", "positions", "arrival"]);
+    await navigation.getByRole("button", { name: "Aller à Coup de sifflet final" }).click();
+    await assertTonnage("255 t", null, 3);
+    await page.reload();
+    await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+    await assertTonnage("255 t", null, 3);
+    console.log(`Browser: independent KPI toggles, Service client, saves and reloads at ${viewport.width}px: OK`);
     assert.deepEqual(errors, [], `Unexpected React errors at ${viewport.width}px`);
     console.log(`Browser: login, upload, agency confirmation, completed import at ${viewport.width}px: OK`);
     await page.close();

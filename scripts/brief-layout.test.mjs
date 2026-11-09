@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout } from "../server/brief-layout.mjs";
+import { BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, migrateBriefLayout, normalizeBriefIndicators } from "../server/brief-layout.mjs";
 
 test("Brief ancien : fusion des textes sans mutation de la source", () => {
   const before = { attack: ["A"], midfield: ["B"], defense: ["C"], coach: { tactic: "inchangé" }, mercato: "inchangé" };
@@ -46,4 +46,27 @@ test("Brief absent : SST et captures restent vides", () => {
   assert.equal(migrated.briefLayoutVersion, 2);
   assert.deepEqual(migrated.defense, []);
   assert.deepEqual(migrated.attachments.defense, []);
+});
+
+test("Brief : les deux tonnages sont visibles par défaut", () => {
+  assert.deepEqual(BRIEF_INDICATOR_IDS, [
+    "performance", "injuries", "tonnage-distribution", "tonnage-expedition",
+    "positions", "arrival", "departure", "destination", "temperature",
+  ]);
+  assert.deepEqual(normalizeBriefIndicators(undefined), BRIEF_INDICATOR_IDS);
+  assert.deepEqual(normalizeBriefIndicators([]), BRIEF_INDICATOR_IDS);
+  assert.deepEqual(normalizeBriefIndicators(["unknown"]), BRIEF_INDICATOR_IDS);
+});
+
+test("Brief : les deux cartes Tonnage sont masquables indépendamment", () => {
+  assert.deepEqual(normalizeBriefIndicators(["tonnage-distribution", "positions"]), ["tonnage-distribution", "positions"]);
+  assert.deepEqual(normalizeBriefIndicators(["tonnage-expedition", "positions"]), ["tonnage-expedition", "positions"]);
+  assert.deepEqual(normalizeBriefIndicators(["tonnage-expedition", "tonnage-distribution"]), ["tonnage-distribution", "tonnage-expedition"]);
+  assert.deepEqual(normalizeBriefIndicators(["positions"]), ["positions"]);
+});
+
+test("Brief : compatibilité avec l'ancien identifiant tonnage", () => {
+  assert.deepEqual(normalizeBriefIndicators(["tonnage", "positions"]), ["tonnage-distribution", "tonnage-expedition", "positions"]);
+  assert.deepEqual(normalizeBriefIndicators(["tonnage", "tonnage-expedition", "arrival"]), ["tonnage-distribution", "tonnage-expedition", "arrival"]);
+  assert.deepEqual(normalizeBriefIndicators(["arrival", "positions"]), ["positions", "arrival"]);
 });
