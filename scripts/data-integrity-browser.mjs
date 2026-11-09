@@ -205,8 +205,9 @@ try {
     assert.deepEqual(baselineReception.receptionScope.availableClients.map(item => item.code), ["TRI TEST"]);
     await page.getByRole("navigation", { name: "Navigation de la feuille de match" })
       .getByRole("button", { name: "Aller à Statistiques du match" }).click();
-    await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % duels gagnés" }).click();
     const scopePanel = page.locator(".reception-scope-control");
+    assert.equal(await scopePanel.evaluate(element => Boolean(element.closest(".operational-charts-carousel"))), false,
+      "The exclusion controls must sit outside the horizontally swiping chart");
     const excludedRows = scopePanel.locator(".reception-scope-exclusion");
     const addToggle = scopePanel.locator(".reception-scope-add > summary");
 
@@ -263,7 +264,6 @@ try {
     await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
     await page.getByRole("navigation", { name: "Navigation de la feuille de match" })
       .getByRole("button", { name: "Aller à Statistiques du match" }).click();
-    await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % duels gagnés" }).click();
     const reloadedRow = page.locator(".reception-scope-exclusion").filter({ hasText: "TRI TEST" });
     await reloadedRow.getByText("Client de tri hors périmètre").waitFor({ state: "visible" });
     assert.equal(await page.locator(".reception-scope-add").getAttribute("open"), null);
