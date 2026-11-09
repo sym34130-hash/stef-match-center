@@ -169,16 +169,13 @@ Le filtre client nécessite une colonne client exploitable dans l'onglet `Donné
 Les règles de calcul restent conditionnées aux fichiers Excel/PDF effectivement présents dans l'agence. Sur Render Free, les exclusions enregistrées dans le stockage local sont aussi soumises au risque de perte au redéploiement.
 
 
-### Lot C (étape 1) — contrôle de cohérence des cartons jaunes
+### Lot C (étape 1) — comptabilisation des cartons jaunes calculés
 
-Le **décompte officiel affiché** provient de `Feuille de match!AK:AN` dans l'Excel importé, filtré par plage horaire et exclusions globales. Les colonnes contiennent Nom, Heure carton, Faute et Voyage. Ce compteur ne déduit **jamais** un carton des seuls libellés du TCD intermédiaire (la colonne `TCD PPT!Y` contient un texte « Chargement à quai » même pour des lignes qui ne sont pas des fautes attribuées).
+Le décompte des cartons jaunes regroupe la liste de `Feuille de match!AK:AN` et les fautes calculées dans les matrices, **y compris celles absentes de la synthèse Excel**. Un rapprochement par opérateur, voyage et motif, tenant compte des occurrences, évite tout double comptage. La plage horaire et les exclusions globales sont appliquées.
 
-Le Lot C compare les cartons attribués aux deux matrices intermédiaires :
-- `X!II:IM` : cas potentiels « Pas de prise de temp » avec opérateur, voyage et horaire exploitables ;
-- `TCD PPT!P:Y` : cas de « Chargement à quai » pour lesquels la colonne `X` (Attaquant calculé) est renseignée, **pas** la seule colonne `Y`.
+- `X!II:IM` : cartons « Pas de prise de temp » identifiés avec opérateur, voyage et horaire exploitables.
+- `TCD PPT!P:Y` : cartons « Chargement à quai » uniquement si la colonne `X` (attaquant calculé) est renseignée ; le texte fixe en colonne `Y` ne suffit jamais.
 
-Les candidats complets absents de la liste finale sont présentés **« à vérifier »** dans le Coach et signalés par un avertissement d'import ; ils ne sont pas ajoutés aux cartons réellement attribués, ni utilisés pour modifier les KPI du score. L'interface ventile les cartons confirmés par motif.
+Dans `Matrice QFC.xlsx` (non stocké dans le dépôt), la synthèse présente **14 cartons jaunes** et la matrice de température comporte **18 cas qualifiés** : les quatre omissions sont **réintégrées**, pour un total de **18 cartons**, sans doublon. Le Coach distingue le total par motif et peut afficher les cartons récupérés depuis la matrice.
 
-Sur le classeur d'exemple `Matrice QFC.xlsx` (non commité dans le dépôt), la feuille finale comporte **14 cartons jaunes** pour température, tandis que la matrice `X` comporte **18 cas avec opérateur et horaire** ; les quatre cas supplémentaires nécessitent validation métier. Le fichier source n'est jamais enregistré dans la PR.
-
-**Non inclus dans cette étape :** calcul autonome des sanctions à partir des opérations brutes, compteur jours sans AT et suivi des litiges. Ces fonctions demandent une validation métier spécifique. L'évolution n'a aucun impact sur les exclusions ciblées des Lots A/B ni sur les quatre KPI du score.
+**Invariants :** aucune modification des quatre KPI du score, des exclusions ciblées Lots A/B, des litiges ou du compteur sans AT. Pas d'import en production par cette PR. Render Free conserve son risque existant de perte des données locales au redéploiement.
