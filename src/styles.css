@@ -21489,3 +21489,32 @@ body.match-celebration-active .main-area {
   .administrator-active-badge strong { font-size: 18px; }
   .coach-league-badge strong { font-size: 15px; }
 }
+
+
+/* Lot A: brief-specific visibility settings, without changing calculation inputs. */
+.tv-brief-display-settings {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  margin: 0 0 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 12px;
+  background: rgba(13, 31, 48, 0.045);
+}
+.tv-brief-display-settings > div:first-child { display: grid; gap: 0.25rem; }
+.tv-brief-display-settings strong { font-weight: 750; }
+.tv-brief-display-settings small { font-size: 0.85rem; }
+.tv-brief-indicator-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));
+  gap: 0.65rem;
+}
+.tv-brief-indicator-options label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+.tv-brief-indicator-options input { flex: none; width: 17px; height: 17px; accent-color: #1269a0; }
+.tv-brief-indicator-options input:disabled { cursor: not-allowed; }
+.tv-brief-tonnage-activity { display: grid; gap: 0.4rem; max-width: 460px; }
+.tv-brief-tonnage-activity select {
+  width: 100%; min-height: 40px; padding: 0.45rem 0.65rem;
+  border: 1px solid rgba(148, 163, 184, 0.55); border-radius: 8px;
+  background: var(--surface, #fff); color: #10283f;
+}
