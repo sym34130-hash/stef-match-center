@@ -21744,3 +21744,14 @@ body.match-celebration-active .main-area {
     max-height: min(48vh, 420px);
   }
 }
+
+
+/* Chromium and other supporting browsers size the motive to its final wrapped
+   content, rather than relying on the pre-layout scrollHeight fallback. */
+@supports (field-sizing: content) {
+  .reception-scope-editor textarea {
+    field-sizing: content;
+    height: auto !important;
+    overflow-y: hidden;
+  }
+}
