@@ -88,8 +88,13 @@ lignes `Expédition` et `Distribution`. Le nombre de positions reste calculé
 exclusivement depuis l'Excel importé. Les lignes `Total`, `OT` et les autres
 indicateurs PDF ne sont pas utilisées. Le carrousel affiche deux
 cartes indépendantes « Tonnage Distribution » et « Tonnage Expédition »,
-de jour comme de nuit. Chaque carte peut être masquée séparément dans
-la personnalisation du brief, sans modifier les calculs KPI.
+de jour comme de nuit. Chaque carte peut être masquée séparément via
+« Personnaliser les indicateurs » directement au-dessus du carrousel
+« Le collectif en chiffres », ou dans l'édition de « Brief équipe ».
+La sélection concerne exclusivement les neuf cartes collectives ; les quatre
+KPI du score et les graphiques de statistiques ne sont pas affectés.
+Un accès autorisé à modifier la causerie est nécessaire pour enregistrer
+ce choix par agence et par journée, sans modifier les calculs KPI.
 
 Le carrousel `Le collectif en chiffres` réunit performance, effectif réel,
 blessures, tonnage, positions et quatre taux du PDF. Les taux restent journaliers
