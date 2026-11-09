@@ -49,8 +49,8 @@ try {
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([
     ["Opérateur", "Date heure de début d'opération", "Type d'opération",
       "N° Position", "Code Voyage", "Agence Segment", "Type Segment",
-      "Filtre opérateur", "Filtre heure", "Poste", "Poz non zonées", "DZ", "Duels gagnés"],
-    ["OP TEST", "17/09/2026 22:00:00", "DECHG", "P001", "TRIP-001", "05R", "Test", "", "", "", "", "", ""],
+      "Filtre opérateur", "Filtre heure", "Poste", "Poz non zonées", "DZ", "Duels gagnés", "Client de tri"],
+    ["OP TEST", "17/09/2026 22:00:00", "DECHG", "P001", "TRIP-001", "05R", "Test", "", "", "", "", "", "", "TRI TEST"],
   ]), "Données");
   const buffer = XLSX.write(book, { type: "buffer", bookType: "xlsx" });
   browser = await chromium.launch({ headless: true });
@@ -192,6 +192,49 @@ try {
     await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
     await assertTonnage(null, "478 t", 3);
     console.log(`Browser: direct nine-card carousel editor, safe save and reload at ${viewport.width}px: OK`);
+    // Lot B: reception-only travel and tri-client filtering, with an audit
+    // trail and unchanged global metrics, in a strictly isolated agency.
+    const readSnapshot = async () => {
+      const response = await fetch(`http://127.0.0.1:${apiPort}/api/agencies/01K/snapshot`, { headers: causerieHeaders });
+      assert.equal(response.status, 200);
+      return (await response.json()).snapshot;
+    };
+    const baselineReception = await readSnapshot();
+    assert.equal(baselineReception.receptionScope.clientColumnPresent, true);
+    assert.deepEqual(baselineReception.receptionScope.availableTravels, ["TRIP-001"]);
+    assert.deepEqual(baselineReception.receptionScope.availableClients.map(item => item.code), ["TRI TEST"]);
+    await page.getByRole("navigation", { name: "Navigation de la feuille de match" })
+      .getByRole("button", { name: "Aller à Statistiques du match" }).click();
+    await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % duels gagnés" }).click();
+    const scopePanel = page.locator(".reception-scope-control");
+    await scopePanel.locator("summary").click();
+    assert.match(await scopePanel.innerText(), /Seuls les duels de réception/);
+    await scopePanel.getByLabel("Voyage concerné").selectOption("TRIP-001");
+    await scopePanel.getByLabel("Motif de l'exclusion").first().fill("Double déchargement atypique");
+    await scopePanel.getByRole("button", { name: "Exclure ce voyage de la réception" }).click();
+    await page.waitForFunction(() => {
+      const node = document.querySelector(".reception-scope-control > summary strong");
+      return node?.textContent?.includes("1 exclusion");
+    }, null, { timeout: 15000 });
+    const travelFiltered = await readSnapshot();
+    assert.deepEqual(travelFiltered.receptionScope.excludedTravels.map(item => item.code), ["TRIP-001"]);
+    assert.equal(travelFiltered.summary.operations, baselineReception.summary.operations);
+    assert.equal(travelFiltered.summary.positions, baselineReception.summary.positions);
+    assert.equal(travelFiltered.summary.duelTotal, baselineReception.summary.duelTotal);
+    await scopePanel.getByRole("button", { name: "Réintégrer en réception" }).click();
+    await page.waitForFunction(() => document.querySelector(".reception-scope-control > summary strong")?.textContent?.includes("0 exclusion"), null, { timeout: 15000 });
+    const restoredReception = await readSnapshot();
+    assert.deepEqual(restoredReception.receptionScope.excludedTravels, []);
+    await scopePanel.getByLabel("Client identifié dans l'Excel").selectOption("TRI TEST");
+    await scopePanel.getByLabel("Motif de l'exclusion").last().fill("Client de tri hors périmètre");
+    await scopePanel.getByRole("button", { name: "Exclure ce client de la réception" }).click();
+    await page.waitForFunction(() => document.querySelector(".reception-scope-control > summary strong")?.textContent?.includes("1 exclusion"), null, { timeout: 15000 });
+    const clientFiltered = await readSnapshot();
+    assert.deepEqual(clientFiltered.receptionScope.excludedClients.map(item => item.code), ["TRI TEST"]);
+    assert.equal(clientFiltered.summary.operations, baselineReception.summary.operations);
+    const state = JSON.parse(await fs.readFile(path.join(root, "01K", "reception-exclusions.json"), "utf8"));
+    assert.equal(Object.values(state.scopes)[0].history.length, viewport.width === 1366 ? 3 : 6);
+    console.log(`Browser: scoped reception voyage, tri client, restore, audit at ${viewport.width}px: OK`);
     assert.deepEqual(errors, [], `Unexpected React errors at ${viewport.width}px`);
     console.log(`Browser: login, upload, agency confirmation, completed import at ${viewport.width}px: OK`);
     await page.close();
