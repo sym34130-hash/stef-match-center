@@ -146,3 +146,26 @@ Une carte Mercato supplémentaire apparaît uniquement si le brief contient
 au moins un entrant. Le contrat est donc huit cartes sans Mercato, neuf avec
 Mercato, pas neuf systématiquement. La recette responsive utilise une fixture
 sans entrant ; les tests Mercato conservent explicitement le cas à neuf cartes.
+
+
+## Lot A — Affichage des indicateurs du brief et tonnage 106J
+
+Le parseur 106J conserve séparément `expedition.tonnage` (valeur historique)
+et `distribution.tonnage` (nouvelle donnée). Les valeurs ne sont pas
+additionnées ni substituées l'une à l'autre. En l'absence de la ligne demandée,
+l'indicateur est indisponible, sans conversion en zéro.
+
+Le carrousel utilise une préférence de tonnage conservée dans la causerie de
+l'agence et de la journée : `auto`, `expedition`, `distribution`.
+En mode automatique, une plage traversant minuit ou commençant avant 08:00
+affiche Distribution ; les autres plages affichent Expédition.
+Cette heuristique sert uniquement à l'affichage et doit être validée avec les
+responsables d'exploitation ; un choix explicite permet de corriger les
+plages particulières. Sans préférence sauvegardée, le mode est `auto`.
+
+`visibleIndicators` conserve la liste des cartes autorisées pendant le brief.
+Les anciennes causeries affichent les huit cartes par défaut. Une carte au
+minimum est conservée. Le masquage n'affecte aucun KPI, score, export ni
+calcul, et ne supprime aucune information des sources. Les choix ne sont
+appliqués qu'au carrousel « Le collectif en chiffres » ; les cartes Mercato
+restent dépendantes de la présence d'entrants.
