@@ -24,7 +24,7 @@ function expandReasonField(event: FormEvent<HTMLTextAreaElement>) {
   const field = event.currentTarget;
   field.style.height = "auto";
   // Reasons wrap while typing; cap excessive growth without hiding the text.
-  field.style.height = `${Math.min(field.scrollHeight + 2, 220)}px`;
+  field.style.height = `${field.scrollHeight + 2}px`;
 }
 
 function formatExclusionDate(value: string | null) {
