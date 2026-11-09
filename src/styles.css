@@ -21585,7 +21585,7 @@ body.match-celebration-active .main-area {
 .reception-scope-control p.reception-scope-feedback {
   font-size: 12px; font-weight: 900; color: #145647;
 }
-.reception-scope-add { border-top: 1px solid #b1cbdc; }
+.reception-scope-add { border-bottom: 1px solid #b1cbdc; }
 .reception-scope-add > summary {
   display: flex; align-items: center; gap: 9px; padding: 13px 16px;
   background: #e7f3fb; color: #103c59; font-size: 13px; font-weight: 900;
