@@ -88,6 +88,18 @@ type MatchKpiCopy = {
   expectedPlayersValue: string;
 };
 
+const BRIEF_INDICATOR_OPTIONS: ReadonlyArray<readonly [string, string]> = [
+  ["performance", "Performance d'équipe"],
+  ["injuries", "Blessures A.T"],
+  ["tonnage-distribution", "Tonnage Distribution"],
+  ["tonnage-expedition", "Tonnage Expédition"],
+  ["positions", "Positions"],
+  ["arrival", "Ponctualité arrivage"],
+  ["departure", "Ponctualité départ"],
+  ["destination", "Ponctualité destination"],
+  ["temperature", "Température retour ramasse"],
+];
+
 type CauserieToast = {
   title: string;
   detail: string;
@@ -1328,6 +1340,10 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const [kpiCopy, setKpiCopy] = useState<MatchKpiCopy>(() => loadMatchKpiCopy(snapshot));
   const [savedKpiCopy, setSavedKpiCopy] = useState<MatchKpiCopy>(kpiCopy);
   const [mercatoPlan, setMercatoPlan] = useState<{ key: string; plan: CauseriePlan | null } | null>(null);
+  const [indicatorSettingsOpen, setIndicatorSettingsOpen] = useState(false);
+  const [indicatorSettingsDraft, setIndicatorSettingsDraft] = useState<string[]>(() => [...BRIEF_INDICATOR_IDS]);
+  const [indicatorSettingsSaving, setIndicatorSettingsSaving] = useState(false);
+  const [indicatorSettingsFeedback, setIndicatorSettingsFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const [activeSlide, setActiveSlide] = useState(0);
   const [slideDirection, setSlideDirection] = useState<"next" | "previous">("next");
   const [pendingTravelCode, setPendingTravelCode] = useState<string | null>(null);
@@ -1339,6 +1355,8 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const mercatoProfiles = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.mercatoProfiles ?? {} : {};
   const redCards = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.redCards ?? "" : "";
   const briefIndicatorIds = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.visibleIndicators : undefined;
+  const indicatorSettingsReady = mercatoPlan?.key === mercatoPlanKey;
+
   const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
   const loadingTarget = formatKpiDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
   const unloadingTarget = formatKpiDuration(snapshot.performanceCriteria?.unloadingSeconds ?? leagueConfig.unloadingSeconds);
@@ -1371,6 +1389,42 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
       cancelled = true;
     };
   }, [mercatoPlanKey, session, snapshot, causerieRevision]);
+
+  function openIndicatorSettings() {
+    if (!indicatorSettingsReady || !session.agency.canImport) return;
+    setIndicatorSettingsDraft(normalizeBriefIndicators(briefIndicatorIds));
+    setIndicatorSettingsFeedback(null);
+    setIndicatorSettingsOpen(true);
+  }
+
+  async function saveIndicatorSettings() {
+    if (!indicatorSettingsReady || !session.agency.canImport || indicatorSettingsSaving) return;
+    setIndicatorSettingsSaving(true);
+    setIndicatorSettingsFeedback(null);
+    try {
+      // Read the freshest revision so this action cannot overwrite other
+      // causerie sections (Mercato, coach notes, captures or team brief).
+      const latest = await fetchCauseriePlan(session, snapshot);
+      const base = normalizeCauseriePlan(latest ?? buildEmptyCauseriePlan());
+      const next: CauseriePlan = {
+        ...base,
+        visibleIndicators: normalizeBriefIndicators(indicatorSettingsDraft),
+        updatedAt: new Date().toISOString(),
+      };
+      const saved = normalizeCauseriePlan(await saveCauseriePlan(session, snapshot, next));
+      setMercatoPlan({ key: mercatoPlanKey, plan: saved });
+      setIndicatorSettingsDraft(saved.visibleIndicators);
+      setIndicatorSettingsOpen(false);
+      setIndicatorSettingsFeedback({ tone: "success", message: "Affichage du carrousel enregistré pour ce match." });
+    } catch (error) {
+      const message = error instanceof CauserieConflictError
+        ? "Le brief a été modifié ailleurs. Annule puis rouvre ce réglage pour repartir de sa dernière version."
+        : error instanceof Error ? error.message : "Impossible d'enregistrer la personnalisation.";
+      setIndicatorSettingsFeedback({ tone: "error", message });
+    } finally {
+      setIndicatorSettingsSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!thresholdReached) return;
@@ -1552,6 +1606,73 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         </div>
 
         <div className="match-indicators-area">
+          {session.agency.canImport && (
+            <div className="match-indicator-settings">
+              <div className="match-indicator-settings-toolbar">
+                <button
+                  type="button"
+                  className="secondary-button compact"
+                  aria-expanded={indicatorSettingsOpen}
+                  aria-controls="match-indicator-settings-panel"
+                  disabled={!indicatorSettingsReady || indicatorSettingsSaving}
+                  onClick={() => {
+                    if (indicatorSettingsOpen) {
+                      setIndicatorSettingsOpen(false);
+                      setIndicatorSettingsFeedback(null);
+                    } else {
+                      openIndicatorSettings();
+                    }
+                  }}
+                >
+                  <Settings2 size={16} />
+                  Personnaliser les indicateurs
+                </button>
+                <span className="match-indicator-settings-count">
+                  {normalizeBriefIndicators(briefIndicatorIds).length} cartes affichées sur 9
+                </span>
+              </div>
+              {indicatorSettingsOpen && (
+                <div id="match-indicator-settings-panel" className="match-indicator-settings-panel" role="group" aria-label="Personnalisation des neuf cartes du carrousel">
+                  <p>Choisis les cartes à afficher dans « Le collectif en chiffres ». Les quatre KPI du score restent inchangés.</p>
+                  <div className="match-indicator-settings-options">
+                    {BRIEF_INDICATOR_OPTIONS.map(([id, label]) => (
+                      <label key={id}>
+                        <input
+                          type="checkbox"
+                          checked={indicatorSettingsDraft.includes(id)}
+                          disabled={indicatorSettingsSaving || (indicatorSettingsDraft.length === 1 && indicatorSettingsDraft.includes(id))}
+                          onChange={(event) => setIndicatorSettingsDraft((current) => normalizeBriefIndicators(
+                            event.target.checked ? [...current, id] : current.filter((item) => item !== id)
+                          ))}
+                        />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="match-indicator-settings-actions">
+                    <button type="button" className="secondary-button compact" disabled={indicatorSettingsSaving}
+                      onClick={() => setIndicatorSettingsDraft([...BRIEF_INDICATOR_IDS])}>
+                      Tout afficher
+                    </button>
+                    <button type="button" className="secondary-button compact" disabled={indicatorSettingsSaving}
+                      onClick={() => { setIndicatorSettingsOpen(false); setIndicatorSettingsFeedback(null); }}>
+                      Annuler
+                    </button>
+                    <button type="button" className="primary-button compact" disabled={indicatorSettingsSaving}
+                      onClick={saveIndicatorSettings}>
+                      <Save size={15} /> {indicatorSettingsSaving ? "Enregistrement..." : "Enregistrer l'affichage"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {indicatorSettingsFeedback && (
+                <p className={`match-indicator-settings-feedback is-${indicatorSettingsFeedback.tone}`}
+                  role={indicatorSettingsFeedback.tone === "error" ? "alert" : "status"}>
+                  {indicatorSettingsFeedback.message}
+                </p>
+              )}
+            </div>
+          )}
           <MatchIndicatorsCarousel
             snapshot={snapshot}
             performance={outcome.collectiveTitle}
@@ -3402,17 +3523,7 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
           {planMode === "edit" ? (
             <>
               <div className="tv-brief-indicator-options">
-                {([
-                  ["performance", "Performance d'équipe"],
-                  ["injuries", "Blessures A.T"],
-                  ["tonnage-distribution", "Tonnage Distribution"],
-                  ["tonnage-expedition", "Tonnage Expédition"],
-                  ["positions", "Positions"],
-                  ["arrival", "Ponctualité arrivage"],
-                  ["departure", "Ponctualité départ"],
-                  ["destination", "Ponctualité destination"],
-                  ["temperature", "Température retour ramasse"],
-                ] as const).map(([id, label]) => (
+                {BRIEF_INDICATOR_OPTIONS.map(([id, label]) => (
                   <label key={id}>
                     <input
                       type="checkbox"

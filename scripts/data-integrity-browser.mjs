@@ -169,6 +169,29 @@ try {
     await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
     await assertTonnage("255 t", null, 3);
     console.log(`Browser: independent KPI toggles, Service client, saves and reloads at ${viewport.width}px: OK`);
+
+    // The nine collective cards can also be edited next to the carousel,
+    // without navigating to the team brief or altering the four score KPIs.
+    const beforeDirectEdit = await readBrief();
+    const button = page.getByRole("button", { name: "Personnaliser les indicateurs" });
+    await button.click();
+    const panel = page.getByRole("group", { name: "Personnalisation des neuf cartes du carrousel" });
+    assert.equal(await panel.locator('input[type="checkbox"]').count(), 9);
+    assert.equal(await panel.locator(".match-indicator-settings-options input:checked").count(), 3);
+    await panel.locator("label").filter({ hasText: "Tonnage Distribution" }).locator("input").uncheck();
+    await panel.locator("label").filter({ hasText: "Tonnage Expédition" }).locator("input").check();
+    await panel.getByRole("button", { name: "Enregistrer l'affichage" }).click();
+    await page.getByRole("status").getByText("Affichage du carrousel enregistré pour ce match.").waitFor({ state: "visible" });
+    const afterDirectEdit = await readBrief();
+    assert.deepEqual(afterDirectEdit.plan.visibleIndicators, ["tonnage-expedition", "positions", "arrival"]);
+    for (const key of ["attack", "midfield", "defense", "attachments", "mercato", "mercatoProfiles", "redCards", "coach"]) {
+      assert.deepEqual(afterDirectEdit.plan[key], beforeDirectEdit.plan[key], `A carousel setting must preserve ${key}`);
+    }
+    await assertTonnage(null, "478 t", 3);
+    await page.reload();
+    await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+    await assertTonnage(null, "478 t", 3);
+    console.log(`Browser: direct nine-card carousel editor, safe save and reload at ${viewport.width}px: OK`);
     assert.deepEqual(errors, [], `Unexpected React errors at ${viewport.width}px`);
     console.log(`Browser: login, upload, agency confirmation, completed import at ${viewport.width}px: OK`);
     await page.close();
