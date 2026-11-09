@@ -107,7 +107,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".tv-plan-empty-state")).toHaveCount(3);
       await expect(page.locator(".tv-grid").getByText("OPÉRATIONS", { exact: true })).toHaveCount(0);
       await expect(page.locator(".tv-plan-column")).toHaveCount(3);
-      await expect(page.getByText("SAV", { exact: true })).toBeVisible();
+      await expect(page.getByText("Service client", { exact: true })).toBeVisible();
       await expect(page.getByText("EXPÉDITION / RAMASSE & EMBALLAGE", { exact: true })).toBeVisible();
       await expect(page.getByText("SST", { exact: true })).toBeVisible();
       await expect(page.getByText("Brief à renseigner", { exact: true })).toHaveCount(3);
@@ -265,9 +265,9 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
 
       await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
       await expect(page.locator(".mercato-carousel-card")).toHaveCount(1);
-      await expect(page.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(9);
+      await expect(page.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(10);
       await expect(page.locator(".match-indicators-track > .match-indicator-slide").first()).toHaveAttribute("data-indicator", "mercato");
-      await expect(page.locator(".match-indicators-navigation > span")).toHaveText(/\/ 9$/);
+      await expect(page.locator(".match-indicators-navigation > span")).toHaveText(/\/ 10$/);
       await expect(page.locator(".mercato-kpi-slide")).toHaveCount(1);
       await expect(page.locator(".mercato-kpi-subtitle")).toHaveText("Nouveau joueur");
       await expect(page.locator(".mercato-kpi-navigation")).toHaveCount(0);
@@ -480,7 +480,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await page.getByRole("button", { name: "Enregistrer le Mercato" }).click();
       await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
       await expect(page.locator('[data-indicator="mercato"]')).toHaveCount(0);
-      await expect(page.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(8);
+      await expect(page.locator(".match-indicators-track > .match-indicator-slide")).toHaveCount(9);
       await expect(page.locator(".match-kpi-wrap")).toBeVisible();
 
       await page.getByRole("button", { name: "04 Coach", exact: true }).click();
@@ -628,7 +628,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await expect(page.locator(".match-indicators").getByText("NB DE BLESSURES (A.T)", { exact: true })).toBeVisible();
       await expect(page.locator(".match-indicators").getByText("Duels gagnés", { exact: true })).toHaveCount(0);
       await expect(page.locator(".real-staff-metric").getByText("À renseigner", { exact: true })).toBeVisible();
-      await expect(page.locator('[data-indicator="tonnage"] .match-indicator-value')).toHaveText("PDF à importer");
+      await expect(page.locator('[data-indicator="tonnage-expedition"] .match-indicator-value')).toHaveText("PDF à importer");
       await page.getByRole("button", { name: "Modifier les chiffres", exact: true }).click();
       await expect(page.getByLabel("Nombre de blessures A.T")).toBeVisible();
       await expect(page.locator(".match-indicators-editor").getByLabel("Effectif prévu du jour")).toBeVisible();
@@ -637,7 +637,7 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await page.getByRole("button", { name: "Enregistrer les chiffres", exact: true }).click();
       await expect(page.locator('[data-indicator="injuries"] .match-indicator-value')).toHaveText("2");
       await expect(page.locator(".real-staff-metric strong")).toHaveText(/\d+,\d+%/);
-      await expect(page.locator('[data-indicator="tonnage"] .match-indicator-value')).toHaveText("PDF à importer");
+      await expect(page.locator('[data-indicator="tonnage-expedition"] .match-indicator-value')).toHaveText("PDF à importer");
       await expect(page.locator(".category-awards .award-card:not(.polyvalent) .award-copy > b")).toHaveCount(0);
       await expect(page.locator(".category-awards .award-card.polyvalent .award-copy > b")).toHaveCount(0);
       await expect(page.locator(".category-awards .award-copy > small")).toHaveCount(0);
@@ -773,8 +773,8 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
   await expect(page.getByRole("button", { name: "Écrire", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Écrire", exact: true }).click();
   await expect(page.locator('input[type="file"][accept="image/png,image/jpeg,image/webp"]')).toHaveCount(3);
-  await expect(page.getByLabel("SAV, contenu du brief")).toBeVisible();
-  await page.getByLabel("SAV, capture d'écran").setInputFiles([
+  await expect(page.getByLabel("Service client, contenu du brief")).toBeVisible();
+  await page.getByLabel("Service client, capture d'écran").setInputFiles([
     {
       name: "capture-1.png",
       mimeType: "image/png",
@@ -786,17 +786,17 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"),
     },
   ]);
-  await expect(page.getByAltText("Capture du brief SAV 1", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Agrandir la capture SAV 2", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Agrandir la capture SAV 1", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Agrandir la capture SAV 1", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Capture agrandie SAV · capture 1", exact: true })).toBeVisible();
-  await expect(page.getByAltText("Capture agrandie du brief SAV")).toBeVisible();
+  await expect(page.getByAltText("Capture du brief Service client 1", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Agrandir la capture Service client 2", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Agrandir la capture Service client 1", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Agrandir la capture Service client 1", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Capture agrandie Service client · capture 1", exact: true })).toBeVisible();
+  await expect(page.getByAltText("Capture agrandie du brief Service client")).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "Capture agrandie SAV · capture 1", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Capture agrandie Service client · capture 1", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Annuler", exact: true }).click();
   await page.getByRole("button", { name: "Écrire", exact: true }).click();
-  for (const label of ["SAV", "EXPÉDITION / RAMASSE & EMBALLAGE", "SST"]) {
+  for (const label of ["Service client", "EXPÉDITION / RAMASSE & EMBALLAGE", "SST"]) {
     await page.getByLabel(`${label}, contenu du brief`).fill("");
   }
   await page.getByRole("button", { name: "Enregistrer", exact: true }).click();
@@ -979,7 +979,7 @@ test("le plan de jeu saisi dans Coach reste séparé sous le brief de la feuille
   });
   expect(separate).toBe(true);
   await slide.getByRole("button", { name: "Écrire", exact: true }).click();
-  await page.getByLabel("SAV, contenu du brief").fill("Traiter les retours clients.");
+  await page.getByLabel("Service client, contenu du brief").fill("Traiter les retours clients.");
   await slide.getByRole("button", { name: "Enregistrer", exact: true }).click();
   await expect(slide.locator(".tv-action")).toContainText("Traiter les retours clients.");
   await expect(coachPlan).not.toContainText("Traiter les retours clients.");
@@ -1222,7 +1222,7 @@ test("la synchronisation ne recharge les données que si leur révision change",
 
   await page.locator(".match-carousel-progress").getByRole("button", { name: "Aller à Brief équipe" }).click();
   await page.getByRole("button", { name: "Écrire", exact: true }).click();
-  const briefDraft = page.getByLabel("SAV, contenu du brief");
+  const briefDraft = page.getByLabel("Service client, contenu du brief");
   await briefDraft.fill("Consigne saisie en cours");
   const beforeSecondCauserieRefresh = causerieRequests;
   causeriePlan = {
@@ -1380,7 +1380,7 @@ test("le brief équipe porte ses zones et son mode plein écran", async ({ page 
   await expect(page.getByRole("button", { name: "Mode plein écran", exact: true })).toBeVisible();
   await expect(page.locator(".tv-action-heading").getByText("BRIEF ÉQUIPE", { exact: true })).toBeVisible();
   await expect(page.locator(".tv-plan-column")).toHaveCount(3);
-  await expect(page.getByText("SAV", { exact: true })).toBeVisible();
+  await expect(page.getByText("Service client", { exact: true })).toBeVisible();
   await expect(page.getByText("EXPÉDITION / RAMASSE & EMBALLAGE", { exact: true })).toBeVisible();
   await expect(page.getByText("SST", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Quitter le brief équipe", exact: true })).toBeVisible();
@@ -1457,7 +1457,7 @@ test("la feuille de match défile entre ses quatre sections sans empiler les vue
 
   await navigation.getByRole("button", { name: "Section précédente" }).click();
   await expect(navigation.locator(".match-carousel-count")).toHaveText("03 / 04");
-  await expect(page.locator(".match-indicators .match-indicator-card:not(.is-mercato)")).toHaveCount(8);
+  await expect(page.locator(".match-indicators .match-indicator-card:not(.is-mercato)")).toHaveCount(9);
   await expect(page.locator(".match-indicators .mercato-carousel-card")).toHaveCount(1);
   // Normal mode is a readable document, not a viewport-fitted presentation.
   // Keep the non-clipping checks above and verify the extra height is reachable.
