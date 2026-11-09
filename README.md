@@ -186,3 +186,8 @@ Dans `Matrice QFC.xlsx` (non stocké dans le dépôt), la synthèse présente **
 La date du dernier accident est saisie par un profil autorisé de l'agence. Le compteur affiche les jours calendaires écoulés à partir de la date civile Europe/Paris. Si elle n'est pas renseignée, il affiche « Non renseigné ». Sur Render Free, **la date et son historique sont temporaires** : en cas de redéploiement ou de réinitialisation, la date doit être saisie à nouveau. Les écritures sont autorisées par défaut pour ce seul compteur, désactivables via `STEF_SAFETY_WRITES_ENABLED=false`. Voir `docs/lot-c-safety.md`.
 
 **Hors périmètre du Lot C livré : les litiges.** Aucun registre, suivi de statuts ni transformation de litiges en cartons/hors-jeu n'est inclus dans cette version.
+
+
+### Lot D1 — simulation des KPI du score (non déployé)
+
+L’espace **Administrateur** propose un simulateur pour sélectionner provisoirement parmi les quatre KPI du score (passes, tirs cadrés, duels, possession). Il affiche la proportion des KPI sélectionnés qui dépassent strictement le seuil de la ligue active, à côté du **score officiel inchangé**, et refuse une simulation si une valeur sélectionnée est manquante. Aucun scénario n’est sauvegardé ou appliqué aux classements. Voir `docs/lot-d-score-contract.md` pour les décisions métier nécessaires avant de personnaliser le score officiel.
