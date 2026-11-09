@@ -5,7 +5,7 @@ import { formatKpiDuration } from "./kpi-duration";
 import { isKpiGoalConceded } from "./kpi-goal-status";
 import { pdfSourceLabel } from "./pdf-source";
 import { qualificationReasons } from "./qualification-reasons";
-import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, migrateBriefLayout, normalizeBriefIndicators, normalizeTonnageActivity } from "../server/brief-layout.mjs";
+import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, migrateBriefLayout, normalizeBriefIndicators } from "../server/brief-layout.mjs";
 import {
   AlertTriangle,
   Award,
@@ -75,7 +75,6 @@ type CauseriePlan = {
   mercatoProfiles: MercatoProfiles;
   redCards: string;
   visibleIndicators: string[];
-  tonnageActivity: "auto" | "expedition" | "distribution";
   coach: {
     tactic: string;
     priority: string;
@@ -1340,7 +1339,6 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const mercatoProfiles = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.mercatoProfiles ?? {} : {};
   const redCards = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.redCards ?? "" : "";
   const briefIndicatorIds = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.visibleIndicators : undefined;
-  const tonnageActivity = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.tonnageActivity : undefined;
   const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
   const loadingTarget = formatKpiDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
   const unloadingTarget = formatKpiDuration(snapshot.performanceCriteria?.unloadingSeconds ?? leagueConfig.unloadingSeconds);
@@ -1564,7 +1562,6 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
             mercato={mercatoText}
             mercatoProfiles={mercatoProfiles}
             visibleIndicatorIds={briefIndicatorIds}
-            tonnageActivity={tonnageActivity}
           />
           <div className="match-kpi-wrap">
             {editingKpis && (
@@ -3408,7 +3405,8 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
                 {([
                   ["performance", "Performance d'équipe"],
                   ["injuries", "Blessures A.T"],
-                  ["tonnage", "Tonnage"],
+                  ["tonnage-distribution", "Tonnage Distribution"],
+                  ["tonnage-expedition", "Tonnage Expédition"],
                   ["positions", "Positions"],
                   ["arrival", "Ponctualité arrivage"],
                   ["departure", "Ponctualité départ"],
@@ -3431,20 +3429,9 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
                   </label>
                 ))}
               </div>
-              <label className="tv-brief-tonnage-activity">
-                Source du tonnage
-                <select
-                  value={planDraft.tonnageActivity}
-                  onChange={(event) => setPlanDraft((current) => ({ ...current, tonnageActivity: normalizeTonnageActivity(event.target.value) }))}
-                >
-                  <option value="auto">Automatique selon la plage horaire</option>
-                  <option value="expedition">Expédition</option>
-                  <option value="distribution">Distribution (activité de nuit)</option>
-                </select>
-              </label>
             </>
           ) : (
-            <small>{plan.visibleIndicators.length} indicateur(s) affiché(s) · tonnage {plan.tonnageActivity === "auto" ? "automatique" : plan.tonnageActivity === "distribution" ? "Distribution" : "Expédition"}</small>
+            <small>{plan.visibleIndicators.length} indicateur(s) affiché(s) · les deux tonnages sont indépendants</small>
           )}
         </div>
         <div className="tv-plan-grid">
@@ -3969,7 +3956,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
             <GuidePanel eyebrow="03 · Importer et actualiser" title="Ce que fait chaque bouton" icon={RefreshCw}>
               <div className="guide-action-list">
                 <GuideAction icon={Upload} title="Contrôler et importer Excel" tone="green" detail="Chargez un nouveau classeur .xlsx complet : opérations, positions, voyages et analyses. Chaque modification du fichier nécessite un nouvel import." />
-                <GuideAction icon={FileCheck2} title="Importer le PDF 106J" tone="blue" detail="Après l’Excel, chargez un rapport SIE.106J pour afficher ses taux journaliers et son tonnage Expédition. Un rapport d'une autre date ou agence est accepté : sa date et son agence source restent indiquées, indépendamment de la plage Excel." />
+                <GuideAction icon={FileCheck2} title="Importer le PDF 106J" tone="blue" detail="Après l’Excel, chargez un rapport SIE.106J pour afficher ses taux journaliers et les tonnages Distribution et Expédition. Un rapport d'une autre date ou agence est accepté : sa date et son agence source restent indiquées, indépendamment de la plage Excel." />
                 <GuideAction icon={RefreshCw} title="Actualiser" tone="blue" detail="À utiliser pour relire le dernier import déjà enregistré. Ce bouton ne va pas chercher un fichier sur votre ordinateur et ne remplace pas un nouvel import." />
                 <GuideAction icon={Clock3} title="Appliquer la plage" tone="orange" detail="À utiliser après avoir choisi le début et la fin du créneau. Les heures sont limitées aux pas de 30 minutes, par exemple 08:00 ou 08:30." />
               </div>
@@ -4263,7 +4250,7 @@ function ImportView({ session, onImported, onOpenMatch }: { session: Session; on
       </div>
       <div className="import-sources">
         <ImportSourceDropZone file={excelFile} accept=".xlsx" icon={FileSpreadsheet} title="1. Excel du match" emptyLabel="Déposer ou sélectionner le fichier .xlsx" detail="Source des opérations, joueurs, positions et scores." inputRef={excelInputRef} onFile={(next) => { setExcelFile(next); setAgencyConfirmation(null); setState("idle"); setMessage(""); }} />
-        <ImportSourceDropZone file={pdfFile} accept=".pdf" icon={FileCheck2} title="2. PDF 106J" emptyLabel="Déposer ou sélectionner le rapport PDF 106J" detail="Taux journaliers et ligne Expédition uniquement." inputRef={pdfInputRef} onFile={(next) => { setPdfFile(next); setState("idle"); setMessage(""); }} />
+        <ImportSourceDropZone file={pdfFile} accept=".pdf" icon={FileCheck2} title="2. PDF 106J" emptyLabel="Déposer ou sélectionner le rapport PDF 106J" detail="Taux journaliers et tonnages Distribution / Expédition." inputRef={pdfInputRef} onFile={(next) => { setPdfFile(next); setState("idle"); setMessage(""); }} />
       </div>
       <div className="import-actions import-source-actions">
         <button className="primary-button" type="button" onClick={() => importFile(excelFile, "excel")} disabled={state === "uploading"}><Upload size={18} /> {state === "uploading" ? "Import en cours..." : "Contrôler et importer Excel"}</button>
@@ -4846,7 +4833,6 @@ function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
     mercatoProfiles: {},
     redCards: "",
     visibleIndicators: [...BRIEF_INDICATOR_IDS],
-    tonnageActivity: "auto",
     coach: {
       tactic: action.title,
       priority: priority || action.detail,
@@ -4875,7 +4861,6 @@ function buildEmptyCauseriePlan(): CauseriePlan {
     mercatoProfiles: {},
     redCards: "",
     visibleIndicators: [...BRIEF_INDICATOR_IDS],
-    tonnageActivity: "auto",
     coach: {
       tactic: "",
       priority: "",
@@ -4911,7 +4896,6 @@ function normalizeCauseriePlan(plan: Partial<CauseriePlan> | null | undefined): 
     mercatoProfiles: normalizeMercatoProfiles(input.mercatoProfiles, mercato),
     redCards: text(input.redCards),
     visibleIndicators: normalizeBriefIndicators(input.visibleIndicators),
-    tonnageActivity: normalizeTonnageActivity(input.tonnageActivity),
     coach: {
       tactic: text(input.coach?.tactic),
       priority: text(input.coach?.priority),
@@ -4937,7 +4921,7 @@ function hasManualCauserieContent(plan: CauseriePlan, snapshot: Snapshot) {
   const hasZoneContent = [...plan.attack, ...plan.midfield, ...plan.defense].some((item) => item.trim().length > 0);
   const hasAttachment = Object.values(plan.attachments).some((items) => items.length > 0);
   const hasMetadata = plan.team.trim().length > 0 || plan.manager.trim().length > 0;
-  if (hasZoneContent || hasAttachment || hasMetadata || plan.mercato.trim().length > 0 || plan.redCards.trim().length > 0 || plan.tonnageActivity !== "auto" || plan.visibleIndicators.length !== BRIEF_INDICATOR_IDS.length) return true;
+  if (hasZoneContent || hasAttachment || hasMetadata || plan.mercato.trim().length > 0 || plan.redCards.trim().length > 0 || plan.visibleIndicators.length !== BRIEF_INDICATOR_IDS.length) return true;
 
   const generated = buildDefaultCauseriePlan(snapshot).coach;
   const legacyGenerated = new Set([
