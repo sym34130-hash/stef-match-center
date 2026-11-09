@@ -101,6 +101,8 @@ try {
     assert.ok(await form.locator('input[type="date"]').isVisible());
     await form.locator('input[type="date"]').fill("2026-10-01");
     await form.getByRole("button", { name: "Valider" }).click();
+    // Wait for the API-backed update; the click only submits asynchronously.
+    await safety.locator(".safety-card-last-date").getByText("01/10/2026").waitFor({ state: "visible", timeout: 15000 });
 
     const safetyResponse = await fetch(`http://127.0.0.1:${apiPort}/api/agencies/01K/safety`,
       { headers: { "x-access-code": "SAFETY-CAROUSEL-TEST" } });
