@@ -342,6 +342,111 @@ app.post("/api/agencies/:agencyCode/travel-exclusions", requireAgency, async (re
   }
 });
 
+app.post("/api/agencies/:agencyCode/reception-exclusions", requireAgency, async (req, res) => {
+  if (!req.agency.canImport) {
+    res.status(403).json({ title: "EXCLUSION NON AUTORISÉE", message: "Cet accès permet seulement de consulter les statistiques." });
+    return;
+  }
+  const kind = req.body?.kind;
+  const code = normalizeReceptionCode(req.body?.code);
+  const excluded = req.body?.excluded === true;
+  const reason = typeof req.body?.reason === "string"
+    ? req.body.reason.normalize("NFKC").trim().replace(/\s+/g, " ").slice(0, 240)
+    : "";
+  if (!["travel", "client"].includes(kind) || !code || (excluded && !reason)) {
+    res.status(400).json({
+      title: "EXCLUSION INVALIDE",
+      message: "Choisis un voyage ou un client présent dans la source et renseigne un motif d'exclusion.",
+    });
+    return;
+  }
+
+  try {
+    await withAgencyLock(req.agency.code, async () => {
+      const currentSnapshot = await readLatestSnapshot(req.agency.code);
+      if (!currentSnapshot) {
+        res.status(404).json({ title: "AUCUN MATCH IMPORTÉ", message: "Importe un fichier Excel avant de filtrer la réception." });
+        return;
+      }
+      const scopeKey = travelExclusionScopeKey(currentSnapshot);
+      if (!scopeKey) {
+        res.status(409).json({ title: "PÉRIMÈTRE INDISPONIBLE", message: "La période active ne peut pas être identifiée." });
+        return;
+      }
+      const reception = currentSnapshot.receptionScope;
+      if (!reception) {
+        res.status(409).json({ title: "ANALYSE À ACTUALISER", message: "Actualise le match avant de modifier les exclusions de réception." });
+        return;
+      }
+      if (kind === "client" && !reception.clientColumnPresent) {
+        res.status(422).json({
+          title: "CLIENTS DE TRI NON IDENTIFIABLES",
+          message: "Le fichier Excel ne possède pas de colonne Client de tri exploitable. Aucun voyage ne sera exclu par supposition.",
+        });
+        return;
+      }
+      const known = kind === "travel"
+        ? reception.availableTravels ?? []
+        : (reception.availableClients ?? []).map(item => item.code);
+      const isKnown = known.some(item => kind === "travel" ? item === code : receptionClientKey(item) === receptionClientKey(code));
+      const original = (kind === "travel" ? reception.excludedTravels : reception.excludedClients) ?? [];
+      const alreadySelected = original.some(item => kind === "travel" ? item.code === code : receptionClientKey(item.code) === receptionClientKey(code));
+      if (!isKnown && !(alreadySelected && !excluded)) {
+        res.status(404).json({ title: "SOURCE INCONNUE", message: "Le voyage ou le client n'est pas présent dans le périmètre de réception actif." });
+        return;
+      }
+
+      const state = await readReceptionExclusionState(req.agency.code);
+      const current = state.scopes[scopeKey] ?? { ...(await readReceptionExclusionsForSnapshot(req.agency.code, currentSnapshot)), history: [] };
+      const nextFilters = normalizeReceptionExclusions(current);
+      const listKey = kind === "travel" ? "travels" : "clients";
+      const matches = item => kind === "travel" ? item.code === code : receptionClientKey(item.code) === receptionClientKey(code);
+      nextFilters[listKey] = nextFilters[listKey].filter(item => !matches(item));
+      if (excluded) nextFilters[listKey].push({ code, reason, updatedAt: new Date().toISOString() });
+      nextFilters[listKey] = normalizeReceptionExclusions(nextFilters)[listKey];
+
+      const agencyDir = path.join(dataDir, sanitizeSegment(req.agency.code));
+      const workbook = await readWorkbookForBuild(agencyDir);
+      const period = normalizeTimeRange(currentSnapshot.match.periodStart, currentSnapshot.match.periodEnd);
+      const excludedTravelCodes = await readExcludedTravelCodesForSnapshot(req.agency.code, currentSnapshot);
+      const result = buildSnapshotFromWorkbook(
+        workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code,
+        { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators: currentSnapshot.dailyIndicators ?? null,
+          excludedTravelCodes, receptionExclusions: nextFilters },
+      );
+      if (!result.ok) { res.status(400).json(result.error); return; }
+      if (result.snapshot.dailyIndicators && !canUsePdfIndicators(pdfAssociation(result.snapshot.dailyIndicators, result.snapshot))) {
+        const withoutPdf = buildSnapshotFromWorkbook(workbook, currentSnapshot.sourceName || "match.xlsx", req.agency.code,
+          { ...period, criteria: currentSnapshot.performanceCriteria, dailyIndicators: null,
+            excludedTravelCodes, receptionExclusions: nextFilters });
+        if (!withoutPdf.ok) { res.status(400).json(withoutPdf.error); return; }
+        result.snapshot = withoutPdf.snapshot;
+      }
+      result.snapshot.agency.name = req.agency.name;
+
+      const auditEvent = { at: new Date().toISOString(), kind, code, excluded, reason: excluded ? reason : "" };
+      state.scopes[scopeKey] = {
+        ...nextFilters,
+        history: [...(Array.isArray(current.history) ? current.history : []), auditEvent].slice(-200),
+      };
+      await writeReceptionExclusionState(req.agency.code, state);
+      await writeJsonAtomic(path.join(agencyDir, "latest.json"), result.snapshot);
+      clearCompositionCache(req.agency.code);
+      res.json({
+        message: excluded ? `${kind === "travel" ? "Voyage" : "Client de tri"} ${code} exclu des seuls KPI de réception.`
+          : `${kind === "travel" ? "Voyage" : "Client de tri"} ${code} réintégré aux KPI de réception.`,
+        snapshot: result.snapshot,
+      });
+    });
+  } catch (error) {
+    if (!isMissingSourceError(error)) {
+      respondInternalError(res, `reception-exclusions:${req.agency.code}`, error);
+      return;
+    }
+    res.status(404).json({ title: "SOURCE EXCEL INDISPONIBLE", message: "Réimporte le fichier Excel avant de modifier les exclusions." });
+  }
+});
+
 app.post("/api/agencies/:agencyCode/composition-range", requireAgency, async (req, res) => {
   let period;
   try {
