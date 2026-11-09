@@ -3165,10 +3165,10 @@ function Coach({
                 )}
                 {yellowCardAudit?.matrix.unlistedCandidates.length ? (
                   <div className="coach-yellow-matrix-alert" role="status">
-                    <strong>{yellowCardAudit.matrix.unlistedCandidates.length} cas à vérifier dans la matrice Excel</strong>
-                    <p>Présents dans les calculs intermédiaires, mais absents de la liste finale. Ils ne sont pas comptés comme cartons attribués.</p>
+                    <strong>{yellowCardAudit.matrix.unlistedCandidates.length} cartons récupérés dans la matrice Excel</strong>
+                    <p>Absents de la liste finale Excel, ils ont été réintégrés au décompte à partir de la matrice calculée, sans doublon.</p>
                     <details>
-                      <summary>Consulter les cas à vérifier</summary>
+                      <summary>Consulter les cartons réintégrés</summary>
                       <ul>{yellowCardAudit.matrix.unlistedCandidates.map((entry, index) => (
                         <li key={`${entry.source}-${entry.travelCode}-${index}`}>
                           <b>{entry.playerName}</b>
@@ -4738,7 +4738,7 @@ function YellowCardsPanel({ snapshot, redCards }: { snapshot: Snapshot; redCards
         {audit?.sourceAvailable && <small className="yellow-cards-summary">Température : {audit.byReason.temperature} · Chargement à quai : {audit.byReason.loading}{audit.byReason.other > 0 ? ` · Autres : ${audit.byReason.other}` : ""}</small>}
         {audit?.matrix.unlistedCandidates.length ? (
           <p className="yellow-cards-matrix-warning" role="status">
-            {audit.matrix.unlistedCandidates.length} cas à vérifier dans la matrice Excel, non comptabilisés.
+            {audit.matrix.unlistedCandidates.length} cartons réintégrés depuis la matrice Excel.
           </p>
         ) : null}
       </section>
