@@ -209,7 +209,12 @@ try {
     assert.equal(await scopePanel.evaluate(element => Boolean(element.closest(".operational-charts-carousel"))), false,
       "The exclusion controls must sit outside the horizontally swiping chart");
     const excludedRows = scopePanel.locator(".reception-scope-exclusion");
+    const collapseToggle = scopePanel.locator(".reception-scope-collapse-summary");
     const addToggle = scopePanel.locator(".reception-scope-add > summary");
+    assert.equal(await scopePanel.getAttribute("open"), null, "Management must start collapsed");
+    const compactHeight = await scopePanel.evaluate(element => element.getBoundingClientRect().height);
+    assert.ok(compactHeight <= 85, `Collapsed manager must not shrink the charts (${compactHeight}px)`);
+    await collapseToggle.click();
 
     // The list is intentionally visible WITHOUT expanding the add form.
     await scopePanel.getByText("Aucune exclusion active sur ce match.").waitFor({ state: "visible" });
@@ -231,8 +236,16 @@ try {
     await travelRow.getByText("Double déchargement atypique").waitFor({ state: "visible" });
     assert.equal(await travelRow.isVisible(), true);
     assert.match(await travelRow.innerText(), /Exclu le/);
-    // Closing the edit form must NOT hide the excluded voyage or its motif.
+    // Closing the edit form keeps the audit row visible. The OUTER panel can
+    // still be collapsed while it contains an excluded voyage.
     await addToggle.click();
+    assert.equal(await travelRow.isVisible(), true);
+    await collapseToggle.click();
+    assert.equal(await scopePanel.getAttribute("open"), null, "Even with a voyage excluded, full collapse must work");
+    assert.equal(await travelRow.isVisible(), false);
+    assert.match(await collapseToggle.innerText(), /1 exclusion active/);
+    assert.ok(await scopePanel.evaluate(element => element.getBoundingClientRect().height) <= 85);
+    await collapseToggle.click();
     assert.equal(await travelRow.isVisible(), true);
     assert.equal(await travelRow.getByText("Double déchargement atypique").isVisible(), true);
     const contrast = await travelRow.evaluate(element => ({
@@ -264,6 +277,10 @@ try {
     await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
     await page.getByRole("navigation", { name: "Navigation de la feuille de match" })
       .getByRole("button", { name: "Aller à Statistiques du match" }).click();
+    assert.equal(await page.locator(".reception-scope-control").getAttribute("open"), null,
+      "After reload, the manager remains compact even with exclusions");
+    assert.match(await page.locator(".reception-scope-collapse-summary").innerText(), /1 exclusion active/);
+    await page.locator(".reception-scope-collapse-summary").click();
     const reloadedRow = page.locator(".reception-scope-exclusion").filter({ hasText: "TRI TEST" });
     await reloadedRow.getByText("Client de tri hors périmètre").waitFor({ state: "visible" });
     assert.equal(await page.locator(".reception-scope-add").getAttribute("open"), null);
@@ -272,7 +289,12 @@ try {
     await reloadedRow.getByRole("button", { name: "Réintégrer le client TRI TEST en réception" }).click();
     await page.waitForFunction(() => document.querySelector(".reception-scope-total")?.textContent?.includes("0 exclusion"), null, { timeout: 15000 });
     assert.deepEqual((await readSnapshot()).receptionScope.excludedClients, []);
-    console.log(`Browser: scoped reception voyage, tri client, restore, audit at ${viewport.width}px: OK`);
+    // Both activities use the same expandable container, but separate scopes.
+    await page.getByRole("tab", { name: "Chargement 0" }).click();
+    await page.locator(".reception-scope-current").getByText("Aucune exclusion active sur ce match.").waitFor({ state: "visible" });
+    await page.locator(".reception-scope-collapse-summary").click();
+    assert.equal(await page.locator(".reception-scope-control").getAttribute("open"), null);
+    console.log(`Browser: compact multi-activity exclusions, restore and audit at ${viewport.width}px: OK`);
     assert.deepEqual(errors, [], `Unexpected React errors at ${viewport.width}px`);
     console.log(`Browser: login, upload, agency confirmation, completed import at ${viewport.width}px: OK`);
     await page.close();
