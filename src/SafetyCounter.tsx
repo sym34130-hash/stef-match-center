@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { CalendarDays, CheckCircle2, ShieldCheck } from "lucide-react";
+import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { ShieldCheck } from "lucide-react";
 import type { Agency } from "./types";
 import "./safety-counter.css";
 
@@ -37,20 +37,6 @@ export function SafetyCounter({ session }: { session: Session }) {
   const [notice, setNotice] = useState<string | null>(null);
 
   const url = `/api/agencies/${encodeURIComponent(session.agency.code)}/safety`;
-
-  const refresh = useCallback(async (resetDraft = false) => {
-    const response = await fetch(url, {
-      cache: "no-store",
-      headers: { "x-access-code": session.accessCode },
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.message ?? "La sécurité de l'agence est indisponible.");
-    const next = payload as SafetyState;
-    setState(next);
-    if (resetDraft) { setDraftDate(next.lastAccidentDate ?? ""); setDraftRevision(next.revision); }
-    setError(null);
-    return next;
-  }, [url, session.accessCode]);
 
   useEffect(() => {
     let disposed = false;
@@ -123,7 +109,7 @@ export function SafetyCounter({ session }: { session: Session }) {
       setDraftDate(payload.lastAccidentDate ?? "");
       setDraftRevision(payload.revision);
       setReason("");
-      setNotice("Date enregistrée temporairement. Pense à la ressaisir si le serveur perd ses données.");
+      setNotice("Date enregistrée.");
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Enregistrement impossible.");
     } finally {
@@ -132,69 +118,49 @@ export function SafetyCounter({ session }: { session: Session }) {
   }
 
   const days = !error && state?.counter.status === "available" ? state.counter.days : null;
+  const needsCorrectionReason = Boolean(state?.lastAccidentDate && draftDate && draftDate !== state.lastAccidentDate);
+  const canSave = Boolean(state?.editable && draftDate && draftDate <= (state?.asOfDate ?? "")
+    && draftDate !== state?.lastAccidentDate && (!needsCorrectionReason || reason.trim().length >= 5));
   return (
-    <section className="safety-counter" aria-label="Jours sans accident du travail">
-      <div className="safety-counter-top">
-        <div className="safety-counter-title">
-          <ShieldCheck size={23} aria-hidden="true" />
-          <div>
-            <h3>Jours sans accident du travail</h3>
-            <p>Compteur commun à l'agence · date renseignée manuellement</p>
-          </div>
-        </div>
-        <div className="safety-counter-value" aria-live="polite">
-          <strong>{loading ? "Chargement…" : days === null ? "Non renseigné" : days.toLocaleString("fr-FR")}</strong>
-          {days !== null && <span>{days === 1 ? "jour" : "jours"}</span>}
-        </div>
+    <article className="match-indicator-card is-safety" style={{ "--indicator-accent": "#a6e6c4" } as CSSProperties}
+      aria-label="Jours sans accident du travail">
+      <div className="match-indicator-title">
+        <ShieldCheck size={21} aria-hidden="true" />
+        <h3>Jours sans accident du travail</h3>
       </div>
-      <div className="safety-counter-meta">
-        <span>Dernier accident : <b>{dateLabel(state?.lastAccidentDate ?? null)}</b></span>
-        {state?.asOfDate && <span>Au {dateLabel(state.asOfDate)}</span>}
-        <button type="button" onClick={() => {
-          setNotice(null);
-          void refresh(true).catch(failure => setError(failure instanceof Error ? failure.message : "Lecture impossible."));
-        }}>Actualiser</button>
+      <div className="match-indicator-body safety-card-body" aria-live="polite">
+        <strong className={`match-indicator-value${days === null ? " is-empty" : ""}`}>
+          {loading ? "Chargement…" : days === null ? "À renseigner" : days.toLocaleString("fr-FR")}
+        </strong>
+        {days !== null && <span className="safety-card-unit">{days === 1 ? "jour" : "jours"}</span>}
       </div>
-      <p className="safety-counter-temporary-note">
-        Donnée temporaire : en cas de redéploiement ou de réinitialisation du serveur, la date du dernier accident
-        et son historique peuvent être perdus. Il faudra alors renseigner à nouveau la date.
-        Le compteur affichera « Non renseigné » tant qu&apos;elle est absente.
-      </p>
-      {error && <p className="safety-counter-error" role="alert">{error}</p>}
-      {notice && <p className="safety-counter-notice" role="status"><CheckCircle2 size={16} />{notice}</p>}
-      {session.agency.canImport && (
-        <details className="safety-counter-editor">
-          <summary><CalendarDays size={16} /> Renseigner / corriger la date du dernier accident</summary>
-          {state?.editable ? (
-            <form onSubmit={save}>
-              <label htmlFor="safety-last-date">Date du dernier accident du travail</label>
-              <input id="safety-last-date" type="date" required min="1900-01-01"
-                max={state.asOfDate} value={draftDate} onChange={event => setDraftDate(event.target.value)} />
-              <label htmlFor="safety-change-reason">Motif de la correction (obligatoire si la date existe déjà)</label>
-              <input id="safety-change-reason" type="text" maxLength={240}
+      <div className="safety-card-footer">
+        <p className="safety-card-last-date">Dernier accident : <b>{dateLabel(state?.lastAccidentDate ?? null)}</b></p>
+        {state?.editable && session.agency.canImport ? (
+          <form className="safety-card-form" onSubmit={save}>
+            <label htmlFor="safety-last-date">Date du dernier accident</label>
+            <div className="safety-card-entry">
+              <input id="safety-last-date" type="date" aria-label="Date du dernier accident du travail"
+                required min="1900-01-01" max={state.asOfDate}
+                value={draftDate} onChange={event => { setDraftDate(event.target.value); setNotice(null); }} />
+              <button type="submit" disabled={saving || !canSave}>{saving ? "..." : "Valider"}</button>
+            </div>
+            {needsCorrectionReason && (
+              <input className="safety-card-reason" type="text" aria-label="Motif de correction de la date"
+                minLength={5} maxLength={240} required
                 value={reason} onChange={event => setReason(event.target.value)}
-                placeholder="Ex. correction validée par le responsable" />
-              <button type="submit" disabled={saving || !draftDate || draftDate > state.asOfDate}>
-                {saving ? "Enregistrement…" : "Enregistrer la date"}
-              </button>
-              <small>La date est partagée avec les autres utilisateurs autorisés de l'agence. Toute modification est historisée.</small>
-            </form>
-          ) : (
-            <p>La saisie a été désactivée par l'administrateur du serveur.</p>
-          )}
-        </details>
-      )}
-      {state?.history?.length ? (
-        <details className="safety-counter-history">
-          <summary>Historique des corrections ({state.history.length})</summary>
-          <ul>{[...state.history].reverse().slice(0, 20).map((item, index) => (
-            <li key={`${item.changedAt}-${index}`}>
-              {dateLabel(item.previousDate)} → {dateLabel(item.newDate)}
-              <small>{new Date(item.changedAt).toLocaleString("fr-FR")} · {item.reason}</small>
-            </li>
-          ))}</ul>
-        </details>
-      ) : null}
-    </section>
+                placeholder="Motif de correction" />
+            )}
+          </form>
+        ) : (
+          <small className="safety-card-readonly">
+            {state && !state.editable && session.agency.canImport ? "Saisie désactivée par l’administrateur" : "Date saisie par un responsable"}
+          </small>
+        )}
+        {error && <p className="safety-card-feedback is-error" role="alert">{error}</p>}
+        {notice && <p className="safety-card-feedback is-success" role="status">{notice}</p>}
+        <small className="safety-card-footnote">Date temporaire · à ressaisir après perte des données du serveur</small>
+      </div>
+    </article>
   );
 }

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerE
 import { Activity, ArrowDownToLine, ArrowUpFromLine, ChevronLeft, ChevronRight, Flag, Package, ShieldPlus, Thermometer, Users, Weight, type LucideIcon } from "lucide-react";
 import { MercatoCarouselSection } from "./MercatoCarousel";
 import { parseMercatoEntrants, type MercatoProfiles } from "./mercato";
-import type { Snapshot } from "./types";
+import type { Agency, Snapshot } from "./types";
+import { SafetyCounter } from "./SafetyCounter";
 import { pdfSourceLabel } from "./pdf-source";
 import "./match-indicators.css";
 
@@ -16,13 +17,14 @@ type Props = {
   mercato: string | null;
   mercatoProfiles: MercatoProfiles;
   visibleIndicatorIds?: string[];
+  session: { agency: Agency; accessCode: string };
 };
 
 const number = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 type PunctualityKey = "arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn";
 
-export function MatchIndicatorsCarousel({ snapshot, performance, motivation, injuries, staffPercent, staffDetail, mercato, mercatoProfiles, visibleIndicatorIds }: Props) {
+export function MatchIndicatorsCarousel({ snapshot, performance, motivation, injuries, staffPercent, staffDetail, mercato, mercatoProfiles, visibleIndicatorIds, session }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const geometry = useRef({ pitch: 296, width: 280, centers: 2, first: 0 });
@@ -46,6 +48,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   const allCards: Array<{ id: string; label: string; value: string | null; detail: string; icon: LucideIcon; accent: string; percent?: number; targetKey?: PunctualityKey }> = [
     { id: "performance", label: "Performance d'équipe", value: performance, detail: motivation, icon: Users, accent: "#91d7c0" },
     { id: "injuries", label: "NB DE BLESSURES (A.T)", value: injuries.trim() ? number.format(Number(injuries)) : null, detail: "Accidents du travail · saisie manuelle", icon: ShieldPlus, accent: "#e1c58e" },
+    { id: "accident-free-days", label: "Jours sans accident du travail", value: null, detail: "Dernier accident · saisie manuelle", icon: ShieldPlus, accent: "#a6e6c4" },
     { id: "tonnage-distribution", label: "Tonnage Distribution", value: metric(pdf?.distribution?.tonnage, " t"), detail: `Distribution · ${pdfDetail}`, icon: Weight, accent: "#98d6d6" },
     { id: "tonnage-expedition", label: "Tonnage Expédition", value: metric(pdf?.expedition?.tonnage, " t"), detail: `Expédition · ${pdfDetail}`, icon: Weight, accent: "#b4d9ef" },
     { id: "positions", label: "Positions", value: metric(snapshot.summary.positions, ""), detail: `Excel · plage ${snapshot.match.timeRangeLabel}`, icon: Package, accent: "#a8c9f0" },
@@ -54,7 +57,9 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     { id: "destination", label: "Ponctualité destination", value: metric(punctuality?.destinationPunctuality, "%"), detail: pdfMetricDetail("destinationPunctuality"), icon: Flag, accent: "#a4d5c8", percent: punctuality?.destinationPunctuality, targetKey: "destinationPunctuality" },
     { id: "temperature", label: "Température retour ramasse", value: metric(punctuality?.temperatureReturn, "%"), detail: pdfMetricDetail("temperatureReturn"), icon: Thermometer, accent: "#dcc0d7", percent: punctuality?.temperatureReturn, targetKey: "temperatureReturn" },
   ];
-  const cards = allCards.filter((card) => !visibleIndicatorIds || visibleIndicatorIds.includes(card.id));
+  // The A.T. day counter is always a carousel slide. Existing nine
+  // site-configurable cards and their saved visibility preferences are untouched.
+  const cards = allCards.filter((card) => card.id === "accident-free-days" || !visibleIndicatorIds || visibleIndicatorIds.includes(card.id));
   const itemCount = cards.length + (hasMercato ? 1 : 0);
   const cardKey = cards.map((card) => card.id).join("|");
   useEffect(() => {
@@ -144,7 +149,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-      if (event.target instanceof Element && event.target.closest(".mercato-kpi-viewport")) return;
+      if (event.target instanceof Element && event.target.closest(".mercato-kpi-viewport, button, input, select, textarea, label, summary")) return;
       event.preventDefault();
       const maxFirst = Math.max(0, totalCount - geometry.current.centers);
       const current = geometry.current.first;
@@ -209,7 +214,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   }, [cards.length, cardKey, hasMercato]);
 
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType !== "mouse" || event.button !== 0 || (event.target as Element).closest(".mercato-kpi-viewport")) return;
+    if (event.pointerType !== "mouse" || event.button !== 0 || (event.target as Element).closest(".mercato-kpi-viewport, button, input, select, textarea, label, summary")) return;
     manualScroll.current = true;
     drag.current = { id: event.pointerId, x: event.clientX, scroll: event.currentTarget.scrollLeft, moved: false };
   };
@@ -249,9 +254,9 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       </header>
       <div ref={viewportRef} className="match-indicators-viewport" tabIndex={0} role="group" aria-label="Défilement des indicateurs du match"
         onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}
-        onTouchStart={(event) => { if (event.target instanceof Element && event.target.closest(".mercato-kpi-viewport")) return; manualScroll.current = true; touching.current = true; }}
-        onTouchEnd={(event) => { if (event.target instanceof Element && event.target.closest(".mercato-kpi-viewport")) return; touching.current = event.touches.length > 0; settleRef.current(); }}
-        onTouchCancel={(event) => { if (event.target instanceof Element && event.target.closest(".mercato-kpi-viewport")) return; touching.current = false; settleRef.current(); }}
+        onTouchStart={(event) => { if (event.target instanceof Element && event.target.closest(".mercato-kpi-viewport, .safety-card-form")) return; manualScroll.current = true; touching.current = true; }}
+        onTouchEnd={(event) => { if (event.target instanceof Element && event.target.closest(".mercato-kpi-viewport, .safety-card-form")) return; touching.current = event.touches.length > 0; settleRef.current(); }}
+        onTouchCancel={(event) => { if (event.target instanceof Element && event.target.closest(".mercato-kpi-viewport, .safety-card-form")) return; touching.current = false; settleRef.current(); }}
         onPointerLeave={() => { if (!drag.current?.moved) drag.current = null; }}
         >
         <div className="match-indicators-track" ref={trackRef}>
@@ -262,7 +267,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
           )}
           {cards.map(({ id, label, value, detail, icon: Icon, accent, percent, targetKey }, index) => (
             <div className="match-indicator-slide" key={id} data-indicator={id} data-featured={index + (hasMercato ? 1 : 0) >= visibleFirst && index + (hasMercato ? 1 : 0) < visibleFirst + position.centers ? "" : undefined} role="group" aria-roledescription="diapositive" aria-label={`${label}, ${index + (hasMercato ? 2 : 1)} sur ${itemCount}`}>
-              <article className={`match-indicator-card ${id === "performance" ? "is-performance" : ""} ${typeof percent === "number" ? (percent > (targetKey ? punctualityTargets?.[targetKey] ?? 100 : 100) ? "is-at-target" : "is-below-target") : ""}`} style={{ "--indicator-accent": accent } as CSSProperties}>
+              {id === "accident-free-days" ? <SafetyCounter session={session} /> : <article className={`match-indicator-card ${id === "performance" ? "is-performance" : ""} ${typeof percent === "number" ? (percent > (targetKey ? punctualityTargets?.[targetKey] ?? 100 : 100) ? "is-at-target" : "is-below-target") : ""}`} style={{ "--indicator-accent": accent } as CSSProperties}>
                 <div className="match-indicator-title"><Icon size={21} /><h3>{label}</h3></div>
                 <div className="match-indicator-body">
                   <strong className={`match-indicator-value ${value === null ? "is-empty" : ""}`}>{value ?? (id === "injuries" ? "À renseigner" : pdf ? "Indisponible" : "PDF à importer")}</strong>
@@ -281,7 +286,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
                   })()}
                 </div>
                 {id === "performance" ? <div className="match-indicator-staff real-staff-metric"><span>Effectif réel</span><strong>{staffPercent}</strong><small>{staffDetail}</small></div> : <small className="match-indicator-source">{value === null && pdf && id !== "injuries" ? "Indicateur absent du PDF" : detail}</small>}
-              </article>
+              </article>}
             </div>
           ))}
         </div>
