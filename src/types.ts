@@ -180,6 +180,12 @@ export type Snapshot = {
   anomalySummary?: AnomalySummary;
   excludedTravelCodes?: string[];
   /** Reception-only exclusions. The global excludedTravelCodes list is unchanged. */
+  /** Independent TCD PPT CHG voyage filters for the active agency/date/range. */
+  loadingScope?: {
+    excludedTravels: Array<{ code: string; reason: string; updatedAt: string | null }>;
+    availableTravels: string[];
+    effectiveExcluded: number;
+  };
   receptionScope?: {
     version: number;
     excludedTravels: Array<{ code: string; reason: string; updatedAt: string | null }>;
