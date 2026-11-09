@@ -5,7 +5,7 @@ import { formatKpiDuration } from "./kpi-duration";
 import { isKpiGoalConceded } from "./kpi-goal-status";
 import { pdfSourceLabel } from "./pdf-source";
 import { qualificationReasons } from "./qualification-reasons";
-import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout } from "../server/brief-layout.mjs";
+import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, migrateBriefLayout, normalizeBriefIndicators, normalizeTonnageActivity } from "../server/brief-layout.mjs";
 import {
   AlertTriangle,
   Award,
@@ -74,6 +74,8 @@ type CauseriePlan = {
   mercato: string;
   mercatoProfiles: MercatoProfiles;
   redCards: string;
+  visibleIndicators: string[];
+  tonnageActivity: "auto" | "expedition" | "distribution";
   coach: {
     tactic: string;
     priority: string;
@@ -1337,6 +1339,8 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const mercatoText = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.mercato ?? "" : null;
   const mercatoProfiles = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.mercatoProfiles ?? {} : {};
   const redCards = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.redCards ?? "" : "";
+  const briefIndicatorIds = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.visibleIndicators : undefined;
+  const tonnageActivity = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.tonnageActivity : undefined;
   const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
   const loadingTarget = formatKpiDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
   const unloadingTarget = formatKpiDuration(snapshot.performanceCriteria?.unloadingSeconds ?? leagueConfig.unloadingSeconds);
@@ -1559,6 +1563,8 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
             staffDetail={formatRealStaffDetail(snapshot, kpiCopy.expectedPlayersValue)}
             mercato={mercatoText}
             mercatoProfiles={mercatoProfiles}
+            visibleIndicatorIds={briefIndicatorIds}
+            tonnageActivity={tonnageActivity}
           />
           <div className="match-kpi-wrap">
             {editingKpis && (
@@ -3390,9 +3396,60 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
             </div>
           )}
         </div>
+
+        <div className="tv-brief-display-settings" aria-label="Préparation des indicateurs du brief">
+          <div>
+            <strong>Indicateurs à afficher pendant le brief</strong>
+            <small>Masquer une carte ne change ni les KPI calculés ni le score du match.</small>
+          </div>
+          {planMode === "edit" ? (
+            <>
+              <div className="tv-brief-indicator-options">
+                {([
+                  ["performance", "Performance d'équipe"],
+                  ["injuries", "Blessures A.T"],
+                  ["tonnage", "Tonnage"],
+                  ["positions", "Positions"],
+                  ["arrival", "Ponctualité arrivage"],
+                  ["departure", "Ponctualité départ"],
+                  ["destination", "Ponctualité destination"],
+                  ["temperature", "Température retour ramasse"],
+                ] as const).map(([id, label]) => (
+                  <label key={id}>
+                    <input
+                      type="checkbox"
+                      checked={planDraft.visibleIndicators.includes(id)}
+                      disabled={planDraft.visibleIndicators.length === 1 && planDraft.visibleIndicators.includes(id)}
+                      onChange={(event) => setPlanDraft((current) => ({
+                        ...current,
+                        visibleIndicators: normalizeBriefIndicators(event.target.checked
+                          ? [...current.visibleIndicators, id]
+                          : current.visibleIndicators.filter((value) => value !== id)),
+                      }))}
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+              <label className="tv-brief-tonnage-activity">
+                Source du tonnage
+                <select
+                  value={planDraft.tonnageActivity}
+                  onChange={(event) => setPlanDraft((current) => ({ ...current, tonnageActivity: normalizeTonnageActivity(event.target.value) }))}
+                >
+                  <option value="auto">Automatique selon la plage horaire</option>
+                  <option value="expedition">Expédition</option>
+                  <option value="distribution">Distribution (activité de nuit)</option>
+                </select>
+              </label>
+            </>
+          ) : (
+            <small>{plan.visibleIndicators.length} indicateur(s) affiché(s) · tonnage {plan.tonnageActivity === "auto" ? "automatique" : plan.tonnageActivity === "distribution" ? "Distribution" : "Expédition"}</small>
+          )}
+        </div>
         <div className="tv-plan-grid">
           {([
-            ["attack", "SAV"],
+            ["attack", "Service client"],
             ["midfield", "EXPÉDITION / RAMASSE & EMBALLAGE"],
             ["defense", "SST"],
           ] as const).map(([zone, label]) => (
@@ -4788,6 +4845,8 @@ function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
     mercato: "",
     mercatoProfiles: {},
     redCards: "",
+    visibleIndicators: [...BRIEF_INDICATOR_IDS],
+    tonnageActivity: "auto",
     coach: {
       tactic: action.title,
       priority: priority || action.detail,
@@ -4815,6 +4874,8 @@ function buildEmptyCauseriePlan(): CauseriePlan {
     mercato: "",
     mercatoProfiles: {},
     redCards: "",
+    visibleIndicators: [...BRIEF_INDICATOR_IDS],
+    tonnageActivity: "auto",
     coach: {
       tactic: "",
       priority: "",
@@ -4849,6 +4910,8 @@ function normalizeCauseriePlan(plan: Partial<CauseriePlan> | null | undefined): 
     mercato,
     mercatoProfiles: normalizeMercatoProfiles(input.mercatoProfiles, mercato),
     redCards: text(input.redCards),
+    visibleIndicators: normalizeBriefIndicators(input.visibleIndicators),
+    tonnageActivity: normalizeTonnageActivity(input.tonnageActivity),
     coach: {
       tactic: text(input.coach?.tactic),
       priority: text(input.coach?.priority),
@@ -4874,7 +4937,7 @@ function hasManualCauserieContent(plan: CauseriePlan, snapshot: Snapshot) {
   const hasZoneContent = [...plan.attack, ...plan.midfield, ...plan.defense].some((item) => item.trim().length > 0);
   const hasAttachment = Object.values(plan.attachments).some((items) => items.length > 0);
   const hasMetadata = plan.team.trim().length > 0 || plan.manager.trim().length > 0;
-  if (hasZoneContent || hasAttachment || hasMetadata || plan.mercato.trim().length > 0 || plan.redCards.trim().length > 0) return true;
+  if (hasZoneContent || hasAttachment || hasMetadata || plan.mercato.trim().length > 0 || plan.redCards.trim().length > 0 || plan.tonnageActivity !== "auto" || plan.visibleIndicators.length !== BRIEF_INDICATOR_IDS.length) return true;
 
   const generated = buildDefaultCauseriePlan(snapshot).coach;
   const legacyGenerated = new Set([
