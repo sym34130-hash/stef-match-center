@@ -152,3 +152,12 @@ cible / 30 hors cible. Ces chiffres dépendent de la plage et de la ligue
 active.
 
 Ces règles doivent rester validées avec les utilisateurs terrain avant usage officiel.
+
+
+## Lot B — exclusions de réception
+
+Dans « Statistiques du match », ouvre « % Duels gagnés » puis « Gérer les exclusions réception ». Un accès d'édition permet de choisir un voyage actif ou, si l'Excel le permet, un client de tri identifié, de saisir un motif, de l'exclure et de le réintégrer. La sélection est conservée par agence, journée et plage horaire, avec un historique des modifications.
+
+Ce nouveau filtre n'est **pas** l'exclusion globale d'un voyage déjà disponible dans l'application : il ne cible que les duels gagnés de réception et leur courbe horaire. Le sous-KPI de réception du score est recalculé ; les passes, chargements, possession, joueurs et volumes ne changent pas.
+
+Pour filtrer un client, l'onglet `Données` doit contenir une colonne identifiant explicitement le client (par exemple `Client de tri`). Sinon aucune attribution client n'est déduite et le filtre client est indisponible. Le filtre voyage reste accessible.
