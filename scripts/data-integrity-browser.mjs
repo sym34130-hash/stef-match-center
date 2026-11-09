@@ -123,6 +123,28 @@ try {
     assert.match(await page.locator('[data-indicator="tonnage"] .match-indicator-source').innerText(), /Distribution/);
     assert.equal(await page.locator('[data-indicator="performance"]').count(), 0);
     console.log(`Browser: Lot A cards, distribution tonnage and saved preferences at ${viewport.width}px: OK`);
+    // Exercise the actual editor, not only its API contract: update, save and reload.
+    await page.getByRole("navigation", { name: "Navigation de la feuille de match" })
+      .getByRole("button", { name: "Aller à Brief équipe" }).click();
+    const brief = page.locator(".match-brief-slide .tv-action");
+    await brief.getByRole("button", { name: "Écrire" }).click();
+    assert.equal((await brief.locator(".tv-plan-column.attack > b").innerText()).trim(), "Service client");
+    await brief.locator(".tv-brief-indicator-options label").filter({ hasText: "Ponctualité arrivage" }).locator("input").check();
+    await brief.locator(".tv-brief-tonnage-activity select").selectOption("expedition");
+    await brief.getByRole("button", { name: "Enregistrer", exact: true }).click();
+    await brief.getByRole("button", { name: "Écrire" }).waitFor({ state: "visible" });
+    const updated = await (await fetch(`${causerieUrl}?matchDate=${encodeURIComponent(importedSnapshot.match.date)}`, { headers: causerieHeaders })).json();
+    assert.deepEqual(updated.plan.visibleIndicators, ["tonnage", "positions", "arrival"]);
+    assert.equal(updated.plan.tonnageActivity, "expedition");
+    await page.getByRole("navigation", { name: "Navigation de la feuille de match" })
+      .getByRole("button", { name: "Aller à Coup de sifflet final" }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".match-indicator-card").length === 3, null, { timeout: 15000 });
+    assert.equal(await page.locator('[data-indicator="tonnage"] .match-indicator-value').innerText(), "478 t");
+    await page.reload();
+    await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".match-indicator-card").length === 3, null, { timeout: 15000 });
+    assert.equal(await page.locator('[data-indicator="tonnage"] .match-indicator-value').innerText(), "478 t");
+    console.log(`Browser: Lot A UI editor, Service client, saved choice and reload at ${viewport.width}px: OK`);
     assert.deepEqual(errors, [], `Unexpected React errors at ${viewport.width}px`);
     console.log(`Browser: login, upload, agency confirmation, completed import at ${viewport.width}px: OK`);
     await page.close();
