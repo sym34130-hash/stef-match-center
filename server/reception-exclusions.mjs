@@ -6,7 +6,7 @@ const MAX_CODE_LENGTH = 120;
 const MAX_REASON_LENGTH = 240;
 
 export function normalizeReceptionCode(value) {
-  return typeof value === "string" ? value.normalize("NFKC").trim().replace(/\\s+/g, " ").slice(0, MAX_CODE_LENGTH) : "";
+  return typeof value === "string" ? value.normalize("NFKC").trim().replace(/\s+/g, " ").slice(0, MAX_CODE_LENGTH) : "";
 }
 
 export function receptionClientKey(value) {
@@ -21,7 +21,7 @@ export function normalizeReceptionExclusions(value) {
       const code = normalizeReceptionCode(item?.code);
       if (!code) continue;
       const key = kind === "clients" ? receptionClientKey(code) : code;
-      const reason = normalizeReceptionCode(item?.reason).slice(0, MAX_REASON_LENGTH);
+      const reason = typeof item?.reason === "string" ? item.reason.normalize("NFKC").trim().replace(/\s+/g, " ").slice(0, MAX_REASON_LENGTH) : "";
       const updatedAt = typeof item?.updatedAt === "string" && !Number.isNaN(Date.parse(item.updatedAt)) ? item.updatedAt : null;
       result.set(key, { code, reason, updatedAt });
     }
