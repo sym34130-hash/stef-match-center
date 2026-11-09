@@ -60,6 +60,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   ];
   const cards = allCards.filter((card) => !visibleIndicatorIds || visibleIndicatorIds.includes(card.id));
   const itemCount = cards.length + (hasMercato ? 1 : 0);
+  const cardKey = cards.map((card) => card.id).join("|");
   useEffect(() => {
     const viewport = viewportRef.current;
     const track = trackRef.current;
@@ -156,7 +157,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     goRef.current = go;
     const layout = () => {
       const available = viewport.clientWidth;
-      const centers = available >= 640 ? 2 : 1;
+      const centers = Math.min(totalCount, available >= 640 ? 2 : 1);
       const isLargeBrief = document.body.classList.contains("match-celebration-active")
         && window.innerWidth >= 2200;
       const width = centers === 2
@@ -209,7 +210,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       clearTimeout(settleTimer);
       settleRef.current = () => {};
     };
-  }, [cards.length, hasMercato]);
+  }, [cards.length, cardKey, hasMercato]);
 
   const startDrag = (event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== "mouse" || event.button !== 0 || (event.target as Element).closest(".mercato-kpi-viewport")) return;
