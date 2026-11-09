@@ -129,7 +129,22 @@ try {
         await simulator.getByLabel("Passes réussies").uncheck();
         assert.ok((await simulatedScore.innerText()).includes("2 / 2"), "Both selected KPI are strictly above threshold");
         assert.ok((await officialScore.innerText()).includes("2 – 2"), "Simulated selections never change official score");
-        await simulator.getByRole("button", { name: "Rétablir les 4 KPI" }).click();
+        await simulator.getByRole("button", { name: "Rétablir les KPI applicables" }).click();
+        assert.equal(await simulator.locator('input[type="checkbox"]:checked').count(), 4);
+        assert.ok((await simulatedScore.innerText()).includes("2 / 4"));
+        const common = simulator.locator(".score-simulator-result.is-common");
+        assert.ok((await common.innerText()).includes("2 / 2"),
+          "Comparable baseline must use only loading and reception");
+        await simulator.getByLabel("Organisation de la plateforme (simulation)").selectOption("without-zoning");
+        assert.equal(await simulator.locator('input[type="checkbox"]:checked').count(), 2,
+          "No zoning is explicitly declared and leaves only loading and reception");
+        assert.equal(await simulator.getByLabel("Passes réussies").isDisabled(), true);
+        assert.equal(await simulator.getByLabel("Possession").isDisabled(), true);
+        assert.ok((await simulatedScore.innerText()).includes("2 / 2"));
+        assert.ok((await officialScore.innerText()).includes("2 – 2"),
+          "Explicit no-zoning simulation must never change the four-KPI official score");
+        assert.ok((await common.innerText()).includes("2 / 2"));
+        await simulator.getByLabel("Organisation de la plateforme (simulation)").selectOption("with-zoning");
         assert.equal(await simulator.locator('input[type="checkbox"]:checked').count(), 4);
         assert.ok((await simulatedScore.innerText()).includes("2 / 4"));
         const overflow = await simulator.evaluate(el => el.scrollWidth > el.clientWidth + 2);
