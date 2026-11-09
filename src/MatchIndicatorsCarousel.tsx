@@ -48,7 +48,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     const target = punctualityTargets?.[key];
     return target === undefined ? pdfDetail : `${pdfDetail} · objectif ${number.format(target)}%`;
   };
-  const cards: Array<{ id: string; label: string; value: string | null; detail: string; icon: LucideIcon; accent: string; percent?: number; targetKey?: PunctualityKey }> = [
+  const allCards: Array<{ id: string; label: string; value: string | null; detail: string; icon: LucideIcon; accent: string; percent?: number; targetKey?: PunctualityKey }> = [
     { id: "performance", label: "Performance d'équipe", value: performance, detail: motivation, icon: Users, accent: "#91d7c0" },
     { id: "injuries", label: "NB DE BLESSURES (A.T)", value: injuries.trim() ? number.format(Number(injuries)) : null, detail: "Accidents du travail · saisie manuelle", icon: ShieldPlus, accent: "#e1c58e" },
     { id: "tonnage", label: "Tonnage", value: metric(tonnageValue, " t"), detail: `${tonnageLabel} · ${pdfDetail}`, icon: Weight, accent: "#98d6d6" },
@@ -57,7 +57,8 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     { id: "departure", label: "Ponctualité départ", value: metric(punctuality?.departurePunctuality, "%"), detail: pdfMetricDetail("departurePunctuality"), icon: ArrowUpFromLine, accent: "#b9c6ed", percent: punctuality?.departurePunctuality, targetKey: "departurePunctuality" },
     { id: "destination", label: "Ponctualité destination", value: metric(punctuality?.destinationPunctuality, "%"), detail: pdfMetricDetail("destinationPunctuality"), icon: Flag, accent: "#a4d5c8", percent: punctuality?.destinationPunctuality, targetKey: "destinationPunctuality" },
     { id: "temperature", label: "Température retour ramasse", value: metric(punctuality?.temperatureReturn, "%"), detail: pdfMetricDetail("temperatureReturn"), icon: Thermometer, accent: "#dcc0d7", percent: punctuality?.temperatureReturn, targetKey: "temperatureReturn" },
-  ].filter((card) => !visibleIndicatorIds || visibleIndicatorIds.includes(card.id));
+  ];
+  const cards = allCards.filter((card) => !visibleIndicatorIds || visibleIndicatorIds.includes(card.id));
   const itemCount = cards.length + (hasMercato ? 1 : 0);
   useEffect(() => {
     const viewport = viewportRef.current;
