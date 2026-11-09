@@ -37,6 +37,8 @@ const importConfirmationSecret = randomBytes(32);
 // show "Non renseigné" when missing rather than inventing an incident-free run.
 // Server operators may still disable edits explicitly.
 const safetyWritesEnabled = process.env.STEF_SAFETY_WRITES_ENABLED !== "false";
+const litigationWritesEnabled = process.env.STEF_LITIGATION_WRITES_ENABLED === "true"
+  || (process.env.NODE_ENV !== "production" && process.env.STEF_LITIGATION_WRITES_ENABLED !== "false");
 
 const app = express();
 app.disable("x-powered-by");
@@ -166,6 +168,81 @@ app.put("/api/agencies/:agencyCode/safety", requireAgency, async (req, res) => {
     });
   } catch (error) {
     respondInternalError(res, `safety:write:${req.agency.code}`, error);
+  }
+});
+
+// Lot C3: manual agency-scoped litigation register. No inference from Excel/PDF
+// anomalies or from the operational score; no destructive deletion endpoint.
+app.get("/api/agencies/:agencyCode/litigations", requireAgency, async (req, res) => {
+  try {
+    const state = await withAgencyLock(req.agency.code, () => readLitigationState(req.agency.code));
+    res.set("Cache-Control", "no-store, max-age=0").json({ ...state,
+      editable: Boolean(req.agency.canImport) && litigationWritesEnabled });
+  } catch (error) {
+    respondInternalError(res, `litigations:read:${req.agency.code}`, error);
+  }
+});
+
+app.put("/api/agencies/:agencyCode/litigations", requireAgency, async (req, res) => {
+  if (!req.agency.canImport) {
+    res.status(403).json({ message: "Ce code d'accès permet uniquement de consulter les litiges." });
+    return;
+  }
+  if (!litigationWritesEnabled) {
+    res.status(503).json({ message: "La saisie de litiges est désactivée tant qu'un stockage durable et restaurable n'est pas confirmé." });
+    return;
+  }
+  if (!Object.prototype.hasOwnProperty.call(req.body ?? {}, "expectedRevision")
+    || (req.body.expectedRevision !== null && typeof req.body.expectedRevision !== "string")) {
+    res.status(428).json({ message: "Une révision du registre est nécessaire pour l'enregistrer. Recharge les litiges." });
+    return;
+  }
+  const record = normalizeManualLitigation(req.body?.record, parisCalendarDate());
+  const reason = typeof req.body?.changeReason === "string" ? req.body.changeReason.trim().replace(/\s+/g, " ") : "";
+  if (!record || reason.length > 240 || (req.body?.changeReason !== undefined && typeof req.body.changeReason !== "string")) {
+    res.status(400).json({ message: "Litige invalide : référence, date, motif, statut ou date de clôture incorrects." });
+    return;
+  }
+  try {
+    await withAgencyLock(req.agency.code, async () => {
+      const current = await readLitigationState(req.agency.code);
+      if (req.body.expectedRevision !== current.revision) {
+        res.status(409).json({ ...current, editable: true, message: "Le registre a été modifié par un autre responsable. Recharge-le avant d'enregistrer." });
+        return;
+      }
+      const existing = current.records.find(item => item.reference.toLocaleUpperCase("fr") === record.reference.toLocaleUpperCase("fr"));
+      if (existing && reason.length < 5) {
+        res.status(400).json({ message: "Le motif de modification d'un litige existant doit comporter au moins 5 caractères." });
+        return;
+      }
+      if (!existing && current.records.length >= 500) {
+        res.status(422).json({ message: "Capacité du registre atteinte (500 litiges) : archivage nécessaire avant toute nouvelle saisie." });
+        return;
+      }
+      if (existing && (["travelCode", "openedAt", "description", "status", "closedAt"].every(key => existing[key] === record[key]))) {
+        res.json({ message: "LITIGE INCHANGÉ", ...current, editable: true });
+        return;
+      }
+      const changedAt = new Date().toISOString();
+      const next = { ...record, createdAt: existing?.createdAt ?? changedAt, updatedAt: changedAt };
+      const records = existing
+        ? current.records.map(item => item.reference.toLocaleUpperCase("fr") === record.reference.toLocaleUpperCase("fr") ? next : item)
+        : [...current.records, next];
+      const history = [...current.history, {
+        reference: record.reference,
+        previous: existing ?? null,
+        current: next,
+        changedAt,
+        reason: reason || "Création manuelle",
+        actor: "session agence autorisée",
+      }].slice(-500);
+      const dir = path.join(dataDir, sanitizeSegment(req.agency.code));
+      await fs.mkdir(dir, { recursive: true });
+      await writeJsonAtomic(litigationFilePath(req.agency.code), { version: 1, records, history, updatedAt: changedAt });
+      res.json({ message: "LITIGE ENREGISTRÉ", ...await readLitigationState(req.agency.code), editable: true });
+    });
+  } catch (error) {
+    respondInternalError(res, `litigations:write:${req.agency.code}`, error);
   }
 });
 
@@ -1108,6 +1185,58 @@ async function readSafetyState(agencyCode) {
     revision: await readFileRevision(file),
     asOfDate,
     counter,
+    history,
+  };
+}
+
+function litigationFilePath(agencyCode) {
+  return path.join(dataDir, sanitizeSegment(agencyCode), "litigations.json");
+}
+
+function normalizeManualLitigation(value, today) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const reference = typeof value.reference === "string" ? value.reference.trim() : "";
+  const travelCode = typeof value.travelCode === "string" ? value.travelCode.trim() : "";
+  const description = typeof value.description === "string" ? value.description.trim().replace(/\s+/g, " ") : "";
+  const openedAt = value.openedAt;
+  const status = value.status;
+  const closedAt = value.closedAt;
+  if (!/^[A-Za-z0-9][A-Za-z0-9 _./-]{2,59}$/.test(reference)
+    || travelCode.length > 80 || /[\r\n]/.test(travelCode)
+    || description.length < 5 || description.length > 240
+    || typeof openedAt !== "string" || sanitizeDate(openedAt) !== openedAt || openedAt > today
+    || !["open", "closed"].includes(status)
+    || (status === "open" && closedAt !== null)
+    || (status === "closed" && (typeof closedAt !== "string" || sanitizeDate(closedAt) !== closedAt
+      || closedAt < openedAt || closedAt > today))) return null;
+  return { reference, travelCode, description, openedAt, status, closedAt };
+}
+
+async function readLitigationState(agencyCode) {
+  const file = litigationFilePath(agencyCode);
+  let saved = null;
+  try {
+    saved = JSON.parse(await fs.readFile(file, "utf8"));
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  const today = parisCalendarDate();
+  const records = Array.isArray(saved?.records)
+    ? saved.records.filter(item => normalizeManualLitigation(item, today)).slice(0, 500)
+    : [];
+  const history = Array.isArray(saved?.history) ? saved.history.slice(-500) : [];
+  return {
+    sourceAvailable: saved !== null,
+    source: "saisie_manuelle_agence",
+    asOfDate: today,
+    updatedAt: typeof saved?.updatedAt === "string" ? saved.updatedAt : null,
+    records: records.sort((a, b) => b.openedAt.localeCompare(a.openedAt) || a.reference.localeCompare(b.reference)),
+    totals: saved === null ? null : {
+      total: records.length,
+      open: records.filter(item => item.status === "open").length,
+      closed: records.filter(item => item.status === "closed").length,
+    },
+    revision: await readFileRevision(file),
     history,
   };
 }

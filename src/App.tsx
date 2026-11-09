@@ -50,6 +50,7 @@ import type { LucideIcon } from "lucide-react";
 import type { Agency, Highlight, Player, Snapshot } from "./types";
 import { MatchIndicatorsCarousel } from "./MatchIndicatorsCarousel";
 import { SafetyCounter } from "./SafetyCounter";
+import { LitigationRegister } from "./LitigationRegister";
 import { ReceptionScopeControls, type ReceptionExclusionChange, type LoadingExclusionChange } from "./ReceptionScopeControls";
 import { KickoffMusicControl } from "./KickoffMusicControl";
 import { OperationalDiagnosticCard, ReceptionHourlyChart } from "./OperationalAnalysisCards";
@@ -1753,6 +1754,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
             visibleIndicatorIds={briefIndicatorIds}
           />
           <SafetyCounter session={session} />
+          <LitigationRegister session={session} />
           <div className="match-kpi-wrap">
             {editingKpis && (
               <div className="match-indicators-editor">

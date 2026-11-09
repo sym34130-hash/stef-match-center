@@ -1,0 +1,54 @@
+/* Lot C3 — independent, compact agency dispute register. */
+.litigation-register {
+  display: grid;
+  gap: 13px;
+  min-width: 0;
+  margin: 14px 0;
+  padding: clamp(14px, 2vw, 22px);
+  background: #102338;
+  color: #eff6fb;
+  border: 1px solid #465c78;
+  border-radius: 14px;
+}
+.litigation-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.litigation-heading-name { display: flex; align-items: center; gap: 11px; }
+.litigation-heading-name svg { color: #b6d9ed; flex-shrink: 0; }
+.litigation-heading h3 { margin: 0 0 4px; color: #fff; font-size: clamp(16px, 2vw, 21px); }
+.litigation-heading p { margin: 0; color: #d2e2ee; font-size: 12px; }
+.litigation-stats { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.litigation-stats span { padding: 7px 11px; border-radius: 7px; border: 1px solid #647e96; background: #203851; color: #ebf4fc; font-size: 12px; }
+.litigation-stats b { font-size: 17px; margin-right: 3px; font-variant-numeric: tabular-nums; }
+.litigation-unavailable { color: #fff0ce; font-size: 12px; }
+.litigation-hint { color: #d4e2ef; font-size: 12px; line-height: 1.5; margin: 0; }
+.litigation-error { color: #ffd0c5; font-size: 12px; margin: 0; }
+.litigation-success { color: #b9f0d2; font-size: 12px; margin: 0; }
+.litigation-add { justify-self: start; color: #092523; background: #b8ead2; border: 0; border-radius: 8px; font-weight: 800; font-size: 12px; padding: 10px 14px; cursor: pointer; }
+.litigation-form { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px 14px; padding: 15px; border: 1px solid #6a88a6; border-radius: 9px; background: #1a324b; }
+.litigation-form-title, .litigation-full, .litigation-form-actions { grid-column: 1 / -1; }
+.litigation-form-title { display: flex; align-items: center; gap: 7px; font-weight: 800; font-size: 13px; }
+.litigation-form label { display: grid; min-width: 0; align-content: end; gap: 6px; color: #e3f1f8; font-size: 12px; }
+.litigation-form input, .litigation-form select { box-sizing: border-box; width: 100%; min-width: 0; padding: 10px; background: #fff; color: #122235; font: inherit; border: 1px solid #8eafc5; border-radius: 7px; }
+.litigation-form input:read-only { background: #d7e3ea; }
+.litigation-form-actions { display: flex; gap: 9px; flex-wrap: wrap; }
+.litigation-form-actions button { cursor: pointer; border-radius: 7px; padding: 9px 14px; font-weight: 700; font-size: 12px; border: 1px solid #a5c3d1; color: #e8f8fb; background: transparent; }
+.litigation-form-actions button[type=submit] { color: #122a24; background: #b8ead2; border-color: #b8ead2; }
+.litigation-form-actions button:disabled { opacity: .6; cursor: not-allowed; }
+.litigation-table-wrap { max-width: 100%; overflow-x: auto; }
+.litigation-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
+.litigation-table th { background: #25445f; color: #f4f8fc; padding: 10px; white-space: nowrap; font-size: 11px; }
+.litigation-table td { border-top: 1px solid #4a6177; padding: 10px; color: #e1edf7; vertical-align: top; line-height: 1.5; }
+.litigation-table td:first-child, .litigation-table td:nth-child(2) { overflow-wrap: anywhere; }
+.litigation-table td:nth-child(4) { max-width: 350px; overflow-wrap: anywhere; }
+.litigation-table td button { border: 1px solid #7cacc6; background: #1b3d55; color: #f0f9ff; padding: 5px 8px; cursor: pointer; border-radius: 5px; }
+.litigation-history { border-top: 1px solid #46617b; padding-top: 10px; }
+.litigation-history summary { font-size: 12px; font-weight: 700; color: #d6efff; cursor: pointer; }
+.litigation-history ul { margin: 9px 0; max-height: 180px; overflow-y: auto; padding-left: 19px; font-size: 12px; }
+.litigation-history li { margin: 7px 0; }
+.litigation-history small { display: block; color: #c7daed; }
+@media (max-width: 650px) {
+  .litigation-form { grid-template-columns: minmax(0,1fr); }
+  .litigation-table { min-width: 690px; }
+}
+
+.litigation-records summary { cursor: pointer; color: #d6efff; font-weight: 700; font-size: 12px; padding: 8px 0; }
+.litigation-records .litigation-table-wrap { margin-top: 8px; }

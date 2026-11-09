@@ -41,9 +41,21 @@ Statut : **saisie manuelle développée et en recette, non déployée**. Décisi
 4. Modification concurrente refusée sur révision obsolète ; perte simulée du fichier éphémère, valeur remise à « Non renseigné » et possibilité de ressaisie testées.
 5. Aucun impact sur imports, exclusions, scores, neuf indicateurs du carrousel et blessés A.T saisis localement.
 
+## Implémentation du registre manuel des litiges (PR empilée après #31)
+
+- `GET /api/agencies/:agencyCode/litigations` : lecture autorisée par agence. Si aucune source manuelle n'est initialisée, `sourceAvailable: false` et `totals: null`, **jamais zéro inventé**.
+- `PUT /api/agencies/:agencyCode/litigations` : création ou modification d'une fiche unique par référence (insensible à la casse), avec révision obligatoire et erreur 409 en cas de concurrence.
+- Champs : référence stable, voyage facultatif, date d'ouverture, description du motif, statut `open` (ouvert) ou `closed` (clôturé), date de clôture obligatoire pour un cas clôturé. Aucune imputation financière n'est inventée.
+- Toute correction d'un enregistrement existant exige un motif (au moins 5 caractères) et historise précédent, nouvelle valeur et horodatage. **Pas de suppression destructive**.
+- Le compteur décrit uniquement les litiges **saisis** dans le registre ; il ne constitue pas une déclaration d'exhaustivité des litiges de l'agence.
+- Registre serveur `<STEF_DATA_DIR>/<agency>/litigations.json`, indépendant des imports et KPI. Limite technique : 500 fiches par agence et 500 événements d'historique conservés ; un archivage durable devra précéder cette limite.
+- Modification autorisée uniquement pour `canImport`. L'auteur individuel n'est pas disponible dans l'authentification agence actuelle : la trace renseigne « session agence autorisée » et ne doit pas être présentée comme une signature nominative.
+- **Sécurité production :** `STEF_LITIGATION_WRITES_ENABLED=true` ne doit être activé que sur un stockage persistant, sauvegardé et restaurable. Par défaut, les écritures sont désactivées en `NODE_ENV=production`.
+- L'écran se situe sous les indicateurs du match, séparé des quatre KPI de score et des neuf cartes de personnalisation, avec formulaire de saisie et **liste repliée par défaut** (défilement horizontal sur mobile) pour préserver l'espace des graphiques. L'historique est également rétractable.
+
 ## C3 — suivi des litiges
 
-**Périmètre métier restant à fixer** : source officielle, identifiant unique, états, dates d'ouverture/résolution, clés de rattachement (agence/voyage), et éventuelle valorisation financière. Ne jamais calculer un « nombre de litiges » en assimilant des anomalies Excel ou PDF non validées.
+**Première version retenue** : un registre de saisie manuelle, identifié et historisé, pour les litiges enregistrés par les responsables. Les données d'une éventuelle source officielle externe, leur exhaustivité, les règles d'imputation et la valorisation financière restent à définir. Ne jamais déduire des litiges d'anomalies Excel/PDF non qualifiées.
 
 Contrat cible recommandé (non encore implémenté) :
 

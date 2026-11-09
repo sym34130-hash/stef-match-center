@@ -65,4 +65,5 @@ jobs:
             scripts/hourly-pass-chart-scope.test.mjs \
             scripts/accident-free-days.test.mjs \
             scripts/safety-api.test.mjs \
+            scripts/litigation-api.test.mjs \
             scripts/kpi-goal-status.test.mjs
