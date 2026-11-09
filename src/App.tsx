@@ -2819,6 +2819,7 @@ function Coach({
   const targetPercent = snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent;
   const footballScore = buildFootballScore(snapshot, targetPercent);
   const yellowCards = snapshot.yellowCards ?? [];
+  const yellowCardAudit = snapshot.yellowCardAudit;
   const redCardEntries = redCardsDraft.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
   const focusPlayers = uniquePlayers([
     ...snapshot.coach.progressPlayers,
@@ -3156,6 +3157,27 @@ function Coach({
             <div className="coach-discipline-grid">
               <section className="coach-card-list coach-yellow-list" aria-label="Cartons jaunes">
                 <div className="coach-discipline-heading"><span>Cartons jaunes</span><strong>{yellowCards.length}</strong></div>
+                {yellowCardAudit?.sourceAvailable && (
+                  <p className="coach-yellow-matrix-source">
+                    Température : {yellowCardAudit.byReason.temperature} · Chargement à quai : {yellowCardAudit.byReason.loading}
+                    {yellowCardAudit.byReason.other > 0 ? ` · Autres : ${yellowCardAudit.byReason.other}` : ""}
+                  </p>
+                )}
+                {yellowCardAudit?.matrix.unlistedCandidates.length ? (
+                  <div className="coach-yellow-matrix-alert" role="status">
+                    <strong>{yellowCardAudit.matrix.unlistedCandidates.length} cas à vérifier dans la matrice Excel</strong>
+                    <p>Présents dans les calculs intermédiaires, mais absents de la liste finale. Ils ne sont pas comptés comme cartons attribués.</p>
+                    <details>
+                      <summary>Consulter les cas à vérifier</summary>
+                      <ul>{yellowCardAudit.matrix.unlistedCandidates.map((entry, index) => (
+                        <li key={`${entry.source}-${entry.travelCode}-${index}`}>
+                          <b>{entry.playerName}</b>
+                          <small>{entry.time} · {entry.travelCode} · {entry.category === "temperature" ? "Prise de température" : "Chargement à quai"}</small>
+                        </li>
+                      ))}</ul>
+                    </details>
+                  </div>
+                ) : null}
                 {yellowCards.length > 0 ? (
                   <ul>
                     {yellowCards.map((card, index) => (
@@ -3165,7 +3187,9 @@ function Coach({
                       </li>
                     ))}
                   </ul>
-                ) : <p>Aucun carton jaune dans la plage active.</p>}
+                ) : <p>{yellowCardAudit && !yellowCardAudit.sourceAvailable
+                  ? "Cartons jaunes indisponibles : tableau de synthèse absent de l'Excel."
+                  : "Aucun carton jaune dans la plage active."}</p>}
               </section>
               <section className="coach-card-list coach-red-list" aria-label="Cartons rouges">
                 <div className="coach-discipline-heading">
@@ -4680,6 +4704,7 @@ function FootballScoreDisplay({ footballScore }: { footballScore: FootballScore 
 
 function YellowCardsPanel({ snapshot, redCards }: { snapshot: Snapshot; redCards: string }) {
   const cards = snapshot.yellowCards ?? [];
+  const audit = snapshot.yellowCardAudit;
   const redCardEntries = redCards.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
   return (
     <div className={`yellow-cards-panel${redCardEntries.length > 0 ? " has-red-cards" : ""}`}>
@@ -4707,7 +4732,15 @@ function YellowCardsPanel({ snapshot, redCards }: { snapshot: Snapshot; redCards
               </ul>
             </details>
         )}
-        {cards.length === 0 && redCardEntries.length === 0 && <p>Aucun carton jaune dans la plage active.</p>}
+        {cards.length === 0 && redCardEntries.length === 0 && <p>{audit && !audit.sourceAvailable
+          ? "Cartons jaunes indisponibles : tableau de synthèse absent de l'Excel."
+          : "Aucun carton jaune dans la plage active."}</p>}
+        {audit?.sourceAvailable && <small className="yellow-cards-summary">Température : {audit.byReason.temperature} · Chargement à quai : {audit.byReason.loading}{audit.byReason.other > 0 ? ` · Autres : ${audit.byReason.other}` : ""}</small>}
+        {audit?.matrix.unlistedCandidates.length ? (
+          <p className="yellow-cards-matrix-warning" role="status">
+            {audit.matrix.unlistedCandidates.length} cas à vérifier dans la matrice Excel, non comptabilisés.
+          </p>
+        ) : null}
       </section>
       {redCardEntries.length > 0 && (
         <section className="red-cards-panel" aria-label="Cartons rouges">
