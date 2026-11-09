@@ -221,7 +221,7 @@ try {
     assert.equal(await excludedRows.count(), 0);
     assert.equal(await addToggle.getAttribute("aria-expanded"), null); // native details
     await addToggle.click();
-    assert.match(await scopePanel.innerText(), /Une exclusion modifie uniquement/);
+    assert.match(await scopePanel.innerText(), /Cette exclusion agit seulement/);
     await scopePanel.getByLabel("Voyage concerné").selectOption("TRIP-001");
     await scopePanel.getByLabel("Motif de l'exclusion").first().fill("Double déchargement atypique");
     await scopePanel.getByRole("button", { name: "Exclure ce voyage de la réception" }).click();
