@@ -25,7 +25,7 @@ test("Brief v2 : migration sans perte, SST indépendant et relecture", async ({ 
   await page.getByRole("button", { name: "05 BRIEF ÉQUIPE", exact: true }).click();
   const exp = page.locator(".tv-plan-column.midfield");
   const sst = page.locator(".tv-plan-column.defense");
-  await expect(page.locator(".tv-plan-column > b")).toHaveText(["SAV", "EXPÉDITION / RAMASSE & EMBALLAGE", "SST"]);
+  await expect(page.locator(".tv-plan-column > b")).toHaveText(["Service client", "EXPÉDITION / RAMASSE & EMBALLAGE", "SST"]);
   await expect(exp.locator(".tv-plan-content")).toHaveText([...expedition, ...ramasse].join("\n"));
   await expect(exp.locator("img")).toHaveCount(24);
   await expect(sst.locator(".tv-plan-empty-state")).toBeVisible();
@@ -102,7 +102,7 @@ test("Nouveau brief : trois zones explicites et SST indépendant", async ({ page
   await page.getByLabel("Code d'accès").fill("LOCAL-058-DEV");
   await page.getByRole("button", { name: "Accéder au match", exact: true }).click();
   await page.getByRole("button", { name: "05 BRIEF ÉQUIPE", exact: true }).click();
-  await expect(page.locator(".tv-plan-column > b")).toHaveText(["SAV", "EXPÉDITION / RAMASSE & EMBALLAGE", "SST"]);
+  await expect(page.locator(".tv-plan-column > b")).toHaveText(["Service client", "EXPÉDITION / RAMASSE & EMBALLAGE", "SST"]);
   await expect(page.locator(".tv-plan-empty-state")).toHaveCount(3);
   await page.getByRole("button", { name: "Écrire", exact: true }).click();
   await page.getByLabel("EXPÉDITION / RAMASSE & EMBALLAGE, contenu du brief").fill("Consignes expédition\nConsignes ramasse et emballage");
