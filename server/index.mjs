@@ -137,7 +137,7 @@ app.put("/api/agencies/:agencyCode/safety", requireAgency, async (req, res) => {
     await withAgencyLock(req.agency.code, async () => {
       const current = await readSafetyState(req.agency.code);
       if (current.revision !== req.body.expectedRevision) {
-        res.status(409).json({ ...current, message: "La date a changé depuis ton dernier chargement. Recharge la valeur avant d'enregistrer." });
+        res.status(409).json({ ...current, editable: true, message: "La date a changé depuis ton dernier chargement. Recharge la valeur avant d'enregistrer." });
         return;
       }
       if (current.lastAccidentDate === date) {
