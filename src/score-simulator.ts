@@ -9,6 +9,16 @@ export const SCORE_INDICATORS = [
 ] as const;
 
 export type ScoreIndicatorId = typeof SCORE_INDICATORS[number]["id"];
+
+/** Activity configuration is explicit, never inferred from a blank day's Excel. */
+export type ScoreActivityProfile = "with-zoning" | "without-zoning";
+export const COMMON_SCORE_INDICATORS: readonly ScoreIndicatorId[] =
+  ["loadingPercent", "unloadingPercent"] as const;
+
+export function eligibleScoreIndicatorIds(profile: ScoreActivityProfile): ScoreIndicatorId[] {
+  if (profile === "without-zoning") return [...COMMON_SCORE_INDICATORS];
+  return SCORE_INDICATORS.map((item) => item.id);
+}
 export type ScoreIndicatorValues = Partial<Record<ScoreIndicatorId, number | null | undefined>>;
 
 export type ScoreSimulationResult =
