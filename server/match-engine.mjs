@@ -5,6 +5,7 @@ import { isValidCalendarDate } from "./calendar-date.mjs";
 import { buildReceptionCohort } from "./reception-cohort.mjs";
 import { normalizeReceptionExclusions, prepareReceptionScope } from "./reception-exclusions.mjs";
 import { isHourlyPassChartRow } from "./hourly-pass-scope.mjs";
+import { auditYellowCards } from "./yellow-card-audit.mjs";
 
 const REQUIRED_COLUMNS = {
   operator: ["operateur"],
@@ -39,7 +40,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 24;
+export const KPI_DICTIONARY_VERSION = 25;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -344,6 +345,16 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   const hourlyPassPerformance = buildHourlyPassPerformance(rawWorkbook, period, scoringRows, rows.filter((row) => !excludedTravelCodes.has(row.travelCode)));
   const scopedLoadingQuality = buildLoadingQualityFromTcd(rawWorkbook, period, criteria.loadingSeconds, excludedTravelCodes,
     new Set(loadingExclusions.map(item => item.code)));
+  // Lot C: read awarded cards only from the final match-sheet list, then
+  // cross-check the intermediate matrices without automatically penalizing
+  // anyone on the basis of a candidate or a static heading.
+  const yellowCards = buildYellowCards(rawWorkbook, period, excludedTravelCodes);
+  const yellowCardAudit = auditYellowCards(rawWorkbook, yellowCards, period, excludedTravelCodes);
+  if (yellowCardAudit.matrix.unlistedCandidates.length > 0) {
+    validation.warnings.push(
+      `Cartons jaunes : ${yellowCardAudit.matrix.unlistedCandidates.length} cas potentiel(s) présent(s) dans la matrice mais absent(s) de la liste finale Excel. Contrôle nécessaire : ces cas ne sont pas comptés automatiquement.`,
+    );
+  }
   const snapshot = buildMatchSnapshot({
     sourceRows: rows,
     matchRows,
@@ -364,7 +375,8 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     },
     unloadingDuelQuality: buildUnloadingDuelQuality(receptionTrips, receptionSelection.rows, travelDestinations),
     unloadingQuality: buildUnloadingQuality(receptionTrips, criteria.unloadingSeconds, travelDestinations),
-    yellowCards: buildYellowCards(rawWorkbook, period, excludedTravelCodes),
+    yellowCards,
+    yellowCardAudit,
     excludedTravelCodes,
     receptionScope: receptionSelection.scope,
     receptionExcludedCodes: receptionSelection.excludedTravelCodes,
@@ -590,7 +602,7 @@ export function normalizeSnapshotContract(snapshot) {
   };
 }
 
-function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period, criteria, hourlyPassPerformance, loadingQuality, unloadingDuelQuality, unloadingQuality, yellowCards, dailyIndicators, excludedTravelCodes, receptionScope, receptionExcludedCodes, loadingScope }) {
+function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period, criteria, hourlyPassPerformance, loadingQuality, unloadingDuelQuality, unloadingQuality, yellowCards, yellowCardAudit, dailyIndicators, excludedTravelCodes, receptionScope, receptionExcludedCodes, loadingScope }) {
   const importedAt = new Date();
   const firstOperation = minDate(matchRows.map((row) => row.startedAt));
   const lastOperation = maxDate(matchRows.map((row) => row.startedAt));
@@ -723,6 +735,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
     unloadingQuality,
     operationalScore,
     yellowCards,
+    yellowCardAudit,
     dailyIndicators,
     duelQuality: buildDuelQuality(scoringRows, matchRows, positions, duelWon, duelTotal),
     compositionPeriods: buildCompositionPeriods(matchRows, period),
