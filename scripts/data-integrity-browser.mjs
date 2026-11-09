@@ -205,37 +205,72 @@ try {
     assert.deepEqual(baselineReception.receptionScope.availableClients.map(item => item.code), ["TRI TEST"]);
     await page.getByRole("navigation", { name: "Navigation de la feuille de match" })
       .getByRole("button", { name: "Aller à Statistiques du match" }).click();
-    await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % duels gagnés" }).click();
     const scopePanel = page.locator(".reception-scope-control");
-    await scopePanel.locator("summary").click();
-    assert.match(await scopePanel.innerText(), /Seuls les duels de réception/);
+    assert.equal(await scopePanel.evaluate(element => Boolean(element.closest(".operational-charts-carousel"))), false,
+      "The exclusion controls must sit outside the horizontally swiping chart");
+    const excludedRows = scopePanel.locator(".reception-scope-exclusion");
+    const addToggle = scopePanel.locator(".reception-scope-add > summary");
+
+    // The list is intentionally visible WITHOUT expanding the add form.
+    await scopePanel.getByText("Aucune exclusion active sur ce match.").waitFor({ state: "visible" });
+    assert.equal(await excludedRows.count(), 0);
+    assert.equal(await addToggle.getAttribute("aria-expanded"), null); // native details
+    await addToggle.click();
+    assert.match(await scopePanel.innerText(), /Une exclusion modifie uniquement/);
     await scopePanel.getByLabel("Voyage concerné").selectOption("TRIP-001");
     await scopePanel.getByLabel("Motif de l'exclusion").first().fill("Double déchargement atypique");
     await scopePanel.getByRole("button", { name: "Exclure ce voyage de la réception" }).click();
-    await page.waitForFunction(() => {
-      const node = document.querySelector(".reception-scope-control > summary strong");
-      return node?.textContent?.includes("1 exclusion");
-    }, null, { timeout: 15000 });
+    await page.waitForFunction(() => document.querySelector(".reception-scope-total")?.textContent?.includes("1 exclusion"), null, { timeout: 15000 });
     const travelFiltered = await readSnapshot();
     assert.deepEqual(travelFiltered.receptionScope.excludedTravels.map(item => item.code), ["TRIP-001"]);
     assert.equal(travelFiltered.summary.operations, baselineReception.summary.operations);
     assert.equal(travelFiltered.summary.positions, baselineReception.summary.positions);
     assert.equal(travelFiltered.summary.duelTotal, baselineReception.summary.duelTotal);
-    await scopePanel.getByRole("button", { name: "Réintégrer en réception" }).click();
-    await page.waitForFunction(() => document.querySelector(".reception-scope-control > summary strong")?.textContent?.includes("0 exclusion"), null, { timeout: 15000 });
+
+    const travelRow = excludedRows.filter({ hasText: "TRIP-001" });
+    await travelRow.getByText("Double déchargement atypique").waitFor({ state: "visible" });
+    assert.equal(await travelRow.isVisible(), true);
+    assert.match(await travelRow.innerText(), /Exclu le/);
+    // Closing the edit form must NOT hide the excluded voyage or its motif.
+    await addToggle.click();
+    assert.equal(await travelRow.isVisible(), true);
+    assert.equal(await travelRow.getByText("Double déchargement atypique").isVisible(), true);
+    const contrast = await travelRow.evaluate(element => ({
+      background: getComputedStyle(element).backgroundColor,
+      text: getComputedStyle(element.querySelector(".reception-scope-code")).color,
+    }));
+    assert.deepEqual(contrast, {
+      background: "rgb(245, 250, 255)",
+      text: "rgb(14, 43, 71)",
+    }, "Exclusion cards must use opaque, high-contrast colors");
+    await travelRow.getByRole("button", { name: "Réintégrer le voyage TRIP-001 en réception" }).click();
+    await page.waitForFunction(() => document.querySelector(".reception-scope-total")?.textContent?.includes("0 exclusion"), null, { timeout: 15000 });
+    assert.equal(await excludedRows.count(), 0);
     const restoredReception = await readSnapshot();
     assert.deepEqual(restoredReception.receptionScope.excludedTravels, []);
+
+    await addToggle.click();
     await scopePanel.getByLabel("Client identifié dans l'Excel").selectOption("TRI TEST");
     await scopePanel.getByLabel("Motif de l'exclusion").last().fill("Client de tri hors périmètre");
     await scopePanel.getByRole("button", { name: "Exclure ce client de la réception" }).click();
-    await page.waitForFunction(() => document.querySelector(".reception-scope-control > summary strong")?.textContent?.includes("1 exclusion"), null, { timeout: 15000 });
+    await page.waitForFunction(() => document.querySelector(".reception-scope-total")?.textContent?.includes("1 exclusion"), null, { timeout: 15000 });
     const clientFiltered = await readSnapshot();
     assert.deepEqual(clientFiltered.receptionScope.excludedClients.map(item => item.code), ["TRI TEST"]);
     assert.equal(clientFiltered.summary.operations, baselineReception.summary.operations);
+    const clientRow = excludedRows.filter({ hasText: "TRI TEST" });
+    await clientRow.getByText("Client de tri hors périmètre").waitFor({ state: "visible" });
+    // A refresh should still expose the retained rule, independently of the add form.
+    await page.reload();
+    await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+    await page.getByRole("navigation", { name: "Navigation de la feuille de match" })
+      .getByRole("button", { name: "Aller à Statistiques du match" }).click();
+    const reloadedRow = page.locator(".reception-scope-exclusion").filter({ hasText: "TRI TEST" });
+    await reloadedRow.getByText("Client de tri hors périmètre").waitFor({ state: "visible" });
+    assert.equal(await page.locator(".reception-scope-add").getAttribute("open"), null);
     const state = JSON.parse(await fs.readFile(path.join(root, "01K", "reception-exclusions.json"), "utf8"));
     assert.equal(Object.values(state.scopes)[0].history.length, viewport.width === 1366 ? 3 : 7);
-    await scopePanel.getByRole("button", { name: "Réintégrer en réception" }).click();
-    await page.waitForFunction(() => document.querySelector(".reception-scope-control > summary strong")?.textContent?.includes("0 exclusion"), null, { timeout: 15000 });
+    await reloadedRow.getByRole("button", { name: "Réintégrer le client TRI TEST en réception" }).click();
+    await page.waitForFunction(() => document.querySelector(".reception-scope-total")?.textContent?.includes("0 exclusion"), null, { timeout: 15000 });
     assert.deepEqual((await readSnapshot()).receptionScope.excludedClients, []);
     console.log(`Browser: scoped reception voyage, tri client, restore, audit at ${viewport.width}px: OK`);
     assert.deepEqual(errors, [], `Unexpected React errors at ${viewport.width}px`);

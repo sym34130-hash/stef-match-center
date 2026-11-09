@@ -1842,13 +1842,13 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         </div>
 
         <div className="match-stat-grid">
+          <ReceptionScopeControls scope={snapshot.receptionScope} canEdit={session.agency.canImport}
+            pending={pendingReceptionCode} onChange={handleReceptionExclusionChange} />
           <OperationalChartsCarousel
             snapshot={snapshot}
             canEditTravelScope={session.agency.canImport}
             onToggleTravel={handleTravelExclusionChange}
             pendingTravelCode={pendingTravelCode}
-            onReceptionExclusionChange={handleReceptionExclusionChange}
-            pendingReceptionCode={pendingReceptionCode}
           />
         </div>
       </section>
@@ -1868,7 +1868,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
 
 type TravelScopeToggle = (travelCode: string, excluded: boolean) => Promise<void>;
 
-function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode, onReceptionExclusionChange, pendingReceptionCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null; onReceptionExclusionChange: ReceptionExclusionChange; pendingReceptionCode: string | null }) {
+function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const slideRefs = useRef<Array<HTMLElement | null>>([]);
@@ -1881,7 +1881,7 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
     {
       id: "reception-time",
       label: "% duels gagnés",
-      content: <ReceptionQualityCard snapshot={snapshot} canEditTravelScope={canEditTravelScope} onToggleTravel={onToggleTravel} pendingTravelCode={pendingTravelCode} onReceptionExclusionChange={onReceptionExclusionChange} pendingReceptionCode={pendingReceptionCode} />,
+      content: <ReceptionQualityCard snapshot={snapshot} canEditTravelScope={canEditTravelScope} onToggleTravel={onToggleTravel} pendingTravelCode={pendingTravelCode} />,
     },
     {
       id: "loading",
@@ -2125,7 +2125,7 @@ function LoadingQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pend
   );
 }
 
-function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode, onReceptionExclusionChange, pendingReceptionCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null; onReceptionExclusionChange: ReceptionExclusionChange; pendingReceptionCode: string | null }) {
+function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null }) {
   const quality = snapshot.unloadingQuality;
   const duelQuality = snapshot.unloadingDuelQuality;
   if (!quality) return null;
@@ -2146,8 +2146,6 @@ function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pe
         </div>
         <b>{formatNumber(total)} voyages</b>
       </div>
-      <ReceptionScopeControls scope={snapshot.receptionScope} canEdit={canEditTravelScope}
-        pending={pendingReceptionCode} onChange={onReceptionExclusionChange} />
       {hasData && (
         <div className="loading-quality-overview">
           <div
