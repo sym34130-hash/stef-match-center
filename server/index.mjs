@@ -1150,7 +1150,10 @@ async function readReceptionExclusionState(agencyCode) {
     const scopes = parsed && typeof parsed.scopes === "object" && !Array.isArray(parsed.scopes) ? parsed.scopes : {};
     return {
       version: RECEPTION_EXCLUSION_VERSION,
-      scopes: Object.fromEntries(Object.entries(scopes).map(([key, value]) => [key, normalizeReceptionExclusions(value)])),
+      scopes: Object.fromEntries(Object.entries(scopes).map(([key, value]) => [key, {
+        ...normalizeReceptionExclusions(value),
+        history: Array.isArray(value?.history) ? value.history.slice(-200) : [],
+      }])),
     };
   } catch (error) {
     if (error?.code === "ENOENT") return { version: RECEPTION_EXCLUSION_VERSION, scopes: {} };
@@ -1162,7 +1165,7 @@ async function writeReceptionExclusionState(agencyCode, state) {
   await writeJsonAtomic(receptionExclusionStatePath(agencyCode), {
     version: RECEPTION_EXCLUSION_VERSION,
     scopes: Object.fromEntries(Object.entries(state.scopes ?? {}).map(([key, value]) =>
-      [key, normalizeReceptionExclusions(value)])),
+      [key, { ...normalizeReceptionExclusions(value), history: Array.isArray(value?.history) ? value.history.slice(-200) : [] }])),
   });
 }
 
