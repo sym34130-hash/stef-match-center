@@ -61,7 +61,14 @@ export function ReceptionScopeControls({ scope, canEdit, pending, onChange }: Pr
   }
 
   return (
-    <section className="reception-scope-control" aria-label="Exclusions ciblées de réception">
+
+    <details className="reception-scope-control" aria-label="Gestion des exclusions par activité">
+      <summary className="reception-scope-collapse-summary">
+        <span className="reception-scope-collapse-title"><EyeOff size={17} aria-hidden="true" /> Gestion des exclusions</span>
+        <span className="reception-scope-collapse-count">{total} exclusion{total > 1 ? "s" : ""} active{total > 1 ? "s" : ""}</span>
+        <ChevronDown size={18} aria-hidden="true" className="reception-scope-collapse-chevron" />
+      </summary>
+      <div className="reception-scope-expanded">
       {canEdit && (
         <details className="reception-scope-add">
           <summary><Plus size={18} aria-hidden="true" /><span>Ajouter une exclusion</span><ChevronDown size={18} aria-hidden="true" className="reception-scope-chevron" /></summary>
@@ -182,7 +189,7 @@ export function ReceptionScopeControls({ scope, canEdit, pending, onChange }: Pr
         )}
         {feedback && <p className="reception-scope-feedback" role="status">{feedback}</p>}
       </div>
-
-    </section>
+      </div>
+    </details>
   );
 }
