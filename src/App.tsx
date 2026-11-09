@@ -49,6 +49,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { Agency, Highlight, Player, Snapshot } from "./types";
 import { MatchIndicatorsCarousel } from "./MatchIndicatorsCarousel";
+import { ScoreSimulator } from "./ScoreSimulator";
 import { ReceptionScopeControls, type ReceptionExclusionChange, type LoadingExclusionChange } from "./ReceptionScopeControls";
 import { KickoffMusicControl } from "./KickoffMusicControl";
 import { OperationalDiagnosticCard, ReceptionHourlyChart } from "./OperationalAnalysisCards";
@@ -744,7 +745,7 @@ export default function App() {
             )}
             {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} causerieRevision={causerieRevision} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
             {screen === "guide" && <GuideView snapshot={snapshot} leagueConfigs={leagueConfigs} onNavigate={setScreen} />}
-            {screen === "admin" && <AdministratorView agencyCode={session.agency.code} activeLeague={activeLeague} leagueConfigs={leagueConfigs} leagueConfigRevision={leagueConfigRevision} onLeagueConfigsChange={queueLeagueConfigSave} onLeagueConfigsReload={async () => {
+            {screen === "admin" && <AdministratorView agencyCode={session.agency.code} snapshot={snapshot} activeLeague={activeLeague} leagueConfigs={leagueConfigs} leagueConfigRevision={leagueConfigRevision} onLeagueConfigsChange={queueLeagueConfigSave} onLeagueConfigsReload={async () => {
               const state = await fetchSharedLeagueConfigs(session);
               setLeagueConfigs(state.configs);
               setLeagueConfigRevision(state.leagueConfigRevision);
@@ -3784,7 +3785,7 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
   );
 }
 
-function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLeagueConfigs, leagueConfigRevision, onLeagueConfigsChange, onLeagueConfigsReload, onActiveLeagueChange }: { agencyCode: string; activeLeague: LeagueId; leagueConfigs: LeagueConfig[]; leagueConfigRevision: string | null; onLeagueConfigsChange: (configs: LeagueConfig[], expectedRevision: string | null) => Promise<SharedLeagueConfigState>; onLeagueConfigsReload: () => Promise<SharedLeagueConfigState>; onActiveLeagueChange: (league: LeagueId, config?: LeagueConfig) => void }) {
+function AdministratorView({ agencyCode, snapshot, activeLeague, leagueConfigs: initialLeagueConfigs, leagueConfigRevision, onLeagueConfigsChange, onLeagueConfigsReload, onActiveLeagueChange }: { agencyCode: string; snapshot: Snapshot | null; activeLeague: LeagueId; leagueConfigs: LeagueConfig[]; leagueConfigRevision: string | null; onLeagueConfigsChange: (configs: LeagueConfig[], expectedRevision: string | null) => Promise<SharedLeagueConfigState>; onLeagueConfigsReload: () => Promise<SharedLeagueConfigState>; onActiveLeagueChange: (league: LeagueId, config?: LeagueConfig) => void }) {
   const leagueConfigStorageKey = `stef-match-league-configs-${agencyCode}`;
   const [leagueConfigs, setLeagueConfigs] = useState(initialLeagueConfigs);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
@@ -3949,6 +3950,9 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
           ))}
         </div>
       </section>
+      <ScoreSimulator snapshot={snapshot} leagueName={selectedLeague.label}
+        targetPercent={selectedLeague.scoreTargetPercent}
+        criteria={selectedLeague} />
     </section>
   );
 }
