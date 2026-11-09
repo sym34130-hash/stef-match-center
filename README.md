@@ -86,9 +86,10 @@ Le PDF 106J alimente les taux de ponctualité arrivage, départ, destination,
 prise de température retour ramasse, ainsi que les tonnages distincts des
 lignes `Expédition` et `Distribution`. Le nombre de positions reste calculé
 exclusivement depuis l'Excel importé. Les lignes `Total`, `OT` et les autres
-indicateurs PDF ne sont pas utilisées. Le carrousel présente Expédition en
-journée et Distribution pour les plages de nuit (ou selon le choix explicite
-du brief), sans modifier le calcul des KPI.
+indicateurs PDF ne sont pas utilisées. Le carrousel affiche deux
+cartes indépendantes « Tonnage Distribution » et « Tonnage Expédition »,
+de jour comme de nuit. Chaque carte peut être masquée séparément dans
+la personnalisation du brief, sans modifier les calculs KPI.
 
 Le carrousel `Le collectif en chiffres` réunit performance, effectif réel,
 blessures, tonnage, positions et quatre taux du PDF. Les taux restent journaliers
