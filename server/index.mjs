@@ -9,7 +9,7 @@ import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, isTimeRang
 import { parse106jPdf } from "./pdf-106j.mjs";
 import { pdfAssociation, canUsePdfIndicators } from "./source-provenance.mjs";
 import { operationalAnalysisNeedsRefresh } from "./operational-analysis.mjs";
-import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout, normalizeBriefIndicators, normalizeTonnageActivity } from "./brief-layout.mjs";
+import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout, normalizeBriefIndicators } from "./brief-layout.mjs";
 import { isValidCalendarDate } from "./calendar-date.mjs";
 import { authAttemptKey, boundedAuthText, createAuthAttemptLimiter, MAX_AGENCY_CODE_LENGTH, MAX_ACCESS_CODE_LENGTH } from "./auth-attempts.mjs";
 
@@ -1248,7 +1248,6 @@ function normalizeCauseriePlan(plan) {
     mercatoProfiles: normalizeMercatoProfiles(input.mercatoProfiles),
     redCards: limitMultilineText(input.redCards, 1000),
     visibleIndicators: normalizeBriefIndicators(input.visibleIndicators),
-    tonnageActivity: normalizeTonnageActivity(input.tonnageActivity),
     coach: {
       tactic: limitText(input.coach?.tactic, 120),
       priority: limitText(input.coach?.priority, 120),
