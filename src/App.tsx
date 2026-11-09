@@ -1978,8 +1978,8 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
   return (
     <section className="operational-charts-carousel" aria-label="Carrousel de lecture opérationnelle">
       {snapshot.excludedTravelCodes && snapshot.excludedTravelCodes.length > 0 && (
-        <details className="travel-exclusion-panel" open>
-          <summary><EyeOff size={15} /> Voyages exclus de l'analyse <span>{formatNumber(snapshot.excludedTravelCodes.length)}</span></summary>
+        <details className="travel-exclusion-panel">
+          <summary><EyeOff size={15} /> Exclusions globales historiques <span>{formatNumber(snapshot.excludedTravelCodes.length)}</span></summary>
           <div className="travel-exclusion-list">
             {snapshot.excludedTravelCodes.map((travelCode) => (
               <button
