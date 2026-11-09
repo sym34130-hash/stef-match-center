@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { buildOperationalAnalyses, normalizeOperationalAnalysisContract, selectNight } from "./operational-analysis.mjs";
 import { isValidCalendarDate } from "./calendar-date.mjs";
 import { buildReceptionCohort } from "./reception-cohort.mjs";
+import { normalizeReceptionExclusions, prepareReceptionScope } from "./reception-exclusions.mjs";
 import { isHourlyPassChartRow } from "./hourly-pass-scope.mjs";
 
 const REQUIRED_COLUMNS = {
@@ -38,7 +39,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 22;
+export const KPI_DICTIONARY_VERSION = 23;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -205,10 +206,11 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   const compositionOnly = periodInput.compositionOnly === true;
   const criteria = normalizePerformanceCriteria(periodInput.criteria);
   const excludedTravelCodes = normalizeTravelCodes(periodInput.excludedTravelCodes);
+  const receptionExclusions = normalizeReceptionExclusions(periodInput.receptionExclusions);
   const parsed = parseWorkbookSource(buffer);
   if (!parsed.ok) return parsed;
 
-  const { isDerivedTemplate, rows, sourceValidation, missingColumns, rawWorkbook, travelDestinations } = parsed;
+  const { isDerivedTemplate, rows, sourceValidation, missingColumns, rawWorkbook, travelDestinations, columnMap } = parsed;
   const autoPeriod = periodInput.start === undefined && periodInput.end === undefined
     ? inferOvernightPeriod(rows)
     : null;
@@ -228,6 +230,7 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     period.useExcelPeriod ? "excel-period" : "clock-period",
     `criteria-${criteria.zonageMinutes}-${criteria.loadingSeconds}-${criteria.unloadingSeconds}-${criteria.scoreTargetPercent}`,
     `excluded-${Array.from(excludedTravelCodes).sort().join(",")}`,
+    `reception-excluded-${JSON.stringify(receptionExclusions)}`,
     `106j-${periodInput.dailyIndicators?.importedAt ?? "none"}`,
     compositionOnly ? "composition" : "snapshot",
   ].join("|");
@@ -333,7 +336,9 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
   }
 
   const receptionPeriodRows = selectNight(matchRows, period).selectedRows;
-  const receptionTrips = buildReceptionCohort(receptionPeriodRows, criteria.unloadingSeconds).travels;
+  const receptionSelection = prepareReceptionScope(receptionPeriodRows, receptionExclusions,
+    { clientColumnPresent: columnMap.triClient !== undefined });
+  const receptionTrips = buildReceptionCohort(receptionSelection.rows, criteria.unloadingSeconds).travels;
   const hourlyPassPerformance = buildHourlyPassPerformance(rawWorkbook, period, scoringRows, rows.filter((row) => !excludedTravelCodes.has(row.travelCode)));
   const snapshot = buildMatchSnapshot({
     sourceRows: rows,
@@ -348,10 +353,12 @@ export function buildSnapshotFromWorkbook(buffer, sourceName, expectedAgencyCode
     criteria,
     hourlyPassPerformance,
     loadingQuality: buildLoadingQualityFromTcd(rawWorkbook, period, criteria.loadingSeconds, excludedTravelCodes),
-    unloadingDuelQuality: buildUnloadingDuelQuality(receptionTrips, receptionPeriodRows, travelDestinations),
+    unloadingDuelQuality: buildUnloadingDuelQuality(receptionTrips, receptionSelection.rows, travelDestinations),
     unloadingQuality: buildUnloadingQuality(receptionTrips, criteria.unloadingSeconds, travelDestinations),
     yellowCards: buildYellowCards(rawWorkbook, period, excludedTravelCodes),
     excludedTravelCodes,
+    receptionScope: receptionSelection.scope,
+    receptionExcludedCodes: receptionSelection.excludedTravelCodes,
     dailyIndicators: periodInput.dailyIndicators ?? null,
   });
 
@@ -460,6 +467,7 @@ function parseWorkbookSource(buffer) {
     const travelCode = cleanText(raw.travelCode);
     const agencySegment = cleanText(raw.agencySegment);
     const segmentType = cleanText(raw.segmentType);
+    const triClient = cleanText(raw.triClient);
     const operatorFilter = cleanText(raw.operatorFilter);
     const hourFilter = cleanText(raw.hourFilter);
     const post = isDerivedTemplate
@@ -491,6 +499,7 @@ function parseWorkbookSource(buffer) {
         hourOperation: parseNumber(columnMap.hourOperation === undefined ? null : row[columnMap.hourOperation]),
         agencySegment,
         segmentType,
+        triClient,
         operatorFilter,
         hourFilter,
         post,
@@ -572,7 +581,7 @@ export function normalizeSnapshotContract(snapshot) {
   };
 }
 
-function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period, criteria, hourlyPassPerformance, loadingQuality, unloadingDuelQuality, unloadingQuality, yellowCards, dailyIndicators, excludedTravelCodes }) {
+function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, expectedAgencyCode, detectedAgency, validation, filterStats, period, criteria, hourlyPassPerformance, loadingQuality, unloadingDuelQuality, unloadingQuality, yellowCards, dailyIndicators, excludedTravelCodes, receptionScope, receptionExcludedCodes }) {
   const importedAt = new Date();
   const firstOperation = minDate(matchRows.map((row) => row.startedAt));
   const lastOperation = maxDate(matchRows.map((row) => row.startedAt));
@@ -633,7 +642,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
     .slice(0, 5);
 
   const weakRole = roleDistribution.reduce((min, current) => (current.count < min.count ? current : min), roleDistribution[0]);
-  const operationalAnalyses = buildOperationalAnalyses({ rows: matchRows, period, criteria, loadingQuality, validation });
+  const operationalAnalyses = buildOperationalAnalyses({ rows: matchRows, period, criteria, loadingQuality, validation, receptionExcludedCodes });
   const legacyDate = firstOperation ? firstOperation.toISOString().slice(0, 10) : importedAt.toISOString().slice(0, 10);
   const localDate = firstOperation ? (() => {
     const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
@@ -649,6 +658,7 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
     sourceName,
     importedAt: importedAt.toISOString(),
     excludedTravelCodes: Array.from(excludedTravelCodes ?? []).sort((left, right) => left.localeCompare(right, "fr")),
+    receptionScope,
     agency: {
       code: expectedAgencyCode || detectedAgency || "AGENCE",
       detectedCode: detectedAgency,
@@ -1468,9 +1478,10 @@ function playerCard(player, label, detail, value, valueLabel) {
 }
 
 function readRow(row, columnMap) {
-  return Object.fromEntries(
-    Object.keys(REQUIRED_COLUMNS).map((key) => [key, row[columnMap[key]]])
-  );
+  return {
+    ...Object.fromEntries(Object.keys(REQUIRED_COLUMNS).map((key) => [key, row[columnMap[key]]])),
+    triClient: columnMap.triClient === undefined ? "" : row[columnMap.triClient],
+  };
 }
 
 function findDataSheet(sheetNames) {
@@ -1486,6 +1497,10 @@ function mapColumns(headerRow) {
   }
   const hourOperationIndex = normalizedHeaders.findIndex((header) => header === "heure op");
   if (hourOperationIndex !== -1) map.hourOperation = hourOperationIndex;
+  // Optional named tri-client column. Never infer it from agency, segment or destination.
+  const triClientAliases = ["client de tri", "client tri", "client", "code client", "nom client", "libelle client", "client reception", "client dechargement"];
+  const triClientIndex = normalizedHeaders.findIndex((header) => triClientAliases.includes(header));
+  if (triClientIndex !== -1) map.triClient = triClientIndex;
   return map;
 }
 

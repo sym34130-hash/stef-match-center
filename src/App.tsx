@@ -49,6 +49,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { Agency, Highlight, Player, Snapshot } from "./types";
 import { MatchIndicatorsCarousel } from "./MatchIndicatorsCarousel";
+import { ReceptionScopeControls, type ReceptionExclusionChange } from "./ReceptionScopeControls";
 import { KickoffMusicControl } from "./KickoffMusicControl";
 import { OperationalDiagnosticCard, ReceptionHourlyChart } from "./OperationalAnalysisCards";
 import { parseMercatoEntrants, type MercatoProfile, type MercatoProfiles } from "./mercato";
@@ -705,6 +706,17 @@ export default function App() {
                     setStatusMessage(error instanceof Error ? error.message : "Le périmètre des voyages n'a pas pu être actualisé.");
                   }
                 }}
+                onReceptionExclusionChange={async (kind, code, excluded, reason) => {
+                  if (!session) throw new Error("Session absente.");
+                  try {
+                    const nextSnapshot = await updateReceptionExclusion(session, kind, code, excluded, reason);
+                    publishSnapshot(nextSnapshot);
+                    setStatusMessage("");
+                  } catch (error) {
+                    setStatusMessage(error instanceof Error ? error.message : "Le périmètre réception n'a pas pu être actualisé.");
+                    throw error;
+                  }
+                }}
               />
             )}
             {screen === "composition" && snapshot && <Composition snapshot={snapshot} session={session} onPlayer={openPlayer} />}
@@ -855,6 +867,18 @@ async function updateTravelExclusion(session: Session, travelCode: string, exclu
   if (!payload.snapshot || typeof payload.snapshot !== "object") {
     throw new Error("Le recalcul du périmètre n'a pas renvoyé de résultat exploitable.");
   }
+  return payload.snapshot;
+}
+
+async function updateReceptionExclusion(session: Session, kind: "travel" | "client", code: string, excluded: boolean, reason: string): Promise<Snapshot> {
+  const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/reception-exclusions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-access-code": session.accessCode },
+    body: JSON.stringify({ kind, code, excluded, reason }),
+  });
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.message ?? "Les exclusions de réception n'ont pas pu être enregistrées.");
+  if (!payload.snapshot || typeof payload.snapshot !== "object") throw new Error("Le recalcul de réception a échoué.");
   return payload.snapshot;
 }
 
@@ -1333,7 +1357,7 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
   );
 }
 
-function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlayer, onCoach, onComposition, onTravelExclusionChange }: { snapshot: Snapshot; session: Session; causerieRevision: string | null; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void; onTravelExclusionChange: (travelCode: string, excluded: boolean) => Promise<void> }) {
+function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlayer, onCoach, onComposition, onTravelExclusionChange, onReceptionExclusionChange }: { snapshot: Snapshot; session: Session; causerieRevision: string | null; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void; onTravelExclusionChange: (travelCode: string, excluded: boolean) => Promise<void>; onReceptionExclusionChange: ReceptionExclusionChange }) {
   const [celebrationMode, setCelebrationMode] = useState(false);
   const [thresholdPulse, setThresholdPulse] = useState(false);
   const [editingKpis, setEditingKpis] = useState(false);
@@ -1347,6 +1371,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const [activeSlide, setActiveSlide] = useState(0);
   const [slideDirection, setSlideDirection] = useState<"next" | "previous">("next");
   const [pendingTravelCode, setPendingTravelCode] = useState<string | null>(null);
+  const [pendingReceptionCode, setPendingReceptionCode] = useState<string | null>(null);
   const slideViewportRef = useRef<HTMLDivElement | null>(null);
   const slideTouchStart = useRef<{ x: number; y: number } | null>(null);
   const slideLabels = ["Coup de sifflet final", "Cérémonie des performances", "Statistiques du match", "Brief équipe"];
@@ -1449,6 +1474,15 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
     if (target instanceof Element && target.closest("button, input, textarea, select, [contenteditable='true'], .match-indicators, .operational-charts-carousel")) return;
     event.preventDefault();
     moveSlide(event.key === "Home" ? 0 : event.key === "End" ? slideLabels.length - 1 : activeSlide + (event.key === "ArrowRight" ? 1 : -1));
+  }
+
+  async function handleReceptionExclusionChange(kind: "travel" | "client", code: string, excluded: boolean, reason: string) {
+    setPendingReceptionCode(kind + ":" + code);
+    try {
+      await onReceptionExclusionChange(kind, code, excluded, reason);
+    } finally {
+      setPendingReceptionCode(null);
+    }
   }
 
   function handleSlideTouchStart(event: ReactTouchEvent<HTMLDivElement>) {
@@ -1813,6 +1847,8 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
             canEditTravelScope={session.agency.canImport}
             onToggleTravel={handleTravelExclusionChange}
             pendingTravelCode={pendingTravelCode}
+            onReceptionExclusionChange={handleReceptionExclusionChange}
+            pendingReceptionCode={pendingReceptionCode}
           />
         </div>
       </section>
@@ -1832,7 +1868,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
 
 type TravelScopeToggle = (travelCode: string, excluded: boolean) => Promise<void>;
 
-function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null }) {
+function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode, onReceptionExclusionChange, pendingReceptionCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null; onReceptionExclusionChange: ReceptionExclusionChange; pendingReceptionCode: string | null }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const slideRefs = useRef<Array<HTMLElement | null>>([]);
@@ -1845,7 +1881,7 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
     {
       id: "reception-time",
       label: "% duels gagnés",
-      content: <ReceptionQualityCard snapshot={snapshot} canEditTravelScope={canEditTravelScope} onToggleTravel={onToggleTravel} pendingTravelCode={pendingTravelCode} />,
+      content: <ReceptionQualityCard snapshot={snapshot} canEditTravelScope={canEditTravelScope} onToggleTravel={onToggleTravel} pendingTravelCode={pendingTravelCode} onReceptionExclusionChange={onReceptionExclusionChange} pendingReceptionCode={pendingReceptionCode} />,
     },
     {
       id: "loading",
@@ -2089,7 +2125,7 @@ function LoadingQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pend
   );
 }
 
-function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null }) {
+function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode, onReceptionExclusionChange, pendingReceptionCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null; onReceptionExclusionChange: ReceptionExclusionChange; pendingReceptionCode: string | null }) {
   const quality = snapshot.unloadingQuality;
   const duelQuality = snapshot.unloadingDuelQuality;
   if (!quality) return null;
@@ -2110,6 +2146,8 @@ function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pe
         </div>
         <b>{formatNumber(total)} voyages</b>
       </div>
+      <ReceptionScopeControls scope={snapshot.receptionScope} canEdit={canEditTravelScope}
+        pending={pendingReceptionCode} onChange={onReceptionExclusionChange} />
       {hasData && (
         <div className="loading-quality-overview">
           <div

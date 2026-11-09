@@ -179,6 +179,19 @@ export type Snapshot = {
   unloadingHourlyAnalysis?: UnloadingHourlyAnalysis;
   anomalySummary?: AnomalySummary;
   excludedTravelCodes?: string[];
+  /** Reception-only exclusions. The global excludedTravelCodes list is unchanged. */
+  receptionScope?: {
+    version: number;
+    excludedTravels: Array<{ code: string; reason: string; updatedAt: string | null }>;
+    excludedClients: Array<{ code: string; reason: string; updatedAt: string | null }>;
+    availableTravels: string[];
+    availableClients: Array<{ code: string; travels: number }>;
+    clientColumnPresent: boolean;
+    excludedByTravelCount: number;
+    excludedByClientCount: number;
+    ambiguousClientTravels: string[];
+  };
+
   performanceCriteria?: {
     zonageMinutes: number;
     loadingSeconds: number;

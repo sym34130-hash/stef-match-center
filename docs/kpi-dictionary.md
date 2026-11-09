@@ -174,3 +174,19 @@ Compatibilité : l'ancien identifiant de visibilité `tonnage` est migré en
 `tonnage-distribution` + `tonnage-expedition` lorsqu'il était actif.
 S'il était masqué, les deux cartes restent masquées. Le champ historique
 `tonnageActivity`, devenu inutile, n'est plus appliqué.
+
+
+## Lot B — périmètre ciblé des voyages et clients de tri
+
+Deux catégories d'exclusion coexistent désormais sans se confondre :
+
+- **Exclusion globale historique** (`travel-exclusions.json`) : conserve son fonctionnement antérieur, avec impact potentiel sur toutes les opérations, joueurs, score et statistiques.
+- **Exclusion réception uniquement** (`reception-exclusions.json`) : voyage atypique ou client de tri reconnu ; ne modifie que la cohorte des voyages `DECHG` des duels gagnés et l'analyse horaire de réception. Le taux de réception corrigé est repris dans les quatre indicateurs du score et peut donc changer le score de football ; les trois autres indicateurs, la possession, les opérations, les joueurs et le diagnostic zonage restent inchangés.
+
+Les filtres sont séparés par agence, date du match et plage active. Toute exclusion ajoute un motif et un horodatage ; les 200 derniers événements sont conservés par périmètre. La réintégration est réversible, les classeurs et lignes sources ne sont jamais modifiés.
+
+Un client n'est reconnu que s'il est présent dans une colonne optionnelle clairement libellée `Client de tri`, `Client tri`, `Client`, `Code client`, `Nom client`, `Libellé client`, `Client réception` ou `Client déchargement` de l'onglet `Données`. L'application n'infère pas un client depuis le type de segment, l'agence ou la destination.
+
+Une exclusion par client retire le voyage complet **uniquement si toutes ses lignes de réception non-AQ sont attribuées à un client explicitement exclu**. Une attribution client partielle ou contradictoire est signalée ; le voyage reste dans le calcul pour éviter un temps artificiellement réduit. Les voyages `AQ` restent non éligibles aux duels, avec ou sans exclusion.
+
+**Limite de recette métier :** les anciens formats Excel Agen connus ne présentent pas nécessairement de colonne client. Dans ce cas, la sélection client est désactivée ; seuls les voyages peuvent être exclus de façon explicite. Le déploiement doit rester séparé de la PR et soumis à validation.

@@ -58,6 +58,7 @@ jobs:
             scripts/agencies.test.mjs \
             scripts/operational-analysis.test.mjs \
             scripts/reception-cohort.test.mjs \
+            scripts/reception-exclusions.test.mjs \
             scripts/reception-carousel-integration.test.mjs \
             scripts/kpi-integrity.test.mjs \
             scripts/hourly-pass-chart-scope.test.mjs \
