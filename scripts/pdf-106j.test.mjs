@@ -11,6 +11,7 @@ test("106J: uniquement les cellules Site et le tonnage Expedition", () => {
     Taux de ponctualité Destination %62,00 %-35%85,00 %
     Taux de prise de température retour ramasse%92,19 %+3%100,00 %`, "106J.pdf");
   assert.deepEqual(result.expedition, { tonnage: 478 });
+  assert.deepEqual(result.distribution, { tonnage: 255 });
   assert.deepEqual(result.punctuality, { arrivalPunctuality: 80, departurePunctuality: 64.1, destinationPunctuality: 62, temperatureReturn: 92.19 });
   assert.deepEqual(result.punctualityTargets, { arrivalPunctuality: 85, departurePunctuality: 85, destinationPunctuality: 85, temperatureReturn: 100 });
   assert.equal(result.referenceDate, "11 septembre 2026");
@@ -22,6 +23,7 @@ test("106J: zero est une valeur, une cellule absente ne l'est pas", () => {
   assert.deepEqual(result.punctuality, { arrivalPunctuality: 0 });
   const partial = parse106jText("DistributionTonnageT255+11% Expédition PositionsNB1477+14% Taux de ponctualité Arrivage%80,00 %", "partial.pdf");
   assert.deepEqual(partial.expedition, {});
+  assert.deepEqual(partial.distribution, { tonnage: 255 });
 });
 
 test("106J: pas de substitution par la ligne suivante ou la tendance", () => {
@@ -38,4 +40,13 @@ test("106J: document sans indicateur et pourcentages invalides refuses", () => {
   assert.throws(() => parse106jText("Un autre document PDF", "other.pdf"), /ne contient pas/);
   assert.throws(() => parse106jText("Taux de ponctualité Arrivage % 125,00 %", "invalid.pdf"), /ne contient pas/);
   assert.throws(() => parse106jText("Taux de ponctualité Arrivage % -4,00 %", "invalid.pdf"), /ne contient pas/);
+});
+
+test("106J: distribution et expedition restent deux series distinctes", () => {
+  const distributionOnly = parse106jText("Distribution Tonnage T 1 255,5 +11%", "night.pdf");
+  assert.deepEqual(distributionOnly.distribution, { tonnage: 1255.5 });
+  assert.deepEqual(distributionOnly.expedition, {});
+  const expeditionOnly = parse106jText("Expédition Tonnage T 478 +33%", "day.pdf");
+  assert.deepEqual(expeditionOnly.expedition, { tonnage: 478 });
+  assert.deepEqual(expeditionOnly.distribution, {});
 });
