@@ -167,3 +167,15 @@ Les anciens boutons « Masquer » des tableaux de chargement/réception, qui app
 Le filtre client nécessite une colonne client exploitable dans l'onglet `Données` ; aucune attribution à partir de la destination/du segment n'est inventée. Les graphiques horaires de passes et le diagnostic de zonage ne sont pas encore munis d'un filtre dédié, faute d'un périmètre de calcul indépendant validé. Les taux consolidés PDF 106J n'exposent pas de voyages individuels.
 
 Les règles de calcul restent conditionnées aux fichiers Excel/PDF effectivement présents dans l'agence. Sur Render Free, les exclusions enregistrées dans le stockage local sont aussi soumises au risque de perte au redéploiement.
+
+
+### Lot C (étape 1) — comptabilisation des cartons jaunes calculés
+
+Le décompte des cartons jaunes regroupe la liste de `Feuille de match!AK:AN` et les fautes calculées dans les matrices, **y compris celles absentes de la synthèse Excel**. Un rapprochement par opérateur, voyage et motif, tenant compte des occurrences, évite tout double comptage. La plage horaire et les exclusions globales sont appliquées.
+
+- `X!II:IM` : cartons « Pas de prise de temp » identifiés avec opérateur, voyage et horaire exploitables.
+- `TCD PPT!P:Y` : cartons « Chargement à quai » uniquement si la colonne `X` (attaquant calculé) est renseignée ; le texte fixe en colonne `Y` ne suffit jamais.
+
+Dans `Matrice QFC.xlsx` (non stocké dans le dépôt), la synthèse présente **14 cartons jaunes** et la matrice de température comporte **18 cas qualifiés** : les quatre omissions sont **réintégrées**, pour un total de **18 cartons**, sans doublon. Le Coach distingue le total par motif et peut afficher les cartons récupérés depuis la matrice.
+
+**Invariants :** aucune modification des quatre KPI du score, des exclusions ciblées Lots A/B, des litiges ou du compteur sans AT. Pas d'import en production par cette PR. Render Free conserve son risque existant de perte des données locales au redéploiement.
