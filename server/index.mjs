@@ -32,10 +32,11 @@ const workbookReadPromises = new Map();
 const agencyOperationQueues = new Map();
 const failedSessionAttempts = createAuthAttemptLimiter();
 const importConfirmationSecret = randomBytes(32);
-// A manual agency-wide safety register must not be writable on ephemeral Render
-// production storage without an explicit durable-storage readiness decision.
-const safetyWritesEnabled = process.env.STEF_SAFETY_WRITES_ENABLED === "true"
-  || (process.env.NODE_ENV !== "production" && process.env.STEF_SAFETY_WRITES_ENABLED !== "false");
+// Lot C2 decision: the last-accident date is deliberately temporary.
+// The agency re-enters it after loss of ephemeral server storage; the UI must
+// show "Non renseigné" when missing rather than inventing an incident-free run.
+// Server operators may still disable edits explicitly.
+const safetyWritesEnabled = process.env.STEF_SAFETY_WRITES_ENABLED !== "false";
 
 const app = express();
 app.disable("x-powered-by");
@@ -113,7 +114,7 @@ app.put("/api/agencies/:agencyCode/safety", requireAgency, async (req, res) => {
     return;
   }
   if (!safetyWritesEnabled) {
-    res.status(503).json({ title: "STOCKAGE NON VALIDÉ", message: "La saisie du dernier accident reste désactivée en production jusqu'à validation d'un stockage durable et restaurable." });
+    res.status(503).json({ title: "SAISIE DÉSACTIVÉE", message: "La saisie de la date du dernier accident est désactivée par configuration du serveur." });
     return;
   }
   if (!Object.prototype.hasOwnProperty.call(req.body ?? {}, "expectedRevision")
