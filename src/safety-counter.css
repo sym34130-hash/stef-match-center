@@ -46,3 +46,13 @@
   .safety-counter-meta button { margin-left: 0; }
   .safety-counter-editor form { grid-template-columns: minmax(0, 1fr); }
 }
+
+.safety-counter-temporary-note {
+  margin: 0;
+  padding: 9px 11px;
+  border-left: 3px solid #e1c58e;
+  background: #203348;
+  color: #f2e7cf;
+  font-size: 12px;
+  line-height: 1.5;
+}
