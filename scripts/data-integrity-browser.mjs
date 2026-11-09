@@ -78,6 +78,50 @@ try {
     const after = await fetch(`http://127.0.0.1:${apiPort}/api/agencies/01K/snapshot`,
       { headers: { "x-access-code": "INTEGRATION-01K" } });
     assert.equal(after.status, 200, "Confirmed import must persist the snapshot");
+    // Lot A: store the same brief preferences used by the UI, without touching source KPI values.
+    const importedSnapshot = (await after.json()).snapshot;
+    const causerieUrl = `http://127.0.0.1:${apiPort}/api/agencies/01K/causerie`;
+    const causerieHeaders = { "x-access-code": "INTEGRATION-01K" };
+    const currentPlanResponse = await fetch(`${causerieUrl}?matchDate=${encodeURIComponent(importedSnapshot.match.date)}`, { headers: causerieHeaders });
+    assert.equal(currentPlanResponse.status, 200);
+    const currentPlan = await currentPlanResponse.json();
+    const savePlanResponse = await fetch(causerieUrl, {
+      method: "POST",
+      headers: { ...causerieHeaders, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        matchDate: importedSnapshot.match.date,
+        expectedRevision: currentPlan.causerieRevision,
+        plan: { visibleIndicators: ["tonnage", "positions"], tonnageActivity: "distribution" },
+      }),
+    });
+    assert.equal(savePlanResponse.status, 200, "Brief preferences must be persisted by the API");
+    const savedPlan = (await savePlanResponse.json()).plan;
+    assert.deepEqual(savedPlan.visibleIndicators, ["tonnage", "positions"]);
+    assert.equal(savedPlan.tonnageActivity, "distribution");
+
+    // This fixture is shown only in the isolated browser; the actual PDF import remains unchanged.
+    await page.route("**/api/agencies/01K/snapshot**", async route => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.snapshot.dailyIndicators = {
+        sourceName: "synthetic-106j.pdf",
+        agencyCode: "01K",
+        referenceDate: "17 septembre 2026",
+        importedAt: null,
+        expedition: { tonnage: 478 },
+        distribution: { tonnage: 255 },
+        punctuality: {},
+      };
+      await route.fulfill({ response, json: body });
+    });
+    await page.reload();
+    await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+    await page.locator('[data-indicator="tonnage"] .match-indicator-value').waitFor({ state: "visible", timeout: 15000 });
+    assert.equal(await page.locator(".match-indicator-card").count(), 2, "Only two KPI cards should be visible");
+    assert.equal(await page.locator('[data-indicator="tonnage"] .match-indicator-value').innerText(), "255 t");
+    assert.match(await page.locator('[data-indicator="tonnage"] .match-indicator-source').innerText(), /Distribution/);
+    assert.equal(await page.locator('[data-indicator="performance"]').count(), 0);
+    console.log(`Browser: Lot A cards, distribution tonnage and saved preferences at ${viewport.width}px: OK`);
     assert.deepEqual(errors, [], `Unexpected React errors at ${viewport.width}px`);
     console.log(`Browser: login, upload, agency confirmation, completed import at ${viewport.width}px: OK`);
     await page.close();
