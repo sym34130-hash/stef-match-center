@@ -1,8 +1,8 @@
 import * as XLSX from "xlsx";
 
-// Lot C: the "Feuille de match" list is the authoritative list of yellow
-// cards. The X and TCD PPT matrices can flag additional candidates, but
-// neither a static infraction label nor a raw candidate is an awarded card.
+// Lot C: the final match-sheet list and qualified, calculated matrix entries
+// form the awarded cards. A static infraction label alone never qualifies.
+// Unlisted candidates are recovered in match-engine after reconciliation.
 const DISPLAY_SOURCE = "Feuille de match!AK:AN";
 const TEMP_MATRIX_SOURCE = "X!II:IM";
 const LOADING_MATRIX_SOURCE = "TCD PPT!P:Y";
@@ -139,7 +139,7 @@ export function auditYellowCards(workbook, awardedCards = [], period, globallyEx
 
   const temp = collectTemperatureCandidates(workbook, period, globallyExcluded);
   const loading = collectLoadingCandidates(workbook, period, globallyExcluded);
-  // The final awarded cards are not recalculated or silently modified here.
+  // Identify calculated infractions omitted from the final sheet.
   // Reconcile by player + voyage + reason, respecting multiplicity.
   const awardedCounts = new Map();
   for (const card of awardedCards) {
