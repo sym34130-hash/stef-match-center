@@ -21513,30 +21513,127 @@ body.match-celebration-active .main-area {
 .tv-brief-indicator-options input { flex: none; width: 17px; height: 17px; accent-color: #1269a0; }
 .tv-brief-indicator-options input:disabled { cursor: not-allowed; }
 
-/* Lot B — distinct, reversible and audited scope for reception indicators. */
-.reception-scope-control { margin: 12px 0; border: 1px solid rgba(153, 201, 227, .32); border-radius: 9px; background: rgba(13, 39, 62, .26); color: #e5f1fb; }
-.reception-scope-control > summary { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 12px 14px; cursor: pointer; font-size: 13px; font-weight: 800; }
-.reception-scope-control > summary strong { margin-left: auto; padding: 4px 8px; border-radius: 6px; background: rgba(154, 203, 228, .17); font-size: 11px; }
-.reception-scope-control > summary:focus-visible { outline: 2px solid #a9e1f1; outline-offset: 3px; }
-.reception-scope-body { display: grid; gap: 13px; padding: 0 14px 14px; min-width: 0; }
-.reception-scope-body p { margin: 0; color: #d4e5f2; font-size: 12px; line-height: 1.5; }
-.reception-scope-body p.reception-scope-warning { color: #ffddac; }
-.reception-scope-body p.reception-scope-count { color: #b3e6d8; }
-.reception-scope-editors { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 12px; }
-.reception-scope-editor { display: grid; align-content: start; gap: 10px; padding: 13px; border: 1px solid rgba(179, 210, 238, .25); border-radius: 8px; min-width: 0; }
-.reception-scope-editor > strong { color: #e5f1fb; font-size: 14px; }
-.reception-scope-editor label { display: grid; gap: 5px; font-size: 12px; color: #d6e7f4; }
-.reception-scope-editor select, .reception-scope-editor input { width: 100%; min-width: 0; min-height: 38px; padding: 8px; color: #fff; background: #12324b; border: 1px solid #9ec7e481; border-radius: 6px; font: inherit; font-size: 13px; }
-.reception-scope-editor select option { color: #10263a; background: #fff; }
-.reception-scope-editor button, .reception-scope-exclusion button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-.reception-scope-list { display: grid; gap: 9px; }
-.reception-scope-exclusion { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border: 1px solid rgba(154, 203, 228, .25); border-radius: 7px; }
-.reception-scope-exclusion > div { display: grid; gap: 4px; min-width: 0; }
-.reception-scope-exclusion strong { font-size: 12px; overflow-wrap: anywhere; }
-.reception-scope-exclusion small { font-size: 11px; overflow-wrap: anywhere; color: #d3e1ee; }
-.reception-scope-body .reception-scope-feedback { font-weight: 700; color: #e5f1fb; }
+/* Lot B: visible exclusions, high-contrast text, and a separate action form.
+   Deliberately use opaque surfaces: dark/transparent cards inherited an
+   unreadable muted palette from the surrounding match statistics. */
+.reception-scope-control {
+  margin: 14px 0; border: 1px solid #acc4d7; border-radius: 12px;
+  background: #fff; color: #102d45; overflow: hidden;
+  box-shadow: 0 2px 12px rgba(20, 58, 88, .08);
+  color-scheme: light;
+}
+.reception-scope-current { display: grid; gap: 12px; padding: 16px; }
+.reception-scope-current-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px;
+}
+.reception-scope-title { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.reception-scope-title > svg { flex: none; color: #135b78; margin-top: 1px; }
+.reception-scope-title h3 { margin: 0 0 4px; color: #102d45; font-size: 17px; line-height: 1.25; font-weight: 900; }
+.reception-scope-control p { margin: 0; color: #29445c; font-size: 13px; line-height: 1.5; }
+.reception-scope-title p { font-size: 12px; }
+.reception-scope-total {
+  flex: none; padding: 7px 10px; border-radius: 8px;
+  background: #13516f; color: #fff; font-size: 12px; font-weight: 900;
+}
+.reception-scope-empty {
+  display: flex; align-items: center; gap: 9px; padding: 12px 14px;
+  border-radius: 8px; border: 1px solid #8ac5b6; background: #e9f7f3;
+}
+.reception-scope-control p.reception-scope-empty { color: #145647; font-weight: 800; }
+.reception-scope-empty svg { flex: none; color: #145647; }
+.reception-scope-control p.reception-scope-impact { font-size: 12px; font-weight: 800; color: #205a75; }
+.reception-scope-list {
+  display: grid; gap: 9px; margin: 0; padding: 0;
+  list-style: none; max-height: 330px; overflow-y: auto;
+}
+.reception-scope-exclusion {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 12px 13px;
+  border: 1px solid #b1cbdc; border-left: 4px solid #167492; border-radius: 8px;
+  background: #f5faff;
+}
+.reception-scope-exclusion-info { display: grid; gap: 4px; min-width: 0; flex: 1 1 195px; }
+.reception-scope-type {
+  color: #245c77; font-size: 10px; font-weight: 900;
+  text-transform: uppercase; letter-spacing: .08em;
+}
+.reception-scope-code {
+  color: #0e2b47; font-size: 17px; font-weight: 900; line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.reception-scope-control p.reception-scope-reason { color: #16364f; font-size: 13px; overflow-wrap: anywhere; }
+.reception-scope-reason span { font-weight: 900; }
+.reception-scope-exclusion small { color: #30536d; font-size: 11px; font-weight: 650; }
+.reception-scope-exclusion small.reception-scope-warning-text { color: #915116; font-weight: 800; }
+.reception-scope-restore {
+  display: inline-flex; gap: 7px; align-items: center; justify-content: center;
+  flex: none; padding: 9px 12px; min-height: 40px;
+  border: 1px solid #185a7c; border-radius: 8px;
+  background: #fff; color: #124763; font-size: 12px; font-weight: 900; cursor: pointer;
+}
+.reception-scope-restore:not(:disabled):hover { background: #e0f0f9; }
+.reception-scope-restore:disabled { opacity: .55; cursor: not-allowed; }
+.reception-scope-restore:focus-visible,
+.reception-scope-add > summary:focus-visible,
+.reception-scope-editor :is(select, input, button):focus-visible { outline: 3px solid #167492; outline-offset: 3px; }
+.reception-scope-control p.reception-scope-warning {
+  display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px;
+  border: 1px solid #d7a254; border-radius: 8px; background: #fff5de; color: #77400a;
+}
+.reception-scope-warning svg { flex: none; }
+.reception-scope-control p.reception-scope-feedback {
+  font-size: 12px; font-weight: 900; color: #145647;
+}
+.reception-scope-add { border-top: 1px solid #b1cbdc; }
+.reception-scope-add > summary {
+  display: flex; align-items: center; gap: 9px; padding: 13px 16px;
+  background: #e7f3fb; color: #103c59; font-size: 13px; font-weight: 900;
+  cursor: pointer; list-style: none;
+}
+.reception-scope-add > summary::-webkit-details-marker { display: none; }
+.reception-scope-add > summary > span { flex: 1; }
+.reception-scope-add > summary .reception-scope-chevron { transition: transform 180ms ease; }
+.reception-scope-add[open] > summary .reception-scope-chevron { transform: rotate(180deg); }
+.reception-scope-add > summary:hover { background: #d5eaf7; }
+.reception-scope-body { display: grid; gap: 13px; padding: 14px 16px 16px; }
+.reception-scope-control p.reception-scope-explanation {
+  padding: 9px 12px; border-left: 3px solid #167492; background: #f3f9fd;
+  color: #29445c; font-size: 12px;
+}
+.reception-scope-editors {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+.reception-scope-editor {
+  display: grid; align-content: start; gap: 11px; padding: 13px;
+  border-radius: 9px; border: 1px solid #b1cbdc;
+  background: #f8fbfd; min-width: 0;
+}
+.reception-scope-editor > strong { color: #102d45; font-size: 14px; font-weight: 900; }
+.reception-scope-editor label { display: grid; gap: 6px; color: #16364f; font-size: 12px; font-weight: 800; }
+.reception-scope-editor select, .reception-scope-editor input {
+  min-width: 0; width: 100%; min-height: 42px; padding: 9px 10px;
+  border: 1px solid #789eb5; border-radius: 7px;
+  background: #fff; color: #102d45; font-size: 13px; font-weight: 700; font-family: inherit;
+}
+.reception-scope-editor input::placeholder { color: #526f86; opacity: 1; font-weight: 500; }
+.reception-scope-editor select option { background: #fff; color: #102d45; }
+.reception-scope-control .secondary-button.reception-scope-exclude {
+  display: inline-flex; gap: 7px; align-items: center;
+  justify-content: center; width: 100%; min-height: 42px;
+  border: 1px solid #124d6a; background: #124d6a;
+  color: #fff; font-size: 12px; font-weight: 900;
+}
+.reception-scope-control .secondary-button.reception-scope-exclude:not(:disabled):hover { background: #0d3c56; }
+.reception-scope-control .secondary-button.reception-scope-exclude:disabled {
+  color: #39566d; border-color: #b3c6d4; background: #e0eaf1; cursor: not-allowed;
+}
 @media (max-width: 640px) {
-  .reception-scope-body { padding-inline: 10px; }
-  .reception-scope-editor { padding: 10px; }
-  .reception-scope-exclusion button { width: 100%; }
+  .reception-scope-current { padding: 12px; }
+  .reception-scope-add > summary { padding: 13px 12px; }
+  .reception-scope-body { padding: 12px; }
+  .reception-scope-exclusion { align-items: stretch; }
+  .reception-scope-restore { width: 100%; }
+  .reception-scope-list { max-height: 300px; }
 }
