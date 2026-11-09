@@ -1915,12 +1915,12 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
     {
       id: "reception-time",
       label: "% duels gagnés",
-      content: <ReceptionQualityCard snapshot={snapshot} canEditTravelScope={canEditTravelScope} onToggleTravel={onToggleTravel} pendingTravelCode={pendingTravelCode} />,
+      content: <ReceptionQualityCard snapshot={snapshot} />,
     },
     {
       id: "loading",
       label: "% tirs cadrés",
-      content: <LoadingQualityCard snapshot={snapshot} canEditTravelScope={canEditTravelScope} onToggleTravel={onToggleTravel} pendingTravelCode={pendingTravelCode} />,
+      content: <LoadingQualityCard snapshot={snapshot} />,
     },
     {
       id: "centers",
@@ -2103,7 +2103,7 @@ function CentersQualityCard({ snapshot }: { snapshot: Snapshot }) {
 }
 
 
-function LoadingQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null }) {
+function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
   const quality = snapshot.loadingQuality;
   if (!quality) return null;
   const loadingTarget = formatReadableDuration(snapshot.performanceCriteria?.loadingSeconds ?? 165);
@@ -2143,12 +2143,12 @@ function LoadingQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pend
           <summary>Voir les tirs non cadrés <span>{formatNumber(quality.nonTargetedShots.length)}</span></summary>
           <div className="loading-quality-table-wrap">
           <div className="loading-quality-table" role="table" aria-label="Détails des tirs non cadrés">
-            <div className={`loading-quality-table-row is-head ${canEditTravelScope ? "has-travel-action" : ""}`} role="row">
-              <span>Voyage</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Frappe</span><span>Résultat</span>{canEditTravelScope && <span>Action</span>}
+            <div className="loading-quality-table-row is-head" role="row">
+              <span>Voyage</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Frappe</span><span>Résultat</span>
             </div>
             {quality.nonTargetedShots.map((shot) => (
-              <div className={`loading-quality-table-row ${canEditTravelScope ? "has-travel-action" : ""}`} role="row" key={`${shot.travelCode}-${shot.time}`}>
-                <span>{shot.travelCode}</span><span>{shot.time}</span><span>{shot.positions}</span><span>{shot.timePerPosition}</span><span>{shot.where}</span><span><i className="loading-result-dot is-off-target" title="Non cadré" aria-label="Non cadré" /></span>{canEditTravelScope && <span className="travel-action-cell"><button type="button" className="travel-visibility-button" disabled={pendingTravelCode === shot.travelCode} onClick={() => void onToggleTravel(shot.travelCode, true)} aria-label={`Masquer le voyage ${shot.travelCode}`} title={`Masquer le voyage ${shot.travelCode}`}><EyeOff size={14} /></button></span>}
+              <div className="loading-quality-table-row" role="row" key={`${shot.travelCode}-${shot.time}`}>
+                <span>{shot.travelCode}</span><span>{shot.time}</span><span>{shot.positions}</span><span>{shot.timePerPosition}</span><span>{shot.where}</span><span><i className="loading-result-dot is-off-target" title="Non cadré" aria-label="Non cadré" /></span>
               </div>
             ))}
           </div>
@@ -2159,7 +2159,7 @@ function LoadingQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pend
   );
 }
 
-function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pendingTravelCode }: { snapshot: Snapshot; canEditTravelScope: boolean; onToggleTravel: TravelScopeToggle; pendingTravelCode: string | null }) {
+function ReceptionQualityCard({ snapshot }: { snapshot: Snapshot }) {
   const quality = snapshot.unloadingQuality;
   const duelQuality = snapshot.unloadingDuelQuality;
   if (!quality) return null;
@@ -2203,12 +2203,12 @@ function ReceptionQualityCard({ snapshot, canEditTravelScope, onToggleTravel, pe
           {duelQuality.lostDuels.length > 0 ? (
             <div className="duel-quality-table-wrap">
               <div className="duel-quality-table" role="table" aria-label="Duels perdus">
-                <div className={`duel-quality-table-row is-head ${canEditTravelScope ? "has-travel-action" : ""}`} role="row">
-                  <span>Voyage</span><span>Destination</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>{canEditTravelScope && <span>Action</span>}
+                <div className="duel-quality-table-row is-head" role="row">
+                  <span>Voyage</span><span>Destination</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>
                 </div>
                 {duelQuality.lostDuels.map((duel) => (
-                  <div className={`duel-quality-table-row ${canEditTravelScope ? "has-travel-action" : ""}`} role="row" key={`${duel.travelCode}-${duel.time}`}>
-                    <span>{duel.travelCode}</span><span className="duel-destination" title={duel.destination ?? undefined}>{duel.destination || "—"}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className="duel-result duel-result-perdu">perdu</span>{canEditTravelScope && <span className="travel-action-cell"><button type="button" className="travel-visibility-button" disabled={pendingTravelCode === duel.travelCode} onClick={() => void onToggleTravel(duel.travelCode, true)} aria-label={`Masquer le voyage ${duel.travelCode}`} title={`Masquer le voyage ${duel.travelCode}`}><EyeOff size={14} /></button></span>}
+                  <div className="duel-quality-table-row" role="row" key={`${duel.travelCode}-${duel.time}`}>
+                    <span>{duel.travelCode}</span><span className="duel-destination" title={duel.destination ?? undefined}>{duel.destination || "—"}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className="duel-result duel-result-perdu">perdu</span>
                   </div>
                 ))}
               </div>
