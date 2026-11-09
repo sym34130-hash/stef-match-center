@@ -128,7 +128,7 @@ try {
       .getByRole("button", { name: "Aller à Brief équipe" }).click();
     const brief = page.locator(".match-brief-slide .tv-action");
     await brief.getByRole("button", { name: "Écrire" }).click();
-    assert.equal((await brief.locator(".tv-plan-column.attack > b").innerText()).trim(), "Service client");
+    assert.equal((await brief.locator(".tv-plan-column.attack > b").textContent()).trim(), "Service client");
     await brief.locator(".tv-brief-indicator-options label").filter({ hasText: "Ponctualité arrivage" }).locator("input").check();
     await brief.locator(".tv-brief-tonnage-activity select").selectOption("expedition");
     await brief.getByRole("button", { name: "Enregistrer", exact: true }).click();
