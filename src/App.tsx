@@ -1615,7 +1615,14 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
                   aria-expanded={indicatorSettingsOpen}
                   aria-controls="match-indicator-settings-panel"
                   disabled={!indicatorSettingsReady || indicatorSettingsSaving}
-                  onClick={() => indicatorSettingsOpen ? (setIndicatorSettingsOpen(false), setIndicatorSettingsFeedback(null)) : openIndicatorSettings()}
+                  onClick={() => {
+                    if (indicatorSettingsOpen) {
+                      setIndicatorSettingsOpen(false);
+                      setIndicatorSettingsFeedback(null);
+                    } else {
+                      openIndicatorSettings();
+                    }
+                  }}
                 >
                   <Settings2 size={16} />
                   Personnaliser les indicateurs
