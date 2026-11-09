@@ -179,13 +179,15 @@ function hourlyReception(rows, night, targetSeconds, reason, minimumPositions) {
 /** Input rows already satisfy the official match filter (operator, active clock range, exclusions).
  * All reception indicators use the same selected dated period and eligibility.
  */
-export function buildOperationalAnalyses({ rows, period, criteria, loadingQuality, validation = {}, minimumReceptionPositions }) {
+export function buildOperationalAnalyses({ rows, period, criteria, loadingQuality, validation = {}, minimumReceptionPositions, receptionExcludedCodes = new Set() }) {
   const valid = (rows ?? []).filter(row => row.startedAt instanceof Date && Number.isFinite(+row.startedAt) &&
     text(row.position) && ["DECHG", "ZONAGE", "CHG"].includes(row.operationType))
     .map(row => ({ ...row, position: text(row.position), travelCode: text(row.travelCode) }));
   const { night, selectedRows, reason } = selectNight(valid, period);
   const zonageDiagnostic = zonageAnalysis(selectedRows, night, criteria.zonageMinutes, reason);
-  const unloadingHourlyAnalysis = hourlyReception(selectedRows, night, criteria.unloadingSeconds, reason, minimumReceptionPositions);
+  // The reception KPI exclusion never removes rows from zonage diagnostics.
+  const receptionRows = selectedRows.filter(row => row.operationType !== "DECHG" || !receptionExcludedCodes.has(row.travelCode));
+  const unloadingHourlyAnalysis = hourlyReception(receptionRows, night, criteria.unloadingSeconds, reason, minimumReceptionPositions);
   const warnings = [...zonageDiagnostic.warnings];
   if (night?.otherNightOperations) warnings.push(`${night.otherNightOperations} opération(s) appartenant à d'autres périodes d'exploitation exclues du diagnostic.`);
   const invalidRows = (rows?.length ?? 0) - valid.length;
