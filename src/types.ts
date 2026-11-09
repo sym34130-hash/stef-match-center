@@ -238,6 +238,7 @@ export type Snapshot = {
     punctuality: Partial<Record<"arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn", number>>;
     punctualityTargets?: Partial<Record<"arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn", number>>;
     expedition: { tonnage?: number };
+    distribution?: { tonnage?: number };
   } | null;
   summary: {
     operations: number;
