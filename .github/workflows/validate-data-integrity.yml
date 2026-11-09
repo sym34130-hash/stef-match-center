@@ -63,4 +63,5 @@ jobs:
             scripts/reception-carousel-integration.test.mjs \
             scripts/kpi-integrity.test.mjs \
             scripts/hourly-pass-chart-scope.test.mjs \
+            scripts/yellow-card-audit.test.mjs \\
             scripts/kpi-goal-status.test.mjs
