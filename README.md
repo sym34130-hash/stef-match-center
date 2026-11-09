@@ -156,7 +156,7 @@ Ces règles doivent rester validées avec les utilisateurs terrain avant usage o
 
 ## Lot B — exclusions de réception
 
-Dans « Statistiques du match », ouvre « % Duels gagnés ». Le tableau **« Exclusions actives »** y reste visible même quand le formulaire est fermé, avec le code voyage/client, le motif et la date. Le bouton **« Réintégrer »** est disponible sur chaque ligne. Pour ajouter une règle, ouvre séparément **« Ajouter une exclusion »**. Un accès d'édition permet de choisir un voyage actif ou, si l'Excel le permet, un client de tri identifié, de saisir un motif, de l'exclure et de le réintégrer. La sélection est conservée par agence, journée et plage horaire, avec un historique des modifications.
+Dans « Statistiques du match », un bloc autonome placé **au-dessus du carrousel de graphiques** affiche le tableau **« Exclusions actives »** y reste visible même quand le formulaire est fermé, avec le code voyage/client, le motif et la date. Le bouton **« Réintégrer »** est disponible sur chaque ligne. Pour ajouter une règle, ouvre séparément **« Ajouter une exclusion »**. Un accès d'édition permet de choisir un voyage actif ou, si l'Excel le permet, un client de tri identifié, de saisir un motif, de l'exclure et de le réintégrer. La sélection est conservée par agence, journée et plage horaire, avec un historique des modifications.
 
 Ce nouveau filtre n'est **pas** l'exclusion globale d'un voyage déjà disponible dans l'application : il ne cible que les duels gagnés de réception et leur courbe horaire. Le sous-KPI de réception du score est recalculé ; les passes, chargements, possession, joueurs et volumes ne changent pas.
 
