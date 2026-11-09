@@ -11,6 +11,7 @@ import { pdfAssociation, canUsePdfIndicators } from "./source-provenance.mjs";
 import { operationalAnalysisNeedsRefresh } from "./operational-analysis.mjs";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout, normalizeBriefIndicators } from "./brief-layout.mjs";
 import { isValidCalendarDate } from "./calendar-date.mjs";
+import { calculateAccidentFreeDays } from "./accident-free-days.mjs";
 import { RECEPTION_EXCLUSION_VERSION, normalizeReceptionCode, normalizeReceptionExclusions, receptionClientKey } from "./reception-exclusions.mjs";
 import { authAttemptKey, boundedAuthText, createAuthAttemptLimiter, MAX_AGENCY_CODE_LENGTH, MAX_ACCESS_CODE_LENGTH } from "./auth-attempts.mjs";
 
@@ -31,6 +32,10 @@ const workbookReadPromises = new Map();
 const agencyOperationQueues = new Map();
 const failedSessionAttempts = createAuthAttemptLimiter();
 const importConfirmationSecret = randomBytes(32);
+// A manual agency-wide safety register must not be writable on ephemeral Render
+// production storage without an explicit durable-storage readiness decision.
+const safetyWritesEnabled = process.env.STEF_SAFETY_WRITES_ENABLED === "true"
+  || (process.env.NODE_ENV !== "production" && process.env.STEF_SAFETY_WRITES_ENABLED !== "false");
 
 const app = express();
 app.disable("x-powered-by");
@@ -88,6 +93,79 @@ app.post("/api/session", (req, res) => {
   }
   clearFailedSessionAttempts(sessionKey);
   res.json({ agency: publicAgency(agency) });
+});
+
+// Agency-wide manual last-accident register. Independent of Excel/PDF snapshots
+// and of the browser-local number of A.T. injuries for a match.
+app.get("/api/agencies/:agencyCode/safety", requireAgency, async (req, res) => {
+  try {
+    const state = await withAgencyLock(req.agency.code, () => readSafetyState(req.agency.code));
+    res.set("Cache-Control", "no-store, max-age=0").json({ ...state,
+      editable: Boolean(req.agency.canImport) && safetyWritesEnabled });
+  } catch (error) {
+    respondInternalError(res, `safety:read:${req.agency.code}`, error);
+  }
+});
+
+app.put("/api/agencies/:agencyCode/safety", requireAgency, async (req, res) => {
+  if (!req.agency.canImport) {
+    res.status(403).json({ title: "MODIFICATION NON AUTORISÉE", message: "Ce code d'accès permet seulement de consulter les indicateurs." });
+    return;
+  }
+  if (!safetyWritesEnabled) {
+    res.status(503).json({ title: "STOCKAGE NON VALIDÉ", message: "La saisie du dernier accident reste désactivée en production jusqu'à validation d'un stockage durable et restaurable." });
+    return;
+  }
+  if (!Object.prototype.hasOwnProperty.call(req.body ?? {}, "expectedRevision")
+    || (req.body.expectedRevision !== null && typeof req.body.expectedRevision !== "string")) {
+    res.status(428).json({ message: "Recharge la date enregistrée avant toute modification : une révision serveur est obligatoire." });
+    return;
+  }
+  const date = req.body?.lastAccidentDate;
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim().replace(/\s+/g, " ") : "";
+  const today = parisCalendarDate();
+  if (typeof date !== "string" || sanitizeDate(date) !== date
+    || calculateAccidentFreeDays(date, today).status !== "available") {
+    res.status(400).json({ title: "DATE INVALIDE", message: "Saisis une date civile réelle, égale ou antérieure à aujourd'hui (heure de Paris)." });
+    return;
+  }
+  if (reason.length > 240 || (req.body.reason !== undefined && typeof req.body.reason !== "string")) {
+    res.status(400).json({ title: "MOTIF INVALIDE", message: "Le motif ne doit pas dépasser 240 caractères." });
+    return;
+  }
+  try {
+    await withAgencyLock(req.agency.code, async () => {
+      const current = await readSafetyState(req.agency.code);
+      if (current.revision !== req.body.expectedRevision) {
+        res.status(409).json({ ...current, message: "La date a changé depuis ton dernier chargement. Recharge la valeur avant d'enregistrer." });
+        return;
+      }
+      if (current.lastAccidentDate === date) {
+        res.json({ message: "DATE INCHANGÉE", ...current, editable: true });
+        return;
+      }
+      if (current.lastAccidentDate !== null && reason.length < 5) {
+        res.status(400).json({ message: "Un motif de correction d'au moins 5 caractères est nécessaire pour modifier une date déjà enregistrée." });
+        return;
+      }
+      const agencyDir = path.join(dataDir, sanitizeSegment(req.agency.code));
+      const changedAt = new Date().toISOString();
+      const history = [...current.history, {
+        previousDate: current.lastAccidentDate,
+        newDate: date,
+        changedAt,
+        reason: reason || "Date initiale saisie manuellement",
+        actor: "session agence autorisée",
+      }].slice(-200);
+      await fs.mkdir(agencyDir, { recursive: true });
+      await writeJsonAtomic(safetyFilePath(req.agency.code), {
+        version: 1, lastAccidentDate: date, updatedAt: changedAt, history,
+      });
+      res.json({ message: "DATE DU DERNIER ACCIDENT ENREGISTRÉE", ...await readSafetyState(req.agency.code), editable: true });
+    });
+  } catch (error) {
+    respondInternalError(res, `safety:write:${req.agency.code}`, error);
+  }
 });
 
 app.get("/api/agencies/:agencyCode/league-configs", requireAgency, async (req, res) => {
@@ -996,6 +1074,41 @@ async function readLeagueConfigs(agencyCode) {
     if (error?.code === "ENOENT") return DEFAULT_LEAGUE_CONFIGS.map((config) => ({ ...config }));
     throw error;
   }
+}
+
+function safetyFilePath(agencyCode) {
+  return path.join(dataDir, sanitizeSegment(agencyCode), "safety.json");
+}
+
+function parisCalendarDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(now);
+  const get = type => parts.find(part => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+async function readSafetyState(agencyCode) {
+  const file = safetyFilePath(agencyCode);
+  let saved = null;
+  try {
+    saved = JSON.parse(await fs.readFile(file, "utf8"));
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  const rawDate = saved?.lastAccidentDate;
+  const date = typeof rawDate === "string" && sanitizeDate(rawDate) === rawDate ? rawDate : null;
+  const history = Array.isArray(saved?.history) ? saved.history.slice(-200) : [];
+  const asOfDate = parisCalendarDate();
+  const counter = calculateAccidentFreeDays(date, asOfDate);
+  return {
+    lastAccidentDate: date,
+    updatedAt: typeof saved?.updatedAt === "string" ? saved.updatedAt : null,
+    revision: await readFileRevision(file),
+    asOfDate,
+    counter,
+    history,
+  };
 }
 
 async function readLeagueConfigState(agencyCode) {
