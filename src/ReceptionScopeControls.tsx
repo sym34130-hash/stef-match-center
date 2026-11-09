@@ -38,11 +38,12 @@ export function ReceptionScopeControls({ scope, loadingScope, canEdit, pending, 
   const [feedback, setFeedback] = useState<string | null>(null);
   if (!scope && !loadingScope) return null;
 
-  const reception = scope ?? {
+  const reception: NonNullable<Snapshot["receptionScope"]> = scope ?? {
+    version: 1,
     excludedTravels: [], excludedClients: [], availableTravels: [], availableClients: [],
     clientColumnPresent: false, excludedByTravelCount: 0, excludedByClientCount: 0, ambiguousClientTravels: [],
   };
-  const loading = loadingScope ?? { excludedTravels: [], availableTravels: [], effectiveExcluded: 0 };
+  const loading: NonNullable<Snapshot["loadingScope"]> = loadingScope ?? { excludedTravels: [], availableTravels: [], effectiveExcluded: 0 };
   const excludedTravels = new Set(reception.excludedTravels.map(item => item.code));
   const excludedClients = new Set(reception.excludedClients.map(item => item.code.normalize("NFKC").toLocaleUpperCase("fr-FR")));
   const availableTravels = reception.availableTravels.filter(code => !excludedTravels.has(code));
