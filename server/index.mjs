@@ -1654,7 +1654,7 @@ function normalizeCauseriePlan(plan) {
     mercatoProfiles: normalizeMercatoProfiles(input.mercatoProfiles),
     redCards: limitMultilineText(input.redCards, 1000),
     visibleIndicatorsVersion: BRIEF_INDICATOR_SELECTION_VERSION,
-    visibleIndicators: normalizeBriefIndicators(input.visibleIndicators, input.visibleIndicatorsVersion),
+    visibleIndicators: normalizeBriefIndicators(input.visibleIndicators, input.visibleIndicatorsVersion ?? 1),
     coach: {
       tactic: limitText(input.coach?.tactic, 120),
       priority: limitText(input.coach?.priority, 120),
