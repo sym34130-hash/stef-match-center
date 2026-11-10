@@ -41,6 +41,8 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   const punctuality = pdf?.punctuality;
   const punctualityTargets = pdf?.punctualityTargets;
   const pdfDetail = pdfSourceLabel(pdf, snapshot.agency.code);
+  const totalTonnageDetail = pdf?.total && Number.isFinite(pdf.total.tonnage)
+    ? ` · Total 106J ${number.format(pdf.total.tonnage!)} t (ligne source)` : "";
   const metric = (value: number | undefined | null, unit: string) => typeof value === "number" && Number.isFinite(value) ? `${number.format(value)}${unit}` : null;
   const pdfMetricDetail = (key: keyof NonNullable<typeof punctuality>) => {
     const target = punctualityTargets?.[key];
