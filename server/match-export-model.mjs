@@ -84,7 +84,7 @@ export function matchExportAwards(snapshot) {
  * agency, an older match, or KPI values calculated with different thresholds. */
 export function matchExportModel({
   agency, snapshot, league, causerie = null, safety = null,
-  expectedMatchDate, expectedImportedAt, manualInjuries = null,
+  expectedMatchDate, expectedImportedAt, manualInjuries = null, manualExpectedPlayers = null,
 }) {
   const agencyCode = String(agency?.code ?? "").trim().toUpperCase();
   if (!agencyCode || !snapshot) {
@@ -109,6 +109,9 @@ export function matchExportModel({
   }
   if (manualInjuries !== null && (!Number.isInteger(manualInjuries) || manualInjuries < 0 || manualInjuries > 99)) {
     throw new MatchExportError(400, "Le nombre de blessures A.T est invalide.");
+  }
+  if (manualExpectedPlayers !== null && (!Number.isInteger(manualExpectedPlayers) || manualExpectedPlayers < 1 || manualExpectedPlayers > 100000)) {
+    throw new MatchExportError(400, "L\u0027effectif prévu est invalide.");
   }
   const visibleIndicators = normalizeBriefIndicators(causerie?.visibleIndicators, causerie?.visibleIndicatorsVersion ?? 1);
   return {
@@ -137,6 +140,7 @@ export function matchExportModel({
     excludedTravelCodes: snapshot.excludedTravelCodes ?? [],
     visibleIndicators,
     manualInjuries,
+    manualExpectedPlayers,
     safety: { lastAccidentDate: safety?.lastAccidentDate ?? null, days: safety?.counter?.days ?? null },
     causerie: {
       team: causerie?.team ?? "",
