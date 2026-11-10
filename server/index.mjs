@@ -251,7 +251,7 @@ app.post("/api/agencies/:agencyCode/match-pdf", requireAgency, async (req, res) 
   }
   const body = req.body ?? {};
   const { matchDate, importedAt, sourceName, leagueId, kpis, criteria } = body;
-  if (!isValidCalendarDate(matchDate) || typeof importedAt !== "string" || importedAt.length > 80 ||
+  if (sanitizeDate(matchDate) !== matchDate || typeof importedAt !== "string" || importedAt.length > 80 ||
       typeof sourceName !== "string" || sourceName.length > 200 ||
       !["bronze", "argent", "or", "platine"].includes(leagueId) ||
       !kpis || typeof kpis !== "object" ||
