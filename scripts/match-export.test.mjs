@@ -73,6 +73,20 @@ test("Lot E: reject stale match, stale import, nonmatching league KPI and invali
   rejected(() => build("058", { manualInjuries: 150 }), 400);
 });
 
+test("Lot E: different agencies and league thresholds cannot be mixed", async () => {
+  const differentLeague = matchExportLeague("or", config);
+  const model = build("059", {
+    league: differentLeague,
+    snapshot: { performanceCriteria: differentLeague.criteria },
+  });
+  const pdf = await pdfParse(renderMatchPdf(model));
+  assert.match(pdf.text, /AGENCE-059/);
+  assert.match(pdf.text, /LDC/);
+  assert.match(pdf.text, /CHG <= 150 s\/poz/);
+  assert.doesNotMatch(pdf.text, /CHG <= 165 s\/poz|AGENCE-058/);
+  assert.doesNotMatch(pdf.text, /Tonnage distribution/);
+});
+
 test("Lot E: direct PDF is valid, includes selected league/KPIs/brief and isolates agencies", async () => {
   const model058 = build("058");
   const model059 = build("059");
