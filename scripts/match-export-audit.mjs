@@ -4,7 +4,7 @@ import path from "node:path";
 import { matchExportLeague, matchExportModel } from "../server/match-export-model.mjs";
 import { renderMatchPdf } from "../server/match-export-pdf.mjs";
 import { PDF_CHART_IDS } from "../server/match-pdf-profile.mjs";
-import pdfParse from "pdf-parse";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 
 const out = process.env.STEF_PDF_AUDIT_DIR || "artifacts/lot-e-audit";
 await fs.mkdir(out, { recursive: true });
