@@ -1,0 +1,70 @@
+name: Audit indépendant V8 - tests complémentaires (aucun déploiement)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/audit-v8-readonly.yml'
+permissions:
+  contents: read
+jobs:
+  expanded-unit-api:
+    name: Tests supplémentaires API, PDF, sécurité, ligues et intégrité
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Audit supplémentaire - tests non appelés par la CI principale
+        run: |
+          node --test \
+            scripts/match-export.test.mjs \
+            scripts/match-export-http.test.mjs \
+            scripts/lot1-api.test.mjs \
+            scripts/auth-attempts.test.mjs \
+            scripts/calendar-validation.test.mjs \
+            scripts/data-integrity-api.test.mjs \
+            scripts/pdf-106j.test.mjs
+      - name: Audit source PDF / graphiques / ligues
+        run: |
+          node scripts/match-export-audit.mjs
+          node --input-type=module -e "import fs from 'node:fs'; const p=JSON.parse(fs.readFileSync('artifacts/lot-e-audit/certification-graphes.json')); if (p.productionCertified !== false || p.cases !== 20 || p.assertions < 100) process.exit(1); console.log('AUDIT SOURCE-PDF PASS',p.cases,p.assertions,p.productionCertified)"
+  access-smoke:
+    name: Production - lecture seule (santé et protections)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: HTTP read only
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import urllib.request,urllib.error,json,re
+          base='https://stef-match-center.onrender.com'
+          def get(path):
+            try:
+              with urllib.request.urlopen(urllib.request.Request(base+path,headers={'User-Agent':'STEF-exhaustive-audit-readonly'}),timeout=45) as res:
+                return res.status,res.read(),res.headers
+            except urllib.error.HTTPError as err:
+              return err.code,err.read(),err.headers
+          status,body,headers=get('/api/health')
+          assert status==200 and json.loads(body).get('ok') is True,('health',status)
+          status,html,_=get('/')
+          assert status==200 and b'<div id="root">' in html
+          assets=re.findall(rb'(?:src|href)="(/assets/[^"]+)"',html)
+          assert assets
+          for a in assets[:3]:
+            status,body,_=get(a.decode())
+            assert status==200 and len(body)>100,(a,status)
+          status,payload,_=get('/api/agencies')
+          assert status==200 and isinstance(json.loads(payload).get('agencies'),list)
+          for agency in ['058','059','01K']:
+            for path in ['snapshot','export/profile','export/match.pdf','causerie?matchDate=2026-11-10','league-configs','sync-state']:
+              status,body,_=get('/api/agencies/'+agency+'/'+path)
+              assert status==401,('/api/agencies/'+agency+'/'+path,status,body[:100])
+          print('PRODUCTION READ-ONLY PASS: health, front assets, agency list, 18 forbidden private requests')
+          PY
