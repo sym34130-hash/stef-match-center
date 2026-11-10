@@ -75,7 +75,7 @@ for (const fixture of fixtures) {
   // silently cut critical text. A date-scoped short summary makes it printable.
   assert.throws(() => renderMatchPdf(model), e => e.status === 422);
   model.pdfProfile = {
-    indicatorIds: fixture.visible.filter(id => ["performance", "injuries", "accident-free-days", "positions", "arrival", "departure", "tonnage-expedition"].includes(id)).slice(0, 6),
+    indicatorIds: fixture.visible.slice(0, 6),
     chartId: code === "058" ? "passes-hourly" : "centers",
     dailyBrief: { matchDate: date, attack: "FIN-DU-BRIEF-TEST-" + code },
   };
