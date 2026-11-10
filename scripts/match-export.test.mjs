@@ -124,7 +124,7 @@ test("Lot E: direct PDF is valid, includes selected league/KPIs/brief and isolat
   assert.match(parsed058.text, /AGENCE-058/);
   assert.match(parsed058.text, /LIGUE 1/);
   assert.match(parsed058.text, /Equipe-058/);
-  assert.match(parsed058.text, /Tirs cadres/);
+  assert.match(parsed058.text, /TIRS CADRÉS/);
   assert.doesNotMatch(parsed058.text, /AGENCE-059|Equipe-059/);
   assert.match(parsed059.text, /AGENCE-059/);
   assert.doesNotMatch(parsed059.text, /AGENCE-058/);
@@ -156,7 +156,7 @@ test("Lot E V3: all 5 chart choices are supported without generating extra pages
     });
     const pdf = await pdfParse(renderMatchPdf(model));
     assert.equal(pdf.numpages, 2, chartId);
-    assert.match(pdf.text, /Positions/);
+    assert.match(pdf.text, /POSITIONS/);
     assert.doesNotMatch(pdf.text, /Ponctualite arrivage|Blessures A.T/i);
   }
 });
@@ -189,8 +189,8 @@ test("Lot E V3: 4, 5 or 6 complementary KPIs do not overlap the chart or create 
     assert.match(parsed.text, /SST/);
     assert.match(parsed.text, /Message service client/);
     assert.match(parsed.text, /Vigilance SST/);
-    if (count === 6) assert.match(parsed.text, /Ponctualite depart/);
-    if (count === 4) assert.doesNotMatch(parsed.text, /Ponctualite depart/);
+    if (count === 6) assert.match(parsed.text, /PONCTUALITÉ DÉPART/);
+    if (count === 4) assert.doesNotMatch(parsed.text, /PONCTUALITÉ DÉPART/);
   }
 });
 
@@ -252,7 +252,7 @@ test("Lot E V4: reception chart plots actual seconds per position, target and sl
   const first = renderMatchPdf(model);
   const parsed = await pdfParse(first);
   assert.equal(parsed.numpages, 2);
-  assert.match(parsed.text, /Barres : moyenne en s\/position/);
+  assert.match(parsed.text, /Barres : secondes moyennes par position/);
   assert.match(parsed.text, /Cible : 60 s\/poz/);
   assert.match(parsed.text, /2 créneaux exploitables/);
   assert.match(parsed.text, /Positions\/créneau : 22 à 30/);
@@ -399,9 +399,10 @@ test("Lot E V6: padded 106J agency code matches the authenticated agency without
   });
   assert.equal(padded.dailyIndicators.agencyCode, "0058");
   assert.equal((await pdfParse(renderMatchPdf(padded))).numpages, 2);
-  rejected(() => build("058", {
+  const foreign = build("058", {
     snapshot: { dailyIndicators: { agencyCode: "0059", expedition: { tonnage: 999 }, punctuality: {} } },
-  }), 409);
+  });
+  assert.equal(foreign.dailyIndicators.agencyCode, "0059", "Foreign 106J is permitted by V8 and retains source attribution");
 });
 
 test("Lot E V6: source-dated tonnage cards print exact two-decimal values, never a rounded or summed total", async () => {
@@ -501,7 +502,7 @@ test("Lot E V7: excessively long unedited source brief refuses explicitly, not s
     causerie: {
       visibleIndicators: ["performance", "positions", "arrival", "injuries"],
       visibleIndicatorsVersion: 2,
-      attack: ["Détail terrain ".repeat(90)], midfield: [], defense: [],
+      attack: ["Détail terrain ".repeat(220)], midfield: [], defense: [],
       coach: { priority: "", tactic: "", arbitration: "" },
     },
   });
