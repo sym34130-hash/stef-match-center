@@ -12,6 +12,8 @@ import { operationalAnalysisNeedsRefresh } from "./operational-analysis.mjs";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_SELECTION_VERSION, migrateBriefLayout, normalizeBriefIndicators } from "./brief-layout.mjs";
 import { isValidCalendarDate } from "./calendar-date.mjs";
 import { calculateAccidentFreeDays } from "./accident-free-days.mjs";
+import { MatchExportError, matchExportLeague, matchExportModel } from "./match-export-model.mjs";
+import { renderMatchPdf } from "./match-export-pdf.mjs";
 import { RECEPTION_EXCLUSION_VERSION, normalizeReceptionCode, normalizeReceptionExclusions, receptionClientKey } from "./reception-exclusions.mjs";
 import { authAttemptKey, boundedAuthText, createAuthAttemptLimiter, MAX_AGENCY_CODE_LENGTH, MAX_ACCESS_CODE_LENGTH } from "./auth-attempts.mjs";
 
@@ -236,6 +238,58 @@ app.get("/api/agencies/:agencyCode/snapshot", requireAgency, async (req, res) =>
     return;
   }
   res.json({ snapshot });
+});
+
+// Lot E: entirely read-only. The export uses ONLY the authenticated agency's
+// sources and verifies date, import version, and official league thresholds.
+// Never accept a client-provided snapshot, PDF attachment, or agency name.
+app.get("/api/agencies/:agencyCode/export/match.pdf", requireAgency, async (req, res) => {
+  try {
+    const leagueId = req.query.leagueId;
+    const matchDate = req.query.matchDate;
+    const importedAt = req.query.importedAt;
+    if (typeof leagueId !== "string" || typeof matchDate !== "string" || typeof importedAt !== "string") {
+      throw new MatchExportError(400, "La ligue, la date du MATCH et la version importée sont requises.");
+    }
+    const rawInjuries = req.query.injuries;
+    if (rawInjuries !== undefined && (typeof rawInjuries !== "string" || !/^(?:[0-9]|[1-9][0-9])$/.test(rawInjuries))) {
+      throw new MatchExportError(400, "Le nombre de blessures A.T est invalide.");
+    }
+    const model = await withAgencyLock(req.agency.code, async () => {
+      const config = matchExportLeague(leagueId, await readLeagueConfigs(req.agency.code));
+      const snapshot = await readLatestSnapshot(req.agency.code, config.criteria);
+      if (!snapshot) throw new MatchExportError(404, "Le MATCH n'est pas disponible pour cette ligue.");
+      // Fail closed on any stale match, agency or criteria before reading the brief.
+      const base = matchExportModel({
+        agency: req.agency, snapshot, league: config,
+        expectedMatchDate: matchDate, expectedImportedAt: importedAt,
+        manualInjuries: rawInjuries === undefined ? null : Number(rawInjuries),
+      });
+      const [causerie, safety] = await Promise.all([
+        readCauserieState(req.agency.code, base.match.date),
+        readSafetyState(req.agency.code),
+      ]);
+      return matchExportModel({
+        agency: req.agency, snapshot, league: config, causerie, safety,
+        expectedMatchDate: matchDate, expectedImportedAt: importedAt,
+        manualInjuries: rawInjuries === undefined ? null : Number(rawInjuries),
+      });
+    });
+    const pdf = renderMatchPdf(model);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="STEF_MATCH_${model.agency.code}_${model.match.date}_${model.league.id}.pdf"`,
+      "Cache-Control": "no-store, max-age=0",
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.status(200).end(pdf);
+  } catch (error) {
+    if (error instanceof MatchExportError) {
+      res.status(error.status).json({ title: "EXPORT MATCH NON DISPONIBLE", message: error.message });
+    } else {
+      respondInternalError(res, `export:match:${req.agency.code}`, error);
+    }
+  }
 });
 
 app.get("/api/agencies/:agencyCode/causerie", requireAgency, async (req, res) => {
