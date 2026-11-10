@@ -1,0 +1,59 @@
+name: Smoke test non-destructif — production Lot E
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/lot-e-live-http-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  smoke-live:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vérifier la disponibilité et les contrôles d'accès sans identifiants
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, time, urllib.request, urllib.error, re
+          BASE = "https://stef-match-center.onrender.com"
+          def get(path):
+              req=urllib.request.Request(BASE+path, headers={"User-Agent":"STEF-lot-e-postdeploy-smoke"})
+              for retry in range(5):
+                  try:
+                      with urllib.request.urlopen(req, timeout=30) as r:
+                          return r.status, r.read(), dict(r.headers)
+                  except urllib.error.HTTPError as err:
+                      return err.code, err.read(), dict(err.headers)
+                  except Exception as exc:
+                      if retry == 4: raise
+                      time.sleep(5)
+          health, body, headers = get("/api/health")
+          assert health == 200, ("Health status", health, body[:300])
+          data=json.loads(body)
+          assert data.get("ok") is True and data.get("service") == "STEF Match Center", data
+          print("PASS /api/health: 200, ok=true")
+          page, html, headers = get("/")
+          assert page == 200, ("Home status", page)
+          assert b'<div id="root">' in html and b'assets/' in html, "Unexpected HTML shell"
+          print("PASS /: 200, HTML shell and asset links")
+          asset_match=re.search(rb'(?:src|href)="(/assets/[^"]+)"', html)
+          assert asset_match, "Missing frontend asset"
+          asset, content, _ = get(asset_match.group(1).decode())
+          assert asset == 200 and len(content) > 100, ("Asset", asset, len(content))
+          print("PASS browser asset: 200")
+          directory, agencies, _ = get("/api/agencies")
+          assert directory == 200 and isinstance(json.loads(agencies).get("agencies"),list)
+          print("PASS agency list: 200")
+          for path in [
+              "/api/agencies/058/snapshot",
+              "/api/agencies/058/export/profile",
+              "/api/agencies/058/export/match.pdf",
+              "/api/agencies/058/safety",
+              "/api/agencies/058/league-configs",
+          ]:
+              status, body, headers = get(path)
+              assert status == 401, ("Access must be denied", path, status, body[:200])
+              print("PASS unauthenticated",path,": 401")
+          print("PRODUCTION HTTP SMOKE: PASS. No production writes were made.")
+          PY
