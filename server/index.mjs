@@ -323,9 +323,14 @@ app.post("/api/agencies/:agencyCode/match-pdf", requireAgency, async (req, res) 
     });
     res.status(200).send(pdf);
   } catch (error) {
-    console.error("[match-pdf] generation failed:", error instanceof Error ? error.message : error);
+    const message = error instanceof Error ? error.message : "Génération indisponible.";
+    console.error("[match-pdf] generation failed:", message);
     if (!res.headersSent) {
-      res.status(503).json({ message: "Le PDF n'a pas pu être généré. Aucune donnée n'a été modifiée." });
+      if (message.startsWith("Export bloqué :")) {
+        res.status(409).json({ message });
+      } else {
+        res.status(503).json({ message: "Le PDF n'a pas pu être généré. Aucune donnée n'a été modifiée." });
+      }
     }
   } finally {
     matchPdfExportBusy = false;
