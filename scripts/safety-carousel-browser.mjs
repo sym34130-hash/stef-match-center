@@ -67,6 +67,13 @@ try {
     await page.getByRole("button", { name: "Accéder au match", exact: true }).click();
     await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
 
+    // Wait for the agency's brief personalization state to be available;
+    // the real export intentionally refuses to proceed while it is loading.
+    await page.waitForFunction(() => {
+      const control = document.querySelector(".match-indicators-customization > button");
+      return Boolean(control && !control.disabled);
+    }, { timeout: 15000 });
+
     // Lot E: a discoverable download button must work without hiding
     // the carrousel navigation or stealing another agency's access code.
     const pdfButton = page.getByRole("button", { name: "Exporter le MATCH en PDF" });
