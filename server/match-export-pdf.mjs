@@ -86,10 +86,18 @@ class Page {
     this.box(x, y + h - 3, w, 3, accent);
     const labelText = ascii(label).toUpperCase();
     const labelSize = clamp((w - 25) / Math.max(1, labelText.length * 0.56), 7.5, 10);
-    this.text(x + 13, y + h - 25, labelSize, labelText, accent, true);
+    const compact = h <= 75;
+    this.text(x + 13, y + h - (compact ? 20 : 25), labelSize, labelText, accent, true);
     const shown = ascii(value || "Indisponible");
-    // Up to three lines, fitted into the available space; card values are not
-    // silently truncated to 42 characters as in the initial prototype.
+    // Short scoreboard cards must use their own baselines. The legacy
+    // "h - 66" baseline otherwise prints outside a condensed card.
+    if (compact) {
+      const fontsize = clamp((w - 26) / Math.max(1, shown.length * 0.58), 13, 24);
+      const fitted = shown.length * fontsize * 0.58 <= w - 26;
+      if (!fitted) throw new MatchExportError(422, "La valeur du score est trop longue pour l'impression.");
+      this.text(x + 13, y + 8, fontsize, shown, C.white, true);
+      return;
+    }
     const fontSize = shown.length > 57 ? 11 : shown.length > 25 ? 15 : 27;
     const charCount = Math.max(10, Math.floor((w - 26) / (fontSize * .57)));
     const lines = wrap(shown, charCount);
