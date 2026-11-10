@@ -2,7 +2,7 @@ export const BRIEF_LAYOUT_VERSION = 2;
 export const BRIEF_TEXT_LIMITS = { attack: 1502, midfield: 3005, defense: 1502 };
 export const BRIEF_CAPTURE_LIMITS = { attack: 12, midfield: 24, defense: 12 };
 
-export const BRIEF_INDICATOR_IDS = ["performance", "injuries", "tonnage-distribution", "tonnage-expedition", "positions", "arrival", "departure", "destination", "temperature"];
+export const BRIEF_INDICATOR_IDS = ["performance", "injuries", "accident-free-days", "tonnage-distribution", "tonnage-expedition", "positions", "arrival", "departure", "destination", "temperature"];
 
 export function normalizeBriefIndicators(value) {
   if (!Array.isArray(value)) return [...BRIEF_INDICATOR_IDS];
