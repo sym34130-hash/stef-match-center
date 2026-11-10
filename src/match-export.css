@@ -31,7 +31,14 @@
 
 /* Preferences are edited in a portal so the MATCH carousel and its counters
    keep their original dimensions in both standard and celebration modes. */
-.match-carousel-heading { flex-wrap: wrap; gap: 6px 10px; }
+.match-pdf-actions {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  min-width: 0;
+}
+.match-pdf-actions .match-pdf-export-button { flex-shrink: 0; }
+@media (max-width: 650px) {
+  .match-pdf-actions .match-pdf-export-button { flex-shrink: 1; }
+}
 .match-pdf-modal-backdrop {
   position: fixed; inset: 0; z-index: 25000;
   display: flex; justify-content: center; align-items: center;
