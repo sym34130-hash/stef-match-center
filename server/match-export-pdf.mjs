@@ -90,7 +90,7 @@ class Page {
       this.text(x + 13, y + h - 66 - i * (fontSize + 5), fontSize, lines[i], C.white, true);
     }
     if (lines.length > maxLines) this.text(x + 13, y + 27, 8, "(valeur longue : consultez le brief)", C.muted);
-    if (detail && lines.length <= 2) this.text(x + 13, y + 12, 8.5,
+    if (detail && lines.length === 1) this.text(x + 13, y + 12, 8.5,
       trim(detail, Math.max(16, Math.floor(w / 5.4))), C.muted);
   }
   image(x, y, w, h, data) {
