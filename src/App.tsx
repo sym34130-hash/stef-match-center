@@ -1825,6 +1825,62 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
             {pdfExporting ? "Génération du PDF..." : "Exporter le MATCH en PDF"}
           </button>
           {pdfExportError && <small className="match-pdf-export-error" role="alert">{pdfExportError}</small>}
+
+          {pdfSettingsOpen && pdfSettingsDraft && createPortal(
+            <div className="match-pdf-modal-backdrop">
+              <section className="match-pdf-modal" role="dialog" aria-modal="true"
+                aria-label="Personnaliser l'export PDF"
+                onKeyDown={(event) => { if (event.key === "Escape" && !pdfSettingsSaving) setPdfSettingsOpen(false); }}>
+                <div className="match-pdf-modal-head">
+                  <div><h2>Personnaliser l'export PDF</h2><p>2 pages maximum · Choix indépendant de l'affichage du MATCH</p></div>
+                  <button className="secondary-button compact" type="button" disabled={pdfSettingsSaving}
+                    aria-label="Fermer la personnalisation PDF" onClick={() => setPdfSettingsOpen(false)}>Fermer</button>
+                </div>
+                <h3>KPI complémentaires (maximum 4)</h3>
+                <p>Seuls les KPI visibles dans le carrousel du MATCH peuvent être imprimés.</p>
+                <div className="match-pdf-kpi-list">
+                  {BRIEF_INDICATOR_OPTIONS.map(([id, label]) => {
+                    const visible = normalizeBriefIndicators(briefIndicatorIds).includes(id);
+                    const checked = pdfSettingsDraft.indicatorIds.includes(id);
+                    return <label key={id}>
+                      <input type="checkbox" checked={checked}
+                        disabled={!visible || (!checked && pdfSettingsDraft.indicatorIds.length >= 4)}
+                        onChange={(event) => setPdfSettingsDraft(current => current ? {
+                          ...current, indicatorIds: event.target.checked ? [...current.indicatorIds, id]
+                            : current.indicatorIds.filter(value => value !== id),
+                        } : null)} />
+                      <span>{label}{!visible ? " (masqué dans le MATCH)" : ""}</span>
+                    </label>;
+                  })}
+                </div>
+                <label className="match-pdf-chart-picker">Graphique opérationnel prioritaire
+                  <select value={pdfSettingsDraft.chartId}
+                    onChange={(event) => setPdfSettingsDraft(current => current ? { ...current, chartId: event.target.value } : null)}>
+                    {PDF_CHART_OPTIONS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                  </select>
+                </label>
+                <h3>Synthèse papier du {snapshot.match.date}</h3>
+                <p>Facultative : sans saisie, l'export reprend le brief enregistré. S'il dépasse la place disponible, rédige une synthèse courte pour éviter toute coupure.</p>
+                <div className="match-pdf-brief-list">
+                  {PDF_BRIEF_OPTIONS.map(([field, label, max]) => (
+                    <label key={field}>{label}
+                      <textarea rows={2} maxLength={max} value={pdfSettingsDraft.dailyBrief[field]}
+                        onChange={(event) => setPdfSettingsDraft(current => current ? {
+                          ...current, dailyBrief: { ...current.dailyBrief, matchDate: snapshot.match.date, [field]: event.target.value },
+                        } : null)} />
+                    </label>
+                  ))}
+                </div>
+                {pdfSettingsError && <p className="match-pdf-export-error" role="alert">{pdfSettingsError}</p>}
+                <div className="match-pdf-modal-actions">
+                  <button type="button" className="secondary-button compact" disabled={pdfSettingsSaving}
+                    onClick={() => setPdfSettingsOpen(false)}>Annuler</button>
+                  <button type="button" className="primary-button compact" disabled={pdfSettingsSaving}
+                    onClick={savePdfSettings}>{pdfSettingsSaving ? "Enregistrement..." : "Enregistrer le profil PDF"}</button>
+                </div>
+              </section>
+            </div>, document.body
+          )}
         </div>
         <div className="match-carousel-controls">
 
