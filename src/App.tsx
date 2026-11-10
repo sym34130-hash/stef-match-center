@@ -105,9 +105,9 @@ const PDF_CHART_OPTIONS: ReadonlyArray<readonly [string, string]> = [
 const PDF_BRIEF_OPTIONS: ReadonlyArray<readonly [PdfBriefField, string, number]> = [
   ["safety", "Sécurité / vigilance", 260],
   ["priorities", "Priorités opérationnelles", 260],
-  ["attack", "Consignes Attaque", 240],
-  ["midfield", "Consignes Milieu", 240],
-  ["defense", "Consignes Défense", 240],
+  ["attack", "Service client", 240],
+  ["midfield", "Expédition / Ramasse & Emballage", 240],
+  ["defense", "SST", 240],
   ["decisions", "Décisions / arbitrages", 330],
 ];
 
@@ -1442,6 +1442,10 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const redCards = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.redCards ?? "" : "";
   const briefIndicatorIds = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.visibleIndicators : undefined;
   const indicatorSettingsReady = mercatoPlan?.key === mercatoPlanKey;
+  const pdfAvailableIndicatorIds = normalizeBriefIndicators(briefIndicatorIds);
+  // With fewer than four visible cards, print all available cards rather than
+  // forcing an agency to re-enable indicators it intentionally hid.
+  const pdfMinimumIndicators = Math.min(4, pdfAvailableIndicatorIds.length);
 
   const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
   const loadingTarget = formatKpiDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
@@ -1504,13 +1508,20 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
     const brief = pdfProfile.dailyBrief.matchDate === snapshot.match.date
       ? pdfProfile.dailyBrief
       : { matchDate: snapshot.match.date, safety: "", priorities: "", attack: "", midfield: "", defense: "", decisions: "" };
-    setPdfSettingsDraft({ ...pdfProfile, indicatorIds: [...pdfProfile.indicatorIds], dailyBrief: { ...brief } });
+    const selected = pdfProfile.indicatorIds.filter(id => pdfAvailableIndicatorIds.includes(id));
+    const filled = [...selected, ...pdfAvailableIndicatorIds.filter(id => !selected.includes(id))]
+      .slice(0, Math.max(pdfMinimumIndicators, selected.length));
+    setPdfSettingsDraft({ ...pdfProfile, indicatorIds: filled, dailyBrief: { ...brief } });
     setPdfSettingsError(null);
     setPdfSettingsOpen(true);
   }
 
   async function savePdfSettings() {
     if (!pdfSettingsDraft || !session.agency.canImport || pdfSettingsSaving) return;
+    if (pdfSettingsDraft.indicatorIds.length < pdfMinimumIndicators || pdfSettingsDraft.indicatorIds.length > 6) {
+      setPdfSettingsError(`Sélectionne entre ${pdfMinimumIndicators} et 6 KPI complémentaires.`);
+      return;
+    }
     setPdfSettingsSaving(true);
     setPdfSettingsError(null);
     try {
@@ -1838,15 +1849,15 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
                   <button className="secondary-button compact" type="button" disabled={pdfSettingsSaving}
                     aria-label="Fermer la personnalisation PDF" onClick={() => setPdfSettingsOpen(false)}>Fermer</button>
                 </div>
-                <h3>KPI complémentaires (maximum 4)</h3>
-                <p>Seuls les KPI visibles dans le carrousel du MATCH peuvent être imprimés.</p>
+                <h3>KPI complémentaires (4 à 6)</h3>
+                <p>Choisis de 4 à 6 KPI parmi ceux visibles dans le MATCH. Si moins de 4 sont activés sur le site, l'export reprend tous ceux disponibles.</p>
                 <div className="match-pdf-kpi-list">
                   {BRIEF_INDICATOR_OPTIONS.map(([id, label]) => {
                     const visible = normalizeBriefIndicators(briefIndicatorIds).includes(id);
                     const checked = pdfSettingsDraft.indicatorIds.includes(id);
                     return <label key={id}>
                       <input type="checkbox" checked={checked}
-                        disabled={(!visible && !checked) || (!checked && pdfSettingsDraft.indicatorIds.length >= 4)}
+                        disabled={(!visible && !checked) || (!checked && pdfSettingsDraft.indicatorIds.length >= 6)}
                         onChange={(event) => setPdfSettingsDraft(current => current ? {
                           ...current, indicatorIds: event.target.checked ? [...current.indicatorIds, id]
                             : current.indicatorIds.filter(value => value !== id),
@@ -1877,7 +1888,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
                 <div className="match-pdf-modal-actions">
                   <button type="button" className="secondary-button compact" disabled={pdfSettingsSaving}
                     onClick={() => setPdfSettingsOpen(false)}>Annuler</button>
-                  <button type="button" className="primary-button compact" disabled={pdfSettingsSaving}
+                  <button type="button" className="primary-button compact" disabled={pdfSettingsSaving || pdfSettingsDraft.indicatorIds.length < pdfMinimumIndicators || pdfSettingsDraft.indicatorIds.length > 6}
                     onClick={savePdfSettings}>{pdfSettingsSaving ? "Enregistrement..." : "Enregistrer le profil PDF"}</button>
                 </div>
               </section>
