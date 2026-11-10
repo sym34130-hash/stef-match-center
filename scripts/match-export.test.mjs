@@ -18,7 +18,7 @@ const makeSnapshot = code => ({
   match: { date, timeRangeLabel: "13:00 - 22:30", status: "MAITRISE", score: 2 },
   operationalScore: {
     status: "available", goalsFor: 3, goalsAgainst: 1, indicators: {
-      passRate: 65, loadingPercent: 75, unloadingPercent: 72, possessionPercent: 59,
+      passRate: 65, loadingPercent: 88, unloadingPercent: 80, possessionPercent: 49,
     },
   },
   summary: {
@@ -261,6 +261,7 @@ test("Lot E V5: compare five PDF summaries with canonical source metrics across 
         loading: { targetSeconds: criteria.loadingSeconds },
       },
       loadingQuality: { targeted: 8, offTarget: 2, targetedPercent: 80, offTargetPercent: 20 },
+      unloadingQuality: { targeted: 72, offTarget: 28, targetedPercent: 72, offTargetPercent: 28 },
       unloadingHourlyAnalysis: {
         state: "disponible", targetSeconds: criteria.unloadingSeconds,
         items: [
@@ -352,4 +353,22 @@ test("Lot E V5: missing source must not masquerade as a zero KPI in charts", asy
     assert.equal(parsed.numpages, 2);
     assert.match(parsed.text, /indisponible|Aucun/i);
   }
+});
+
+
+test("Lot E V5: block charts when the score disagrees with canonical loading, unloading or result counts", () => {
+  const root = makeSnapshot("058");
+  rejected(() => build("058", { snapshot: {
+    operationalScore: { ...root.operationalScore, indicators: {
+      ...root.operationalScore.indicators, loadingPercent: 52,
+    } },
+  } }), 409);
+  rejected(() => build("058", { snapshot: {
+    operationalScore: { ...root.operationalScore, indicators: {
+      ...root.operationalScore.indicators, unloadingPercent: 52,
+    } },
+  } }), 409);
+  rejected(() => build("058", { snapshot: {
+    operationalScore: { ...root.operationalScore, goalsFor: 4, goalsAgainst: 0 },
+  } }), 409);
 });
