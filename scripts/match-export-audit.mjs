@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import pdfParse from "pdf-parse";
 import { matchExportLeague, matchExportModel } from "../server/match-export-model.mjs";
 import { renderMatchPdf } from "../server/match-export-pdf.mjs";
 
@@ -72,15 +71,17 @@ for (const fixture of fixtures) {
     expectedMatchDate: date, expectedImportedAt: importedAt,
     manualInjuries: 2, manualExpectedPlayers: 20 });
   const pdf = renderMatchPdf(model);
-  const parsed = await pdfParse(pdf);
-  assert.ok(parsed.numpages >= 9, "Expected multipage printable report");
-  assert.match(parsed.text, new RegExp("FIN-DU-BRIEF-TEST-" + code));
-  assert.match(parsed.text, /HEURE-27/);
-  assert.match(parsed.text, /RECEPT-23/);
-  assert.match(parsed.text, new RegExp("TEST GROUPE-" + code));
-  assert.match(parsed.text, new RegExp("ATTAQUANT-" + code));
-  assert.doesNotMatch(parsed.text, new RegExp("TEST GROUPE-" + (code === "058" ? "059" : "058")));
+  const pdfText = pdf.toString("latin1");
+  const pages = (pdfText.match(/\/Type \/Page \/Parent/g) ?? []).length;
+  assert.equal(pdfText.slice(0, 8), "%PDF-1.4");
+  assert.ok(pages >= 9, "Expected multipage printable report");
+  assert.match(pdfText, new RegExp("FIN-DU-BRIEF-TEST-" + code));
+  assert.match(pdfText, /HEURE-27/);
+  assert.match(pdfText, /RECEPT-23/);
+  assert.match(pdfText, new RegExp("TEST GROUPE-" + code));
+  assert.match(pdfText, new RegExp("ATTAQUANT-" + code));
+  assert.doesNotMatch(pdfText, new RegExp("TEST GROUPE-" + (code === "058" ? "059" : "058")));
   const filename = path.join(out, "SYNTHETIC_MATCH_" + code + "_" + league.label.replace(/ /g, "_") + ".pdf");
   await fs.writeFile(filename, pdf);
-  console.log(filename + " / pages=" + parsed.numpages + " / bytes=" + pdf.length);
+  console.log(filename + " / pages=" + pages + " / bytes=" + pdf.length);
 }
