@@ -70,6 +70,7 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
     const query = code => new URLSearchParams({
       leagueId: "argent", matchDate: snapshots[code].match.date,
       importedAt: snapshots[code].importedAt,
+      zonageMinutes: "30", loadingSeconds: "165", unloadingSeconds: "60", scoreTargetPercent: "50",
     });
     const uri = code => base + "/api/agencies/" + code + "/export/match.pdf?" + query(code);
     const blocked = await fetch(uri("059"), { headers: { "x-access-code": "SECRET-058" } });
@@ -79,6 +80,7 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
     assert.equal(missing.status, 401);
     const badDate = await fetch(base + "/api/agencies/058/export/match.pdf?" + new URLSearchParams({
       leagueId: "argent", matchDate: "2026-10-01", importedAt: snapshots["058"].importedAt,
+      zonageMinutes: "30", loadingSeconds: "165", unloadingSeconds: "60", scoreTargetPercent: "50",
     }), { headers: { "x-access-code": "SECRET-058" } });
     assert.equal(badDate.status, 409);
     for (const code of ["058", "059"]) {
