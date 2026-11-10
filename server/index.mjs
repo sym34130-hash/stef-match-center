@@ -1619,10 +1619,17 @@ async function readCauseriePlan(agencyCode, matchDate) {
   try {
     const stored = JSON.parse(await fs.readFile(causeriePath, "utf8"));
     const migrated = migrateBriefLayout(stored);
+    // Expose historical selections with the new card enabled, even before
+    // the brief is next saved. Do not rewrite a version-2 file on a GET.
+    const normalized = {
+      ...migrated,
+      visibleIndicatorsVersion: BRIEF_INDICATOR_SELECTION_VERSION,
+      visibleIndicators: normalizeBriefIndicators(migrated.visibleIndicators, migrated.visibleIndicatorsVersion ?? 1),
+    };
     if (!(Number(stored?.briefLayoutVersion) >= BRIEF_LAYOUT_VERSION)) {
-      await saveCauseriePlan(agencyCode, matchDate, migrated);
+      await saveCauseriePlan(agencyCode, matchDate, normalized);
     }
-    return migrated;
+    return normalized;
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
     return null;
