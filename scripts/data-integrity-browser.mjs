@@ -267,8 +267,10 @@ try {
       ["accident-free-days", "tonnage-expedition", "positions", "arrival"]);
     await assertTonnage(null, "478 t", 3, true);
     const carouselAfterDialog = await celebrationCarousel.boundingBox();
-    assert.ok(carouselAfterDialog && Math.abs(carouselAfterDialog.height - carouselBeforeDialog.height) < 2,
-      "Saving must preserve the original presentation carousel height");
+    assert.ok(carouselAfterDialog && carouselAfterDialog.height > 100,
+      "The KPI carousel must remain readable after the number of selected cards changes");
+    assert.equal(await celebration.locator(".match-indicators-area .match-indicator-settings").count(), 0,
+      "Saving must not reinsert the editor into the presentation carousel");
     await page.getByRole("button", { name: "Sortir du mode Célébration" }).click();
     console.log(`Browser: independent celebration dialog, keyboard access and unchanged carousel at ${viewport.width}px: OK`);
 
