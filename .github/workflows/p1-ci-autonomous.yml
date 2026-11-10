@@ -1,0 +1,95 @@
+name: P1 — Recette obligatoire autonome (PDF, API, navigateur)
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p1-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-pdf-regressions:
+    name: P1 API, sécurité, 106J et PDF (sans données privées)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Tests API, concurrence, erreurs, sécurité, 106J, PDF et versions
+        run: |
+          node --test \
+            scripts/match-export.test.mjs \
+            scripts/match-export-http.test.mjs \
+            scripts/lot1-api.test.mjs \
+            scripts/auth-attempts.test.mjs \
+            scripts/calendar-validation.test.mjs \
+            scripts/data-integrity-api.test.mjs \
+            scripts/pdf-106j.test.mjs
+      - name: Certification PDF sur sources synthétiques (20 cas, 4 ligues x 5 graphiques)
+        run: |
+          node scripts/match-export-audit.mjs
+          node --input-type=module -e '
+            import fs from "node:fs";
+            import assert from "node:assert/strict";
+            const report = JSON.parse(fs.readFileSync("artifacts/lot-e-audit/certification-graphes.json"));
+            assert.equal(report.productionCertified, false, "Do not falsely label synthetic data as production certified");
+            assert.equal(report.cases, 20);
+            assert.ok(report.assertions >= 100);
+            assert.equal(report.results.length, 20);
+            console.log("P1 PDF fixture certification:", report.cases, report.assertions);
+          '
+      - name: Artefacts — 20 PDF et certification synthétique
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p1-pdf-synthetic
+          path: |
+            artifacts/lot-e-audit/*.pdf
+            artifacts/lot-e-audit/certification-graphes.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  playwright-synthetic:
+    name: P1 Playwright — desktop / tablette / mobile (isolé)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Vérifier la compilation de la V8
+        run: pnpm build
+      - name: Installer Chromium pour 3 formats de test
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Parcours E2E autonome sur trois formats
+        run: pnpm exec playwright test --config=playwright.ci.config.ts
+      - name: Artefacts de diagnostic navigateur
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p1-playwright-diagnostics
+          path: |
+            test-results/
+            artifacts/p1-playwright-report/
+          if-no-files-found: warn
+          retention-days: 7
