@@ -1,5 +1,9 @@
 FROM node:22-alpine
 
+# System Chromium generates real, selectable, print-styled PDF pages.
+# Fonts are installed for French text; requests are bounded to one worker.
+RUN apk add --no-cache chromium ttf-dejavu
+
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./

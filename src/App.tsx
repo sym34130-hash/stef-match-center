@@ -21,6 +21,7 @@ import {
   Clock3,
   Crown,
   Dumbbell,
+  Download,
   Edit3,
   Eye,
   EyeOff,
@@ -691,6 +692,7 @@ export default function App() {
             )}
             {screen === "match" && snapshot && (
               <MatchSheet
+                key={`${session.agency.code}:${snapshot.match.date}`}
                 snapshot={snapshot}
                 session={session}
                 causerieRevision={causerieRevision}
@@ -1393,6 +1395,9 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const [indicatorSettingsDraft, setIndicatorSettingsDraft] = useState<string[]>(() => [...BRIEF_INDICATOR_IDS]);
   const [indicatorSettingsSaving, setIndicatorSettingsSaving] = useState(false);
   const [indicatorSettingsFeedback, setIndicatorSettingsFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+  const [exportingMatchPdf, setExportingMatchPdf] = useState(false);
+  const [matchPdfError, setMatchPdfError] = useState<string | null>(null);
+  const activeExportKeyRef = useRef("");
   const [activeSlide, setActiveSlide] = useState(0);
   const [slideDirection, setSlideDirection] = useState<"next" | "previous">("next");
   const [pendingTravelCode, setPendingTravelCode] = useState<string | null>(null);
@@ -1477,6 +1482,78 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
     }
   }
 
+  // A PDF must correspond to the same agency, version, league and saved KPI
+  // values before and after the asynchronous browser-side download.
+  const activeExportKey = JSON.stringify({
+    agencyCode: session.agency.code,
+    matchDate: snapshot.match.date,
+    importedAt: snapshot.importedAt,
+    sourceName: snapshot.sourceName,
+    leagueId: activeLeague,
+    criteria: snapshot.performanceCriteria ?? leagueConfig,
+    kpis: savedKpiCopy,
+    briefRevision: mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan?.updatedAt ?? null : "loading",
+  });
+  activeExportKeyRef.current = activeExportKey;
+  useEffect(() => () => { activeExportKeyRef.current = ""; }, []);
+
+  async function downloadMatchPdf() {
+    if (exportingMatchPdf || editingKpis || !indicatorSettingsReady) return;
+    if (snapshot.agency.code !== session.agency.code) {
+      setMatchPdfError("Le MATCH affiché n'appartient pas à l'agence connectée.");
+      return;
+    }
+    const initialKey = activeExportKeyRef.current;
+    setExportingMatchPdf(true);
+    setMatchPdfError(null);
+    try {
+      const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/match-pdf`, {
+        method: "POST",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json", "x-access-code": session.accessCode },
+        body: JSON.stringify({
+          matchDate: snapshot.match.date,
+          importedAt: snapshot.importedAt,
+          sourceName: snapshot.sourceName,
+          leagueId: activeLeague,
+          kpis: savedKpiCopy,
+          criteria: snapshot.performanceCriteria ?? leagueConfig,
+        }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.message ?? "Impossible de générer le PDF du MATCH.");
+      }
+      if (!response.headers.get("Content-Type")?.includes("application/pdf")) {
+        throw new Error("Le fichier reçu n'est pas un PDF.");
+      }
+      const pdf = await response.blob();
+      if (activeExportKeyRef.current !== initialKey) {
+        throw new Error("Le MATCH ou l'agence a changé pendant le téléchargement. Relance l'export.");
+      }
+      const filenameHeader = response.headers.get("Content-Disposition") ?? "";
+      const requestedFilename = filenameHeader.match(/filename="([^"]+)"/)?.[1];
+      const fallbackName = `STEF-MATCH-${session.agency.code}-${snapshot.match.date}-${activeLeague}.pdf`;
+      const filename = requestedFilename && /^[A-Za-z0-9_.-]+[.]pdf$/.test(requestedFilename)
+        ? requestedFilename : fallbackName;
+      const href = URL.createObjectURL(pdf);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = filename;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(href), 10000);
+    } catch (error) {
+      if (activeExportKeyRef.current) {
+        setMatchPdfError(error instanceof Error ? error.message : "Export PDF indisponible.");
+      }
+    } finally {
+      if (activeExportKeyRef.current) setExportingMatchPdf(false);
+    }
+  }
+
   useEffect(() => {
     if (!thresholdReached) return;
     setThresholdPulse(true);
@@ -1550,7 +1627,10 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const slideClass = (index: number) => `match-slide-panel ${activeSlide === index ? `is-active is-enter-${slideDirection}` : index < activeSlide ? "is-before" : "is-after"}`;
 
   return (
-    <div className={`${celebrationMode ? "match-page is-celebration-mode" : "match-page"} ${outcome.tone} ${thresholdReached ? "is-threshold-reached" : ""} ${thresholdPulse ? "is-threshold-pulse" : ""}`}>
+    <div className={`${celebrationMode ? "match-page is-celebration-mode" : "match-page"} ${outcome.tone} ${thresholdReached ? "is-threshold-reached" : ""} ${thresholdPulse ? "is-threshold-pulse" : ""}`}
+      data-export-agency={snapshot.agency.code} data-export-date={snapshot.match.date}
+      data-export-imported={snapshot.importedAt} data-export-source={snapshot.sourceName}
+      data-export-league={activeLeague} data-export-brief-ready={indicatorSettingsReady ? "true" : "false"}>
       <nav className="match-carousel-navigation" aria-label="Navigation de la feuille de match">
         <div className="match-carousel-heading">
           <span>FEUILLE DE MATCH</span>
@@ -1580,6 +1660,17 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
             <ChevronRight size={20} />
           </button>
         </div>
+        <div className="match-pdf-download-row">
+          <button type="button" className="secondary-button compact match-pdf-download"
+            onClick={() => void downloadMatchPdf()}
+            disabled={exportingMatchPdf || !indicatorSettingsReady || editingKpis}
+            title="Télécharger toutes les sections et tous les graphiques du MATCH en PDF"
+          >
+            <Download size={15} />
+            {exportingMatchPdf ? "Génération PDF..." : "Télécharger le MATCH en PDF"}
+          </button>
+        </div>
+        {matchPdfError && <p className="match-pdf-error" role="alert">{matchPdfError}</p>}
         <div className="match-carousel-progress" aria-label="Accès direct aux sections">
           {slideLabels.map((label, index) => (
             <button

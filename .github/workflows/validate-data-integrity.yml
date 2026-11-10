@@ -49,6 +49,15 @@ jobs:
         run: node scripts/reception-hour-volume-browser.mjs
       - name: Safety counter vignette in carousel (desktop/tablet/mobile)
         run: node scripts/safety-carousel-browser.mjs
+      - name: Lot E - PDF complet et contrôle d'accès inter-agences
+        run: node scripts/match-pdf-browser.mjs
+      - name: Lot E - Exemple PDF fictif pour revue visuelle
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot-e-match-pdf-demo-058
+          path: artifacts/lot-e-pdf-058-demo.pdf
+          if-no-files-found: error
+          retention-days: 7
       - name: Standalone unit and API checks
         run: |
           node --test \
@@ -68,4 +77,5 @@ jobs:
             scripts/accident-free-days.test.mjs \
             scripts/safety-api.test.mjs \
             scripts/yellow-card-audit.test.mjs \
-            scripts/kpi-goal-status.test.mjs
+            scripts/kpi-goal-status.test.mjs \
+            scripts/match-export-identity.test.mjs
