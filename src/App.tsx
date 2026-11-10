@@ -1849,6 +1849,24 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
                   <button className="secondary-button compact" type="button" disabled={pdfSettingsSaving}
                     aria-label="Fermer la personnalisation PDF" onClick={() => setPdfSettingsOpen(false)}>Fermer</button>
                 </div>
+                <section className="match-pdf-source-panel" aria-label="Source du tonnage imprimé">
+                  <h3>Tonnage du PDF : vérification de la source</h3>
+                  <p>{pdfSourceLabel(snapshot.dailyIndicators, session.agency.code)} · La date 106J peut différer de la date du MATCH Excel.</p>
+                  <dl>
+                    {([
+                      ["Distribution", snapshot.dailyIndicators?.distribution?.tonnage],
+                      ["Expédition", snapshot.dailyIndicators?.expedition?.tonnage],
+                      ["Total 106J", snapshot.dailyIndicators?.total?.tonnage],
+                    ] as const).map(([label, amount]) => (
+                      <div key={label}><dt>{label}</dt>
+                        <dd>{typeof amount === "number" && Number.isFinite(amount)
+                          ? new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 }).format(amount) + " t"
+                          : "Non disponible"}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <p>Le total provient de la ligne officielle du 106J ; il n'est pas recalculé à partir de valeurs arrondies.</p>
+                </section>
                 <h3>KPI complémentaires (4 à 6)</h3>
                 <p>Choisis de 4 à 6 KPI parmi ceux visibles dans le MATCH. Si moins de 4 sont activés sur le site, l'export reprend tous ceux disponibles.</p>
                 <div className="match-pdf-kpi-list">
