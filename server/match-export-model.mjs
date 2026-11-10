@@ -1,4 +1,5 @@
 import { normalizeBriefIndicators } from "./brief-layout.mjs";
+import { normalizedAgencyId } from "./source-provenance.mjs";
 
 const LEAGUE_LABELS = Object.freeze({
   bronze: "LIGUE 2",
