@@ -206,6 +206,7 @@ try {
     assert.equal(await safetyToggle.isChecked(), true);
     await safetyToggle.uncheck();
     await panel.getByRole("button", { name: "Enregistrer l'affichage" }).click();
+    await page.getByRole("status").getByText("Affichage du carrousel enregistré pour ce match.").waitFor({ state: "visible" });
     const withoutSafety = await readBrief();
     assert.deepEqual(withoutSafety.plan.visibleIndicators, ["tonnage-expedition", "positions", "arrival"]);
     assert.equal(withoutSafety.plan.visibleIndicatorsVersion, 2);
