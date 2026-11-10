@@ -434,10 +434,10 @@ function compactMetric(p, x, y, width, label, value, detail = "") {
  * carousel source, never a reinterpreted percentage or a screenshot crop.
  * All vector primitives are confined to the same 784 x 116 pt page-one panel. */
 function chartFrame(p, title, subtitle) {
-  p.box(29, 43, 784, 116, C.panel);
-  p.box(29, 156, 784, 3, C.aqua);
-  p.text(42, 139, 11, title, C.aqua, true);
-  if (subtitle) p.text(42, 124, 8.7, subtitle, C.text);
+  p.box(29, 43, 784, 146, C.panel);
+  p.box(29, 186, 784, 3, C.aqua);
+  p.text(42, 170, 11, title, C.aqua, true);
+  if (subtitle) p.text(42, 155, 9, subtitle, C.text);
 }
 function chartPercentRow(p, y, label, rate, volume, color = C.aqua) {
   p.text(42, y + 10, 9, label, C.white, true);
@@ -469,7 +469,7 @@ function compactChart(p, m, chartId) {
     chartFrame(p, "PASSES RÉUSSIES / HEURE",
       "DECHG, segments AQ/ED/EX ou vides ; LIV exclus  |  Total filtré : " + percent(weightedRate));
     if (!rows.length) { p.text(43, 91, 10, "Aucune donnée horaire éligible dans la plage choisie.", C.muted); return; }
-    const x = 78, baseline = 77, w = 699, h = 34;
+    const x = 78, baseline = 85, w = 699, h = 51;
     for (const value of [0, 50, 100]) {
       const y = baseline + value / 100 * h;
       p.box(x, y, w, 0.6, C.panel2);
@@ -487,9 +487,9 @@ function compactChart(p, m, chartId) {
       p.box(xx - 1.8, yy - 1.8, 3.6, 3.6, C.aqua);
     }
     const first = rows[0], last = rows[rows.length - 1];
-    p.text(x, 62, 8, trim(String(first.label ?? first.hour ?? "Début"), 22) + " : " + percent(first.rate), C.muted);
-    p.text(x + w, 62, 8, trim(String(last.label ?? last.hour ?? "Fin"), 22) + " : " + percent(last.rate), C.muted, false, "right");
-    p.text(42, 49, 7.8, "Graphique horaire filtré ; périmètre distinct du KPI officiel des passes du score.", C.muted);
+    p.text(x, 67, 8, trim(String(first.label ?? first.hour ?? "Début"), 22) + " : " + percent(first.rate), C.muted);
+    p.text(x + w, 67, 8, trim(String(last.label ?? last.hour ?? "Fin"), 22) + " : " + percent(last.rate), C.muted, false, "right");
+    p.text(42, 49, 8.4, "Graphique horaire filtré ; périmètre distinct du KPI officiel des passes du score.", C.muted);
     return;
   }
   if (chartId === "reception-time") {
@@ -502,7 +502,7 @@ function compactChart(p, m, chartId) {
       "Duels au score : " + percent(m.score?.indicators?.unloadingPercent)
         + "  |  Barres : secondes moyennes par position  |  Cible : " + fmt(target) + " s/poz");
     if (!slots.length) { p.text(43, 90, 10, "Aucun créneau réception exploitable (15 poz min, hors AQ).", C.muted); return; }
-    const x = 78, baseline = 79, w = 699, h = 32;
+    const x = 78, baseline = 87, w = 699, h = 47;
     const maxRate = Math.max(target, ...slots.map(slot => slot.meanSecondsPerPosition));
     const ceiling = Math.max(60, Math.ceil(maxRate * 1.2 / 60) * 60);
     p.text(43, baseline + h - 2, 7.4, fmt(ceiling) + "s", C.muted);
@@ -517,8 +517,13 @@ function compactChart(p, m, chartId) {
       const width = Math.max(1.4, step - Math.min(4, step / 4));
       const height = Math.max(1, Math.min(h, slot.meanSecondsPerPosition / ceiling * h));
       p.box(left, baseline, width, height, slot.meanSecondsPerPosition > target ? C.red : C.aqua);
+      // The web carousel prints positions above each column, while its height
+      // represents seconds per position. Preserve both concepts on paper.
+      if ((index % labelEvery === 0 || index === slots.length - 1) && Number.isFinite(slot.distinctPositions)) {
+        p.text(left, Math.min(144, baseline + height + 4), 7.6, fmt(slot.distinctPositions) + " pos", C.text);
+      }
       if (index % labelEvery === 0 || index === slots.length - 1) {
-        p.text(left, 66, 7.2, slotClock(slot, index), C.muted);
+        p.text(left, 68, 7.7, slotClock(slot, index), C.muted);
       }
     });
     const positions = slots.map(slot => slot.distinctPositions).filter(Number.isFinite);
@@ -537,9 +542,9 @@ function compactChart(p, m, chartId) {
     if (!total || total <= 0 || !Number.isFinite(q?.targetedPercent) || !Number.isFinite(q?.offTargetPercent)) {
       p.text(43, 91, 10, "Aucun chargement exploitable sur le perimetre selectionne.", C.muted); return;
     }
-    chartPercentRow(p, 98, "Chargements cadrés", q.targetedPercent, fmt(q.targeted) + " / " + fmt(total), C.aqua);
-    chartPercentRow(p, 73, "Chargements hors cible", q.offTargetPercent, fmt(q.offTarget) + " / " + fmt(total), C.red);
-    p.text(42, 49, 8, "Source : TCD PPT / exclusions chargement de l'agence appliquees au MATCH.", C.muted);
+    chartPercentRow(p, 112, "Chargements cadrés", q.targetedPercent, fmt(q.targeted) + " / " + fmt(total), C.aqua);
+    chartPercentRow(p, 82, "Chargements hors cible", q.offTargetPercent, fmt(q.offTarget) + " / " + fmt(total), C.red);
+    p.text(42, 52, 8.4, "Source : TCD PPT / exclusions chargement de l'agence appliquees au MATCH.", C.muted);
     return;
   }
   if (chartId === "centers") {
@@ -552,16 +557,16 @@ function compactChart(p, m, chartId) {
     if (!Number.isFinite(value) || value < 0 || value > 100) {
       p.text(43, 92, 10, "Donnée 106J indisponible : aucun taux de centres ne peut etre affiche.", C.muted); return;
     }
-    p.text(43, 88, 21, percent(value), C.white, true);
-    p.box(210, 89, 558, 17, C.panel2);
-    p.box(210, 89, 558 * value / 100, 17, C.aqua);
-    p.box(210 + 558 * value / 100, 89, 558 * (100 - value) / 100, 17, C.red);
+    p.text(43, 105, 23, percent(value), C.white, true);
+    p.box(210, 109, 558, 21, C.panel2);
+    p.box(210, 109, 558 * value / 100, 21, C.aqua);
+    p.box(210 + 558 * value / 100, 109, 558 * (100 - value) / 100, 21, C.red);
     if (Number.isFinite(target) && target >= 0 && target <= 100) {
       const mark = 210 + 558 * target / 100;
-      p.box(mark - 1, 86, 2, 22, C.gold);
+      p.box(mark - 1, 106, 2, 27, C.gold);
     }
-    p.text(210, 70, 8.5, "Réussis : " + percent(value) + "  |  Hors cible : " + percent(100 - value), C.text);
-    p.text(42, 49, 8,
+    p.text(210, 88, 9, "Réussis : " + percent(value) + "  |  Hors cible : " + percent(100 - value), C.text);
+    p.text(42, 52, 8.6,
       Number.isFinite(target) ? "Objectif 106J : " + percent(target) + " (repere or ; pas le seuil de ligue)"
         : "Objectif 106J non fourni : aucun seuil n'est présumé.", C.muted);
     return;
@@ -574,21 +579,21 @@ function compactChart(p, m, chartId) {
       || z.receivedPositions <= 0) {
       p.text(43, 90, 10, "Perimetre zonage indisponible ; aucun retard n'est présumé.", C.muted); return;
     }
-    p.text(43, 109, 9,
+    p.text(43, 132, 9.7,
       "Hors délai : " + fmt(z.latePositions) + "/" + fmt(z.qualifiablePositions)
       + " vérifiables   |   Délais inconnus : " + fmt(z.unqualifiablePositions)
       + "/" + fmt(z.receivedPositions) + " reçues", C.text);
     const complete = [z.latePositions, z.onTimePositions, z.unqualifiablePositions].every(v =>
       Number.isFinite(v) && v >= 0) && z.latePositions + z.onTimePositions + z.unqualifiablePositions === z.receivedPositions;
     if (complete) {
-      const x = 52, y = 82, w = 730;
+      const x = 52, y = 103, w = 730;
       p.box(x, y, w, 14, C.panel2);
       p.box(x, y, w * z.latePositions / z.receivedPositions, 14, C.red);
       p.box(x + w * z.latePositions / z.receivedPositions, y, w * z.onTimePositions / z.receivedPositions, 14, C.aqua);
       p.box(x + w * (z.latePositions + z.onTimePositions) / z.receivedPositions, y,
         w * z.unqualifiablePositions / z.receivedPositions, 14, C.muted);
-    } else p.text(42, 83, 8, "Répartition indisponible : nombres de positions incohérents.", C.muted);
-    p.text(42, 64, 8.5,
+    } else p.text(42, 104, 8, "Répartition indisponible : nombres de positions incohérents.", C.muted);
+    p.text(42, 84, 9,
       "Anomalie (qualifiables) : " + percent(z.anomalyRate)
       + "  |  Couverture (reçues) : " + percent(z.coverageRate), C.text);
     const worst = Array.isArray(z.top5) && z.top5.length ? z.top5[0] : null;
