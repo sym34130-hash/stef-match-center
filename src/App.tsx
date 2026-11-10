@@ -1531,7 +1531,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
       const filenameHeader = response.headers.get("Content-Disposition") ?? "";
       const requestedFilename = filenameHeader.match(/filename="([^"]+)"/)?.[1];
       const fallbackName = `STEF-MATCH-${session.agency.code}-${snapshot.match.date}-${activeLeague}.pdf`;
-      const filename = requestedFilename && /^[A-Za-z0-9_.-]+\\.pdf$/.test(requestedFilename)
+      const filename = requestedFilename && /^[A-Za-z0-9_.-]+[.]pdf$/.test(requestedFilename)
         ? requestedFilename : fallbackName;
       const href = URL.createObjectURL(pdf);
       const link = document.createElement("a");
