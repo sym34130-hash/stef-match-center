@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import pdfParse from "pdf-parse";
 import { matchExportLeague, matchExportModel, MatchExportError } from "../server/match-export-model.mjs";
 import { renderMatchPdf } from "../server/match-export-pdf.mjs";
+import { normalizePdfProfile, effectivePdfProfile, PDF_CHART_IDS } from "../server/match-pdf-profile.mjs";
 
 const config = [{ id: "argent", zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 },
   { id: "or", zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 }];
@@ -35,6 +36,7 @@ const build = (code, overrides = {}) => matchExportModel({
   agency: agency(code),
   snapshot: { ...makeSnapshot(code), ...(overrides.snapshot ?? {}) },
   league: overrides.league ?? league,
+  pdfProfile: overrides.pdfProfile ?? null,
   causerie: overrides.causerie ?? {
     team: "Equipe-" + code, manager: "Manager-" + code,
     visibleIndicators: ["performance", "injuries", "accident-free-days", "arrival"],
@@ -97,14 +99,56 @@ test("Lot E: direct PDF is valid, includes selected league/KPIs/brief and isolat
   assert.equal(pdf058.subarray(0, 8).toString("latin1"), "%PDF-1.4");
   const parsed058 = await pdfParse(pdf058);
   const parsed059 = await pdfParse(pdf059);
-  assert.ok(parsed058.numpages >= 6, "All four match sections plus the carousel need several pages");
+  assert.equal(parsed058.numpages, 2, "The complete printable briefing must be exactly two pages");
+  assert.equal(parsed059.numpages, 2);
   assert.match(parsed058.text, /AGENCE-058/);
   assert.match(parsed058.text, /LIGUE 1/);
-  assert.match(parsed058.text, /OPERATEUR-058/);
   assert.match(parsed058.text, /Equipe-058/);
   assert.match(parsed058.text, /Tirs cadres/);
-  assert.doesNotMatch(parsed058.text, /AGENCE-059|OPERATEUR-059|Equipe-059/);
-  assert.match(parsed059.text, /AGENCE-059|OPERATEUR-059/);
-  assert.doesNotMatch(parsed059.text, /AGENCE-058|OPERATEUR-058/);
+  assert.doesNotMatch(parsed058.text, /AGENCE-059|Equipe-059/);
+  assert.match(parsed059.text, /AGENCE-059/);
+  assert.doesNotMatch(parsed059.text, /AGENCE-058/);
   assert.ok(!pdf058.equals(pdf059), "PDFs of different agencies must be distinct");
+});
+
+test("Lot E V2: agency profile has at most 4 known KPI and a supported chart", () => {
+  const profile = normalizePdfProfile({
+    indicatorIds: ["positions", "arrival", "temperature", "performance"],
+    chartId: "centers",
+    dailyBrief: { matchDate: date, priorities: "Sécuriser les départs" },
+  }, { strict: true });
+  assert.equal(profile.indicatorIds.length, 4);
+  assert.equal(profile.dailyBrief.priorities, "Sécuriser les départs");
+  assert.throws(() => normalizePdfProfile({
+    indicatorIds: ["positions", "arrival", "temperature", "performance", "injuries"],
+  }, { strict: true }), /4 KPI/);
+  assert.throws(() => normalizePdfProfile({ chartId: "unknown" }), /inconnu/);
+  const active = effectivePdfProfile(profile, ["positions", "performance"], date);
+  assert.deepEqual(active.indicatorIds, ["positions", "performance"]);
+  assert.equal(effectivePdfProfile(profile, ["positions"], "2026-11-11").dailyBrief.priorities, "");
+});
+
+test("Lot E V2: all 5 chart choices are supported without generating extra pages", async () => {
+  for (const chartId of PDF_CHART_IDS) {
+    const model = build("058", {
+      pdfProfile: { indicatorIds: ["positions"], chartId },
+    });
+    const pdf = await pdfParse(renderMatchPdf(model));
+    assert.equal(pdf.numpages, 2, chartId);
+    assert.match(pdf.text, /Positions/);
+    assert.doesNotMatch(pdf.text, /Ponctualite arrivage|Blessures A.T/i);
+  }
+});
+
+test("Lot E V2: an excessive brief must fail instead of silently spilling or being truncated", () => {
+  const model = build("058", { causerie: {
+    visibleIndicators: ["positions"], visibleIndicatorsVersion: 2,
+    attack: ["Surcharge opérationnelle ".repeat(180)], midfield: [], defense: [],
+  } });
+  rejected(() => renderMatchPdf(model), 422);
+  model.pdfProfile = {
+    indicatorIds: ["positions"], chartId: "loading",
+    dailyBrief: { matchDate: date, attack: "Vérifier les quais avant le départ." },
+  };
+  assert.equal((renderMatchPdf(model).toString("latin1").match(/\/Type \/Page \/Parent/g) ?? []).length, 2);
 });
