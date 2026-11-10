@@ -1634,14 +1634,6 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
           <strong aria-live="polite">{slideLabels[activeSlide]}</strong>
         </div>
         <div className="match-carousel-controls">
-          <button type="button" className="secondary-on-dark match-pdf-download"
-            onClick={() => void downloadMatchPdf()}
-            disabled={exportingMatchPdf || !indicatorSettingsReady || editingKpis}
-            title="Télécharger toutes les sections et tous les graphiques du MATCH en PDF"
-          >
-            <Download size={15} />
-            {exportingMatchPdf ? "Génération PDF..." : "Télécharger le MATCH en PDF"}
-          </button>
           {celebrationMode && (
             <button
               type="button"
@@ -1663,6 +1655,16 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
           </button>
           <button type="button" className="match-carousel-arrow" onClick={() => moveSlide(activeSlide + 1)} disabled={activeSlide === slideLabels.length - 1} aria-label="Section suivante" title="Section suivante">
             <ChevronRight size={20} />
+          </button>
+        </div>
+        <div className="match-pdf-download-row">
+          <button type="button" className="secondary-button compact match-pdf-download"
+            onClick={() => void downloadMatchPdf()}
+            disabled={exportingMatchPdf || !indicatorSettingsReady || editingKpis}
+            title="Télécharger toutes les sections et tous les graphiques du MATCH en PDF"
+          >
+            <Download size={15} />
+            {exportingMatchPdf ? "Génération PDF..." : "Télécharger le MATCH en PDF"}
           </button>
         </div>
         {matchPdfError && <p className="match-pdf-error" role="alert">{matchPdfError}</p>}
