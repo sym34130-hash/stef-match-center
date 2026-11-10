@@ -413,103 +413,177 @@ function compactMetric(p, x, y, width, label, value) {
   if (parts.length > 2) throw new MatchExportError(422, "Le libellé d'un KPI est trop long pour le briefing papier.");
   parts.forEach((line, i) => p.text(x + 10, y + 18 - i * 12, fontSize, line, C.white, true));
 }
-function compactBar(p, x, y, name, fraction, caption = "") {
-  p.text(x, y + 19, 10, trim(name, 34), C.white, true);
-  p.box(x, y + 3, 350, 12, C.panel2);
-  if (Number.isFinite(fraction)) p.box(x, y + 3, 350 * clamp(fraction / 100, 0, 1), 12, C.aqua);
-  p.text(x + 360, y + 5, 10, Number.isFinite(fraction) ? percent(fraction) : "N/D", C.text, true);
-  if (caption) p.text(x + 495, y + 5, 8, trim(caption, 31), C.muted);
-}
-function compactChart(p, m, chartId) {
-  const names = {
-    "passes-hourly": "PASSES REUSSIES PAR HEURE",
-    "reception-time": "DUELS GAGNES / RECEPTION",
-    loading: "TIRS CADRES",
-    centers: "CENTRES REUSSIS",
-    "operational-diagnostic": "DIAGNOSTIC OPERATIONNEL",
-  };
+
+/** Every printed chart is an operationally faithful *summary* of its on-screen
+ * carousel source, never a reinterpreted percentage or a screenshot crop.
+ * All vector primitives are confined to the same 784 x 116 pt page-one panel. */
+function chartFrame(p, title, subtitle) {
   p.box(29, 43, 784, 116, C.panel);
   p.box(29, 156, 784, 3, C.aqua);
-  p.text(42, 139, 11, names[chartId] ?? "ANALYSE", C.aqua, true);
+  p.text(42, 139, 11, title, C.aqua, true);
+  if (subtitle) p.text(42, 124, 8.7, subtitle, C.text);
+}
+function chartPercentRow(p, y, label, rate, volume, color = C.aqua) {
+  p.text(42, y + 10, 9, label, C.white, true);
+  p.box(238, y + 6, 398, 11, C.panel2);
+  if (Number.isFinite(rate) && rate >= 0 && rate <= 100) {
+    p.box(238, y + 6, 398 * rate / 100, 11, color);
+  }
+  p.text(650, y + 8, 9, Number.isFinite(rate) ? percent(rate) : "N/D", C.text, true);
+  if (volume) p.text(800, y + 8, 8, volume, C.muted, false, "right");
+}
+function slotClock(slot, index) {
+  const label = typeof slot?.label === "string" ? slot.label.trim() : "";
+  if (/^\d{1,2}\s*h(?::?\d{2})?$/.test(label)) return label;
+  const start = typeof slot?.start === "string" ? slot.start : "";
+  if (/^\d{1,2}:\d{2}$/.test(start)) return start.slice(0, 2) + "h";
+  const date = new Date(start);
+  if (start && Number.isFinite(date.getTime())) {
+    return new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", hourCycle: "h23" }).format(date) + "h";
+  }
+  return label && label.length <= 7 ? label : String(index + 1);
+}
+function compactChart(p, m, chartId) {
   if (chartId === "passes-hourly") {
-    const rows = Array.isArray(m.hourlyPerformance) ? m.hourlyPerformance.filter(v => Number.isFinite(v?.rate)) : [];
-    if (!rows.length) { p.text(44, 90, 11, "Analyse horaire indisponible", C.muted); return; }
-    const x = 52, y = 63, w = 730, h = 57;
-    p.box(x, y, w, 1, C.panel2);
-    const first = rows[0], last = rows[rows.length - 1];
-    for (let i = 0; i < rows.length; i++) {
-      const pointX = x + i * w / Math.max(rows.length - 1, 1);
-      const valueY = y + clamp(rows[i].rate, 0, 100) * h / 100;
-      p.box(pointX - 2, valueY - 2, 4, 4, C.aqua);
-      if (i > 0) {
-        const previousX = x + (i - 1) * w / Math.max(rows.length - 1, 1);
-        const previousY = y + clamp(rows[i - 1].rate, 0, 100) * h / 100;
-        p.ops.push(`${rgb(C.aqua)} RG 1.6 w ${previousX.toFixed(2)} ${previousY.toFixed(2)} m ${pointX.toFixed(2)} ${valueY.toFixed(2)} l S\n`);
-      }
+    const rows = Array.isArray(m.hourlyPerformance) ? m.hourlyPerformance
+      .filter(row => row && Number.isFinite(row.rate) && row.rate >= 0 && row.rate <= 100) : [];
+    const won = rows.reduce((sum, row) => sum + (Number.isFinite(row.won) ? row.won : 0), 0);
+    const total = rows.reduce((sum, row) => sum + (Number.isFinite(row.total) ? row.total : 0), 0);
+    const weightedRate = total > 0 ? Math.round(won / total * 1000) / 10 : null;
+    chartFrame(p, "PASSES REUSSIES / HEURE",
+      "DECHG, segments AQ/ED/EX ou vides ; LIV exclus  |  Total filtre : " + percent(weightedRate));
+    if (!rows.length) { p.text(43, 91, 10, "Aucune donnée horaire éligible dans la plage choisie.", C.muted); return; }
+    const x = 78, baseline = 77, w = 699, h = 34;
+    for (const value of [0, 50, 100]) {
+      const y = baseline + value / 100 * h;
+      p.box(x, y, w, 0.6, C.panel2);
+      p.text(42, y - 2.5, 7.4, String(value) + "%", C.muted);
     }
-    p.text(x, 51, 8, trim(first.label ?? first.hour ?? "Début", 24), C.muted);
-    p.text(x + w, 51, 8, trim(last.label ?? last.hour ?? "Fin", 24), C.muted, false, "right");
-    p.text(520, 139, 8, "Périmètre horaire du graphique (distinct du score)", C.muted);
+    for (let i = 0; i < rows.length; i++) {
+      const xx = rows.length === 1 ? x + w / 2 : x + i * w / (rows.length - 1);
+      const yy = baseline + rows[i].rate * h / 100;
+      if (i > 0) {
+        const previous = rows.length === 1 ? xx : x + (i - 1) * w / (rows.length - 1);
+        const py = baseline + rows[i - 1].rate * h / 100;
+        p.ops.push(rgb(C.aqua) + " RG 1.6 w " + previous.toFixed(2) + " " + py.toFixed(2)
+          + " m " + xx.toFixed(2) + " " + yy.toFixed(2) + " l S\n");
+      }
+      p.box(xx - 1.8, yy - 1.8, 3.6, 3.6, C.aqua);
+    }
+    const first = rows[0], last = rows[rows.length - 1];
+    p.text(x, 62, 8, trim(String(first.label ?? first.hour ?? "Début"), 22) + " : " + percent(first.rate), C.muted);
+    p.text(x + w, 62, 8, trim(String(last.label ?? last.hour ?? "Fin"), 22) + " : " + percent(last.rate), C.muted, false, "right");
+    p.text(42, 49, 7.8, "Graphique horaire filtre ; perimetre distinct du KPI officiel des passes du score.", C.muted);
     return;
   }
   if (chartId === "reception-time") {
-    // Keep the official duel rate AND the mean seconds/position for each slot.
-    // Bar heights are time in seconds per position; red is above league target.
     const hourly = m.unloadingHourlyAnalysis;
-    const slots = (hourly?.items ?? []).filter(slot =>
-      Number.isFinite(slot?.meanSecondsPerPosition) && slot.meanSecondsPerPosition >= 0
-      && slot?.state !== "indisponible");
-    const target = Number.isFinite(hourly?.targetSeconds) ? hourly.targetSeconds : m.criteria.unloadingSeconds;
-    const won = m.score?.indicators?.unloadingPercent;
-    p.text(42, 124, 8.5,
-      `Duels gagnés : ${percent(won)} (score)  |  Barres : moyenne en s/position  |  Cible : ${fmt(target)} s/poz`, C.text);
-    if (!slots.length) {
-      p.text(42, 91, 10, "Aucun créneau de réception exploitable sur la période.", C.muted);
-      return;
-    }
-    const x0 = 52, baseline = 82, plotWidth = 724, plotHeight = 37;
-    const ceiling = Math.max(1, target || 0, ...slots.map(slot => slot.meanSecondsPerPosition)) * 1.15;
-    p.box(x0, baseline, plotWidth, 1, C.panel2);
-    if (Number.isFinite(target) && target > 0) {
-      const ty = baseline + Math.min(plotHeight, target / ceiling * plotHeight);
-      p.ops.push(`${rgb(C.gold)} RG 0.9 w ${x0.toFixed(2)} ${ty.toFixed(2)} m ${(x0 + plotWidth).toFixed(2)} ${ty.toFixed(2)} l S\n`);
-    }
-    const step = plotWidth / slots.length;
-    const labelEvery = Math.ceil(slots.length / 12);
+    const slots = hourly?.state === "indisponible" ? [] : (hourly?.items ?? [])
+      .filter(slot => Number.isFinite(slot?.meanSecondsPerPosition)
+        && slot.meanSecondsPerPosition >= 0 && slot.state !== "indisponible");
+    const target = m.criteria.unloadingSeconds;
+    chartFrame(p, "DUELS GAGNES / TEMPS DE RECEPTION",
+      "Duels au score : " + percent(m.score?.indicators?.unloadingPercent)
+        + "  |  Barres : secondes moyennes par position  |  Cible : " + fmt(target) + " s/poz");
+    if (!slots.length) { p.text(43, 90, 10, "Aucun creneau reception exploitable (15 poz min, hors AQ).", C.muted); return; }
+    const x = 78, baseline = 79, w = 699, h = 32;
+    const maxRate = Math.max(target, ...slots.map(slot => slot.meanSecondsPerPosition));
+    const ceiling = Math.max(60, Math.ceil(maxRate * 1.2 / 60) * 60);
+    p.text(43, baseline + h - 2, 7.4, fmt(ceiling) + "s", C.muted);
+    p.text(43, baseline - 2, 7.4, "0s", C.muted);
+    p.box(x, baseline, w, 0.6, C.panel2);
+    const goalY = baseline + Math.min(1, target / ceiling) * h;
+    p.ops.push(rgb(C.gold) + " RG 1 w " + x.toFixed(2) + " " + goalY.toFixed(2)
+      + " m " + (x + w).toFixed(2) + " " + goalY.toFixed(2) + " l S\n");
+    const step = w / slots.length, labelEvery = Math.max(1, Math.ceil(slots.length / 11));
     slots.forEach((slot, index) => {
-      const left = x0 + index * step + Math.min(2, step / 8);
-      const width = Math.max(1.5, step - Math.min(4, step / 4));
-      const height = Math.max(1, Math.min(plotHeight, slot.meanSecondsPerPosition / ceiling * plotHeight));
-      const failed = Number.isFinite(target) && slot.meanSecondsPerPosition > target;
-      p.box(left, baseline, width, height, failed ? C.red : C.aqua);
+      const left = x + index * step + Math.min(2, step / 8);
+      const width = Math.max(1.4, step - Math.min(4, step / 4));
+      const height = Math.max(1, Math.min(h, slot.meanSecondsPerPosition / ceiling * h));
+      p.box(left, baseline, width, height, slot.meanSecondsPerPosition > target ? C.red : C.aqua);
       if (index % labelEvery === 0 || index === slots.length - 1) {
-        const label = String(slot.start ?? slot.label ?? String(index + 1));
-        p.text(left, 70, 7, label.length > 8 ? `#${index + 1}` : label, C.muted);
+        p.text(left, 66, 7.2, slotClock(slot, index), C.muted);
       }
     });
     const positions = slots.map(slot => slot.distinctPositions).filter(Number.isFinite);
-    const positionSummary = positions.length
-      ? `Positions/créneau : ${fmt(Math.min(...positions))} à ${fmt(Math.max(...positions))}`
-      : "Positions/créneau : indisponibles";
-    p.text(42, 52, 8,
-      `${slots.length} créneaux exploitables  |  ${positionSummary}  |  Rouge : au-dessus de la cible`, C.muted);
+    p.text(42, 49, 7.8,
+      String(slots.length) + " creneaux | Positions/creneau : "
+      + (positions.length ? fmt(Math.min(...positions)) + " a " + fmt(Math.max(...positions)) : "N/D")
+      + " | Rouge = au-dessus de la cible, or = seuil de ligue.", C.muted);
     return;
   }
   if (chartId === "loading") {
-    compactBar(p, 42, 96, "Tirs cadrés", m.loadingQuality?.targetedPercent);
-    compactBar(p, 42, 62, "Chargements hors cible", m.loadingQuality?.offTargetPercent);
+    const q = m.loadingQuality;
+    chartFrame(p, "TIRS CADRES / QUALITE DES CHARGEMENTS",
+      "TCD PPT, plage active  |  Temps par position <= " + fmt(m.criteria.loadingSeconds) + " s/poz (ligue " + m.league.label + ")");
+    const total = Number.isFinite(q?.targeted) && Number.isFinite(q?.offTarget)
+      ? q.targeted + q.offTarget : null;
+    if (!total || total <= 0 || !Number.isFinite(q?.targetedPercent) || !Number.isFinite(q?.offTargetPercent)) {
+      p.text(43, 91, 10, "Aucun chargement exploitable sur le perimetre selectionne.", C.muted); return;
+    }
+    chartPercentRow(p, 98, "Chargements cadres", q.targetedPercent, fmt(q.targeted) + " / " + fmt(total), C.aqua);
+    chartPercentRow(p, 73, "Chargements hors cible", q.offTargetPercent, fmt(q.offTarget) + " / " + fmt(total), C.red);
+    p.text(42, 49, 8, "Source : TCD PPT / exclusions chargement de l'agence appliquees au MATCH.", C.muted);
     return;
   }
   if (chartId === "centers") {
-    compactBar(p, 42, 90, "Centres réussis (destination)", m.dailyIndicators?.punctuality?.destinationPunctuality,
-      "Source PDF 106J");
+    const d = m.dailyIndicators;
+    const value = d?.punctuality?.destinationPunctuality;
+    const target = d?.punctualityTargets?.destinationPunctuality;
+    const date = d?.referenceDate ?? "date non renseignee";
+    chartFrame(p, "CENTRES REUSSIS / PONCTUALITE DESTINATION",
+      "Source PDF 106J du " + String(date) + "  |  Perimetre journalier, distinct de la plage Excel.");
+    if (!Number.isFinite(value) || value < 0 || value > 100) {
+      p.text(43, 92, 10, "Donnee 106J indisponible : aucun taux de centres ne peut etre affiche.", C.muted); return;
+    }
+    p.text(43, 88, 21, percent(value), C.white, true);
+    p.box(210, 89, 558, 17, C.panel2);
+    p.box(210, 89, 558 * value / 100, 17, C.aqua);
+    p.box(210 + 558 * value / 100, 89, 558 * (100 - value) / 100, 17, C.red);
+    if (Number.isFinite(target) && target >= 0 && target <= 100) {
+      const mark = 210 + 558 * target / 100;
+      p.box(mark - 1, 86, 2, 22, C.gold);
+    }
+    p.text(210, 70, 8.5, "Reussis : " + percent(value) + "  |  Hors cible : " + percent(100 - value), C.text);
+    p.text(42, 49, 8,
+      Number.isFinite(target) ? "Objectif 106J : " + percent(target) + " (repere or ; pas le seuil de ligue)"
+        : "Objectif 106J non fourni : aucun seuil n'est presume.", C.muted);
     return;
   }
-  compactBar(p, 42, 91, "Couverture du zonage", m.zonageDiagnostic?.coverageRate);
-  p.text(42, 64, 10,
-    `Positions hors délai : ${fmt(m.zonageDiagnostic?.latePositions)} / non vérifiables : ${fmt(m.zonageDiagnostic?.unqualifiablePositions)}`,
-    C.text);
+  if (chartId === "operational-diagnostic") {
+    const z = m.zonageDiagnostic;
+    chartFrame(p, "DIAGNOSTIC OPERATIONNEL / ZONAGE",
+      "Ligue " + m.league.label + "  |  Cible zonage <= " + fmt(m.criteria.zonageMinutes) + " min  |  Plage exploitation retenue.");
+    if (!z || z.state === "indisponible" || !Number.isFinite(z.receivedPositions)
+      || z.receivedPositions <= 0) {
+      p.text(43, 90, 10, "Perimetre zonage indisponible ; aucun retard n'est presume.", C.muted); return;
+    }
+    p.text(43, 109, 9,
+      "Hors delai : " + fmt(z.latePositions) + "/" + fmt(z.qualifiablePositions)
+      + " verifiables   |   Delais inconnus : " + fmt(z.unqualifiablePositions)
+      + "/" + fmt(z.receivedPositions) + " recues", C.text);
+    const complete = [z.latePositions, z.onTimePositions, z.unqualifiablePositions].every(v =>
+      Number.isFinite(v) && v >= 0) && z.latePositions + z.onTimePositions + z.unqualifiablePositions === z.receivedPositions;
+    if (complete) {
+      const x = 52, y = 82, w = 730;
+      p.box(x, y, w, 14, C.panel2);
+      p.box(x, y, w * z.latePositions / z.receivedPositions, 14, C.red);
+      p.box(x + w * z.latePositions / z.receivedPositions, y, w * z.onTimePositions / z.receivedPositions, 14, C.aqua);
+      p.box(x + w * (z.latePositions + z.onTimePositions) / z.receivedPositions, y,
+        w * z.unqualifiablePositions / z.receivedPositions, 14, C.muted);
+    } else p.text(42, 83, 8, "Repartition indisponible : nombres de positions incoherents.", C.muted);
+    p.text(42, 64, 8.5,
+      "Anomalie (qualifiables) : " + percent(z.anomalyRate)
+      + "  |  Couverture (recues) : " + percent(z.coverageRate), C.text);
+    const worst = Array.isArray(z.top5) && z.top5.length ? z.top5[0] : null;
+    p.text(42, 49, 8,
+      worst ? "Premier voyage a examiner : " + trim(worst.travelCode, 32) + " / " + fmt(worst.latePositions) + " retards"
+        : "Aucun voyage prioritaire identifie dans la population qualifiable.", C.muted);
+    return;
+  }
+  chartFrame(p, "ANALYSE INDISPONIBLE", "La selection du graphique a change. Recharge le MATCH.");
 }
+
 function shortBlock(p, { x, y, w, h, title, value, chars, maxLines = 3 }) {
   p.box(x, y, w, h, C.panel);
   p.box(x, y + h - 3, w, 3, C.blue);
