@@ -522,8 +522,7 @@ function compactScorePage(doc, m) {
     ["Possession", score?.indicators?.possessionPercent],
   ];
   rates.forEach(([label, val], i) =>
-    p.card(29 + i * 199, 303, 187, 76, label, percent(val),
-      `Objectif ${fmt(m.criteria.scoreTargetPercent)} %`,
+    p.card(29 + i * 199, 303, 187, 76, label, percent(val), "",
       Number.isFinite(val) && val <= m.criteria.scoreTargetPercent ? C.red : C.blue));
   // Two rows: 2 x 2 when four are selected, 3 x 2 for five or six.
   // The chart keeps its own fixed area and the font size is unchanged.
@@ -544,7 +543,7 @@ function compactScorePage(doc, m) {
 function compactBriefPage(doc, m) {
   const p = doc.add("02 / BRIEF DES SERVICES");
   p.text(36, 477, 20, "BRIEF OPERATIONNEL DU JOUR", C.white, true);
-  p.text(813, 479, 9, trim([m.causerie?.team, m.causerie?.manager].filter(Boolean).join(" / "), 63), C.muted, false, "right");
+  p.text(777, 479, 8, trim([m.causerie?.team, m.causerie?.manager].filter(Boolean).join(" / "), 42), C.muted, false, "right");
   const brief = effectiveBriefText(m);
   // Keep the exact labels of BRIEF ÉQUIPE, not the old football metaphors.
   shortBlock(p, { x: 29, y: 405, w: 784, h: 58, title: "Sécurité / vigilance", value: brief.safety, maxLines: 2 });
