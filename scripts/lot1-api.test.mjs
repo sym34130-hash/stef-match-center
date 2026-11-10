@@ -214,3 +214,52 @@ test("5S: imports multipart invalides, trop volumineux et interrompus préserven
     assert.deepEqual(await fs.readdir(directory), [], "Rejected and aborted imports must not create agency files");
   });
 });
+
+test("AT : lecture héritée, enregistrement, masquage durable et isolation par match", async () => {
+  await withApi(async ({ directory, request }) => {
+    const matchDate = "2026-11-10";
+    const file = path.join(directory, "TEST", "causeries", `${matchDate}.json`);
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    const historical = JSON.stringify({
+      briefLayoutVersion: 2, visibleIndicators: ["performance", "positions"],
+      coach: { priority: "Ne pas toucher aux consignes" },
+    });
+    await fs.writeFile(file, historical, "utf8");
+
+    const response = await request(`causerie?matchDate=${matchDate}`);
+    assert.equal(response.status, 200);
+    const initial = await response.json();
+    assert.deepEqual(initial.plan.visibleIndicators, ["performance", "accident-free-days", "positions"]);
+    assert.equal(initial.plan.visibleIndicatorsVersion, 2);
+    assert.equal(await fs.readFile(file, "utf8"), historical, "La lecture ne modifie pas le fichier historique");
+
+    const migrated = await request("causerie", "POST", {
+      matchDate, expectedRevision: initial.causerieRevision, plan: initial.plan,
+    });
+    assert.equal(migrated.status, 200);
+    const saved = await migrated.json();
+    assert.deepEqual(saved.plan.visibleIndicators, ["performance", "accident-free-days", "positions"]);
+    assert.equal(saved.plan.coach.priority, "Ne pas toucher aux consignes");
+
+    const hidden = await request("causerie", "POST", {
+      matchDate, expectedRevision: saved.causerieRevision,
+      plan: { ...saved.plan, visibleIndicators: ["performance", "positions"] },
+    });
+    assert.equal(hidden.status, 200);
+    const afterHide = await hidden.json();
+    assert.deepEqual(afterHide.plan.visibleIndicators, ["performance", "positions"]);
+    assert.equal(afterHide.plan.visibleIndicatorsVersion, 2);
+    assert.deepEqual((await (await request(`causerie?matchDate=${matchDate}`)).json()).plan.visibleIndicators,
+      ["performance", "positions"], "Une désactivation enregistrée reste désactivée");
+    assert.deepEqual(JSON.parse(await fs.readFile(file, "utf8")).visibleIndicators, ["performance", "positions"]);
+
+    const otherMatch = await request("causerie", "POST", {
+      matchDate: "2026-11-11", expectedRevision: null, plan: { visibleIndicators: ["departure"] },
+    });
+    assert.equal(otherMatch.status, 200);
+    assert.deepEqual((await otherMatch.json()).plan.visibleIndicators,
+      ["accident-free-days", "departure"], "Un ancien plan migré dans un autre match n'hérite pas du masquage");
+    assert.deepEqual((await (await request(`causerie?matchDate=${matchDate}`)).json()).plan.visibleIndicators,
+      ["performance", "positions"]);
+  });
+});
