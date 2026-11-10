@@ -454,10 +454,11 @@ function compactChart(p, m, chartId) {
   }
   if (chartId === "reception-time") {
     const positions = (m.unloadingHourlyAnalysis?.items ?? []).filter(entry => Number.isFinite(entry?.distinctPositions));
-    const won = m.unloadingDuelQuality?.wonPercent ?? m.score?.indicators?.unloadingPercent;
+    const won = m.score?.indicators?.unloadingPercent;
     compactBar(p, 42, 107, "Duels gagnés", won, "KPI officiel du score");
+    const positionCounts = positions.map(entry => entry.distinctPositions);
     p.text(42, 78, 9.5, positions.length
-      ? `Positions réceptionnées par créneau : ${positions.map(entry => fmt(entry.distinctPositions)).join(" / ").slice(0, 125)}`
+      ? `${positions.length} créneaux analysés / positions par créneau : ${fmt(Math.min(...positionCounts))} à ${fmt(Math.max(...positionCounts))}`
       : "Détail horaire indisponible", C.muted);
     return;
   }
