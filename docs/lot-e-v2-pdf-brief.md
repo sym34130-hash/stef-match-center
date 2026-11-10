@@ -42,3 +42,11 @@ En cas de modification du profil ou de la causerie entre affichage et export, un
 - Exécuter lint, build, tests Node/HTTP/UI et l'image Docker.
 
 **Ne pas fusionner/deployer tant que la recette visuelle et les cas métier réels ne sont pas validés.**
+
+## Lot E V8 — origine des sources et export du brief
+
+L'utilisateur d'une agence autorisée peut importer un Excel et un PDF 106J dont les **agences source diffèrent de l'agence connectée**. L'import conserve la provenance exacte et le PDF indique, sur ses deux pages, les codes Excel et 106J ainsi que la date de référence du 106J. Le code agence de connexion reste le propriétaire des données stockées ; les droits d'accès inter-agences ne changent pas. Les Excel aux segments d'une autre agence connue conservent leur étape de confirmation d'import.
+
+Au téléchargement, la Feuille de match charge la version du BRIEF ÉQUIPE propre à la date **depuis le serveur**, sans déduire de l'absence d'une révision locale que le brief serait non enregistré. Si le contenu local diverge, un avertissement demande de confirmer l'utilisation du brief enregistré sur le serveur ; aucun contenu local n'est envoyé ni incorporé secrètement au PDF. Le mécanisme d'optimistic locking sur les versions du profil PDF et de la causerie reste actif.
+
+La sauvegarde avant fusion est `backup/pre-lot-e-v8-2026-11-10`. Elle protège le code, pas les données éphémères Render Free. La recette en production nécessite une vérification authentifiée d'un MATCH réel.
