@@ -91,7 +91,7 @@ try {
     const exportDownload = page.waitForEvent("download");
     await pdfButton.click();
     const downloaded = await exportDownload;
-    assert.match(downloaded.suggestedFilename(), /^STEF_MATCH_01K_.*_argent\\.pdf$/);
+    assert.equal(downloaded.suggestedFilename(), `STEF_MATCH_01K_${built.snapshot.match.date}_argent.pdf`);
     assert.ok(pdfRequest, "PDF export reaches the agency-specific HTTP endpoint");
     assert.equal(pdfRequest.headers["x-access-code"], "SAFETY-CAROUSEL-TEST");
     const pdfParams = new URL(pdfRequest.url).searchParams;
