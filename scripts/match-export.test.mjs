@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import pdfParse from "pdf-parse";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { matchExportLeague, matchExportModel, MatchExportError } from "../server/match-export-model.mjs";
 import { renderMatchPdf } from "../server/match-export-pdf.mjs";
 import { normalizePdfProfile, effectivePdfProfile, PDF_CHART_IDS } from "../server/match-pdf-profile.mjs";
