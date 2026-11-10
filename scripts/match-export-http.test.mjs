@@ -129,7 +129,7 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
     const state058 = await original.json();
     assert.deepEqual(state058.profile.indicatorIds.length, 4);
     const custom = { ...state058.profile,
-      indicatorIds: ["positions"], chartId: "loading",
+      indicatorIds: ["positions", "accident-free-days"], chartId: "loading",
       dailyBrief: { matchDate: snapshots["058"].match.date, safety: "",
         priorities: "PRIORITE-PDF-058", attack: "", midfield: "", defense: "", decisions: "" },
     };
