@@ -284,6 +284,9 @@ app.get("/api/agencies/:agencyCode/export/match.pdf", requireAgency, async (req,
         readCauserieState(req.agency.code, base.match.date),
         readSafetyState(req.agency.code),
       ]);
+      if (req.query.causerieRevision !== (causerieState.causerieRevision ?? "")) {
+        throw new MatchExportError(409, "Le brief enregistré a changé. Actualise avant l\u0027export.");
+      }
       return matchExportModel({
         agency: req.agency, snapshot, league: config, causerie: causerieState.plan, safety,
         expectedMatchDate: matchDate, expectedImportedAt: importedAt,
