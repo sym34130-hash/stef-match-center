@@ -52,7 +52,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     { id: "performance", label: "Performance d'équipe", value: performance, detail: motivation, icon: Users, accent: "#91d7c0" },
     { id: "injuries", label: "NB DE BLESSURES (A.T)", value: injuries.trim() ? number.format(Number(injuries)) : null, detail: "Accidents du travail · saisie manuelle", icon: ShieldPlus, accent: "#e1c58e" },
     { id: "accident-free-days", label: "Jours sans accident du travail", value: null, detail: "Dernier accident · saisie manuelle", icon: ShieldPlus, accent: "#a6e6c4" },
-    { id: "tonnage-distribution", label: "Tonnage Distribution", value: metric(pdf?.distribution?.tonnage, " t"), detail: `Distribution · ${pdfDetail}`, icon: Weight, accent: "#98d6d6" },
+    { id: "tonnage-distribution", label: "Tonnage Distribution", value: metric(pdf?.distribution?.tonnage, " t"), detail: `Distribution · ${pdfDetail}${totalTonnageDetail}`, icon: Weight, accent: "#98d6d6" },
     { id: "tonnage-expedition", label: "Tonnage Expédition", value: metric(pdf?.expedition?.tonnage, " t"), detail: `Expédition · ${pdfDetail}`, icon: Weight, accent: "#b4d9ef" },
     { id: "positions", label: "Positions", value: metric(snapshot.summary.positions, ""), detail: `Excel · plage ${snapshot.match.timeRangeLabel}`, icon: Package, accent: "#a8c9f0" },
     { id: "arrival", label: "Ponctualité arrivage", value: metric(punctuality?.arrivalPunctuality, "%"), detail: pdfMetricDetail("arrivalPunctuality"), icon: ArrowDownToLine, accent: "#a4cbee", percent: punctuality?.arrivalPunctuality, targetKey: "arrivalPunctuality" },
