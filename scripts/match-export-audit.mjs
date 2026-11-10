@@ -70,18 +70,27 @@ for (const fixture of fixtures) {
     snapshot, causerie, league,
     expectedMatchDate: date, expectedImportedAt: importedAt,
     manualInjuries: 2, manualExpectedPlayers: 20 });
+
+  // The complete 2,000+ character instructions cannot fit on A4: refuse to
+  // silently cut critical text. A date-scoped short summary makes it printable.
+  assert.throws(() => renderMatchPdf(model), e => e.status === 422);
+  model.pdfProfile = {
+    indicatorIds: fixture.visible.filter(id => ["performance", "accident-free-days", "positions", "arrival", "tonnage-expedition"].includes(id)).slice(0, 4),
+    chartId: code === "058" ? "passes-hourly" : "centers",
+    dailyBrief: { matchDate: date, attack: "FIN-DU-BRIEF-TEST-" + code },
+  };
   const pdf = renderMatchPdf(model);
   const pdfText = pdf.toString("latin1");
-  const pages = (pdfText.match(/\/Type \/Page \/Parent/g) ?? []).length;
+  const pages = (pdfText.match(/\\/Type \\/Page \\/Parent/g) ?? []).length;
   assert.equal(pdfText.slice(0, 8), "%PDF-1.4");
-  assert.ok(pages >= 9, "Expected multipage printable report");
+  assert.equal(pages, 2, "No synthetic agency configuration may exceed two pages");
   assert.match(pdfText, new RegExp("FIN-DU-BRIEF-TEST-" + code));
-  assert.match(pdfText, /HEURE-27/);
-  assert.match(pdfText, /RECEPT-23/);
-  assert.match(pdfText, new RegExp("TEST GROUPE-" + code));
-  assert.match(pdfText, new RegExp("ATTAQUANT-" + code));
-  assert.match(pdfText, /\/Subtype \/Image/, "Brief JPEG capture must be embedded as PDF image");
-  assert.doesNotMatch(pdfText, new RegExp("TEST GROUPE-" + (code === "058" ? "059" : "058")));
+  assert.match(pdfText, /COUP DE SIFFLET FINAL/);
+  assert.match(pdfText, /LE PLAN DE JEU/);
+  assert.doesNotMatch(pdfText, /CAPTURES DU BRIEF|CEREMONIE DES PERFORMANCES/i);
+  assert.doesNotMatch(pdfText, /\\/Subtype \\/Image/, "Detailed JPEG annexes must not fill the two-page briefing");
+  assert.doesNotMatch(pdfText, new RegExp("FIN-DU-BRIEF-TEST-" + (code === "058" ? "059" : "058")));
+  if (code === "058") assert.match(pdfText, /HEURE-27/);
   const filename = path.join(out, "SYNTHETIC_MATCH_" + code + "_" + league.label.replace(/ /g, "_") + ".pdf");
   await fs.writeFile(filename, pdf);
   console.log(filename + " / pages=" + pages + " / bytes=" + pdf.length);
