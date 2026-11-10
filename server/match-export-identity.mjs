@@ -11,8 +11,7 @@ const LEAGUE_LABELS = Object.freeze({
 });
 const CARD_IDS = Object.freeze([
   "performance", "injuries", "tonnage-distribution", "tonnage-expedition",
-  "arrival-punctuality", "departure-punctuality", "destination-punctuality",
-  "temperature-return", "staff",
+  "positions", "arrival", "departure", "destination", "temperature",
 ]);
 
 function requireText(value, field) {
