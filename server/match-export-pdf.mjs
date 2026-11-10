@@ -31,9 +31,30 @@ function wrap(value, maxChars = 70) {
   if (line) result.push(line);
   return result.length ? result : ["-"];
 }
+function jpegDimensions(data) {
+  if (!Buffer.isBuffer(data) || data.length < 16 || data[0] !== 0xff || data[1] !== 0xd8) return null;
+  let i = 2;
+  while (i + 8 < data.length) {
+    if (data[i] !== 0xff) { i++; continue; }
+    while (i < data.length && data[i] === 0xff) i++;
+    const marker = data[i++];
+    if (marker === 0xda || marker === 0xd9) break;
+    if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+    if (i + 1 >= data.length) return null;
+    const length = data.readUInt16BE(i);
+    if (length < 2 || i + length > data.length) return null;
+    if ([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb].includes(marker)) {
+      if (length < 8) return null;
+      const height = data.readUInt16BE(i + 3), width = data.readUInt16BE(i + 5);
+      return width > 0 && height > 0 ? { width, height } : null;
+    }
+    i += length;
+  }
+  return null;
+}
 class Page {
   constructor(title, m, number) {
-    this.title = title; this.ops = []; this.number = number;
+    this.title = title; this.ops = []; this.images = []; this.number = number;
     this.box(0, 0, WIDTH, HEIGHT, C.bg);
     this.box(0, HEIGHT - 8, WIDTH, 8, C.aqua);
     this.text(29, 552, 17, "STEF MATCH CENTER", C.white, true);
@@ -60,6 +81,17 @@ class Page {
     this.text(x + 13, y + h - 72, shown.length > 18 ? 18 : 32, shown, C.white, true);
     if (detail) this.text(x + 13, y + 13, 8.5, trim(detail, Math.max(16, Math.floor(w / 5.4))), C.muted);
   }
+  image(x, y, w, h, data) {
+    const dims = jpegDimensions(data);
+    if (!dims) return false;
+    const index = this.images.length;
+    this.images.push({ data, ...dims });
+    const scale = Math.min(w / dims.width, h / dims.height);
+    const imageW = dims.width * scale, imageH = dims.height * scale;
+    const posX = x + (w - imageW) / 2, posY = y + (h - imageH) / 2;
+    this.ops.push(`q ${imageW.toFixed(2)} 0 0 ${imageH.toFixed(2)} ${posX.toFixed(2)} ${posY.toFixed(2)} cm /Im${index} Do Q\n`);
+    return true;
+  }
   lines(x, y, values, options = {}) {
     const { width = 84, size = 11, step = 17, maxY = 55, color = C.text } = options;
     let cur = y;
@@ -82,6 +114,14 @@ class Pdf {
       "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"];
     const pageIds = [];
     for (const p of this.pages) {
+      const imageIds = p.images.map(img => {
+        const id = objects.length;
+        objects.push(Buffer.concat([
+          Buffer.from(`<< /Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.data.length} >>\nstream\n`),
+          img.data, Buffer.from("\nendstream"),
+        ]));
+        return id;
+      });
       const content = Buffer.from(p.ops.join(""), "latin1");
       const contentsId = objects.length;
       objects.push(Buffer.concat([
@@ -89,7 +129,10 @@ class Pdf {
         content, Buffer.from("endstream"),
       ]));
       const id = objects.length;
-      objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${WIDTH} ${HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentsId} 0 R >>`);
+      const xobjects = imageIds.length
+        ? `/XObject << ${imageIds.map((id, i) => `/Im${i} ${id} 0 R`).join(" ")} >>`
+        : "";
+      objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${WIDTH} ${HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> ${xobjects} >> /Contents ${contentsId} 0 R >>`);
       pageIds.push(id);
     }
     objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
