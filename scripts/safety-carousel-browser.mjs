@@ -67,6 +67,10 @@ try {
     await page.getByRole("button", { name: "Accéder au match", exact: true }).click();
     await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
 
+    const toolbar = page.locator(".match-indicator-settings-toolbar");
+    assert.equal(await toolbar.getByRole("button", { name: "Personnaliser les indicateurs" }).count(), 1);
+    assert.equal(await toolbar.locator(".match-indicator-settings-count").count(), 0,
+      "Personalize button replaces the redundant cards-displayed caption");
     const carousel = page.getByRole("group", { name: "Défilement des indicateurs du match" });
     await carousel.waitFor({ state: "visible", timeout: 15000 });
     const slides = page.locator(".match-indicators-track > .match-indicator-slide");
@@ -79,7 +83,9 @@ try {
     assert.equal(safetyIndex, injuryIndex + 1, "Days without AT immediately follows the injuries vignette");
 
     await page.getByRole("button", { name: "Afficher Jours sans accident du travail" }).click();
-    await safety.locator(".safety-card-last-date").getByText("Non renseignée").waitFor({ state: "visible" });
+    await safety.locator(".safety-card-form").waitFor({ state: "visible" });
+    assert.equal(await safety.locator(".safety-card-last-date").count(), 0,
+      "No duplicate last-accident date while entering the initial date");
     assert.match(await safety.locator(".match-indicator-value").innerText(), /À renseigner/);
 
     const geometryBefore = await page.locator(".match-indicator-card").first().evaluate(el => {
@@ -118,10 +124,18 @@ try {
     // Once saved, the date form must collapse without a second visible date.
     assert.equal(await safety.locator(".safety-card-form").count(), 0);
     assert.equal(await safety.locator(".safety-card-last-date").count(), 1);
+    assert.equal((await safety.locator(".safety-card-last-date").innerText()).trim(), "01/10/2026",
+      "Show only the manually entered date, without a redundant label");
+    const dateFontSize = await safety.locator(".safety-card-last-date").evaluate(el => parseFloat(getComputedStyle(el).fontSize));
+    assert.ok(dateFontSize <= 11, viewport.width + "px: saved date is visually secondary");
+    assert.equal(await safety.locator(".safety-card-footnote").count(), 0,
+      "No explanatory footnote competes with the day count after save");
     const editDate = safety.getByRole("button", { name: "Modifier la date" });
     assert.ok(await editDate.isVisible());
     await editDate.click();
     assert.ok(await safety.locator(".safety-card-form").isVisible());
+    assert.equal(await safety.locator(".safety-card-last-date").count(), 0,
+      "Editing date never displays a second copy of the date");
     assert.ok(await safety.locator(".safety-card-reason").count() === 0);
     await safety.getByRole("button", { name: "Annuler" }).click();
     assert.equal(await safety.locator(".safety-card-form").count(), 0);
