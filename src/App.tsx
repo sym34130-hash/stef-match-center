@@ -1873,16 +1873,30 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
                   </select>
                 </label>
                 <h3>Synthèse papier du {snapshot.match.date}</h3>
-                <p>Facultative : sans saisie, l'export reprend le brief enregistré. S'il dépasse la place disponible, rédige une synthèse courte pour éviter toute coupure.</p>
+                <p>Les textes du Brief équipe sont repris automatiquement. Si une rubrique contient uniquement des captures d’écran, sa synthèse papier devient obligatoire : les images ne sont pas interprétées ni insérées dans le PDF.</p>
                 <div className="match-pdf-brief-list">
-                  {PDF_BRIEF_OPTIONS.map(([field, label, max]) => (
-                    <label key={field}>{label}
-                      <textarea rows={2} maxLength={max} value={pdfSettingsDraft.dailyBrief[field]}
+                  {PDF_BRIEF_OPTIONS.map(([field, label, max]) => {
+                    const zone = field === "attack" || field === "midfield" || field === "defense" ? field : null;
+                    const plan = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan : null;
+                    const captures = zone ? (plan?.attachments?.[zone]?.length ?? 0) : 0;
+                    const sourceTextPresent = zone ? (plan?.[zone] ?? []).some(value => value.trim().length > 0) : true;
+                    const needsSummary = captures > 0 && !sourceTextPresent;
+                    return <label key={field}>{label}
+                      {captures > 0 && (
+                        <small className={needsSummary ? "match-pdf-brief-warning" : "match-pdf-brief-note"}>
+                          {needsSummary
+                            ? `${captures} capture(s), aucun texte : synthèse obligatoire pour pouvoir exporter.`
+                            : `${captures} capture(s) conservée(s) sur le site : seul le texte sera imprimé.`}
+                        </small>
+                      )}
+                      <textarea rows={2} maxLength={max} required={needsSummary}
+                        aria-invalid={needsSummary && !pdfSettingsDraft.dailyBrief[field].trim()}
+                        value={pdfSettingsDraft.dailyBrief[field]}
                         onChange={(event) => setPdfSettingsDraft(current => current ? {
                           ...current, dailyBrief: { ...current.dailyBrief, matchDate: snapshot.match.date, [field]: event.target.value },
                         } : null)} />
-                    </label>
-                  ))}
+                    </label>;
+                  })}
                 </div>
                 {pdfSettingsError && <p className="match-pdf-export-error" role="alert">{pdfSettingsError}</p>}
                 <div className="match-pdf-modal-actions">
