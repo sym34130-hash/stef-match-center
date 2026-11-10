@@ -21,6 +21,7 @@ import {
   Clock3,
   Crown,
   Dumbbell,
+  Download,
   Edit3,
   Eye,
   EyeOff,
@@ -1386,6 +1387,8 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const [celebrationMode, setCelebrationMode] = useState(false);
   const [thresholdPulse, setThresholdPulse] = useState(false);
   const [editingKpis, setEditingKpis] = useState(false);
+  const [pdfExporting, setPdfExporting] = useState(false);
+  const [pdfExportError, setPdfExportError] = useState<string | null>(null);
   const [kpiCopy, setKpiCopy] = useState<MatchKpiCopy>(() => loadMatchKpiCopy(snapshot));
   const [savedKpiCopy, setSavedKpiCopy] = useState<MatchKpiCopy>(kpiCopy);
   const [mercatoPlan, setMercatoPlan] = useState<{ key: string; plan: CauseriePlan | null } | null>(null);
@@ -1541,6 +1544,46 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
     slideViewportRef.current?.scrollTo({ top: 0, behavior: "auto" });
   }, [activeSlide]);
 
+  async function downloadMatchPdf() {
+    if (pdfExporting) return;
+    setPdfExporting(true);
+    setPdfExportError(null);
+    try {
+      const params = new URLSearchParams({
+        leagueId: activeLeague,
+        matchDate: snapshot.match.date,
+        importedAt: snapshot.importedAt,
+      });
+      if (/^(?:[0-9]|[1-9][0-9])$/.test(kpiCopy.injuriesValue.trim())) {
+        params.set("injuries", kpiCopy.injuriesValue.trim());
+      }
+      const response = await fetch(
+        `/api/agencies/${encodeURIComponent(session.agency.code)}/export/match.pdf?${params}`,
+        { cache: "no-store", headers: { "x-access-code": session.accessCode } },
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.message ?? "L'export PDF a échoué.");
+      }
+      if (!response.headers.get("Content-Type")?.includes("application/pdf")) {
+        throw new Error("La réponse du serveur n'est pas un PDF.");
+      }
+      const pdf = await response.blob();
+      const url = URL.createObjectURL(pdf);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `STEF_MATCH_${session.agency.code}_${snapshot.match.date}_${activeLeague}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (error) {
+      setPdfExportError(error instanceof Error ? error.message : "Impossible de télécharger le MATCH.");
+    } finally {
+      setPdfExporting(false);
+    }
+  }
+
   function moveSlide(nextIndex: number) {
     const next = Math.max(0, Math.min(slideLabels.length - 1, nextIndex));
     if (next !== activeSlide) setSlideDirection(next > activeSlide ? "next" : "previous");
@@ -1654,6 +1697,13 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         <div className="match-carousel-heading">
           <span>FEUILLE DE MATCH</span>
           <strong aria-live="polite">{slideLabels[activeSlide]}</strong>
+          <button className="match-pdf-export-button" type="button"
+            aria-label="Télécharger le MATCH en PDF" disabled={pdfExporting}
+            onClick={downloadMatchPdf}>
+            <Download size={15} aria-hidden="true" />
+            {pdfExporting ? "Préparation du PDF..." : "Télécharger le MATCH (PDF)"}
+          </button>
+          {pdfExportError && <small className="match-pdf-export-error" role="alert">{pdfExportError}</small>}
         </div>
         <div className="match-carousel-controls">
 
