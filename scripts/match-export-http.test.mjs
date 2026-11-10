@@ -85,10 +85,12 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
     });
     server.stderr.on("data", chunk => { stderr += chunk.toString(); });
     await waitHealth(base);
+    const pdfProfileRevisions = { "058": "", "059": "" };
     const query = code => new URLSearchParams({
       leagueId: "argent", matchDate: snapshots[code].match.date,
       importedAt: snapshots[code].importedAt,
       causerieRevision: causerieRevisions[code],
+      pdfProfileRevision: pdfProfileRevisions[code],
       zonageMinutes: "30", loadingSeconds: "165", unloadingSeconds: "60", scoreTargetPercent: "50",
     });
     const uri = code => base + "/api/agencies/" + code + "/export/match.pdf?" + query(code);
@@ -118,6 +120,40 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
     staleImport.set("importedAt", "2024-01-01T00:00:00.000Z");
     assert.equal((await fetch(base + "/api/agencies/058/export/match.pdf?" + staleImport,
       { headers: { "x-access-code": "SECRET-058" } })).status, 409);
+    // An agency may save its own presentation without altering the on-screen
+    // selection or another agency's profile. Revision conflicts fail closed.
+    const profileUri = code => base + "/api/agencies/" + code + "/export/profile";
+    assert.equal((await fetch(profileUri("059"), { headers: { "x-access-code": "SECRET-058" } })).status, 401);
+    const original = await fetch(profileUri("058"), { headers: { "x-access-code": "SECRET-058" } });
+    assert.equal(original.status, 200);
+    const state058 = await original.json();
+    assert.deepEqual(state058.profile.indicatorIds.length, 4);
+    const custom = { ...state058.profile,
+      indicatorIds: ["positions"], chartId: "loading",
+      dailyBrief: { matchDate: snapshots["058"].match.date, safety: "",
+        priorities: "PRIORITE-PDF-058", attack: "", midfield: "", defense: "", decisions: "" },
+    };
+    const saved = await fetch(profileUri("058"), {
+      method: "PUT", headers: { "x-access-code": "SECRET-058", "Content-Type": "application/json" },
+      body: JSON.stringify({ profile: custom, expectedRevision: state058.profileRevision }),
+    });
+    assert.equal(saved.status, 200, await saved.text().catch(() => ""));
+    const savedState = await (await fetch(profileUri("058"), { headers: { "x-access-code": "SECRET-058" } })).json();
+    pdfProfileRevisions["058"] = savedState.profileRevision;
+    assert.ok(pdfProfileRevisions["058"]);
+    const otherProfile = await (await fetch(profileUri("059"), {
+      headers: { "x-access-code": "SECRET-059" },
+    })).json();
+    assert.equal(otherProfile.profileRevision, null);
+    assert.notDeepEqual(savedState.profile.indicatorIds, otherProfile.profile.indicatorIds);
+    const staleProfile = new URLSearchParams(query("058"));
+    staleProfile.set("pdfProfileRevision", "");
+    assert.equal((await fetch(base + "/api/agencies/058/export/match.pdf?" + staleProfile,
+      { headers: { "x-access-code": "SECRET-058" } })).status, 409);
+    assert.equal((await fetch(profileUri("058"), {
+      method: "PUT", headers: { "x-access-code": "SECRET-058", "Content-Type": "application/json" },
+      body: JSON.stringify({ profile: custom, expectedRevision: null }),
+    })).status, 409);
     for (const code of ["058", "059"]) {
       const response = await fetch(uri(code), { headers: { "x-access-code": "SECRET-" + code } });
       if (response.status !== 200) {
@@ -129,7 +165,9 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
       assert.match(response.headers.get("Cache-Control") ?? "", /no-store/);
       const data = Buffer.from(await response.arrayBuffer());
       const parsed = await pdfParse(data);
+      assert.equal(parsed.numpages, 2);
       assert.match(parsed.text, new RegExp("AGENCE-" + code));
+      if (code === "058") assert.match(parsed.text, /PRIORITE-PDF-058/);
       assert.match(parsed.text, new RegExp("EQUIPE-" + code));
       assert.match(parsed.text, new RegExp("CONSIGNE-ATTAQUE-" + code));
       assert.match(parsed.text, new RegExp("PRIORITE-" + code));
