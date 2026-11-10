@@ -67,10 +67,24 @@ try {
     await page.getByRole("button", { name: "Accéder au match", exact: true }).click();
     await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
 
-    const toolbar = page.locator(".match-indicator-settings-toolbar");
-    assert.equal(await toolbar.getByRole("button", { name: "Personnaliser les indicateurs" }).count(), 1);
-    assert.equal(await toolbar.locator(".match-indicator-settings-count").count(), 0,
-      "Personalize button replaces the redundant cards-displayed caption");
+    const heading = page.locator(".match-indicators-heading");
+    const customize = heading.getByRole("button", { name: "Personnaliser les indicateurs" });
+    const navigation = heading.locator(".match-indicators-navigation");
+    assert.equal(await customize.count(), 1);
+    assert.equal(await page.locator(".match-indicator-settings-toolbar").count(), 0,
+      "Customization no longer occupies a separate row above the carousel header");
+    const buttonBox = await customize.boundingBox();
+    const navBox = await navigation.boundingBox();
+    assert.ok(buttonBox && navBox, "Customization and carousel navigation are visible");
+    assert.ok(
+      buttonBox.y >= navBox.y + navBox.height - 1 ||
+      buttonBox.x >= navBox.x + navBox.width - 1 ||
+      navBox.x >= buttonBox.x + buttonBox.width - 1,
+      viewport.width + "px: Customization must not overlap the carousel counter or arrow buttons",
+    );
+    const headerBox = await heading.boundingBox();
+    assert.ok(headerBox && buttonBox.y + buttonBox.height <= headerBox.y + headerBox.height + 1,
+      viewport.width + "px: Customization must stay inside the carousel header");
     const carousel = page.getByRole("group", { name: "Défilement des indicateurs du match" });
     await carousel.waitFor({ state: "visible", timeout: 15000 });
     const slides = page.locator(".match-indicators-track > .match-indicator-slide");
