@@ -266,17 +266,20 @@ app.post("/api/agencies/:agencyCode/match-pdf", requireAgency, async (req, res) 
   matchPdfExportBusy = true;
   try {
     // All reads use req.agency.code (derived solely from requireAgency).
-    const [snapshot, configState] = await withAgencyLock(req.agency.code, async () => Promise.all([
-      readLatestSnapshot(req.agency.code, criteria),
-      readLeagueConfigState(req.agency.code),
-    ]));
-    if (!snapshot || snapshot.match?.date !== matchDate || snapshot.sourceName !== sourceName) {
-      res.status(409).json({ message: "La version du MATCH a changé. Actualise la page avant l'export." });
-      return;
-    }
+    const configState = await withAgencyLock(req.agency.code, () => readLeagueConfigState(req.agency.code));
     const league = configState.configs.find(config => config.id === leagueId);
     if (!league) {
       res.status(400).json({ message: "Ligue inconnue." });
+      return;
+    }
+    const keys = ["zonageMinutes", "loadingSeconds", "unloadingSeconds", "scoreTargetPercent"];
+    if (keys.some(key => criteria[key] !== league[key])) {
+      res.status(409).json({ message: "La configuration de la ligue a changé. Actualise le MATCH avant l'export." });
+      return;
+    }
+    const snapshot = await withAgencyLock(req.agency.code, () => readLatestSnapshot(req.agency.code, criteria));
+    if (!snapshot || snapshot.match?.date !== matchDate || snapshot.sourceName !== sourceName) {
+      res.status(409).json({ message: "La version du MATCH a changé. Actualise la page avant l'export." });
       return;
     }
     const [briefState, snapshotRevision] = await withAgencyLock(req.agency.code, async () => Promise.all([
