@@ -58,7 +58,7 @@ class Page {
     this.box(0, 0, WIDTH, HEIGHT, C.bg);
     this.box(0, HEIGHT - 8, WIDTH, 8, C.aqua);
     this.text(29, 552, 17, "STEF MATCH CENTER", C.white, true);
-    this.text(29, 528, 10, `LOT E / ${title}`, C.aqua, true);
+    this.text(29, 528, 10, title, C.aqua, true);
     this.text(813, 552, 12, `${m.agency.name} [${m.agency.code}]`, C.white, true, "right");
     this.text(813, 531, 10, `${m.league.label} / ${m.match.date} / ${m.match.timeRangeLabel}`, C.muted, false, "right");
     this.box(29, 509, 784, 1, C.panel2);
