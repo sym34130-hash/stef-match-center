@@ -307,9 +307,32 @@ function causeriePages(doc, m) {
     ["Revue", c.coach?.review || "Non renseignee"],
     ["Mercato", c.mercato || "Aucun mouvement"],
     ["Cartons rouges", c.redCards || "Aucune saisie"],
-    ["Captures du brief", `Attaque ${c.attachmentCounts?.attack ?? 0}, Milieu ${c.attachmentCounts?.midfield ?? 0}, Defense ${c.attachmentCounts?.defense ?? 0}. Pieces visuelles a consulter sur le site.`],
+    ["Captures du brief", `Attaque ${c.attachmentCounts?.attack ?? 0}, Milieu ${c.attachmentCounts?.midfield ?? 0}, Defense ${c.attachmentCounts?.defense ?? 0}. Pages de captures en annexe.`],
   ];
   listing(doc, "04 - BRIEF EQUIPE", rows, { chars: 104 });
+}
+function briefCapturePages(doc, m) {
+  const captures = [];
+  for (const [key, title] of [["attack", "ATTAQUE"], ["midfield", "MILIEU"], ["defense", "DEFENSE"]]) {
+    (m.causerie.attachments?.[key] ?? []).forEach((source, i) => {
+      captures.push({ title, index: i + 1, source });
+    });
+  }
+  for (let start = 0; start < captures.length; start += 4) {
+    const page = doc.add(start ? "04 - CAPTURES DU BRIEF / SUITE" : "04 - CAPTURES DU BRIEF");
+    captures.slice(start, start + 4).forEach((item, i) => {
+      const x = 29 + (i % 2) * 395, y = 266 - Math.floor(i / 2) * 223;
+      page.box(x, y, 380, 209, C.panel);
+      page.box(x, y + 206, 380, 3, C.aqua);
+      page.text(x + 12, y + 186, 10, `${item.title} / CAPTURE ${item.index}`, C.aqua, true);
+      const match = typeof item.source === "string"
+        ? item.source.match(/^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/) : null;
+      const data = match && item.source.length <= 260_000 ? Buffer.from(match[1], "base64") : null;
+      if (!data || !page.image(x + 10, y + 9, 360, 164, data)) {
+        page.text(x + 12, y + 98, 10, "Image non exportable (format source ancien ou invalide)", C.red);
+      }
+    });
+  }
 }
 function yellowCardsPages(doc, m) {
   if (!m.yellowCards.length) return;
@@ -326,5 +349,6 @@ export function renderMatchPdf(model) {
   awardsPage(doc, model);
   analyticsPages(doc, model);
   causeriePages(doc, model);
+  briefCapturePages(doc, model);
   return doc.render();
 }
