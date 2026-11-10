@@ -198,7 +198,7 @@ function awardsPage(doc, m) {
 }
 function analyticsPages(doc, m) {
   const p = doc.add("03 - STATISTIQUES DU MATCH");
-  let y = section(p, 470, "Chiffres de reference");
+  section(p, 470, "Chiffres de reference");
   [
     ["Operations", m.summary?.operations],
     ["Positions", m.summary?.positions],
