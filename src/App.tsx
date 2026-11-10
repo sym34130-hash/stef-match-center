@@ -690,6 +690,7 @@ export default function App() {
             )}
             {screen === "match" && snapshot && (
               <MatchSheet
+                key={`${session.agency.code}:${snapshot.match.date}`}
                 snapshot={snapshot}
                 session={session}
                 causerieRevision={causerieRevision}
