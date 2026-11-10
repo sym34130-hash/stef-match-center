@@ -6,6 +6,8 @@ export const PDF_CHART_IDS = Object.freeze([
 export const PDF_BRIEF_FIELDS = Object.freeze([
   "safety", "priorities", "attack", "midfield", "defense", "decisions",
 ]);
+export const PDF_MIN_KPIS = 4;
+export const PDF_MAX_KPIS = 6;
 const DEFAULT_KPIS = ["performance", "accident-free-days", "positions", "arrival"];
 const BRIEF_LIMITS = Object.freeze({
   safety: 260, priorities: 260, attack: 240, midfield: 240,
@@ -30,10 +32,10 @@ export function normalizePdfProfile(value, { strict = false } = {}) {
   if (!Array.isArray(source) || source.some(id => typeof id !== "string" || !BRIEF_INDICATOR_IDS.includes(id))) {
     throw new TypeError("La sélection des KPI du PDF est invalide.");
   }
-  if (strict && (source.length > 4 || new Set(source).size !== source.length)) {
-    throw new TypeError("Sélectionne au maximum 4 KPI complémentaires distincts.");
+  if (strict && (source.length > PDF_MAX_KPIS || new Set(source).size !== source.length)) {
+    throw new TypeError("Sélectionne au maximum 6 KPI complémentaires distincts.");
   }
-  const indicatorIds = [...new Set(source)].slice(0, 4);
+  const indicatorIds = [...new Set(source)].slice(0, PDF_MAX_KPIS);
   const chartId = input.chartId === undefined ? fallback.chartId : input.chartId;
   if (!PDF_CHART_IDS.includes(chartId)) throw new TypeError("Le graphique du PDF est inconnu.");
   const originalBrief = input.dailyBrief ?? {};
