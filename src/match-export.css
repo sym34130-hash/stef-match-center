@@ -83,3 +83,34 @@
 .match-pdf-brief-warning { display: block; color: #a12720; font-size: 11px; font-weight: 700; line-height: 1.4; }
 .match-pdf-brief-note { display: block; color: #50677c; font-size: 11px; line-height: 1.4; }
 .match-pdf-brief-list textarea[aria-invalid="true"] { border-color: #c34434; background: #fff8f6; }
+
+/* Print provenance is surfaced before PDF generation, preventing a 106J from
+   another date from being mistaken for the active Excel operating window. */
+.match-pdf-source-panel {
+  margin: 12px 0 16px;
+  padding: 12px;
+  border: 1px solid #bfd1e0;
+  border-radius: 8px;
+  background: #edf4f9;
+}
+.match-pdf-source-panel h3 { margin: 0 0 4px; }
+.match-pdf-source-panel p { margin: 3px 0 9px; color: #445d74; font-size: 12px; }
+.match-pdf-source-panel dl {
+  margin: 8px 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.match-pdf-source-panel dl div {
+  background: #fff;
+  border: 1px solid #d6e0eb;
+  border-radius: 6px;
+  padding: 9px 11px;
+}
+.match-pdf-source-panel dt { font-size: 11px; color: #52687d; font-weight: 650; }
+.match-pdf-source-panel dd { margin: 5px 0 0; font-size: 19px; line-height: 1.2; color: #143a5b; font-weight: 800; }
+@media (max-width: 530px) {
+  .match-pdf-source-panel dl { grid-template-columns: 1fr; }
+  .match-pdf-source-panel dl div { display: flex; justify-content: space-between; align-items: center; }
+  .match-pdf-source-panel dd { margin-top: 0; font-size: 16px; }
+}
