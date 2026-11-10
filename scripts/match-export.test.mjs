@@ -240,3 +240,116 @@ test("Lot E V4: reception chart plots actual seconds per position, target and sl
   const changed = renderMatchPdf(model);
   assert.ok(!first.equals(changed), "Changing measured seconds must change the chart geometry/colors");
 });
+
+
+test("Lot E V5: compare five PDF summaries with canonical source metrics across all four league configurations", async () => {
+  const allConfigs = [
+    { id: "bronze", zonageMinutes: 35, loadingSeconds: 185, unloadingSeconds: 70, scoreTargetPercent: 45 },
+    { id: "argent", zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 },
+    { id: "or", zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 },
+    { id: "platine", zonageMinutes: 20, loadingSeconds: 130, unloadingSeconds: 45, scoreTargetPercent: 70 },
+  ];
+  for (const criteria of allConfigs) {
+    const selectedLeague = matchExportLeague(criteria.id, allConfigs);
+    const snapshot = {
+      performanceCriteria: { ...selectedLeague.criteria },
+      operationalScore: {
+        status: "available", targetPercent: criteria.scoreTargetPercent,
+        goalsFor: [65, 80, 72, 59].filter(value => value > criteria.scoreTargetPercent).length,
+        goalsAgainst: [65, 80, 72, 59].filter(value => value <= criteria.scoreTargetPercent).length,
+        indicators: { passRate: 65, loadingPercent: 80, unloadingPercent: 72, possessionPercent: 59 },
+        loading: { targetSeconds: criteria.loadingSeconds },
+      },
+      loadingQuality: { targeted: 8, offTarget: 2, targetedPercent: 80, offTargetPercent: 20 },
+      unloadingHourlyAnalysis: {
+        state: "disponible", targetSeconds: criteria.unloadingSeconds,
+        items: [
+          { start: "2026-11-10T21:00:00.000Z", label: "22h", state: "disponible", meanSecondsPerPosition: 30, distinctPositions: 15 },
+          { start: "2026-11-10T23:00:00.000Z", state: "disponible", meanSecondsPerPosition: 90, distinctPositions: 30 },
+        ],
+      },
+      zonageDiagnostic: {
+        state: "disponible", targetMinutes: criteria.zonageMinutes,
+        receivedPositions: 100, qualifiablePositions: 80, latePositions: 14, onTimePositions: 66,
+        unqualifiablePositions: 20, anomalyRate: 17.5, coverageRate: 80,
+        top5: [{ travelCode: "TEST-RETARD-01", latePositions: 12 }],
+      },
+      dailyIndicators: {
+        agencyCode: "058", referenceDate: "2026-11-09", sourceName: "FAUX-106J.pdf",
+        punctuality: { arrivalPunctuality: 96, destinationPunctuality: 92 },
+        punctualityTargets: { destinationPunctuality: 88 },
+        expedition: { tonnage: 9 },
+      },
+      hourlyPerformance: [
+        { label: "13h", rate: 80, won: 8, total: 10 },
+        { label: "14h", rate: 40, won: 2, total: 5 },
+      ],
+    };
+    for (const chartId of PDF_CHART_IDS) {
+      const model = build("058", {
+        league: selectedLeague, snapshot,
+        pdfProfile: { indicatorIds: ["performance", "injuries", "accident-free-days", "arrival"], chartId },
+      });
+      const parsed = await pdfParse(renderMatchPdf(model));
+      assert.equal(parsed.numpages, 2, criteria.id + ":" + chartId);
+      assert.match(parsed.text, new RegExp(selectedLeague.label));
+      assert.ok(parsed.text.includes("CHG <= " + criteria.loadingSeconds + " s/poz"));
+      assert.ok(parsed.text.includes("DECHG <= " + criteria.unloadingSeconds + " s/poz"));
+      assert.ok(parsed.text.includes("Zonage <= " + criteria.zonageMinutes + " min"));
+      if (chartId === "passes-hourly") {
+        assert.match(parsed.text, /Total filtré : 66,7 %/i);
+        assert.match(parsed.text, /périmètre distinct du KPI officiel/i);
+      } else if (chartId === "reception-time") {
+        assert.ok(parsed.text.includes("Cible : " + criteria.unloadingSeconds + " s/poz"));
+        assert.match(parsed.text, /22h/);
+        assert.match(parsed.text, /00h/);
+        assert.match(parsed.text, /Positions\/créneau : 15 à 30/);
+        assert.match(parsed.text, /Duels au score : 72 %/i);
+      } else if (chartId === "loading") {
+        assert.match(parsed.text, /Chargements cadrés/i);
+        assert.match(parsed.text, /8 \/ 10/);
+        assert.ok(parsed.text.includes("Temps par position <= " + criteria.loadingSeconds));
+      } else if (chartId === "centers") {
+        assert.match(parsed.text, /Source PDF 106J du 2026-11-09/);
+        assert.match(parsed.text, /92 %/);
+        assert.match(parsed.text, /Objectif 106J : 88 %/);
+        assert.match(parsed.text, /pas le seuil de ligue/);
+      } else {
+        assert.ok(parsed.text.includes("Cible zonage <= " + criteria.zonageMinutes + " min"));
+        assert.match(parsed.text, /Hors délai : 14\/80/i);
+        assert.match(parsed.text, /TEST-RETARD-01/);
+        assert.match(parsed.text, /Couverture.*80 %/);
+      }
+    }
+  }
+});
+
+test("Lot E V5: reject internal chart thresholds from an obsolete league even when root criteria match", () => {
+  const active = league.criteria;
+  const score = makeSnapshot("058").operationalScore;
+  rejected(() => build("058", { snapshot: {
+    operationalScore: { ...score, targetPercent: active.scoreTargetPercent + 5 },
+  } }), 409);
+  rejected(() => build("058", { snapshot: {
+    operationalScore: { ...score, loading: { targetSeconds: active.loadingSeconds - 10 } },
+  } }), 409);
+  rejected(() => build("058", { snapshot: {
+    unloadingHourlyAnalysis: { state: "disponible", targetSeconds: active.unloadingSeconds + 5, items: [] },
+  } }), 409);
+  rejected(() => build("058", { snapshot: {
+    zonageDiagnostic: { state: "disponible", targetMinutes: active.zonageMinutes + 5 },
+  } }), 409);
+});
+
+test("Lot E V5: missing source must not masquerade as a zero KPI in charts", async () => {
+  for (const chartId of ["loading", "centers", "operational-diagnostic", "reception-time"]) {
+    const model = build("058", { snapshot: {
+      loadingQuality: null, dailyIndicators: null,
+      zonageDiagnostic: { state: "indisponible", targetMinutes: league.criteria.zonageMinutes },
+      unloadingHourlyAnalysis: { state: "indisponible", targetSeconds: league.criteria.unloadingSeconds, items: [] },
+    }, pdfProfile: { indicatorIds: ["performance"], chartId } });
+    const parsed = await pdfParse(renderMatchPdf(model));
+    assert.equal(parsed.numpages, 2);
+    assert.match(parsed.text, /indisponible|Aucun/i);
+  }
+});
