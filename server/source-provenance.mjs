@@ -51,8 +51,8 @@ export function pdfAssociation(pdf, snapshot) {
   return { status: "matched", referenceDate: pdf.referenceDate, message: "PDF 106J associé à la période du match." };
 }
 
-// All readable 106J reports can be attached to the selected space; mismatches remain warnings.
-// Ownership of the agency workspace and the Excel confirmation rules do not change.
+// A different *date* is permitted and explicitly displayed. A different
+// *agency* is never allowed to populate another agency’s tonnage/KPIs.
 export function canUsePdfIndicators(association) {
-  return ["matched", "mismatched", "unverified", "mismatched-agency"].includes(association?.status);
+  return ["matched", "mismatched", "unverified"].includes(association?.status);
 }
