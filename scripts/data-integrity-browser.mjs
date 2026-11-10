@@ -237,8 +237,17 @@ try {
       "The editor must be portalled outside the clipped celebration slide");
     assert.equal(await celebrationDialog.locator('input[type="checkbox"]').count(), 10);
     const dialogBox = await celebrationDialog.boundingBox();
+    const dialogDiagnostics = await celebrationDialog.evaluate(element => ({
+      dialog: element.getBoundingClientRect().toJSON(),
+      backdrop: element.parentElement?.getBoundingClientRect().toJSON(),
+      maxHeight: getComputedStyle(element).maxHeight,
+      overflow: getComputedStyle(element).overflow,
+      scrollHeight: element.scrollHeight,
+      innerHeight: window.innerHeight,
+      visualHeight: window.visualViewport?.height,
+    }));
     assert.ok(dialogBox && dialogBox.top >= 0 && dialogBox.bottom <= viewport.height + 1,
-      "All dialog content must fit into a scrollable viewport");
+      "All dialog content must fit into a scrollable viewport: " + JSON.stringify({ dialogBox, viewport, dialogDiagnostics }));
     const carouselWithDialog = await celebrationCarousel.boundingBox();
     assert.ok(carouselWithDialog && Math.abs(carouselWithDialog.height - carouselBeforeDialog.height) < 2,
       "Opening settings must not shrink the KPI carousel");
