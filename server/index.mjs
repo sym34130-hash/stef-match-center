@@ -9,7 +9,7 @@ import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, isTimeRang
 import { parse106jPdf } from "./pdf-106j.mjs";
 import { pdfAssociation, canUsePdfIndicators } from "./source-provenance.mjs";
 import { operationalAnalysisNeedsRefresh } from "./operational-analysis.mjs";
-import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout, normalizeBriefIndicators } from "./brief-layout.mjs";
+import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_SELECTION_VERSION, migrateBriefLayout, normalizeBriefIndicators } from "./brief-layout.mjs";
 import { isValidCalendarDate } from "./calendar-date.mjs";
 import { calculateAccidentFreeDays } from "./accident-free-days.mjs";
 import { RECEPTION_EXCLUSION_VERSION, normalizeReceptionCode, normalizeReceptionExclusions, receptionClientKey } from "./reception-exclusions.mjs";
@@ -1619,10 +1619,17 @@ async function readCauseriePlan(agencyCode, matchDate) {
   try {
     const stored = JSON.parse(await fs.readFile(causeriePath, "utf8"));
     const migrated = migrateBriefLayout(stored);
+    // Expose historical selections with the new card enabled, even before
+    // the brief is next saved. Do not rewrite a version-2 file on a GET.
+    const normalized = {
+      ...migrated,
+      visibleIndicatorsVersion: BRIEF_INDICATOR_SELECTION_VERSION,
+      visibleIndicators: normalizeBriefIndicators(migrated.visibleIndicators, migrated.visibleIndicatorsVersion ?? 1),
+    };
     if (!(Number(stored?.briefLayoutVersion) >= BRIEF_LAYOUT_VERSION)) {
-      await saveCauseriePlan(agencyCode, matchDate, migrated);
+      await saveCauseriePlan(agencyCode, matchDate, normalized);
     }
-    return migrated;
+    return normalized;
   } catch (error) {
     if (error?.code !== "ENOENT") throw error;
     return null;
@@ -1653,7 +1660,8 @@ function normalizeCauseriePlan(plan) {
     mercato: limitMultilineText(input.mercato, 240),
     mercatoProfiles: normalizeMercatoProfiles(input.mercatoProfiles),
     redCards: limitMultilineText(input.redCards, 1000),
-    visibleIndicators: normalizeBriefIndicators(input.visibleIndicators),
+    visibleIndicatorsVersion: BRIEF_INDICATOR_SELECTION_VERSION,
+    visibleIndicators: normalizeBriefIndicators(input.visibleIndicators, input.visibleIndicatorsVersion ?? 1),
     coach: {
       tactic: limitText(input.coach?.tactic, 120),
       priority: limitText(input.coach?.priority, 120),

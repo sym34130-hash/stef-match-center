@@ -106,7 +106,7 @@ try {
     });
     assert.equal(savePlanResponse.status, 200, "Brief preferences must be persisted by the API");
     const savedPlan = (await savePlanResponse.json()).plan;
-    assert.deepEqual(savedPlan.visibleIndicators, ["tonnage-distribution", "tonnage-expedition", "positions"]);
+    assert.deepEqual(savedPlan.visibleIndicators, ["accident-free-days", "tonnage-distribution", "tonnage-expedition", "positions"]);
 
     // Synthetic PDF indicators are injected only into this isolated browser test.
     await page.route("**/api/agencies/01K/snapshot**", async route => {
@@ -124,11 +124,10 @@ try {
       await route.fulfill({ response, json: body });
     });
 
-    const assertTonnage = async (distribution, expedition, cardCount) => {
-      // The nine optional cards retain their saved count; the separate A.T.
-      // day-counter is a fixed tenth vignette inside the same carousel.
-      await page.waitForFunction(expected => document.querySelectorAll(".match-indicator-card").length === expected + 1, cardCount, { timeout: 15000 });
-      assert.equal(await page.locator('[data-indicator="accident-free-days"] .match-indicator-card.is-safety').count(), 1);
+    const assertTonnage = async (distribution, expedition, cardCount, safetyVisible = true) => {
+      // The A.T. card is selected by default for legacy plans but can be hidden.
+      await page.waitForFunction(expected => document.querySelectorAll(".match-indicator-card").length === expected, cardCount + Number(safetyVisible), { timeout: 15000 });
+      assert.equal(await page.locator('[data-indicator="accident-free-days"] .match-indicator-card.is-safety').count(), Number(safetyVisible));
       assert.equal(await page.locator('[data-indicator="tonnage-distribution"]').count(), distribution === null ? 0 : 1);
       assert.equal(await page.locator('[data-indicator="tonnage-expedition"]').count(), expedition === null ? 0 : 1);
       if (distribution !== null) {
@@ -156,7 +155,7 @@ try {
     await brief.getByRole("button", { name: "Enregistrer", exact: true }).click();
     await brief.getByRole("button", { name: "Écrire" }).waitFor({ state: "visible" });
     let updated = await readBrief();
-    assert.deepEqual(updated.plan.visibleIndicators, ["tonnage-expedition", "positions", "arrival"]);
+    assert.deepEqual(updated.plan.visibleIndicators, ["accident-free-days", "tonnage-expedition", "positions", "arrival"]);
     await navigation.getByRole("button", { name: "Aller à Coup de sifflet final" }).click();
     await assertTonnage(null, "478 t", 3);
     await page.reload();
@@ -171,7 +170,7 @@ try {
     await brief.getByRole("button", { name: "Enregistrer", exact: true }).click();
     await brief.getByRole("button", { name: "Écrire" }).waitFor({ state: "visible" });
     updated = await readBrief();
-    assert.deepEqual(updated.plan.visibleIndicators, ["tonnage-distribution", "positions", "arrival"]);
+    assert.deepEqual(updated.plan.visibleIndicators, ["accident-free-days", "tonnage-distribution", "positions", "arrival"]);
     await navigation.getByRole("button", { name: "Aller à Coup de sifflet final" }).click();
     await assertTonnage("255 t", null, 3);
     await page.reload();
@@ -179,20 +178,20 @@ try {
     await assertTonnage("255 t", null, 3);
     console.log(`Browser: independent KPI toggles, Service client, saves and reloads at ${viewport.width}px: OK`);
 
-    // The nine collective cards can also be edited next to the carousel,
+    // All ten collective cards can also be edited next to the carousel,
     // without navigating to the team brief or altering the four score KPIs.
     const beforeDirectEdit = await readBrief();
     const button = page.getByRole("button", { name: "Personnaliser les indicateurs" });
     await button.click();
-    const panel = page.getByRole("group", { name: "Personnalisation des neuf cartes du carrousel" });
-    assert.equal(await panel.locator('input[type="checkbox"]').count(), 9);
-    assert.equal(await panel.locator(".match-indicator-settings-options input:checked").count(), 3);
+    const panel = page.getByRole("group", { name: "Personnalisation des dix cartes du carrousel" });
+    assert.equal(await panel.locator('input[type="checkbox"]').count(), 10);
+    assert.equal(await panel.locator(".match-indicator-settings-options input:checked").count(), 4);
     await panel.locator("label").filter({ hasText: "Tonnage Distribution" }).locator("input").uncheck();
     await panel.locator("label").filter({ hasText: "Tonnage Expédition" }).locator("input").check();
     await panel.getByRole("button", { name: "Enregistrer l'affichage" }).click();
     await page.getByRole("status").getByText("Affichage du carrousel enregistré pour ce match.").waitFor({ state: "visible" });
     const afterDirectEdit = await readBrief();
-    assert.deepEqual(afterDirectEdit.plan.visibleIndicators, ["tonnage-expedition", "positions", "arrival"]);
+    assert.deepEqual(afterDirectEdit.plan.visibleIndicators, ["accident-free-days", "tonnage-expedition", "positions", "arrival"]);
     for (const key of ["attack", "midfield", "defense", "attachments", "mercato", "mercatoProfiles", "redCards", "coach"]) {
       assert.deepEqual(afterDirectEdit.plan[key], beforeDirectEdit.plan[key], `A carousel setting must preserve ${key}`);
     }
@@ -200,7 +199,23 @@ try {
     await page.reload();
     await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
     await assertTonnage(null, "478 t", 3);
-    console.log(`Browser: direct nine-card carousel editor, safe save and reload at ${viewport.width}px: OK`);
+    console.log(`Browser: direct ten-card carousel editor, safe save and reload at ${viewport.width}px: OK`);
+    // A deliberate AT deselection must persist; migration must not re-enable it.
+    await button.click();
+    const safetyToggle = panel.locator("label").filter({ hasText: "Jours sans accident du travail" }).locator("input");
+    assert.equal(await safetyToggle.isChecked(), true);
+    await safetyToggle.uncheck();
+    await panel.getByRole("button", { name: "Enregistrer l'affichage" }).click();
+    await page.getByRole("status").getByText("Affichage du carrousel enregistré pour ce match.").waitFor({ state: "visible" });
+    const withoutSafety = await readBrief();
+    assert.deepEqual(withoutSafety.plan.visibleIndicators, ["tonnage-expedition", "positions", "arrival"]);
+    assert.equal(withoutSafety.plan.visibleIndicatorsVersion, 2);
+    await assertTonnage(null, "478 t", 3, false);
+    await page.reload();
+    await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+    await assertTonnage(null, "478 t", 3, false);
+    console.log(`Browser: AT card can be hidden and remains hidden after reload at ${viewport.width}px: OK`);
+
     // Lot B: reception-only travel and tri-client filtering, with an audit
     // trail and unchanged global metrics, in a strictly isolated agency.
     const readSnapshot = async () => {

@@ -58,9 +58,8 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     { id: "destination", label: "Ponctualité destination", value: metric(punctuality?.destinationPunctuality, "%"), detail: pdfMetricDetail("destinationPunctuality"), icon: Flag, accent: "#a4d5c8", percent: punctuality?.destinationPunctuality, targetKey: "destinationPunctuality" },
     { id: "temperature", label: "Température retour ramasse", value: metric(punctuality?.temperatureReturn, "%"), detail: pdfMetricDetail("temperatureReturn"), icon: Thermometer, accent: "#dcc0d7", percent: punctuality?.temperatureReturn, targetKey: "temperatureReturn" },
   ];
-  // The A.T. day counter is always a carousel slide. Existing nine
-  // site-configurable cards and their saved visibility preferences are untouched.
-  const cards = allCards.filter((card) => card.id === "accident-free-days" || !visibleIndicatorIds || visibleIndicatorIds.includes(card.id));
+  // The A.T. day counter follows the same saved visibility selection as the other cards.
+  const cards = allCards.filter((card) => !visibleIndicatorIds || visibleIndicatorIds.includes(card.id));
   const itemCount = cards.length + (hasMercato ? 1 : 0);
   const cardKey = cards.map((card) => card.id).join("|");
   useEffect(() => {

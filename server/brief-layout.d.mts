@@ -10,5 +10,6 @@ export function migrateBriefLayout(plan: unknown): {
   attachments: Record<Zone, string[]>;
 };
 
+export const BRIEF_INDICATOR_SELECTION_VERSION: 2;
 export const BRIEF_INDICATOR_IDS: string[];
-export function normalizeBriefIndicators(value: unknown): string[];
+export function normalizeBriefIndicators(value: unknown, selectionVersion?: number): string[];

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, migrateBriefLayout, normalizeBriefIndicators } from "../server/brief-layout.mjs";
+import { BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, BRIEF_INDICATOR_SELECTION_VERSION, migrateBriefLayout, normalizeBriefIndicators } from "../server/brief-layout.mjs";
 
 test("Brief ancien : fusion des textes sans mutation de la source", () => {
   const before = { attack: ["A"], midfield: ["B"], defense: ["C"], coach: { tactic: "inchangé" }, mercato: "inchangé" };
@@ -50,7 +50,7 @@ test("Brief absent : SST et captures restent vides", () => {
 
 test("Brief : les deux tonnages sont visibles par défaut", () => {
   assert.deepEqual(BRIEF_INDICATOR_IDS, [
-    "performance", "injuries", "tonnage-distribution", "tonnage-expedition",
+    "performance", "injuries", "accident-free-days", "tonnage-distribution", "tonnage-expedition",
     "positions", "arrival", "departure", "destination", "temperature",
   ]);
   assert.deepEqual(normalizeBriefIndicators(undefined), BRIEF_INDICATOR_IDS);
@@ -69,4 +69,27 @@ test("Brief : compatibilité avec l'ancien identifiant tonnage", () => {
   assert.deepEqual(normalizeBriefIndicators(["tonnage", "positions"]), ["tonnage-distribution", "tonnage-expedition", "positions"]);
   assert.deepEqual(normalizeBriefIndicators(["tonnage", "tonnage-expedition", "arrival"]), ["tonnage-distribution", "tonnage-expedition", "arrival"]);
   assert.deepEqual(normalizeBriefIndicators(["arrival", "positions"]), ["positions", "arrival"]);
+});
+
+test("AT : une ancienne configuration conserve ses choix et affiche la nouvelle vignette par défaut", () => {
+  const historical = ["performance", "tonnage-expedition", "positions"];
+  const copy = [...historical];
+  assert.equal(BRIEF_INDICATOR_SELECTION_VERSION, 2);
+  assert.deepEqual(normalizeBriefIndicators(historical, 1), ["performance", "accident-free-days", "tonnage-expedition", "positions"]);
+  assert.deepEqual(historical, copy, "Migration sans mutation des anciennes préférences");
+  assert.deepEqual(normalizeBriefIndicators(["tonnage", "positions"], 1), [
+    "accident-free-days", "tonnage-distribution", "tonnage-expedition", "positions",
+  ]);
+});
+
+test("AT : une sélection versionnée peut masquer la vignette durablement", () => {
+  const withoutAT = ["performance", "positions"];
+  assert.deepEqual(normalizeBriefIndicators(withoutAT, BRIEF_INDICATOR_SELECTION_VERSION), withoutAT);
+  assert.deepEqual(normalizeBriefIndicators(withoutAT), withoutAT, "Le formulaire ne réactive pas une case décochée");
+  assert.deepEqual(normalizeBriefIndicators([...withoutAT, "accident-free-days"], BRIEF_INDICATOR_SELECTION_VERSION), [
+    "performance", "accident-free-days", "positions",
+  ]);
+  assert.deepEqual(normalizeBriefIndicators(normalizeBriefIndicators(withoutAT, 1), BRIEF_INDICATOR_SELECTION_VERSION), [
+    "performance", "accident-free-days", "positions",
+  ], "Après migration, l'affichage devient idempotent");
 });

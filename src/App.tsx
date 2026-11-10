@@ -5,7 +5,7 @@ import { formatKpiDuration } from "./kpi-duration";
 import { isKpiGoalConceded } from "./kpi-goal-status";
 import { pdfSourceLabel } from "./pdf-source";
 import { qualificationReasons } from "./qualification-reasons";
-import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, migrateBriefLayout, normalizeBriefIndicators } from "../server/brief-layout.mjs";
+import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, BRIEF_INDICATOR_SELECTION_VERSION, migrateBriefLayout, normalizeBriefIndicators } from "../server/brief-layout.mjs";
 import {
   AlertTriangle,
   Award,
@@ -76,6 +76,7 @@ type CauseriePlan = {
   mercatoProfiles: MercatoProfiles;
   redCards: string;
   visibleIndicators: string[];
+  visibleIndicatorsVersion: number;
   coach: {
     tactic: string;
     priority: string;
@@ -92,6 +93,7 @@ type MatchKpiCopy = {
 const BRIEF_INDICATOR_OPTIONS: ReadonlyArray<readonly [string, string]> = [
   ["performance", "Performance d'équipe"],
   ["injuries", "Blessures A.T"],
+  ["accident-free-days", "Jours sans accident du travail"],
   ["tonnage-distribution", "Tonnage Distribution"],
   ["tonnage-expedition", "Tonnage Expédition"],
   ["positions", "Positions"],
@@ -1676,7 +1678,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
           {session.agency.canImport && (indicatorSettingsOpen || indicatorSettingsFeedback) && (
             <div className="match-indicator-settings">
               {indicatorSettingsOpen && (
-                <div id="match-indicator-settings-panel" className="match-indicator-settings-panel" role="group" aria-label="Personnalisation des neuf cartes du carrousel">
+                <div id="match-indicator-settings-panel" className="match-indicator-settings-panel" role="group" aria-label="Personnalisation des dix cartes du carrousel">
                   <p>Choisis les cartes à afficher dans « Le collectif en chiffres ». Les quatre KPI du score restent inchangés.</p>
                   <div className="match-indicator-settings-options">
                     {BRIEF_INDICATOR_OPTIONS.map(([id, label]) => (
@@ -5037,6 +5039,7 @@ function buildDefaultCauseriePlan(snapshot: Snapshot): CauseriePlan {
     mercatoProfiles: {},
     redCards: "",
     visibleIndicators: [...BRIEF_INDICATOR_IDS],
+    visibleIndicatorsVersion: BRIEF_INDICATOR_SELECTION_VERSION,
     coach: {
       tactic: action.title,
       priority: priority || action.detail,
@@ -5065,6 +5068,7 @@ function buildEmptyCauseriePlan(): CauseriePlan {
     mercatoProfiles: {},
     redCards: "",
     visibleIndicators: [...BRIEF_INDICATOR_IDS],
+    visibleIndicatorsVersion: BRIEF_INDICATOR_SELECTION_VERSION,
     coach: {
       tactic: "",
       priority: "",
@@ -5099,7 +5103,8 @@ function normalizeCauseriePlan(plan: Partial<CauseriePlan> | null | undefined): 
     mercato,
     mercatoProfiles: normalizeMercatoProfiles(input.mercatoProfiles, mercato),
     redCards: text(input.redCards),
-    visibleIndicators: normalizeBriefIndicators(input.visibleIndicators),
+    visibleIndicators: normalizeBriefIndicators(input.visibleIndicators, input.visibleIndicatorsVersion ?? 1),
+    visibleIndicatorsVersion: BRIEF_INDICATOR_SELECTION_VERSION,
     coach: {
       tactic: text(input.coach?.tactic),
       priority: text(input.coach?.priority),
