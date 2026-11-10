@@ -271,11 +271,24 @@ app.put("/api/agencies/:agencyCode/export/profile", requireAgency, async (req, r
       if (req.body?.expectedRevision !== current.profileRevision) {
         throw new MatchExportError(409, "Le profil PDF a été modifié ailleurs. Recharge la configuration.");
       }
-      if (profile.dailyBrief.matchDate) {
-        const latest = await readLatestSnapshot(req.agency.code);
-        if (latest?.match?.date !== profile.dailyBrief.matchDate) {
-          throw new MatchExportError(409, "Le MATCH a changé. Actualise le briefing PDF.");
-        }
+      const latest = await readLatestSnapshot(req.agency.code);
+      if (!latest?.match?.date) {
+        throw new MatchExportError(409, "Aucun MATCH actif pour personnaliser le PDF.");
+      }
+      if (profile.dailyBrief.matchDate && latest.match.date !== profile.dailyBrief.matchDate) {
+        throw new MatchExportError(409, "Le MATCH a changé. Actualise le briefing PDF.");
+      }
+      const currentBrief = await readCauseriePlan(req.agency.code, latest.match.date);
+      const availableIds = normalizeBriefIndicators(
+        currentBrief?.visibleIndicators,
+        currentBrief?.visibleIndicatorsVersion ?? 1,
+      );
+      if (profile.indicatorIds.some(id => !availableIds.includes(id))) {
+        throw new MatchExportError(400, "Certains KPI sont masqués dans le MATCH. Actualise la sélection PDF.");
+      }
+      const minimum = Math.min(4, availableIds.length);
+      if (profile.indicatorIds.length < minimum) {
+        throw new MatchExportError(400, `Sélectionne au moins ${minimum} KPI complémentaires parmi ceux visibles dans le MATCH.`);
       }
       const file = path.join(dataDir, sanitizeSegment(req.agency.code), "pdf-profile.json");
       await writeJsonAtomic(file, profile);

@@ -3,8 +3,8 @@
 ## Objectif
 Le MATCH reste complet dans l'application. Le téléchargement produit une synthèse **deux pages A4 paysage**, dédiée au briefing papier des filiales sans écran.
 
-- Page 1 — score du MATCH, quatre indicateurs sportifs, 0 à 4 KPI complémentaires, un graphique opérationnel.
-- Page 2 — sécurité, priorités, consignes Attaque/Milieu/Défense et arbitrages.
+- Page 1 — score du MATCH, quatre indicateurs sportifs, 4 à 6 KPI complémentaires (ou tous les KPI visibles si moins de 4 sont actifs), un graphique opérationnel.
+- Page 2 — sécurité, Service client, Expédition / Ramasse & Emballage, SST, priorités et arbitrages.
 - Aucun tableau Excel, annexe 106J, capture historique ou carrousel multipage n'est exporté automatiquement.
 
 ## Sources et parité métier
@@ -27,7 +27,7 @@ GET/PUT /api/agencies/:agencyCode/export/profile est protégé par requireAgency
 - stockage dans STEF_DATA_DIR/<agence>/pdf-profile.json ;
 - pas de stockage du PDF généré sur Render.
 
-Ce profil contient 0 à 4 KPI complémentaires (parmi les 10 identifiants supportés), l'ID du graphique prioritaire et six synthèses facultatives, associées à la **date du MATCH**. Les textes des autres dates sont ignorés dans le PDF. La configuration ne modifie pas le carrousel visible ni la causerie d'origine. Les KPI masqués dans le MATCH sont retirés du PDF au moment de l'export.
+Ce profil contient 4 à 6 KPI complémentaires (parmi les 10 identifiants supportés), l'ID du graphique prioritaire et six synthèses facultatives, associées à la **date du MATCH**. Les textes des autres dates sont ignorés dans le PDF. La configuration ne modifie pas le carrousel visible ni la causerie d'origine. Les KPI masqués dans le MATCH sont retirés du PDF au moment de l'export.
 
 En cas de modification du profil ou de la causerie entre affichage et export, une erreur 409 force un rechargement. En cas de texte obligatoire trop long pour la deuxième page, une erreur 422 demande une synthèse : ne jamais imprimer un troisième feuillet ni couper le texte critique.
 
@@ -35,7 +35,7 @@ En cas de modification du profil ou de la causerie entre affichage et export, un
 
 ## Recette avant toute fusion
 - Vérifier les quatre ligues et au moins deux agences isolées (058/059 synthétiques).
-- Tester 0/1/4 KPI, les cinq graphiques, les indicateurs masqués et les valeurs absentes.
+- Tester 2 (cas exceptionnel), 4/5/6 KPI, les cinq graphiques, les indicateurs masqués et les valeurs absentes.
 - Tester la conservation des sélections, le blocage des profils périmés et les droits.
 - Vérifier les PDF réels avec pdf-parse : 2 pages, texte, identité et absence de mélange.
 - Inspecter visuellement les deux pages de chaque PDF synthétique (workflow lot-e-pdf-audit) : chevauchements, lisibilité et contraste imprimé.

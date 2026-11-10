@@ -60,7 +60,9 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
       const causeriePath = path.join(causeriesDir, built.snapshot.match.date + ".json");
       await fs.writeFile(causeriePath, JSON.stringify({
         briefLayoutVersion: 2, visibleIndicatorsVersion: 2,
-        visibleIndicators: ["positions", "accident-free-days"],
+        visibleIndicators: code === "059"
+          ? ["positions", "accident-free-days", "performance", "injuries", "arrival", "departure"]
+          : ["positions", "accident-free-days"],
         team: "EQUIPE-" + code, manager: "RESPONSABLE-" + code,
         attack: ["CONSIGNE-ATTAQUE-" + code], midfield: ["CONSIGNE-MILIEU-" + code],
         defense: ["CONSIGNE-DEFENSE-" + code],
@@ -129,7 +131,7 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
     const state058 = await original.json();
     assert.deepEqual(state058.profile.indicatorIds.length, 4);
     const custom = { ...state058.profile,
-      indicatorIds: ["positions"], chartId: "loading",
+      indicatorIds: ["positions", "accident-free-days"], chartId: "loading",
       dailyBrief: { matchDate: snapshots["058"].match.date, safety: "",
         priorities: "PRIORITE-PDF-058", attack: "", midfield: "", defense: "", decisions: "" },
     };
@@ -146,6 +148,19 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
     })).json();
     assert.equal(otherProfile.profileRevision, null);
     assert.notDeepEqual(savedState.profile.indicatorIds, otherProfile.profile.indicatorIds);
+    // With six visible KPIs, the API requires at least four and accepts six.
+    const sixKpis = ["positions", "accident-free-days", "performance", "injuries", "arrival", "departure"];
+    const edit059 = indicatorIds => fetch(profileUri("059"), {
+      method: "PUT", headers: { "x-access-code": "SECRET-059", "Content-Type": "application/json" },
+      body: JSON.stringify({ profile: { ...otherProfile.profile, indicatorIds }, expectedRevision: otherProfile.profileRevision }),
+    });
+    assert.equal((await edit059(sixKpis.slice(0, 3))).status, 400, "Fewer than 4 must be rejected when 6 are visible");
+    assert.equal((await edit059([...sixKpis.slice(0, 3), "temperature"])).status, 400, "Hidden KPI must be rejected");
+    const acceptedSix = await edit059(sixKpis);
+    assert.equal(acceptedSix.status, 200, "Six visible KPI should be accepted");
+    const state059 = await acceptedSix.json();
+    pdfProfileRevisions["059"] = state059.profileRevision;
+    assert.deepEqual(state059.profile.indicatorIds, sixKpis);
     const staleProfile = new URLSearchParams(query("058"));
     staleProfile.set("pdfProfileRevision", "");
     assert.equal((await fetch(base + "/api/agencies/058/export/match.pdf?" + staleProfile,
@@ -168,6 +183,7 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
       assert.equal(parsed.numpages, 2);
       assert.match(parsed.text, new RegExp("AGENCE-" + code));
       if (code === "058") assert.match(parsed.text, /PRIORITE-PDF-058/);
+      if (code === "059") assert.match(parsed.text, /PONCTUALITE DEPART/i);
       assert.match(parsed.text, new RegExp("EQUIPE-" + code));
       assert.match(parsed.text, new RegExp("CONSIGNE-ATTAQUE-" + code));
       assert.match(parsed.text, new RegExp("PRIORITE-" + code));

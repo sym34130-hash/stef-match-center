@@ -111,7 +111,7 @@ test("Lot E: direct PDF is valid, includes selected league/KPIs/brief and isolat
   assert.ok(!pdf058.equals(pdf059), "PDFs of different agencies must be distinct");
 });
 
-test("Lot E V2: agency profile has at most 4 known KPI and a supported chart", () => {
+test("Lot E V3: agency profile supports 4 to 6 known KPI and a chart", () => {
   const profile = normalizePdfProfile({
     indicatorIds: ["positions", "arrival", "temperature", "performance"],
     chartId: "centers",
@@ -120,15 +120,16 @@ test("Lot E V2: agency profile has at most 4 known KPI and a supported chart", (
   assert.equal(profile.indicatorIds.length, 4);
   assert.equal(profile.dailyBrief.priorities, "Sécuriser les départs");
   assert.throws(() => normalizePdfProfile({
-    indicatorIds: ["positions", "arrival", "temperature", "performance", "injuries"],
-  }, { strict: true }), /4 KPI/);
+    indicatorIds: ["positions", "arrival", "temperature", "performance", "injuries", "departure", "destination"],
+  }, { strict: true }), /6 KPI/);
+  assert.equal(normalizePdfProfile({ indicatorIds: ["positions", "arrival", "temperature", "performance", "injuries", "departure"] }, { strict: true }).indicatorIds.length, 6);
   assert.throws(() => normalizePdfProfile({ chartId: "unknown" }), /inconnu/);
   const active = effectivePdfProfile(profile, ["positions", "performance"], date);
   assert.deepEqual(active.indicatorIds, ["positions", "performance"]);
   assert.equal(effectivePdfProfile(profile, ["positions"], "2026-11-11").dailyBrief.priorities, "");
 });
 
-test("Lot E V2: all 5 chart choices are supported without generating extra pages", async () => {
+test("Lot E V3: all 5 chart choices are supported without generating extra pages", async () => {
   for (const chartId of PDF_CHART_IDS) {
     const model = build("058", {
       pdfProfile: { indicatorIds: ["positions"], chartId },
@@ -151,4 +152,24 @@ test("Lot E V2: an excessive brief must fail instead of silently spilling or bei
     dailyBrief: { matchDate: date, attack: "Vérifier les quais avant le départ." },
   };
   assert.equal((renderMatchPdf(model).toString("latin1").match(/\/Type \/Page \/Parent/g) ?? []).length, 2);
+});
+
+test("Lot E V3: 4, 5 or 6 complementary KPIs do not overlap the chart or create a third page", async () => {
+  const ids = ["performance", "injuries", "accident-free-days", "positions", "arrival", "departure"];
+  for (const count of [4, 5, 6]) {
+    const selected = ids.slice(0, count);
+    const model = build("058", {
+      causerie: { visibleIndicators: ids, visibleIndicatorsVersion: 2, attack: ["Message service client"], midfield: ["Départs prioritaires"], defense: ["Vigilance SST"] },
+      pdfProfile: { indicatorIds: selected, chartId: "passes-hourly" },
+    });
+    const parsed = await pdfParse(renderMatchPdf(model));
+    assert.equal(parsed.numpages, 2, count + " KPI");
+    assert.match(parsed.text, /SERVICE CLIENT/i);
+    assert.match(parsed.text, /EXPÉDITION \/ RAMASSE & EMBALLAGE/i);
+    assert.match(parsed.text, /SST/);
+    assert.match(parsed.text, /Message service client/);
+    assert.match(parsed.text, /Vigilance SST/);
+    if (count === 6) assert.match(parsed.text, /Ponctualite depart/);
+    if (count === 4) assert.doesNotMatch(parsed.text, /Ponctualite depart/);
+  }
 });
