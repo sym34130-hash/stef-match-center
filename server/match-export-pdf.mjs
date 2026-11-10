@@ -11,7 +11,7 @@ const C = {
 };
 const rgb = value => value.map(number => number.toFixed(3)).join(" ");
 const trim = (value, limit = 160) => String(value ?? "").replace(/[\r\n\t]/g, " ").trim().slice(0, limit);
-const ascii = value => trim(value, 2000).replace(/[\u2010-\u2015]/g, "-").replace(/[\u2018\u2019]/g, "'")
+const ascii = value => String(value ?? "").replace(/[\r\n\t]/g, " ").slice(0, 12000).replace(/[\u2010-\u2015]/g, "-").replace(/[\u2018\u2019]/g, "'")
   .replace(/[\u201c\u201d]/g, '"').replace(/\u2026/g, "...").replace(/\u0153/g, "oe")
   .replace(/\u0152/g, "OE").replace(/\u20ac/g, "EUR").replace(/[^\u0020-\u00ff]/g, "?");
 const escape = value => ascii(value).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
@@ -76,10 +76,22 @@ class Page {
   card(x, y, w, h, label, value, detail = "", accent = C.aqua) {
     this.box(x, y, w, h, C.panel);
     this.box(x, y + h - 3, w, 3, accent);
-    this.text(x + 13, y + h - 26, 10, label.toUpperCase().slice(0, 45), accent, true);
-    const shown = trim(value, 42);
-    this.text(x + 13, y + h - 72, shown.length > 18 ? 18 : 32, shown, C.white, true);
-    if (detail) this.text(x + 13, y + 13, 8.5, trim(detail, Math.max(16, Math.floor(w / 5.4))), C.muted);
+    const labelText = ascii(label).toUpperCase();
+    const labelSize = clamp((w - 25) / Math.max(1, labelText.length * 0.56), 7.5, 10);
+    this.text(x + 13, y + h - 25, labelSize, labelText, accent, true);
+    const shown = ascii(value || "Indisponible");
+    // Up to three lines, fitted into the available space; card values are not
+    // silently truncated to 42 characters as in the initial prototype.
+    const fontSize = shown.length > 57 ? 11 : shown.length > 25 ? 15 : 27;
+    const charCount = Math.max(10, Math.floor((w - 26) / (fontSize * .57)));
+    const lines = wrap(shown, charCount);
+    const maxLines = Math.min(lines.length, 3);
+    for (let i = 0; i < maxLines; i++) {
+      this.text(x + 13, y + h - 66 - i * (fontSize + 5), fontSize, lines[i], C.white, true);
+    }
+    if (lines.length > maxLines) this.text(x + 13, y + 27, 8, "(valeur longue : consultez le brief)", C.muted);
+    if (detail && lines.length <= 2) this.text(x + 13, y + 12, 8.5,
+      trim(detail, Math.max(16, Math.floor(w / 5.4))), C.muted);
   }
   image(x, y, w, h, data) {
     const dims = jpegDimensions(data);
@@ -162,11 +174,22 @@ function listing(doc, title, items, options = {}) {
   const step = options.step ?? 23;
   for (const [label, raw] of items) {
     const lines = wrap(raw ?? "-", options.chars ?? 105);
-    if (y < 70 + lines.length * 14) { p = doc.add(title + " / suite"); y = 475; }
-    p.box(29, y - 7, 784, Math.max(step, 18 + (lines.length - 1) * 14), C.panel);
-    p.text(40, y + 5, 9.5, trim(label, 34), C.aqua, true);
-    lines.forEach((line, index) => p.text(205, y + 5 - index * 14, 9.5, line, C.text));
-    y -= Math.max(step + 5, 18 + lines.length * 14 + 5);
+    let offset = 0;
+    // Long team instructions may be 3,000+ characters. Break a single entry
+    // over consecutive pages, rather than draw below the printable area.
+    while (offset < lines.length) {
+      if (y < 95) { p = doc.add(title + " / suite"); y = 475; }
+      const available = Math.max(1, 1 + Math.floor((y - 67) / 14));
+      const chunk = lines.slice(offset, offset + available);
+      const height = Math.max(step, 26 + (chunk.length - 1) * 14);
+      const bottom = y + 15 - height;
+      if (bottom < 51) { p = doc.add(title + " / suite"); y = 475; continue; }
+      p.box(29, bottom, 784, height, C.panel);
+      p.text(40, y, 9.5, trim(label, 28) + (offset ? " / suite" : ""), C.aqua, true);
+      chunk.forEach((line, index) => p.text(205, y - index * 14, 9.5, line, C.text));
+      offset += chunk.length;
+      y -= height + 7;
+    }
   }
   if (!items.length) p.text(41, 452, 14, "Aucune donnée disponible sur cette période.", C.muted);
 }
