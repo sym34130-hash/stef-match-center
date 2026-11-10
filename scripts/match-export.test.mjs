@@ -440,3 +440,52 @@ test("Lot E V6: all five charts and four league variations keep score and data o
     }
   }
 });
+
+test("Lot E V7: all six fully filled brief fields fit two pages without losing final text", async () => {
+  const atLimit = (token, length) => {
+    const last = " FIN-VALIDATION";
+    return (token + " ").repeat(Math.ceil(length / (token.length + 1))).slice(0, length - last.length).trimEnd() + last;
+  };
+  const longBrief = {
+    matchDate: date,
+    safety: atLimit("Consigne sécurité", 260),
+    priorities: atLimit("Priorité quai", 260),
+    attack: atLimit("Information service client", 240),
+    midfield: atLimit("Expédition ramasse", 240),
+    defense: atLimit("Vigilance SST", 240),
+    decisions: atLimit("Arbitrage exploitation", 330),
+  };
+  for (const count of [4, 6]) {
+    for (const chartId of PDF_CHART_IDS) {
+      const visible = ["performance", "positions", "arrival", "injuries", "departure", "temperature"];
+      const model = build("058", {
+        causerie: {
+          visibleIndicators: visible, visibleIndicatorsVersion: 2,
+          attack: [], midfield: [], defense: [], redCards: "Point de vigilance",
+          coach: { priority: "", tactic: "", arbitration: "" },
+        },
+        pdfProfile: { indicatorIds: visible.slice(0, count), chartId, dailyBrief: longBrief },
+      });
+      const pdf = await pdfParse(renderMatchPdf(model));
+      assert.equal(pdf.numpages, 2, "Two-page output, " + count + " KPI, " + chartId);
+      assert.equal((pdf.text.match(/FIN-VALIDATION/g) || []).length, 6,
+        "All six field endings must appear in printed output");
+      assert.match(pdf.text, /SERVICE CLIENT/i);
+      assert.match(pdf.text, /SST/i);
+    }
+  }
+});
+
+test("Lot E V7: excessively long unedited source brief refuses explicitly, not silently cropped", () => {
+  const model = build("058", {
+    causerie: {
+      visibleIndicators: ["performance", "positions", "arrival", "injuries"],
+      visibleIndicatorsVersion: 2,
+      attack: ["Détail terrain ".repeat(90)], midfield: [], defense: [],
+      coach: { priority: "", tactic: "", arbitration: "" },
+    },
+  });
+  assert.throws(() => renderMatchPdf(model), error =>
+    error instanceof MatchExportError && error.status === 422
+    && /Service client/.test(error.message) && /lignes/.test(error.message));
+});

@@ -27,6 +27,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: lot-e-pdf-synthetic
-          path: artifacts/lot-e-audit/*.pdf
+          path: |
+            artifacts/lot-e-audit/*.pdf
+            artifacts/lot-e-audit/certification-graphes.json
           if-no-files-found: error
           retention-days: 7

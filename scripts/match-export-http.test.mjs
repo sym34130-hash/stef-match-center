@@ -206,6 +206,42 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
     assert.match(orPdf.text, /LDC/);
     assert.match(orPdf.text, /CHG <= 150 s\/poz/);
     assert.match(orPdf.text, /CONSIGNE-ATTAQUE-058/);
+    // Regression: the exact documented form maxima must not prevent download
+    // after a successful save. This uses the new server profile revision.
+    const fitted = (word, max) => {
+      const suffix = " FIN-HTTP-CERTIF";
+      return (word + " ").repeat(Math.ceil(max / (word.length + 1))).slice(0, max - suffix.length).trimEnd() + suffix;
+    };
+    const currentState = await (await fetch(profileUri("058"),
+      { headers: { "x-access-code": "SECRET-058" } })).json();
+    const fullBrief = {
+      matchDate: snapshots["058"].match.date,
+      safety: fitted("Sécurité", 260),
+      priorities: fitted("Arbitrage des priorités", 260),
+      attack: fitted("Service client", 240),
+      midfield: fitted("Expédition ramasse", 240),
+      defense: fitted("Consigne SST", 240),
+      decisions: fitted("Décisions", 330),
+    };
+    const stored = await fetch(profileUri("058"), {
+      method: "PUT",
+      headers: { "x-access-code": "SECRET-058", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        profile: { ...currentState.profile, dailyBrief: fullBrief },
+        expectedRevision: currentState.profileRevision,
+      }),
+    });
+    assert.equal(stored.status, 200, "All six maximum-length fields must be saveable");
+    const storedState = await stored.json();
+    pdfProfileRevisions["058"] = storedState.profileRevision;
+    const fullExport = await fetch(uri("058"), { headers: { "x-access-code": "SECRET-058" } });
+    assert.equal(fullExport.status, 200, "A fully completed form must produce a PDF: "
+      + (fullExport.ok ? "" : await fullExport.text()));
+    const fullPdf = await pdfParse(Buffer.from(await fullExport.arrayBuffer()));
+    assert.equal(fullPdf.numpages, 2);
+    assert.equal((fullPdf.text.match(/FIN-HTTP-CERTIF/g) ?? []).length, 6,
+      "Every completed section must be present, not silently cropped");
+
   } finally {
     if (server && server.exitCode === null && server.signalCode === null) {
       const stopped = once(server, "close");
