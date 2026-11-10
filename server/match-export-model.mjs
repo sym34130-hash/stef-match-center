@@ -76,6 +76,7 @@ export function matchExportModel({
     yellowCardAudit: snapshot.yellowCardAudit ?? null,
     dailyIndicators: snapshot.dailyIndicators ?? null,
     hourlyPerformance: snapshot.hourlyPerformance ?? [],
+    unloadingHourlyAnalysis: snapshot.unloadingHourlyAnalysis ?? null,
     loadingQuality: snapshot.loadingQuality ?? null,
     unloadingQuality: snapshot.unloadingQuality ?? null,
     unloadingDuelQuality: snapshot.unloadingDuelQuality ?? null,
@@ -96,6 +97,11 @@ export function matchExportModel({
       coach: causerie?.coach ?? {},
       mercato: causerie?.mercato ?? "",
       redCards: causerie?.redCards ?? "",
+      attachments: {
+        attack: Array.isArray(causerie?.attachments?.attack) ? causerie.attachments.attack : [],
+        midfield: Array.isArray(causerie?.attachments?.midfield) ? causerie.attachments.midfield : [],
+        defense: Array.isArray(causerie?.attachments?.defense) ? causerie.attachments.defense : [],
+      },
       attachmentCounts: {
         attack: causerie?.attachments?.attack?.length ?? 0,
         midfield: causerie?.attachments?.midfield?.length ?? 0,
