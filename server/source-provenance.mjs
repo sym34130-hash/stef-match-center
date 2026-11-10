@@ -24,7 +24,7 @@ export function parisDay(iso) {
   return `${p.year}-${p.month}-${p.day}`;
 }
 
-function normalizedAgencyId(value) {
+export function normalizedAgencyId(value) {
   return String(value ?? "").trim().toUpperCase().replace(/^0+(?=[0-9A-Z])/, "");
 }
 
@@ -35,7 +35,7 @@ export function pdfAssociation(pdf, snapshot) {
   if (reportedAgency && targetAgency && reportedAgency !== targetAgency) return {
     status: "mismatched-agency", referenceDate: pdf?.referenceDate ?? null,
     reportedAgency: pdf.agencyCode, targetAgency: snapshot.agency.code,
-    message: `PDF 106J de l'agence ${pdf.agencyCode} (date : ${pdf.referenceDate ?? "non précisée"}), différente de l'espace ${snapshot.agency.code}. Import autorisé : les chiffres affichés proviennent de cette autre agence.`,
+    message: `PDF 106J de l'agence ${pdf.agencyCode} (date : ${pdf.referenceDate ?? "non précisée"}), différente de l'espace ${snapshot.agency.code}. Import refusé : utilise le 106J correspondant à l'agence du MATCH.`,
   };
   const night = snapshot?.zonageDiagnostic?.night ?? snapshot?.anomalySummary?.night;
   const start = night?.startDate ?? parisDay(snapshot?.match?.firstOperation);
@@ -51,8 +51,8 @@ export function pdfAssociation(pdf, snapshot) {
   return { status: "matched", referenceDate: pdf.referenceDate, message: "PDF 106J associé à la période du match." };
 }
 
-// All readable 106J reports can be attached to the selected space; mismatches remain warnings.
-// Ownership of the agency workspace and the Excel confirmation rules do not change.
+// A different *date* is permitted and explicitly displayed. A different
+// *agency* is never allowed to populate another agency’s tonnage/KPIs.
 export function canUsePdfIndicators(association) {
-  return ["matched", "mismatched", "unverified", "mismatched-agency"].includes(association?.status);
+  return ["matched", "mismatched", "unverified"].includes(association?.status);
 }

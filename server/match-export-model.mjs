@@ -1,4 +1,5 @@
 import { normalizeBriefIndicators } from "./brief-layout.mjs";
+import { normalizedAgencyId } from "./source-provenance.mjs";
 
 const LEAGUE_LABELS = Object.freeze({
   bronze: "LIGUE 2",
@@ -94,8 +95,9 @@ export function matchExportModel({
   const snapshotAgency = String(snapshot.agency?.code ?? "").trim().toUpperCase();
   const detectedAgency = String(snapshot.agency?.detectedCode ?? "").trim().toUpperCase();
   const pdfAgency = String(snapshot.dailyIndicators?.agencyCode ?? "").trim().toUpperCase();
-  if (snapshotAgency !== agencyCode || (detectedAgency && detectedAgency !== agencyCode)
-      || (pdfAgency && pdfAgency !== agencyCode)) {
+  if (normalizedAgencyId(snapshotAgency) !== normalizedAgencyId(agencyCode)
+      || (detectedAgency && normalizedAgencyId(detectedAgency) !== normalizedAgencyId(agencyCode))
+      || (pdfAgency && normalizedAgencyId(pdfAgency) !== normalizedAgencyId(agencyCode))) {
     throw new MatchExportError(409, "Export bloqué : les sources ne correspondent pas à cette agence.");
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(expectedMatchDate ?? "")

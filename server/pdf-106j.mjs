@@ -34,6 +34,10 @@ export function parse106jText(rawText, sourceName, options = {}) {
   if (tonnage !== null) indicators.expedition.tonnage = tonnage;
   const distributionTonnage = findActivityTonnage(text, "distribution");
   if (distributionTonnage !== null) indicators.distribution.tonnage = distributionTonnage;
+  // The official Total line can differ by 1 t from the sum of individually
+  // rounded Distribution and Expédition cells. Never recompute this field.
+  const totalTonnage = findActivityTonnage(text, "total");
+  if (totalTonnage !== null) indicators.total = { tonnage: totalTonnage };
 
   if (Object.keys(indicators.punctuality).length === 0 && Object.keys(indicators.expedition).length === 0 && Object.keys(indicators.distribution).length === 0) {
     throw new Error("Le PDF ne contient pas les indicateurs attendus du rapport SIE.106J.");

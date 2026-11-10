@@ -278,6 +278,8 @@ export type Snapshot = {
     punctualityTargets?: Partial<Record<"arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn", number>>;
     expedition: { tonnage?: number };
     distribution?: { tonnage?: number };
+    /** Official 106J Total line; may differ from sum of rounded section tonnages. */
+    total?: { tonnage?: number };
   } | null;
   summary: {
     operations: number;

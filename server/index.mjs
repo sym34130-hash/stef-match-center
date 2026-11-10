@@ -1493,6 +1493,13 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
       }
     }
 
+    // Protect the UI as well as the export against legacy imports made before
+    // agency-source checks were strict. Preserve the stored file for recovery,
+    // but never present another agency's 106J KPIs as this agency's own.
+    if (snapshot.dailyIndicators && pdfAssociation(snapshot.dailyIndicators,
+      { ...snapshot, agency: { ...snapshot.agency, code: agencyCode } }).status === "mismatched-agency") {
+      snapshot = { ...snapshot, dailyIndicators: null };
+    }
     if (agency) {
       snapshot.agency.code = agency.code;
       snapshot.agency.name = agency.name;

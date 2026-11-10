@@ -50,3 +50,37 @@ test("106J: distribution et expedition restent deux series distinctes", () => {
   assert.deepEqual(expeditionOnly.expedition, { tonnage: 478 });
   assert.deepEqual(expeditionOnly.distribution, {});
 });
+
+test("106J: les trois tonnages proviennent de lignes distinctes, sans addition des valeurs arrondies", () => {
+  const source = `SIE.106J - Indicateurs journaliers agence 58
+  Date de référence de calcul : 11 septembre 2026
+  Site : STEF Transport AGEN [0058]
+  1-Activité Groupage Site Tendance
+  Distribution Tonnage T 255 +11% -1% +4%
+  Positions NB 739 +7%
+  Expédition Tonnage T 478 +33% +11% +2%
+  Positions NB 1 477 +14%
+  Total Tonnage T 734 +22% +3% +3%
+  OT Tonnage T 20 -13%
+  Taux de ponctualité Destination % 62,00 % -35% 85,00 %`;
+  const parsed = parse106jText(source, "TEST-SYNTHETIQUE-106J.pdf");
+  assert.equal(parsed.agencyCode, "0058");
+  assert.equal(parsed.referenceDate, "11 septembre 2026");
+  assert.equal(parsed.distribution.tonnage, 255);
+  assert.equal(parsed.expedition.tonnage, 478);
+  assert.equal(parsed.total.tonnage, 734);
+  assert.notEqual(parsed.total.tonnage, parsed.distribution.tonnage + parsed.expedition.tonnage);
+  assert.equal(parsed.punctuality.destinationPunctuality, 62);
+  assert.equal(parsed.punctualityTargets.destinationPunctuality, 85);
+});
+
+test("106J: zéro, décimales et absence de ligne Total restent explicitement distingués", () => {
+  const zero = parse106jText("Distribution Tonnage T 0 +0% Expédition Tonnage T 0 +0% Total Tonnage T 0 +0%", "zero.pdf");
+  assert.equal(zero.total.tonnage, 0);
+  const precise = parse106jText("Distribution Tonnage T 1 255,55 +1% Expédition Tonnage T 2 478,25 +1% Total Tonnage T 3 733,8 +1%", "precision.pdf");
+  assert.equal(precise.distribution.tonnage, 1255.55);
+  assert.equal(precise.expedition.tonnage, 2478.25);
+  assert.equal(precise.total.tonnage, 3733.8);
+  const partial = parse106jText("Distribution Tonnage T 255 +1%", "partial.pdf");
+  assert.equal(partial.total, undefined);
+});

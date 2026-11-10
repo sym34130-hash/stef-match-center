@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as XLSX from "xlsx";
 import { buildSnapshotFromWorkbook } from "../server/match-engine.mjs";
+import { pdfAssociation, canUsePdfIndicators, normalizedAgencyId } from "../server/source-provenance.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const reference = await fs.readFile(path.join(root, "data/agencies/058/latest.xlsx"));
@@ -42,4 +43,15 @@ test("contrat Excel : format STABILISE réel partiel, sans faux zéro", { skip: 
   assert.equal(result.snapshot.summary.passRate, null);
   assert.equal(result.snapshot.operationalScore.indicators.loadingPercent, null);
   assert.deepEqual(result.snapshot.validation.importReadiness.unavailableKpis.map(item => item.id).sort(), ["loadingPercent", "passRate"]);
+});
+
+test("106J: code agence avec zeros initiaux normalisé, dates différentes toujours acceptées", () => {
+  const snapshot = { agency: { code: "058" }, match: { firstOperation: "2026-09-09T13:00:00Z", lastOperation: "2026-09-09T22:30:00Z" } };
+  const same = pdfAssociation({ agencyCode: "0058", referenceDate: "11 septembre 2026" }, snapshot);
+  assert.equal(normalizedAgencyId("0058"), normalizedAgencyId("058"));
+  assert.equal(same.status, "mismatched");
+  assert.equal(canUsePdfIndicators(same), true, "Different dates are allowed within the same agency");
+  const other = pdfAssociation({ agencyCode: "0059", referenceDate: "11 septembre 2026" }, snapshot);
+  assert.equal(other.status, "mismatched-agency");
+  assert.equal(canUsePdfIndicators(other), false, "Another agency cannot supply the displayed tonnage");
 });

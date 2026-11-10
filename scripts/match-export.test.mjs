@@ -372,3 +372,71 @@ test("Lot E V5: block charts when the score disagrees with canonical loading, un
     operationalScore: { ...root.operationalScore, goalsFor: 4, goalsAgainst: 0 },
   } }), 409);
 });
+
+test("Lot E V6: padded 106J agency code matches the authenticated agency without allowing another", async () => {
+  const padded = build("058", {
+    snapshot: { dailyIndicators: { agencyCode: "0058", referenceDate: "11 septembre 2026", expedition: { tonnage: 478 }, distribution: { tonnage: 255 }, total: { tonnage: 734 }, punctuality: {} } },
+  });
+  assert.equal(padded.dailyIndicators.agencyCode, "0058");
+  assert.equal((await pdfParse(renderMatchPdf(padded))).numpages, 2);
+  rejected(() => build("058", {
+    snapshot: { dailyIndicators: { agencyCode: "0059", expedition: { tonnage: 999 }, punctuality: {} } },
+  }), 409);
+});
+
+test("Lot E V6: source-dated tonnage cards print exact two-decimal values, never a rounded or summed total", async () => {
+  const model = build("058", {
+    snapshot: {
+      summary: { ...makeSnapshot("058").summary, positions: 1477 },
+      dailyIndicators: {
+        agencyCode: "0058", sourceName: "RAPPORT-106J.pdf", referenceDate: "11 septembre 2026",
+        distribution: { tonnage: 1255.55 }, expedition: { tonnage: 2478.25 }, total: { tonnage: 3733.8 },
+        punctuality: { destinationPunctuality: 62 },
+        punctualityTargets: { destinationPunctuality: 85 },
+      },
+    },
+    causerie: {
+      visibleIndicators: ["tonnage-distribution", "tonnage-expedition", "positions", "destination", "arrival", "departure"],
+      visibleIndicatorsVersion: 2, attack: [], midfield: [], defense: [],
+    },
+    pdfProfile: { indicatorIds: ["tonnage-distribution", "tonnage-expedition", "positions", "destination"], chartId: "centers" },
+  });
+  const pdf = await pdfParse(renderMatchPdf(model));
+  assert.equal(pdf.numpages, 2);
+  assert.match(pdf.text, /1 255,55 t/);
+  assert.match(pdf.text, /2 478,25 t/);
+  assert.match(pdf.text, /Total 3 733,8 t/);
+  assert.match(pdf.text, /11 septembre 2026/);
+  assert.match(pdf.text, /1 477/);
+  assert.match(pdf.text, /62 %/);
+  assert.match(pdf.text, /85 %/);
+  assert.doesNotMatch(pdf.text, /1\?255|2\?478|3\?733/);
+});
+
+test("Lot E V6: all five charts and four league variations keep score and data on two pages", async () => {
+  const ids = ["bronze", "argent", "or", "platine"];
+  const all = [
+    ...config, { id: "bronze", zonageMinutes: 35, loadingSeconds: 185, unloadingSeconds: 70, scoreTargetPercent: 45 },
+    { id: "platine", zonageMinutes: 20, loadingSeconds: 130, unloadingSeconds: 45, scoreTargetPercent: 70 },
+  ];
+  for (const id of ids) {
+    const lg = matchExportLeague(id, all);
+    for (const chartId of PDF_CHART_IDS) {
+      const model = build("058", {
+        league: lg,
+        snapshot: {
+          performanceCriteria: lg.criteria,
+          operationalScore: { status: "available", targetPercent: lg.criteria.scoreTargetPercent, indicators: {
+            passRate: 75, loadingPercent: 88, unloadingPercent: 80, possessionPercent: 49,
+          }, goalsFor: [75,88,80,49].filter(v => v > lg.criteria.scoreTargetPercent).length,
+          goalsAgainst: [75,88,80,49].filter(v => v <= lg.criteria.scoreTargetPercent).length },
+        },
+        pdfProfile: { indicatorIds: ["performance", "injuries", "accident-free-days", "arrival"], chartId },
+      });
+      const parsed = await pdfParse(renderMatchPdf(model));
+      assert.equal(parsed.numpages, 2, id + "/" + chartId);
+      assert.match(parsed.text, /Buts marqués|BUTS MARQUÉS/i);
+      assert.match(parsed.text, /Duels gagnés|DUELS GAGNÉS/i);
+    }
+  }
+});
