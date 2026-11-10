@@ -1,0 +1,32 @@
+name: Lot E PDF visual audit (synthetic only)
+on:
+  pull_request:
+    paths:
+      - 'server/match-export-*.mjs'
+      - 'scripts/match-export-audit.mjs'
+      - '.github/workflows/lot-e-pdf-audit.yml'
+  workflow_dispatch:
+jobs:
+  pdf-preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Produce synthetic PDF samples and assert all pages/data
+        run: node scripts/match-export-audit.mjs
+      - name: Upload synthetic PDFs for visual review
+        uses: actions/upload-artifact@v4
+        with:
+          name: lot-e-pdf-synthetic
+          path: artifacts/lot-e-audit/*.pdf
+          if-no-files-found: error
+          retention-days: 7
