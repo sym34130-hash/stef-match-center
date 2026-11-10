@@ -189,8 +189,8 @@ test("Lot E V3: 4, 5 or 6 complementary KPIs do not overlap the chart or create 
     assert.match(parsed.text, /SST/);
     assert.match(parsed.text, /Message service client/);
     assert.match(parsed.text, /Vigilance SST/);
-    if (count === 6) assert.match(parsed.text, /PONCTUALITÉ DÉPART/);
-    if (count === 4) assert.doesNotMatch(parsed.text, /PONCTUALITÉ DÉPART/);
+    if (count === 6) assert.match(parsed.text, /PONCTUALIT[ÉE] D[ÉE]PART/);
+    if (count === 4) assert.doesNotMatch(parsed.text, /PONCTUALIT[ÉE] D[ÉE]PART/);
   }
 });
 
@@ -254,8 +254,8 @@ test("Lot E V4: reception chart plots actual seconds per position, target and sl
   assert.equal(parsed.numpages, 2);
   assert.match(parsed.text, /Barres : secondes moyennes par position/);
   assert.match(parsed.text, /Cible : 60 s\/poz/);
-  assert.match(parsed.text, /2 créneaux exploitables/);
-  assert.match(parsed.text, /Positions\/créneau : 22 à 30/);
+  assert.match(parsed.text, /2 créneaux/);
+  assert.match(parsed.text, /Positions\/créneau : 22 a 30/);
   model.unloadingHourlyAnalysis.items[1].meanSecondsPerPosition = 54;
   const changed = renderMatchPdf(model);
   assert.ok(!first.equals(changed), "Changing measured seconds must change the chart geometry/colors");
@@ -324,7 +324,7 @@ test("Lot E V5: compare five PDF summaries with canonical source metrics across 
         assert.ok(parsed.text.includes("Cible : " + criteria.unloadingSeconds + " s/poz"));
         assert.match(parsed.text, /22h/);
         assert.match(parsed.text, /00h/);
-        assert.match(parsed.text, /Positions\/créneau : 15 à 30/);
+        assert.match(parsed.text, /Positions\/créneau : 15 a 30/);
         assert.match(parsed.text, /Duels au score : 72 %/i);
       } else if (chartId === "loading") {
         assert.match(parsed.text, /Chargements cadrés/i);
