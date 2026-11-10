@@ -156,8 +156,8 @@ test("Lot E V3: all 5 chart choices are supported without generating extra pages
     });
     const pdf = await pdfParse(renderMatchPdf(model));
     assert.equal(pdf.numpages, 2, chartId);
-    assert.match(pdf.text, /POSITIONS/);
-    assert.doesNotMatch(pdf.text, /Ponctualite arrivage|Blessures A.T/i);
+    assert.match(pdf.text, /JOURS SANS A.T/i, "V8: a hidden 'positions' KPI is not automatically re-enabled");
+    assert.doesNotMatch(pdf.text, /TONNAGE DISTRIBUTION/i);
   }
 });
 
