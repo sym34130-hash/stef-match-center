@@ -260,7 +260,7 @@ function indicatorCards(m) {
     injuries: { label: "Blessures A.T", value: m.manualInjuries === null ? "Non renseigne" : String(m.manualInjuries), detail: "Saisie manuelle du navigateur" },
     "accident-free-days": { label: "Jours sans A.T", value: Number.isFinite(m.safety.days) ? fmt(m.safety.days) : "Non renseigne", detail: m.safety.lastAccidentDate ? "Dernier A.T : " + m.safety.lastAccidentDate : "Date non renseignee" },
     "tonnage-distribution": { label: "Tonnage distribution", value: Number.isFinite(d?.distribution?.tonnage) ? fmtTonnage(d.distribution.tonnage) + " t" : "Indisponible",
-      detail: "106J " + (d?.referenceDate ?? "date inconnue") + " · Distribution" },
+      detail: "106J " + (d?.referenceDate ?? "date inconnue") + (Number.isFinite(d?.total?.tonnage) ? " · Total " + fmtTonnage(d.total.tonnage) + " t" : "") },
     "tonnage-expedition": { label: "Tonnage expédition", value: Number.isFinite(d?.expedition?.tonnage) ? fmtTonnage(d.expedition.tonnage) + " t" : "Indisponible",
       detail: "106J " + (d?.referenceDate ?? "date inconnue") + " · Expédition" },
     positions: { label: "Positions", value: fmt(m.summary?.positions), detail: "Excel · " + (m.match?.timeRangeLabel ?? "plage active") },
