@@ -14,6 +14,7 @@ import { isValidCalendarDate } from "./calendar-date.mjs";
 import { calculateAccidentFreeDays } from "./accident-free-days.mjs";
 import { MatchExportError, matchExportLeague, matchExportModel } from "./match-export-model.mjs";
 import { renderMatchPdf } from "./match-export-pdf.mjs";
+import { defaultPdfProfile, normalizePdfProfile } from "./match-pdf-profile.mjs";
 import { RECEPTION_EXCLUSION_VERSION, normalizeReceptionCode, normalizeReceptionExclusions, receptionClientKey } from "./reception-exclusions.mjs";
 import { authAttemptKey, boundedAuthText, createAuthAttemptLimiter, MAX_AGENCY_CODE_LENGTH, MAX_ACCESS_CODE_LENGTH } from "./auth-attempts.mjs";
 
@@ -240,6 +241,53 @@ app.get("/api/agencies/:agencyCode/snapshot", requireAgency, async (req, res) =>
   res.json({ snapshot });
 });
 
+// PDF presentation preferences are agency-scoped. The printable brief is
+// deliberately tied to its match date so yesterday's instructions never leak
+// into the following day's briefing.
+app.get("/api/agencies/:agencyCode/export/profile", requireAgency, async (req, res) => {
+  try {
+    const state = await withAgencyLock(req.agency.code, () => readPdfProfileState(req.agency.code));
+    res.set("Cache-Control", "no-store, max-age=0").json(state);
+  } catch (error) {
+    respondInternalError(res, `export:profile:get:${req.agency.code}`, error);
+  }
+});
+
+app.put("/api/agencies/:agencyCode/export/profile", requireAgency, async (req, res) => {
+  if (!req.agency.canImport) {
+    res.status(403).json({ message: "Cet accès permet seulement de consulter le briefing." });
+    return;
+  }
+  let profile;
+  try {
+    profile = normalizePdfProfile(req.body?.profile, { strict: true });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : "Profil PDF invalide." });
+    return;
+  }
+  try {
+    const state = await withAgencyLock(req.agency.code, async () => {
+      const current = await readPdfProfileState(req.agency.code);
+      if (req.body?.expectedRevision !== current.profileRevision) {
+        throw new MatchExportError(409, "Le profil PDF a été modifié ailleurs. Recharge la configuration.");
+      }
+      if (profile.dailyBrief.matchDate) {
+        const latest = await readLatestSnapshot(req.agency.code);
+        if (latest?.match?.date !== profile.dailyBrief.matchDate) {
+          throw new MatchExportError(409, "Le MATCH a changé. Actualise le briefing PDF.");
+        }
+      }
+      const file = path.join(dataDir, sanitizeSegment(req.agency.code), "pdf-profile.json");
+      await writeJsonAtomic(file, profile);
+      return readPdfProfileState(req.agency.code);
+    });
+    res.set("Cache-Control", "no-store, max-age=0").json(state);
+  } catch (error) {
+    if (error instanceof MatchExportError) res.status(error.status).json({ message: error.message });
+    else respondInternalError(res, `export:profile:put:${req.agency.code}`, error);
+  }
+});
+
 // Lot E: entirely read-only. The export uses ONLY the authenticated agency's
 // sources and verifies date, import version, and official league thresholds.
 // Never accept a client-provided snapshot, PDF attachment, or agency name.
@@ -280,15 +328,20 @@ app.get("/api/agencies/:agencyCode/export/match.pdf", requireAgency, async (req,
         manualInjuries: rawInjuries === undefined ? null : Number(rawInjuries),
         manualExpectedPlayers: expectedPlayers === undefined ? null : Number(expectedPlayers),
       });
-      const [causerieState, safety] = await Promise.all([
+      const [causerieState, safety, pdfProfileState] = await Promise.all([
         readCauserieState(req.agency.code, base.match.date),
         readSafetyState(req.agency.code),
+        readPdfProfileState(req.agency.code),
       ]);
+      if (req.query.pdfProfileRevision !== (pdfProfileState.profileRevision ?? "")) {
+        throw new MatchExportError(409, "La personnalisation du PDF a changé. Actualise avant l'export.");
+      }
       if (req.query.causerieRevision !== (causerieState.causerieRevision ?? "")) {
         throw new MatchExportError(409, "Le brief enregistré a changé. Actualise avant l\u0027export.");
       }
       return matchExportModel({
         agency: req.agency, snapshot, league: config, causerie: causerieState.plan, safety,
+        pdfProfile: pdfProfileState.profile,
         expectedMatchDate: matchDate, expectedImportedAt: importedAt,
         manualInjuries: rawInjuries === undefined ? null : Number(rawInjuries),
       });
@@ -1662,6 +1715,17 @@ async function readLatestWorkbook(agencyDir) {
     if (!candidates[0]) throw new Error("Aucun Excel disponible.", { cause: error });
     return fs.readFile(candidates[0].filePath);
   }
+}
+
+async function readPdfProfileState(agencyCode) {
+  const file = path.join(dataDir, sanitizeSegment(agencyCode), "pdf-profile.json");
+  let profile = defaultPdfProfile();
+  try {
+    profile = normalizePdfProfile(JSON.parse(await fs.readFile(file, "utf8")));
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  return { profile, profileRevision: await readFileRevision(file) };
 }
 
 async function readCauserieState(agencyCode, matchDate) {
