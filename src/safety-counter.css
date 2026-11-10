@@ -1,8 +1,8 @@
 /* A.T. days appear as a normal slide inside the existing collective carousel.
    Never create an extra full-width panel or alter carousel geometry. */
 .match-indicator-card.is-safety {
-  grid-template-rows: auto minmax(105px, 1fr) auto;
-  gap: 10px;
+  grid-template-rows: auto minmax(140px, 1fr) auto;
+  gap: 8px;
   overflow-x: hidden;
   overscroll-behavior: contain;
   padding: 18px;
@@ -14,7 +14,7 @@
 .safety-card-body { align-self: center; min-width: 0; }
 .safety-card-body .match-indicator-value {
   white-space: nowrap;
-  font-size: clamp(54px, 6vw, 68px);
+  font-size: clamp(60px, 7vw, 80px);
   line-height: 1.06;
 }
 .safety-card-body .match-indicator-value.is-empty {
@@ -24,24 +24,24 @@
 .safety-card-unit { display: block; margin-top: 4px; color: #dff8e9; font-size: 12px; font-weight: 800; }
 .safety-card-footer {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  padding-top: 8px;
+  padding-top: 6px;
   border-top: 1px solid #c6e0f22b;
 }
-.safety-card-last-date {
-  min-width: 0;
-  margin: 0;
-  color: #deedf4;
-  font-size: 11px;
-  line-height: 1.35;
-}
-.safety-card-last-date b { color: #fff; font-weight: 800; font-variant-numeric: tabular-nums; }
-.safety-card-form { display: grid; gap: 4px; min-width: 0; }
-.safety-card-form > label {
-  color: #d9f0e8;
-  font-size: 10px;
-  font-weight: 800;
+.safety-card-date-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 18px; min-width: 0; }
+.safety-card-last-date { min-width: 0; color: #d1e4ee; font-size: 10px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.safety-card-form { display: grid; gap: 5px; min-width: 0; }
+.safety-card-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 .safety-card-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; gap: 5px; min-width: 0; }
 .safety-card-entry input,
@@ -77,8 +77,8 @@
   background: transparent;
   color: #d6f8e7;
   font: inherit;
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 10px;
+  font-weight: 700;
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
@@ -93,5 +93,5 @@
 .safety-card-footnote { font-size: 9px; line-height: 1.25; color: #d4e6ed; }
 @media (max-width: 380px) {
   .match-indicator-card.is-safety { padding: 14px; }
-  .safety-card-body .match-indicator-value { font-size: 52px; }
+  .safety-card-body .match-indicator-value { font-size: 64px; }
 }

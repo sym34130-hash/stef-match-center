@@ -1694,9 +1694,6 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
                   <Settings2 size={16} />
                   Personnaliser les indicateurs
                 </button>
-                <span className="match-indicator-settings-count">
-                  {normalizeBriefIndicators(briefIndicatorIds).length} cartes affichées sur 9
-                </span>
               </div>
               {indicatorSettingsOpen && (
                 <div id="match-indicator-settings-panel" className="match-indicator-settings-panel" role="group" aria-label="Personnalisation des neuf cartes du carrousel">
