@@ -28,3 +28,46 @@
 @media (max-width: 600px) {
   .match-pdf-export-button { padding: 4px 6px; font-size: 10px; min-height: 28px; }
 }
+
+/* Preferences are edited in a portal so the MATCH carousel and its counters
+   keep their original dimensions in both standard and celebration modes. */
+.match-carousel-heading { flex-wrap: wrap; gap: 6px 10px; }
+.match-pdf-modal-backdrop {
+  position: fixed; inset: 0; z-index: 25000;
+  display: flex; justify-content: center; align-items: center;
+  padding: 14px; background: rgba(8, 23, 40, .79);
+  box-sizing: border-box;
+}
+.match-pdf-modal {
+  width: min(790px, 100%); max-height: min(94dvh, 940px);
+  overflow-y: auto; box-sizing: border-box; padding: 24px;
+  background: #f8fbff; color: #112d48;
+  border: 2px solid #a3bad0; border-radius: 13px;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, .36);
+  font-family: inherit;
+}
+.match-pdf-modal h2 { font-size: 23px; margin: 0 0 5px; color: #102d4a; }
+.match-pdf-modal h3 { font-size: 15px; margin: 17px 0 7px; color: #173d62; }
+.match-pdf-modal p { font-size: 12px; line-height: 1.5; margin: 5px 0 12px; color: #3c5269; }
+.match-pdf-modal-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+.match-pdf-modal-head button { flex-shrink: 0; }
+.match-pdf-kpi-list, .match-pdf-brief-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 12px; }
+.match-pdf-kpi-list label { display: flex; align-items: start; gap: 8px; padding: 8px 10px; border: 1px solid #d5e2ee; border-radius: 6px; background: #fff; font-size: 13px; }
+.match-pdf-kpi-list input { margin-top: 3px; accent-color: #17638d; }
+.match-pdf-kpi-list label:has(input:disabled) { color: #748393; background: #e9eef3; }
+.match-pdf-chart-picker, .match-pdf-brief-list label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 750; }
+.match-pdf-chart-picker { margin: 12px 0; }
+.match-pdf-chart-picker select, .match-pdf-brief-list textarea {
+  width: 100%; box-sizing: border-box; padding: 10px; color: #132e48;
+  border: 1px solid #aebed0; border-radius: 6px; background: #fff;
+  font: inherit; font-size: 13px;
+}
+.match-pdf-brief-list textarea { min-height: 63px; resize: vertical; }
+.match-pdf-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 17px; }
+.match-pdf-modal .match-pdf-export-error { max-width: none; font-size: 13px; }
+@media (max-width: 600px) {
+  .match-pdf-modal { padding: 14px; }
+  .match-pdf-modal h2 { font-size: 18px; }
+  .match-pdf-kpi-list, .match-pdf-brief-list { grid-template-columns: 1fr; }
+  .match-pdf-modal-head { flex-wrap: wrap; }
+}
