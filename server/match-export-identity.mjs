@@ -41,6 +41,9 @@ export function buildMatchExportIdentity(input) {
     throw new Error("Export bloqué : les données du MATCH ne correspondent pas à l'agence connectée.");
   }
   const pdfAgency = snapshot.dailyIndicators?.agencyCode;
+  if (snapshot.dailyIndicators && !pdfAgency) {
+    throw new Error("Export bloqué : l'agence du PDF 106J n'est pas identifiable.");
+  }
   if (pdfAgency && !sameAgency(pdfAgency, code)) {
     throw new Error("Export bloqué : le PDF 106J provient d'une autre agence.");
   }
