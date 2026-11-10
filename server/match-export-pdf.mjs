@@ -492,6 +492,20 @@ function effectiveBriefText(m) {
   const custom = m.pdfProfile.dailyBrief;
   const c = m.causerie ?? {};
   const combined = values => values.filter(value => typeof value === "string" && value.trim()).join(" ; ");
+  // Screenshots cannot be faithfully converted to text in the printed PDF.
+  // A section that contains ONLY captures requires a date-scoped short brief.
+  for (const [field, label] of [
+    ["attack", "Service client"],
+    ["midfield", "Expédition / Ramasse & Emballage"],
+    ["defense", "SST"],
+  ]) {
+    const captures = c.attachmentCounts?.[field] ?? c.attachments?.[field]?.length ?? 0;
+    const sourceText = combined(Array.isArray(c[field]) ? c[field] : []);
+    if (captures > 0 && !sourceText && !custom[field]?.trim()) {
+      throw new MatchExportError(422,
+        `La rubrique « ${label} » contient ${captures} capture(s) mais aucun texte imprimable. Renseigne une synthèse dans « Personnaliser le PDF » pour ce MATCH.`);
+    }
+  }
   const safetyMessage = combined([
     Number.isFinite(m.safety?.days) ? `${fmt(m.safety.days)} jours sans accident de travail` : "",
     c.redCards ? `Cartons rouges : ${c.redCards}` : "",
