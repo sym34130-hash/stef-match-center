@@ -1550,10 +1550,23 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
     setPdfExporting(true);
     setPdfExportError(null);
     try {
+      if (!indicatorSettingsReady) {
+        throw new Error("Le brief équipe est en cours de chargement. Réessaie après actualisation.");
+      }
+      const plan = mercadoPlan?.key === mercatoPlanKey ? mercatoPlan.plan : null;
+      if (!plan?.revision && plan && (
+        Boolean(plan.team.trim() || plan.manager.trim() || plan.mercato.trim() || plan.redCards.trim())
+        || [...plan.attack, ...plan.midfield, ...plan.defense].some(line => line.trim())
+        || Object.values(plan.attachments).some(images => images.length > 0)
+        || Object.values(plan.coach).some(value => value.trim())
+      )) {
+        throw new Error("Le brief affiché contient des modifications locales non enregistrées sur le serveur. Enregistre le brief avant l'export PDF.");
+      }
       const params = new URLSearchParams({
         leagueId: activeLeague,
         matchDate: snapshot.match.date,
         importedAt: snapshot.importedAt,
+        causerieRevision: plan?.revision ?? "",
         zonageMinutes: String(snapshot.performanceCriteria?.zonageMinutes ?? ""),
         loadingSeconds: String(snapshot.performanceCriteria?.loadingSeconds ?? ""),
         unloadingSeconds: String(snapshot.performanceCriteria?.unloadingSeconds ?? ""),
