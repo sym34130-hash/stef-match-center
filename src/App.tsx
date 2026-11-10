@@ -1808,6 +1808,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         <div className="match-carousel-heading">
           <span>FEUILLE DE MATCH</span>
           <strong aria-live="polite">{slideLabels[activeSlide]}</strong>
+          <div className="match-pdf-actions">
           {session.agency.canImport && (
             <button className="match-pdf-export-button" type="button"
               aria-label="Personnaliser l'export PDF"
@@ -1824,6 +1825,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
             <Download size={15} aria-hidden="true" />
             {pdfExporting ? "Génération du PDF..." : "Exporter le MATCH en PDF"}
           </button>
+          </div>
           {pdfExportError && <small className="match-pdf-export-error" role="alert">{pdfExportError}</small>}
 
           {pdfSettingsOpen && pdfSettingsDraft && createPortal(
