@@ -1516,7 +1516,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
     setPdfSettingsOpen(true);
   }
 
-  async function savePdfSettings() {
+  async function savePdfSettings(exportImmediately = false) {
     if (!pdfSettingsDraft || !session.agency.canImport || pdfSettingsSaving) return;
     if (pdfSettingsDraft.indicatorIds.length < pdfMinimumIndicators || pdfSettingsDraft.indicatorIds.length > 6) {
       setPdfSettingsError(`Sélectionne entre ${pdfMinimumIndicators} et 6 KPI complémentaires.`);
@@ -1539,6 +1539,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
       setPdfProfileRevision(result.profileRevision);
       setPdfSettingsOpen(false);
       setPdfSettingsDraft(null);
+      if (exportImmediately) await downloadMatchPdf(result);
     } catch (error) {
       setPdfSettingsError(error instanceof Error ? error.message : "Enregistrement du profil impossible.");
     } finally {
@@ -1644,12 +1645,12 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
     slideViewportRef.current?.scrollTo({ top: 0, behavior: "auto" });
   }, [activeSlide]);
 
-  async function downloadMatchPdf() {
+  async function downloadMatchPdf(updated?: PdfProfileResponse) {
     if (pdfExporting) return;
     setPdfExporting(true);
     setPdfExportError(null);
     try {
-      if (!pdfProfile) throw new Error("La personnalisation du PDF n'est pas chargée. Actualise le MATCH.");
+      if (!(updated?.profile ?? pdfProfile)) throw new Error("La personnalisation du PDF n'est pas chargée. Actualise le MATCH.");
       if (!indicatorSettingsReady) {
         throw new Error("Le brief équipe est en cours de chargement. Réessaie après actualisation.");
       }
@@ -1667,7 +1668,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         matchDate: snapshot.match.date,
         importedAt: snapshot.importedAt,
         causerieRevision: plan?.revision ?? "",
-        pdfProfileRevision: pdfProfileRevision ?? "",
+        pdfProfileRevision: updated?.profileRevision ?? pdfProfileRevision ?? "",
         zonageMinutes: String(snapshot.performanceCriteria?.zonageMinutes ?? ""),
         loadingSeconds: String(snapshot.performanceCriteria?.loadingSeconds ?? ""),
         unloadingSeconds: String(snapshot.performanceCriteria?.unloadingSeconds ?? ""),
@@ -1685,7 +1686,9 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
       );
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        throw new Error(payload?.message ?? "L'export PDF a échoué.");
+        const reason = new Error(payload?.message ?? "L'export PDF a échoué.") as Error & { status?: number };
+        reason.status = response.status;
+        throw reason;
       }
       if (!response.headers.get("Content-Type")?.includes("application/pdf")) {
         throw new Error("La réponse du serveur n'est pas un PDF.");
@@ -1700,7 +1703,19 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (error) {
-      setPdfExportError(error instanceof Error ? error.message : "Impossible de télécharger le MATCH.");
+      const message = error instanceof Error ? error.message : "Impossible de télécharger le MATCH.";
+      setPdfExportError(message);
+      if ((error as Error & { status?: number })?.status === 422
+        && /rubrique|synthèse/i.test(message) && session.agency.canImport) {
+        const saved = updated?.profile ?? pdfProfile;
+        if (saved) {
+          const brief = saved.dailyBrief.matchDate === snapshot.match.date ? saved.dailyBrief
+            : { matchDate: snapshot.match.date, safety: "", priorities: "", attack: "", midfield: "", defense: "", decisions: "" };
+          setPdfSettingsDraft({ ...saved, indicatorIds: [...saved.indicatorIds], dailyBrief: { ...brief } });
+          setPdfSettingsError(message);
+          setPdfSettingsOpen(true);
+        }
+      }
     } finally {
       setPdfExporting(false);
     }
@@ -1832,7 +1847,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
           <button className="match-pdf-export-button" type="button"
             aria-label="Exporter le MATCH en PDF" disabled={pdfExporting || editingKpis}
             title={editingKpis ? "Enregistre les chiffres avant l\u0027export." : "Exporter le MATCH en PDF"}
-            onClick={downloadMatchPdf}>
+            onClick={() => void downloadMatchPdf()}>
             <Download size={15} aria-hidden="true" />
             {pdfExporting ? "Génération du PDF..." : "Exporter le MATCH en PDF"}
           </button>
@@ -1903,7 +1918,12 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
                   <button type="button" className="secondary-button compact" disabled={pdfSettingsSaving}
                     onClick={() => setPdfSettingsOpen(false)}>Annuler</button>
                   <button type="button" className="primary-button compact" disabled={pdfSettingsSaving || pdfSettingsDraft.indicatorIds.length < pdfMinimumIndicators || pdfSettingsDraft.indicatorIds.length > 6}
-                    onClick={savePdfSettings}>{pdfSettingsSaving ? "Enregistrement..." : "Enregistrer le profil PDF"}</button>
+                    onClick={() => void savePdfSettings(false)}>{pdfSettingsSaving ? "Enregistrement..." : "Enregistrer"}</button>
+                  <button type="button" className="primary-button compact"
+                    disabled={pdfSettingsSaving || pdfExporting || pdfSettingsDraft.indicatorIds.length < pdfMinimumIndicators || pdfSettingsDraft.indicatorIds.length > 6}
+                    onClick={() => void savePdfSettings(true)}>
+                    {pdfSettingsSaving || pdfExporting ? "Préparation..." : "Enregistrer et télécharger le PDF"}
+                  </button>
                 </div>
               </section>
             </div>, document.body
