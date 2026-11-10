@@ -483,7 +483,8 @@ function compactChart(p, m, chartId) {
       const failed = Number.isFinite(target) && slot.meanSecondsPerPosition > target;
       p.box(left, baseline, width, height, failed ? C.red : C.aqua);
       if (index % labelEvery === 0 || index === slots.length - 1) {
-        p.text(left, 70, 7, trim(slot.label ?? slot.start ?? String(index + 1), 8), C.muted);
+        const label = String(slot.start ?? slot.label ?? String(index + 1));
+        p.text(left, 70, 7, label.length > 8 ? `#${index + 1}` : label, C.muted);
       }
     });
     const positions = slots.map(slot => slot.distinctPositions).filter(Number.isFinite);
