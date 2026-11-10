@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
-import { Activity, ArrowDownToLine, ArrowUpFromLine, ChevronLeft, ChevronRight, Flag, Package, ShieldPlus, Thermometer, Users, Weight, type LucideIcon } from "lucide-react";
+import { Activity, ArrowDownToLine, ArrowUpFromLine, ChevronLeft, ChevronRight, Flag, Settings2, Package, ShieldPlus, Thermometer, Users, Weight, type LucideIcon } from "lucide-react";
 import { MercatoCarouselSection } from "./MercatoCarousel";
 import { parseMercatoEntrants, type MercatoProfiles } from "./mercato";
 import type { Agency, Snapshot } from "./types";
@@ -18,13 +18,14 @@ type Props = {
   mercatoProfiles: MercatoProfiles;
   visibleIndicatorIds?: string[];
   session: { agency: Agency; accessCode: string };
+  indicatorCustomization?: { expanded: boolean; disabled: boolean; onToggle: () => void };
 };
 
 const number = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 type PunctualityKey = "arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn";
 
-export function MatchIndicatorsCarousel({ snapshot, performance, motivation, injuries, staffPercent, staffDetail, mercato, mercatoProfiles, visibleIndicatorIds, session }: Props) {
+export function MatchIndicatorsCarousel({ snapshot, performance, motivation, injuries, staffPercent, staffDetail, mercato, mercatoProfiles, visibleIndicatorIds, session, indicatorCustomization }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const geometry = useRef({ pitch: 296, width: 280, centers: 2, first: 0 });
@@ -251,6 +252,21 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
           <button type="button" disabled={visibleFirst === 0} aria-label="Indicateurs précédents" title="Indicateurs précédents" onClick={() => goRef.current(visibleFirst - 1)}><ChevronLeft size={19} /></button>
           <button type="button" disabled={atLastIndicator} aria-label="Indicateurs suivants" title="Indicateurs suivants" onClick={() => goRef.current(visibleFirst + 1)}><ChevronRight size={19} /></button>
         </div>
+        {indicatorCustomization && (
+          <div className="match-indicators-customization">
+            <button
+              type="button"
+              className="secondary-button compact"
+              aria-expanded={indicatorCustomization.expanded}
+              aria-controls="match-indicator-settings-panel"
+              disabled={indicatorCustomization.disabled}
+              onClick={indicatorCustomization.onToggle}
+            >
+              <Settings2 size={16} aria-hidden="true" />
+              Personnaliser les indicateurs
+            </button>
+          </div>
+        )}
       </header>
       <div ref={viewportRef} className="match-indicators-viewport" tabIndex={0} role="group" aria-label="Défilement des indicateurs du match"
         onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}

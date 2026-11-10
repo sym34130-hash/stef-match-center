@@ -3,13 +3,33 @@
 .match-indicators-area { min-width: 0; width: 100%; }
 .match-indicators { min-width: 0; width: 100%; color: #fff; }
 .match-indicators *, .match-indicators-editor * { box-sizing: border-box; letter-spacing: 0; }
-.match-indicators-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 0 6px 6px; }
-.match-indicators-title { display: inline-flex; align-items: center; gap: 9px; margin: 0; font-size: 14px; font-weight: 800; color: #d2e6f9; }
-.match-indicators-navigation { display: flex; align-items: center; gap: 8px; }
+.match-indicators-heading { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 12px; row-gap: 8px; min-width: 0; padding: 0 6px 6px; }
+.match-indicators-title { display: inline-flex; align-items: center; gap: 9px; min-width: 0; margin: 0; font-size: 14px; font-weight: 800; line-height: 1.35; color: #d2e6f9; overflow-wrap: anywhere; }
+.match-indicators-navigation { display: flex; align-items: center; justify-self: end; flex: none; gap: 8px; white-space: nowrap; }
 .match-indicators-navigation > span { min-width: 64px; text-align: center; color: #d2e6f9; font-size: 12px; font-variant-numeric: tabular-nums; }
 .match-indicators-navigation button { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid #bad6ed55; background: #173b5970; color: #fff; cursor: pointer; }
 .match-indicators-navigation button:hover:not(:disabled) { background: #87b4d633; }
 .match-indicators-navigation button:disabled { opacity: .3; cursor: default; }
+/* A dedicated second header row prevents settings from covering the position
+   counter and arrow controls at desktop, tablet, and mobile widths. */
+.match-indicators-customization { grid-column: 1 / -1; display: flex; justify-content: flex-end; min-width: 0; }
+.match-indicators-customization > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  line-height: 1.3;
+  white-space: normal;
+  text-align: center;
+}
+.match-indicators-customization > button svg { flex: none; }
+.match-indicators-customization > button:disabled { opacity: .5; cursor: not-allowed; }
+
 .match-indicators button:focus-visible, .match-indicators-viewport:focus-visible { outline: 2px solid #d6efff; outline-offset: 3px; }
 .match-indicators-viewport { --indicator-width: 280px; --indicator-padding: 20px; position: relative; width: 100%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; scroll-padding-inline: var(--indicator-padding); cursor: grab; border-radius: 8px; mask-image: linear-gradient(to right, transparent, #000 3%, #000 97%, transparent); }
 .match-indicators-viewport::-webkit-scrollbar { display: none; }
@@ -96,7 +116,8 @@
 }
 @media (max-width: 600px) {
   .match-indicator-card { padding: 16px; }
-  .match-indicators-heading { padding-inline: 0; }
+  .match-indicators-heading { gap: 6px; padding-inline: 0; }
+  .match-indicators-customization > button { font-size: 11px; min-height: 30px; padding: 5px 9px; }
   .match-indicators-title { font-size: 12px; }
   .match-indicators-navigation { gap: 4px; }
   .match-indicators-navigation > span { min-width: 40px; }
@@ -192,9 +213,6 @@
 
 /* Direct Lot A customization: only the nine collective carousel cards. */
 .match-indicator-settings { display: grid; gap: 9px; margin: 0 6px 12px; color: #e1effb; }
-.match-indicator-settings-toolbar { display: flex; justify-content: flex-end; align-items: center; min-width: 0; }
-.match-indicator-settings-toolbar > button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; max-width: 100%; min-width: 0; height: auto; white-space: normal; text-align: center; line-height: 1.3; }
-.match-indicator-settings-toolbar > button:disabled { opacity: .5; cursor: not-allowed; }
 .match-indicator-settings-panel {
   display: grid; gap: 14px; padding: 16px; min-width: 0;
   border-radius: 10px; border: 1px solid #9bc6e572; background: #17364e;
@@ -213,7 +231,6 @@
 .match-indicator-settings-feedback.is-success { color: #d0f5df; }
 @media (max-width: 640px) {
   .match-indicator-settings { margin-inline: 4px; }
-  .match-indicator-settings-toolbar { justify-content: flex-end; }
   .match-indicator-settings-panel { padding: 12px; }
   .match-indicator-settings-actions { justify-content: stretch; }
   .match-indicator-settings-actions button { flex: 1 1 auto; justify-content: center; }

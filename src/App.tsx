@@ -1673,28 +1673,8 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         </div>
 
         <div className="match-indicators-area">
-          {session.agency.canImport && (
+          {session.agency.canImport && (indicatorSettingsOpen || indicatorSettingsFeedback) && (
             <div className="match-indicator-settings">
-              <div className="match-indicator-settings-toolbar">
-                <button
-                  type="button"
-                  className="secondary-button compact"
-                  aria-expanded={indicatorSettingsOpen}
-                  aria-controls="match-indicator-settings-panel"
-                  disabled={!indicatorSettingsReady || indicatorSettingsSaving}
-                  onClick={() => {
-                    if (indicatorSettingsOpen) {
-                      setIndicatorSettingsOpen(false);
-                      setIndicatorSettingsFeedback(null);
-                    } else {
-                      openIndicatorSettings();
-                    }
-                  }}
-                >
-                  <Settings2 size={16} />
-                  Personnaliser les indicateurs
-                </button>
-              </div>
               {indicatorSettingsOpen && (
                 <div id="match-indicator-settings-panel" className="match-indicator-settings-panel" role="group" aria-label="Personnalisation des neuf cartes du carrousel">
                   <p>Choisis les cartes à afficher dans « Le collectif en chiffres ». Les quatre KPI du score restent inchangés.</p>
@@ -1748,6 +1728,18 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
             mercatoProfiles={mercatoProfiles}
             visibleIndicatorIds={briefIndicatorIds}
             session={session}
+            indicatorCustomization={session.agency.canImport ? {
+              expanded: indicatorSettingsOpen,
+              disabled: !indicatorSettingsReady || indicatorSettingsSaving,
+              onToggle: () => {
+                if (indicatorSettingsOpen) {
+                  setIndicatorSettingsOpen(false);
+                  setIndicatorSettingsFeedback(null);
+                } else {
+                  openIndicatorSettings();
+                }
+              },
+            } : undefined}
           />
           <div className="match-kpi-wrap">
             {editingKpis && (
