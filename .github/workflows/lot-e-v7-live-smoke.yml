@@ -1,0 +1,63 @@
+name: Lot E V7 — Smoke test post-déploiement (lecture seule)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/lot-e-v7-live-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vérifier le code V7 servi et les endpoints privés sans aucune écriture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error, re, time
+          base="https://stef-match-center.onrender.com"
+          def get(path):
+              req=urllib.request.Request(base+path,headers={"User-Agent":"STEF-Lot-E-V7-smoke-read-only"})
+              for i in range(6):
+                  try:
+                      with urllib.request.urlopen(req, timeout=45) as r:
+                          return r.status, r.read(), dict(r.headers)
+                  except urllib.error.HTTPError as ex:
+                      return ex.code,ex.read(),dict(ex.headers)
+                  except Exception:
+                      if i==5: raise
+                      time.sleep(3)
+          status,payload,_=get("/api/health")
+          assert status==200 and json.loads(payload).get("ok") is True
+          print("PASS /api/health")
+          status,html,_=get("/")
+          assert status==200 and b'<div id="root">' in html
+          print("PASS homepage")
+          assets=re.findall(rb'(?:src|href)="(/assets/[^"]+)"',html)
+          assert assets
+          js=[]
+          for a in assets:
+              code,data,_=get(a.decode())
+              assert code==200 and len(data)>100,(a,code)
+              if a.endswith(b".js"): js.append(data)
+          assert js, "No JS bundle"
+          bundle=b"".join(js)
+          assert "Enregistrer et télécharger le PDF".encode() in bundle, "V7 primary action not served"
+          assert "Tonnage du PDF : vérification de la source".encode() not in bundle, "Old bulky tonnage panel still served"
+          print("PASS V7 frontend content deployed; tonnage panel absent")
+          status,data,_=get("/api/agencies")
+          assert status==200 and isinstance(json.loads(data).get("agencies"),list)
+          print("PASS agencies")
+          for p in [
+            "/api/agencies/058/snapshot",
+            "/api/agencies/058/export/profile",
+            "/api/agencies/058/export/match.pdf",
+            "/api/agencies/058/safety",
+            "/api/agencies/058/league-configs",
+            "/api/agencies/058/causerie?matchDate=2026-11-10"
+          ]:
+              code,body,_=get(p)
+              assert code==401, (p,code,body[:150])
+              print("PASS private",p,":401")
+          print("V7 LIVE SMOKE SUCCESS — read only, no agency data accessed or modified")
+          PY
