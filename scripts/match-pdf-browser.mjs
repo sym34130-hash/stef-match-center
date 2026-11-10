@@ -7,6 +7,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import * as XLSX from "xlsx";
+import { chromium } from "@playwright/test";
 import { buildSnapshotFromWorkbook } from "../server/match-engine.mjs";
 import { buildMatchExportIdentity } from "../server/match-export-identity.mjs";
 
@@ -112,10 +113,41 @@ try {
   assert.match(parsed.text, /STEF MATCH CENTER/);
   assert.match(parsed.text, /058/);
   assert.ok(!parsed.text.includes("Site beta 059"), "PDF must not mention second agency");
+  assert.ok(!parsed.text.includes("PDF-058-ACCESS"), "Never print agency credentials");
   assert.match(parsed.text, /Le collectif en chiffres/i);
   assert.match(parsed.text, /Cérémonie des performances/i);
   assert.match(parsed.text, /Lecture opérationnelle/i);
-  console.log(`Lot E PDF: ${bytes.byteLength} bytes, ${parsed.numpages} pages, agency 058 only, league argent`);
+  // A synthetic, non-confidential PDF is retained as a CI artifact for design review.
+  await fs.mkdir("artifacts", { recursive: true });
+  await fs.writeFile("artifacts/lot-e-pdf-058-demo.pdf", bytes);
+
+  // Check the actual site's download control, not only the HTTP endpoint.
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ acceptDownloads: true, viewport: { width: 1366, height: 768 } });
+    await page.goto(api, { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Code agence").selectOption("058");
+    await page.getByLabel("Code d'accès").fill("PDF-058-ACCESS");
+    await page.getByRole("button", { name: "Accéder au match", exact: true }).click();
+    await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+    const downloadButton = page.getByRole("button", { name: "Télécharger le MATCH en PDF" });
+    await downloadButton.waitFor({ state: "visible" });
+    await page.waitForFunction(() => {
+      const button = document.querySelector(".match-pdf-download");
+      return button && !button.hasAttribute("disabled");
+    }, null, { timeout: 20000 });
+    const downloadReady = page.waitForEvent("download", { timeout: 120000 });
+    await downloadButton.click();
+    const download = await downloadReady;
+    assert.equal(download.suggestedFilename(), identity.filename,
+      "Direct download filename must include selected agency/date/league");
+    const downloadPath = await download.path();
+    assert.equal((await fs.readFile(downloadPath)).subarray(0, 5).toString(), "%PDF-");
+    await page.close();
+  } finally {
+    await browser.close();
+  }
+  console.log(`Lot E PDF: ${bytes.byteLength} bytes, ${parsed.numpages} pages, agency 058 only, league argent, UI download OK`);
 } finally {
   if (server.exitCode === null && server.signalCode === null) {
     const stopped = once(server, "close");
