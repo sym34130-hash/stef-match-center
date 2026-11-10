@@ -47,7 +47,7 @@ for (const fixture of fixtures) {
     hourlyPerformance: Array.from({ length: 27 }, (_, i) => ({ label: "HEURE-" + String(i+1).padStart(2, "0"), hour: i, rate: 10+i })),
     unloadingHourlyAnalysis: { targetSeconds: league.criteria.unloadingSeconds,
       items: Array.from({ length: 23 }, (_, i) => ({ label: "RECEPT-" + String(i+1).padStart(2, "0"),
-        meanSecondsPerPosition: 20+i, distinctPositions: 10+i })) },
+        meanSecondsPerPosition: 22+i*3, distinctPositions: 10+i, state: "disponible" })) },
     loadingQuality: { targetedPercent: 85, offTargetPercent: 15 },
     unloadingQuality: { targetedPercent: 69, offTargetPercent: 31 },
     unloadingDuelQuality: { wonPercent: 67, lostPercent: 33 },
@@ -76,7 +76,7 @@ for (const fixture of fixtures) {
   assert.throws(() => renderMatchPdf(model), e => e.status === 422);
   model.pdfProfile = {
     indicatorIds: fixture.visible.slice(0, 6),
-    chartId: code === "058" ? "passes-hourly" : "centers",
+    chartId: code === "058" ? "passes-hourly" : "reception-time",
     dailyBrief: { matchDate: date, attack: "FIN-DU-BRIEF-TEST-" + code },
   };
   const pdf = renderMatchPdf(model);
@@ -93,6 +93,7 @@ for (const fixture of fixtures) {
   assert.doesNotMatch(pdfText, /\/Subtype \/Image/, "Detailed JPEG annexes must not fill the two-page briefing");
   assert.doesNotMatch(pdfText, new RegExp("FIN-DU-BRIEF-TEST-" + (code === "058" ? "059" : "058")));
   if (code === "058") assert.match(pdfText, /HEURE-27/);
+  if (code === "059") assert.match(pdfText, /Barres : moyenne en s\/position/);
   const filename = path.join(out, "SYNTHETIC_MATCH_" + code + "_" + league.label.replace(/ /g, "_") + ".pdf");
   await fs.writeFile(filename, pdf);
   console.log(filename + " / pages=" + pages + " / bytes=" + pdf.length);
