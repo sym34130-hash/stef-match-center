@@ -173,3 +173,70 @@ test("Lot E V3: 4, 5 or 6 complementary KPIs do not overlap the chart or create 
     if (count === 4) assert.doesNotMatch(parsed.text, /Ponctualite depart/);
   }
 });
+
+
+test("Lot E V4: first export fills four visible KPIs without re-enabling hidden cards", async () => {
+  const visible = ["departure", "temperature", "tonnage-expedition", "destination", "positions", "arrival"];
+  const first = effectivePdfProfile(null, visible, date);
+  assert.equal(first.indicatorIds.length, 4);
+  assert.deepEqual(first.indicatorIds, ["positions", "arrival", "departure", "temperature"]);
+  assert.ok(first.indicatorIds.every(id => visible.includes(id)));
+  const sparse = effectivePdfProfile({ indicatorIds: ["positions"], chartId: "centers" }, visible, date);
+  assert.deepEqual(sparse.indicatorIds, ["positions", "departure", "temperature", "tonnage-expedition"]);
+  const few = effectivePdfProfile(null, ["temperature", "positions"], date);
+  assert.deepEqual(few.indicatorIds, ["positions", "temperature"]);
+  const snapshot = { ...makeSnapshot("058") };
+  const model = matchExportModel({
+    agency: agency("058"), snapshot, league, expectedMatchDate: date, expectedImportedAt: importedAt,
+    causerie: { visibleIndicators: visible, visibleIndicatorsVersion: 2, attack: [], midfield: [], defense: [] },
+  });
+  const pdf = await pdfParse(renderMatchPdf(model));
+  assert.equal(pdf.numpages, 2);
+  assert.match(pdf.text, /PONCTUALITE DEPART/i);
+  assert.doesNotMatch(pdf.text, /BLESSURES A.T/i);
+});
+
+test("Lot E V4: image-only service brief cannot disappear silently from the PDF", async () => {
+  for (const [zone, title] of [["attack", "Service client"], ["midfield", "Expédition"], ["defense", "SST"]]) {
+    const causerie = {
+      visibleIndicators: ["positions", "arrival", "departure", "temperature"], visibleIndicatorsVersion: 2,
+      attack: [], midfield: [], defense: [],
+      attachments: { attack: [], midfield: [], defense: [], [zone]: ["data:image/jpeg;base64,TEST-CAPTURE"] },
+    };
+    const model = build("058", { causerie });
+    assert.throws(() => renderMatchPdf(model),
+      error => error instanceof MatchExportError && error.status === 422 && error.message.includes(title));
+    model.pdfProfile = {
+      indicatorIds: ["positions", "arrival", "departure", "temperature"], chartId: "centers",
+      dailyBrief: { matchDate: date, [zone]: "Synthèse validée pour la réunion opérationnelle." },
+    };
+    const parsed = await pdfParse(renderMatchPdf(model));
+    assert.equal(parsed.numpages, 2);
+    assert.match(parsed.text, /Synthèse validée pour la réunion opérationnelle/);
+    assert.match(parsed.text, /Captures sur le site/i);
+    model.pdfProfile.dailyBrief.matchDate = "2026-11-11";
+    rejected(() => renderMatchPdf(model), 422);
+  }
+});
+
+test("Lot E V4: reception chart plots actual seconds per position, target and slots", async () => {
+  const analysis = { state: "disponible", targetSeconds: 60, items: [
+    { label: "13h", start: "13:00", state: "disponible", distinctPositions: 30, meanSecondsPerPosition: 45 },
+    { label: "14h", start: "14:00", state: "disponible", distinctPositions: 22, meanSecondsPerPosition: 92 },
+    { label: "15h", start: "15:00", state: "indisponible", distinctPositions: 0, meanSecondsPerPosition: null },
+  ] };
+  const model = build("058", {
+    snapshot: { unloadingHourlyAnalysis: analysis },
+    pdfProfile: { indicatorIds: ["performance"], chartId: "reception-time" },
+  });
+  const first = renderMatchPdf(model);
+  const parsed = await pdfParse(first);
+  assert.equal(parsed.numpages, 2);
+  assert.match(parsed.text, /Barres : moyenne en s\/position/);
+  assert.match(parsed.text, /Cible : 60 s\/poz/);
+  assert.match(parsed.text, /2 créneaux exploitables/);
+  assert.match(parsed.text, /Positions\/créneau : 22 à 30/);
+  model.unloadingHourlyAnalysis.items[1].meanSecondsPerPosition = 54;
+  const changed = renderMatchPdf(model);
+  assert.ok(!first.equals(changed), "Changing measured seconds must change the chart geometry/colors");
+});
