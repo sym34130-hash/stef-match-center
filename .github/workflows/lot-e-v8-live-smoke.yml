@@ -1,0 +1,63 @@
+name: Lot E V8 — Smoke production, lecture seule
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/lot-e-v8-live-smoke.yml'
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vérifier le bon JS déployé, les APIs et les accès privés sans écriture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, urllib.request, urllib.error, re, time
+          base="https://stef-match-center.onrender.com"
+          def get(path):
+              req=urllib.request.Request(base+path,headers={"User-Agent":"STEF-Lot-E-V8-smoke-read-only"})
+              for i in range(6):
+                  try:
+                      with urllib.request.urlopen(req, timeout=45) as r:
+                          return r.status, r.read(), dict(r.headers)
+                  except urllib.error.HTTPError as ex:
+                      return ex.code,ex.read(),dict(ex.headers)
+                  except Exception:
+                      if i==5: raise
+                      time.sleep(3)
+          status,payload,_=get("/api/health")
+          assert status==200 and json.loads(payload).get("ok") is True
+          print("PASS API health 200")
+          status,html,_=get("/")
+          assert status==200 and b'<div id="root">' in html
+          print("PASS homepage 200")
+          assets=re.findall(rb'(?:src|href)="(/assets/[^"]+)"',html)
+          assert assets, "Missing frontend assets"
+          js=[]
+          for a in assets:
+              code,data,_=get(a.decode())
+              assert code==200 and len(data)>100, (a,code)
+              if a.endswith(b".js"): js.append(data)
+          assert js, "No JavaScript entry point"
+          bundle=b"".join(js)
+          assert "Le BRIEF affiché sur ce poste diffère de la version enregistrée en ligne.".encode() in bundle, "V8 live source reconciliation not served"
+          assert "Le brief affiché contient des modifications locales non enregistrées sur le serveur.".encode() not in bundle, "Old blocking message still in live bundle"
+          print("PASS V8 browser code: new authoritative reconciliation present; old blocking message removed")
+          code,payload,_=get("/api/agencies")
+          assert code==200 and isinstance(json.loads(payload).get("agencies"),list)
+          print("PASS agency list")
+          for p in [
+            "/api/agencies/058/snapshot",
+            "/api/agencies/058/export/profile",
+            "/api/agencies/058/export/match.pdf",
+            "/api/agencies/058/causerie?matchDate=2026-11-10",
+            "/api/agencies/058/league-configs",
+            "/api/agencies/058/safety",
+          ]:
+              code,payload,_=get(p)
+              assert code==401,(p,code,payload[:140])
+              print("PASS protected",p,"401")
+          print("LOT E V8 LIVE HTTP SMOKE PASS. No production data modified.")
+          PY
