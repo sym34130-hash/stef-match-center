@@ -233,7 +233,11 @@ function scorePage(doc, m) {
 function indicatorCards(m) {
   const d = m.dailyIndicators, p = d?.punctuality ?? {};
   const pool = {
-    performance: { label: "Performance d'equipe", value: m.match.status ?? "Indisponible" },
+    performance: { label: "Performance d'equipe", value: m.score?.status !== "available"
+      ? "Performance a completer"
+      : m.score.goalsFor > m.score.goalsAgainst ? "Performance d'equipe validee"
+      : m.score.goalsFor === m.score.goalsAgainst ? "Collectif en maitrise"
+      : "Reconnaissance et reprise terrain" },
     injuries: { label: "Blessures A.T", value: m.manualInjuries === null ? "Non renseigne" : String(m.manualInjuries), detail: "Saisie manuelle du navigateur" },
     "accident-free-days": { label: "Jours sans A.T", value: Number.isFinite(m.safety.days) ? fmt(m.safety.days) : "Non renseigne", detail: m.safety.lastAccidentDate ? "Dernier A.T : " + m.safety.lastAccidentDate : "Date non renseignee" },
     "tonnage-distribution": { label: "Tonnage distribution", value: Number.isFinite(d?.distribution?.tonnage) ? fmt(d.distribution.tonnage) + " t" : "Indisponible" },
@@ -248,19 +252,26 @@ function indicatorCards(m) {
 }
 function awardsPage(doc, m) {
   const p = doc.add("02 - CEREMONIE DES PERFORMANCES");
-  const awards = [
-    ["HOMME DU MATCH", m.highlights?.manOfTheMatch],
-    ["MEILLEUR BUTEUR", m.highlights?.bestScorer],
-    ["MEILLEUR PASSEUR", m.highlights?.bestPasser],
-    ["MUR DEFENSIF", m.highlights?.defensiveWall],
-  ];
-  awards.forEach(([title, award], i) => {
-    const x = 29 + (i % 2) * 395, y = 280 + (i < 2 ? 0 : -193);
-    p.card(x, y, 380, 178, title, award?.name || "Non attribue",
-      award ? `${trim(award.role, 24)} / ${trim(award.valueLabel || award.detail, 55)}` : "Donnees insuffisantes",
-      i === 0 ? C.gold : C.blue);
-    if (award) p.text(x + 14, y + 68, 11, `${fmt(award.value)} / ${fmt(award.positions ?? award.operations)} operations ou positions`, C.text);
+  const awards = m.awards ?? [];
+  awards.forEach((award, i) => {
+    const x = 29 + (i % 2) * 395, y = 280 - Math.floor(i / 2) * 193;
+    p.card(x, y, 380, 178, award.label, award.name,
+      "", i === 0 ? C.gold : C.blue);
+    p.text(x + 13, y + 67, 10,
+      `${fmt(award.value)} ${award.valueLabel ?? "positions"} / ${trim(award.role, 24)}`, C.text);
+    if (award.challengers?.length) {
+      p.text(x + 13, y + 48, 8.5, "CHALLENGERS", C.aqua, true);
+      award.challengers.slice(0, 2).forEach((item, index) =>
+        p.text(x + 13, y + 33 - index * 16, 8.5,
+          `${item.name} / ${fmt(item.value)}`, C.muted));
+    } else {
+      p.text(x + 13, y + 32, 8.5, "Aucun challenger disponible", C.muted);
+    }
   });
+  if (!awards.length) p.text(41, 425, 14, "Aucune distinction disponible", C.muted);
+  if (!awards.some(award => award.kind === "polyvalent")) {
+    p.text(41, 55, 9, "Polyvalence : aucun candidat eligible non deja recompense.", C.muted);
+  }
 }
 function analyticsPages(doc, m) {
   const p = doc.add("03 - STATISTIQUES DU MATCH");
