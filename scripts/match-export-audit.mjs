@@ -3,16 +3,21 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { matchExportLeague, matchExportModel } from "../server/match-export-model.mjs";
 import { renderMatchPdf } from "../server/match-export-pdf.mjs";
+import { PDF_CHART_IDS } from "../server/match-pdf-profile.mjs";
 
 const out = process.env.STEF_PDF_AUDIT_DIR || "artifacts/lot-e-audit";
 await fs.mkdir(out, { recursive: true });
 const fixtures = [
   { code: "058", league: "argent", visible: ["performance", "injuries", "accident-free-days", "positions", "arrival", "departure"] },
   { code: "059", league: "or", visible: ["performance", "tonnage-expedition", "tonnage-distribution", "temperature"] },
+  { code: "060", league: "bronze", visible: ["performance", "positions", "arrival", "temperature", "destination"] },
+  { code: "061", league: "platine", visible: ["performance", "injuries", "positions", "destination", "departure", "temperature"] },
 ];
 const configs = [
   { id: "argent", zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 },
   { id: "or", zonageMinutes: 25, loadingSeconds: 150, unloadingSeconds: 55, scoreTargetPercent: 60 },
+  { id: "bronze", zonageMinutes: 35, loadingSeconds: 185, unloadingSeconds: 70, scoreTargetPercent: 45 },
+  { id: "platine", zonageMinutes: 20, loadingSeconds: 130, unloadingSeconds: 45, scoreTargetPercent: 70 },
 ];
 for (const fixture of fixtures) {
   const league = matchExportLeague(fixture.league, configs);
@@ -23,12 +28,15 @@ for (const fixture of fixtures) {
     positionsByType: { CHG: 25-i*2, DECHG: 16-i*2, ZONAGE: 12-i },
     operationTypes: i === 3 ? 3 : 1, polyvalence: i === 3 ? 87 : 25,
   }));
+  // Synthetic examples, not production agency thresholds.
+  const rates = { passRate: 75, loadingPercent: 85, unloadingPercent: 69, possessionPercent: 52 };
+  const goalsFor = Object.values(rates).filter(value => value > league.criteria.scoreTargetPercent).length;
   const snapshot = {
     agency: { code, name: "AGENCE TEST " + code, detectedCode: code }, sourceName: "FAUX_Excel-" + code + ".xlsx",
     importedAt, performanceCriteria: { ...league.criteria },
     match: { date, periodStart: "13:00", periodEnd: "22:30", timeRangeLabel: "13:00 - 22:30", status: "MAITRISE" },
-    operationalScore: { status: "available", targetPercent: league.criteria.scoreTargetPercent, goalsFor: 3, goalsAgainst: 1,
-      indicators: { passRate: 75, loadingPercent: 73, unloadingPercent: 66, possessionPercent: 52 } },
+    operationalScore: { status: "available", targetPercent: league.criteria.scoreTargetPercent, goalsFor, goalsAgainst: 4 - goalsFor,
+      indicators: rates, loading: { targetSeconds: league.criteria.loadingSeconds } },
     summary: { operations: 500, positions: 310, players: 19, travels: 44, duelWon: 80, duelTotal: 101 },
     players, highlights: {
       bestScorer: { name: players[0].name, value: 70, role: "Attaquant" },
@@ -40,19 +48,28 @@ for (const fixture of fixtures) {
       playerName: "OPERATEUR-" + code + "-" + i, travelCode: "TR" + i,
       time: "15:30", reason: "Controle temperature",
     })),
-    dailyIndicators: { agencyCode: code, punctuality: {
+    dailyIndicators: { agencyCode: code, sourceName: "106J-SYNTHETIQUE.pdf", referenceDate: "2026-11-09",
+      punctualityTargets: { destinationPunctuality: 91 }, punctuality: {
       arrivalPunctuality: 96, departurePunctuality: 94,
       destinationPunctuality: 92, temperatureReturn: 97 },
       distribution: { tonnage: 7.2 }, expedition: { tonnage: 14.4 } },
-    hourlyPerformance: Array.from({ length: 27 }, (_, i) => ({ label: "HEURE-" + String(i+1).padStart(2, "0"), hour: i, rate: 10+i })),
-    unloadingHourlyAnalysis: { targetSeconds: league.criteria.unloadingSeconds,
-      items: Array.from({ length: 23 }, (_, i) => ({ label: "RECEPT-" + String(i+1).padStart(2, "0"),
+    hourlyPerformance: Array.from({ length: 24 }, (_, i) => {
+      const won = 10 + i, total = 25 + i;
+      return { label: String((13 + i) % 24).padStart(2, "0") + "h", hour: i,
+        won, total, rate: Math.round(won / total * 1000) / 10 };
+    }),
+    unloadingHourlyAnalysis: { state: "disponible", targetSeconds: league.criteria.unloadingSeconds,
+      items: Array.from({ length: 23 }, (_, i) => ({
+        start: new Date(Date.UTC(2026, 10, 10, 12 + i)).toISOString(),
+        label: String((13 + i) % 24).padStart(2, "0") + "h",
         meanSecondsPerPosition: 22+i*3, distinctPositions: 10+i, state: "disponible" })) },
-    loadingQuality: { targetedPercent: 85, offTargetPercent: 15 },
-    unloadingQuality: { targetedPercent: 69, offTargetPercent: 31 },
+    loadingQuality: { targeted: 85, offTarget: 15, targetedPercent: 85, offTargetPercent: 15 },
+    unloadingQuality: { targeted: 69, offTarget: 31, targetedPercent: 69, offTargetPercent: 31 },
     unloadingDuelQuality: { wonPercent: 67, lostPercent: 33 },
-    zonageDiagnostic: { latePositions: 12, unqualifiablePositions: 3, qualifiablePositions: 150,
-      coverageRate: 97, top5: [] },
+    zonageDiagnostic: { state: "disponible", targetMinutes: league.criteria.zonageMinutes,
+      receivedPositions: 160, latePositions: 12, onTimePositions: 138, unqualifiablePositions: 10,
+      qualifiablePositions: 150, anomalyRate: 8, coverageRate: 93.75,
+      top5: [{ travelCode: "EX-001", latePositions: 8 }] },
     anomalySummary: { unloading: { offTargetTravels: 2, eligibleTravels: 23 },
       loading: { offTargetTravels: 3, eligibleTravels: 27 } },
   };
@@ -74,27 +91,35 @@ for (const fixture of fixtures) {
   // The complete 2,000+ character instructions cannot fit on A4: refuse to
   // silently cut critical text. A date-scoped short summary makes it printable.
   assert.throws(() => renderMatchPdf(model), e => e.status === 422);
-  model.pdfProfile = {
-    indicatorIds: fixture.visible.slice(0, 6),
-    chartId: code === "058" ? "passes-hourly" : "reception-time",
-    dailyBrief: { matchDate: date, attack: "FIN-DU-BRIEF-TEST-" + code },
-  };
-  const pdf = renderMatchPdf(model);
-  const pdfText = pdf.toString("latin1");
-  const pages = (pdfText.match(/\/Type \/Page \/Parent/g) ?? []).length;
-  assert.equal(pdfText.slice(0, 8), "%PDF-1.4");
-  assert.equal(pages, 2, "No synthetic agency configuration may exceed two pages");
-  assert.match(pdfText, new RegExp("FIN-DU-BRIEF-TEST-" + code));
-  assert.match(pdfText, /COUP DE SIFFLET FINAL/);
-  assert.match(pdfText, /BRIEF OPERATIONNEL DU JOUR/);
-  assert.match(pdfText, /SERVICE CLIENT/);
-  assert.match(pdfText, /SST/);
-  assert.doesNotMatch(pdfText, /CAPTURES DU BRIEF|CEREMONIE DES PERFORMANCES/i);
-  assert.doesNotMatch(pdfText, /\/Subtype \/Image/, "Detailed JPEG annexes must not fill the two-page briefing");
-  assert.doesNotMatch(pdfText, new RegExp("FIN-DU-BRIEF-TEST-" + (code === "058" ? "059" : "058")));
-  if (code === "058") assert.match(pdfText, /HEURE-27/);
-  if (code === "059") assert.match(pdfText, /Barres : moyenne en s\/position/);
-  const filename = path.join(out, "SYNTHETIC_MATCH_" + code + "_" + league.label.replace(/ /g, "_") + ".pdf");
-  await fs.writeFile(filename, pdf);
-  console.log(filename + " / pages=" + pages + " / bytes=" + pdf.length);
+
+  for (const chartId of PDF_CHART_IDS) {
+    model.pdfProfile = {
+      indicatorIds: fixture.visible.slice(0, 6),
+      chartId,
+      dailyBrief: { matchDate: date, attack: "FIN-DU-BRIEF-TEST-" + code },
+    };
+    const pdf = renderMatchPdf(model);
+    const pdfText = pdf.toString("latin1");
+    const pages = (pdfText.match(/\/Type \/Page \/Parent/g) ?? []).length;
+    assert.equal(pdfText.slice(0, 8), "%PDF-1.4");
+    assert.equal(pages, 2, chartId + ": must never create a third page");
+    assert.match(pdfText, new RegExp("FIN-DU-BRIEF-TEST-" + code));
+    assert.ok(pdfText.includes(league.label));
+    assert.ok(pdfText.includes("Zonage <= " + league.criteria.zonageMinutes + " min"));
+    assert.ok(pdfText.includes("CHG <= " + league.criteria.loadingSeconds + " s/poz"));
+    assert.ok(pdfText.includes("DECHG <= " + league.criteria.unloadingSeconds + " s/poz"));
+    assert.match(pdfText, /BRIEF OPERATIONNEL DU JOUR|SERVICE CLIENT/);
+    const expectedText = {
+      "passes-hourly": "Total filtré",
+      "reception-time": "Cible : " + league.criteria.unloadingSeconds + " s/poz",
+      loading: "Temps par position",
+      centers: "Source PDF 106J du 2026-11-09",
+      "operational-diagnostic": "Cible zonage",
+    }[chartId];
+    assert.ok(pdfText.includes(expectedText), chartId + ": missing target/source " + expectedText);
+    assert.doesNotMatch(pdfText, /\/Subtype \/Image/, "No screenshots in two-page summary");
+    const filename = path.join(out, "SYNTHETIC_MATCH_" + code + "_" + league.label.replace(/ /g, "_") + "_" + chartId + ".pdf");
+    await fs.writeFile(filename, pdf);
+    console.log(filename + " / pages=" + pages + " / bytes=" + pdf.length);
+  }
 }

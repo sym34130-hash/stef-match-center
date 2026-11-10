@@ -108,6 +108,47 @@ export function matchExportModel({
   if (CRITERIA_KEYS.some(key => Number(snapshot.performanceCriteria?.[key]) !== league.criteria[key])) {
     throw new MatchExportError(409, "Les KPI de l'instantané ne correspondent pas à la ligue sélectionnée.");
   }
+  // Some chart metrics carry their own persisted targets. Checking only the
+  // high-level performanceCriteria can otherwise print a graph computed with
+  // an older league's threshold alongside the active league scoreboard.
+  const embeddedThresholds = [
+    ["score", snapshot.operationalScore?.targetPercent, league.criteria.scoreTargetPercent],
+    ["chargement", snapshot.operationalScore?.loading?.targetSeconds, league.criteria.loadingSeconds],
+    ["réception", snapshot.unloadingHourlyAnalysis?.targetSeconds, league.criteria.unloadingSeconds],
+    ["zonage", snapshot.zonageDiagnostic?.targetMinutes, league.criteria.zonageMinutes],
+  ];
+  const stale = embeddedThresholds.find(([, recorded, active]) => Number.isFinite(recorded) && recorded !== active);
+  if (stale) {
+    throw new MatchExportError(409,
+      `Le seuil ${stale[0]} du graphique ne correspond plus à la ligue active. Actualise le MATCH avant l'export.`);
+  }
+  // Score and carousel use the SAME canonical snapshot values. If the score's
+  // persisted rates or result disagree with their underlying KPI sources,
+  // showing both together would be misleading: fail instead of masking it.
+  const score = snapshot.operationalScore;
+  if (score?.status === "available") {
+    const rates = score.indicators ?? {};
+    const comparisons = [
+      ["tirs cadrés", rates.loadingPercent, snapshot.loadingQuality?.targetedPercent],
+      ["duels gagnés", rates.unloadingPercent, snapshot.unloadingQuality?.targetedPercent],
+      ["possession", rates.possessionPercent, snapshot.summary?.possessionPercent],
+      ["passes réussies", rates.passRate, snapshot.summary?.passRate],
+    ];
+    const mismatch = comparisons.find(([, official, source]) =>
+      Number.isFinite(official) && Number.isFinite(source) && Math.abs(official - source) > 0.11);
+    if (mismatch) {
+      throw new MatchExportError(409,
+        `Le KPI « ${mismatch[0]} » diverge entre le score et sa source. Actualise ou réimporte le MATCH avant l'export.`);
+    }
+    const values = [rates.passRate, rates.loadingPercent, rates.unloadingPercent, rates.possessionPercent];
+    if (values.every(Number.isFinite)) {
+      const forGoals = values.filter(value => value > league.criteria.scoreTargetPercent).length;
+      if (score.goalsFor !== forGoals || score.goalsAgainst !== values.length - forGoals) {
+        throw new MatchExportError(409,
+          "Le résultat du MATCH ne correspond plus aux quatre KPI de la ligue. Actualise le MATCH avant l'export.");
+      }
+    }
+  }
   if (manualInjuries !== null && (!Number.isInteger(manualInjuries) || manualInjuries < 0 || manualInjuries > 99)) {
     throw new MatchExportError(400, "Le nombre de blessures A.T est invalide.");
   }
