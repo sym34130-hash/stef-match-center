@@ -1703,10 +1703,10 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
           <span>FEUILLE DE MATCH</span>
           <strong aria-live="polite">{slideLabels[activeSlide]}</strong>
           <button className="match-pdf-export-button" type="button"
-            aria-label="Télécharger le MATCH en PDF" disabled={pdfExporting}
+            aria-label="Exporter le MATCH en PDF" disabled={pdfExporting}
             onClick={downloadMatchPdf}>
             <Download size={15} aria-hidden="true" />
-            {pdfExporting ? "Préparation du PDF..." : "Télécharger le MATCH (PDF)"}
+            {pdfExporting ? "Génération du PDF..." : "Exporter le MATCH en PDF"}
           </button>
           {pdfExportError && <small className="match-pdf-export-error" role="alert">{pdfExportError}</small>}
         </div>
