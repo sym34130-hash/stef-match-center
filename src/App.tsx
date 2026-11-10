@@ -963,6 +963,21 @@ async function fetchCauseriePlan(session: Session, snapshot: Snapshot): Promise<
   }
 }
 
+/** Compare the operational content, not the browser-only revision or
+ * updatedAt stamp. The download reads the real server revision every time. */
+function sameCauserieContent(a: CauseriePlan, b: CauseriePlan): boolean {
+  const signature = (raw: CauseriePlan) => {
+    const p = normalizeCauseriePlan(raw);
+    return JSON.stringify({
+      team: p.team, manager: p.manager, attack: p.attack,
+      midfield: p.midfield, defense: p.defense, attachments: p.attachments,
+      coach: p.coach, mercato: p.mercato, mercatoProfiles: p.mercatoProfiles,
+      redCards: p.redCards, visibleIndicators: p.visibleIndicators,
+    });
+  };
+  return signature(a) === signature(b);
+}
+
 class CauserieConflictError extends Error {
   constructor(message: string, readonly serverPlan: CauseriePlan) { super(message); }
 }
@@ -1414,6 +1429,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const [editingKpis, setEditingKpis] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
   const [pdfExportError, setPdfExportError] = useState<string | null>(null);
+  const [pdfExportNotice, setPdfExportNotice] = useState<string | null>(null);
   const [pdfProfile, setPdfProfile] = useState<PdfProfile | null>(null);
   const [pdfProfileRevision, setPdfProfileRevision] = useState<string | null>(null);
   const [pdfSettingsOpen, setPdfSettingsOpen] = useState(false);
@@ -1649,25 +1665,48 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
     if (pdfExporting) return;
     setPdfExporting(true);
     setPdfExportError(null);
+    setPdfExportNotice(null);
     try {
       if (!(updated?.profile ?? pdfProfile)) throw new Error("La personnalisation du PDF n'est pas chargée. Actualise le MATCH.");
       if (!indicatorSettingsReady) {
         throw new Error("Le brief équipe est en cours de chargement. Réessaie après actualisation.");
       }
+      // Never infer persistence from the browser's cached Causerie object.
+      // The server's dated brief and its revision are authoritative.
       const plan = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan : null;
-      if (!plan?.revision && plan && (
-        Boolean(plan.team.trim() || plan.manager.trim() || plan.mercato.trim() || plan.redCards.trim())
-        || [...plan.attack, ...plan.midfield, ...plan.defense].some(line => line.trim())
-        || Object.values(plan.attachments).some(images => images.length > 0)
-        || Object.values(plan.coach).some(value => value.trim())
-      )) {
-        throw new Error("Le brief affiché contient des modifications locales non enregistrées sur le serveur. Enregistre le brief avant l'export PDF.");
+      const briefResponse = await fetch(
+        `/api/agencies/${encodeURIComponent(session.agency.code)}/causerie?matchDate=${encodeURIComponent(snapshot.match.date)}`,
+        { cache: "no-store", headers: { "x-access-code": session.accessCode } },
+      );
+      if (!briefResponse.ok) {
+        throw new Error("Impossible de vérifier le brief enregistré sur le serveur. Réessaie lorsque la connexion est disponible.");
+      }
+      const serverBrief = await briefResponse.json() as {
+        plan: CauseriePlan | null; causerieRevision: string | null;
+      };
+      const currentRevision = serverBrief.causerieRevision ?? "";
+      const localContent = Boolean(plan && hasManualCauserieContent(plan, snapshot));
+      const needsLocalWarning = Boolean(localContent && (
+        !serverBrief.plan || !sameCauserieContent(plan!, normalizeCauseriePlan(serverBrief.plan))));
+      if (needsLocalWarning) {
+        const proceed = window.confirm(
+          "Le BRIEF affiché sur ce poste diffère de la version enregistrée en ligne. "
+          + "Le PDF utilisera uniquement le brief serveur et les synthèses PDF enregistrées, "
+          + "sans inclure les modifications locales. Continuer le téléchargement ?",
+        );
+        if (!proceed) {
+          throw new Error("Export annulé : enregistre d'abord le BRIEF ÉQUIPE sur le serveur ou utilise les synthèses papier.");
+        }
+        setPdfExportNotice("Le PDF utilise la version du brief enregistrée en ligne, et non les modifications locales.");
+      } else if (serverBrief.plan && (!plan?.revision || plan.revision !== currentRevision)) {
+        setMercatoPlan({ key: mercatoPlanKey,
+          plan: normalizeCauseriePlan({ ...serverBrief.plan, revision: currentRevision }) });
       }
       const params = new URLSearchParams({
         leagueId: activeLeague,
         matchDate: snapshot.match.date,
         importedAt: snapshot.importedAt,
-        causerieRevision: plan?.revision ?? "",
+        causerieRevision: currentRevision,
         pdfProfileRevision: updated?.profileRevision ?? pdfProfileRevision ?? "",
         zonageMinutes: String(snapshot.performanceCriteria?.zonageMinutes ?? ""),
         loadingSeconds: String(snapshot.performanceCriteria?.loadingSeconds ?? ""),
@@ -1853,6 +1892,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
           </button>
           </div>
           {pdfExportError && <small className="match-pdf-export-error" role="alert">{pdfExportError}</small>}
+          {pdfExportNotice && <small className="match-pdf-export-notice" role="status">{pdfExportNotice}</small>}
 
           {pdfSettingsOpen && pdfSettingsDraft && createPortal(
             <div className="match-pdf-modal-backdrop">
