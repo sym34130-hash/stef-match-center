@@ -44,6 +44,7 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
   try {
     const criteria = { zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 };
     const snapshots = {};
+    const causerieRevisions = {};
     for (const code of ["058", "059"]) {
       const binary = workbook(code);
       const built = buildSnapshotFromWorkbook(binary, "match-" + code + ".xlsx", code, {
@@ -56,7 +57,8 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
       await fs.writeFile(path.join(dataDir, code, "latest.xlsx"), binary);
       const causeriesDir = path.join(dataDir, code, "causeries");
       await fs.mkdir(causeriesDir, { recursive: true });
-      await fs.writeFile(path.join(causeriesDir, built.snapshot.match.date + ".json"), JSON.stringify({
+      const causeriePath = path.join(causeriesDir, built.snapshot.match.date + ".json");
+      await fs.writeFile(causeriePath, JSON.stringify({
         briefLayoutVersion: 2, visibleIndicatorsVersion: 2,
         visibleIndicators: ["positions", "accident-free-days"],
         team: "EQUIPE-" + code, manager: "RESPONSABLE-" + code,
@@ -65,6 +67,8 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
         coach: { tactic: "PRIORITE-" + code, priority: "SURVEILLER-" + code },
         attachments: { attack: [], midfield: [], defense: [] },
       }));
+      const file = await fs.stat(causeriePath, { bigint: true });
+      causerieRevisions[code] = `${file.ino}:${file.size}:${file.mtimeNs}`;
       await fs.writeFile(path.join(dataDir, code, "safety.json"), JSON.stringify({
         lastAccidentDate: code === "058" ? "2026-09-05" : "2026-09-06",
       }));
@@ -84,6 +88,7 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
     const query = code => new URLSearchParams({
       leagueId: "argent", matchDate: snapshots[code].match.date,
       importedAt: snapshots[code].importedAt,
+      causerieRevision: causerieRevisions[code],
       zonageMinutes: "30", loadingSeconds: "165", unloadingSeconds: "60", scoreTargetPercent: "50",
     });
     const uri = code => base + "/api/agencies/" + code + "/export/match.pdf?" + query(code);
@@ -94,6 +99,7 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
     assert.equal(missing.status, 401);
     const badDate = await fetch(base + "/api/agencies/058/export/match.pdf?" + new URLSearchParams({
       leagueId: "argent", matchDate: "2026-10-01", importedAt: snapshots["058"].importedAt,
+      causerieRevision: causerieRevisions["058"],
       zonageMinutes: "30", loadingSeconds: "165", unloadingSeconds: "60", scoreTargetPercent: "50",
     }), { headers: { "x-access-code": "SECRET-058" } });
     assert.equal(badDate.status, 409);
@@ -103,6 +109,11 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
     const badCriteria = await fetch(base + "/api/agencies/058/export/match.pdf?" + mismatchedThreshold,
       { headers: { "x-access-code": "SECRET-058" } });
     assert.equal(badCriteria.status, 409, "Different league KPI must never be silently exported");
+    const staleBrief = new URLSearchParams(query("058"));
+    staleBrief.set("causerieRevision", "outdated");
+    assert.equal((await fetch(base + "/api/agencies/058/export/match.pdf?" + staleBrief,
+      { headers: { "x-access-code": "SECRET-058" } })).status, 409,
+      "Outdated team brief must never be silently exported");
     const staleImport = new URLSearchParams(query("058"));
     staleImport.set("importedAt", "2024-01-01T00:00:00.000Z");
     assert.equal((await fetch(base + "/api/agencies/058/export/match.pdf?" + staleImport,
