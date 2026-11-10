@@ -262,7 +262,7 @@ function indicatorCards(m) {
     "tonnage-distribution": { label: "Tonnage distribution", value: Number.isFinite(d?.distribution?.tonnage) ? fmtTonnage(d.distribution.tonnage) + " t" : "Indisponible",
       detail: "106J " + (d?.referenceDate ?? "date inconnue") + (Number.isFinite(d?.total?.tonnage) ? " · Total " + fmtTonnage(d.total.tonnage) + " t" : "") },
     "tonnage-expedition": { label: "Tonnage expédition", value: Number.isFinite(d?.expedition?.tonnage) ? fmtTonnage(d.expedition.tonnage) + " t" : "Indisponible",
-      detail: "106J " + (d?.referenceDate ?? "date inconnue") + " · Expédition" },
+      detail: "106J " + (d?.referenceDate ?? "date inconnue") + (Number.isFinite(d?.total?.tonnage) ? " · Total " + fmtTonnage(d.total.tonnage) + " t" : "") },
     positions: { label: "Positions", value: fmt(m.summary?.positions), detail: "Excel · " + (m.match?.timeRangeLabel ?? "plage active") },
     arrival: { label: "Ponctualite arrivage", value: percent(p.arrivalPunctuality) },
     departure: { label: "Ponctualite depart", value: percent(p.departurePunctuality) },
