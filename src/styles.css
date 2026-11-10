@@ -18309,6 +18309,31 @@ body.tv-screen-active .app-shell.league-platine {
   flex: 0 0 auto;
 }
 
+/* Lot E: export action has its own navigation row so it cannot overlap arrows. */
+.match-pdf-download-row {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.match-pdf-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  max-width: 100%;
+  line-height: 1.3;
+  white-space: normal;
+  text-align: center;
+}
+.match-pdf-download:disabled { opacity: .5; cursor: not-allowed; }
+.match-pdf-error { grid-column: 1 / -1; margin: 0; color: #bb2626; font-size: 12px; font-weight: 750; }
+.match-page.is-celebration-mode .match-pdf-download { color: #f4f8ff; background: #163c62; border-color: #8fbee3; }
+.match-page.is-celebration-mode .match-pdf-error { color: #ffb3a5; }
+@media (max-width: 640px) {
+  .match-pdf-download { font-size: 11px; min-height: 30px; padding: 5px 9px; }
+}
+
 .match-carousel-count {
   min-width: 54px;
   margin-right: 2px;
