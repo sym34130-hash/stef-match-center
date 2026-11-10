@@ -1844,7 +1844,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
                     const checked = pdfSettingsDraft.indicatorIds.includes(id);
                     return <label key={id}>
                       <input type="checkbox" checked={checked}
-                        disabled={!visible || (!checked && pdfSettingsDraft.indicatorIds.length >= 4)}
+                        disabled={(!visible && !checked) || (!checked && pdfSettingsDraft.indicatorIds.length >= 4)}
                         onChange={(event) => setPdfSettingsDraft(current => current ? {
                           ...current, indicatorIds: event.target.checked ? [...current.indicatorIds, id]
                             : current.indicatorIds.filter(value => value !== id),
