@@ -21,6 +21,7 @@ import {
   Clock3,
   Crown,
   Dumbbell,
+  Download,
   Edit3,
   Eye,
   EyeOff,
@@ -53,6 +54,7 @@ import { ReceptionScopeControls, type ReceptionExclusionChange, type LoadingExcl
 import { KickoffMusicControl } from "./KickoffMusicControl";
 import { OperationalDiagnosticCard, ReceptionHourlyChart } from "./OperationalAnalysisCards";
 import { parseMercatoEntrants, type MercatoProfile, type MercatoProfiles } from "./mercato";
+import "./match-export.css";
 
 type Session = {
   agency: Agency;
@@ -84,6 +86,30 @@ type CauseriePlan = {
     review: string;
   };
 };
+
+type PdfBriefField = "safety" | "priorities" | "attack" | "midfield" | "defense" | "decisions";
+type PdfProfile = {
+  version: number;
+  indicatorIds: string[];
+  chartId: string;
+  dailyBrief: { matchDate: string } & Record<PdfBriefField, string>;
+};
+type PdfProfileResponse = { profile: PdfProfile; profileRevision: string | null };
+const PDF_CHART_OPTIONS: ReadonlyArray<readonly [string, string]> = [
+  ["passes-hourly", "% passes réussies par heure"],
+  ["reception-time", "Duels gagnés / réception"],
+  ["loading", "% tirs cadrés"],
+  ["centers", "% centres réussis"],
+  ["operational-diagnostic", "Diagnostic opérationnel"],
+];
+const PDF_BRIEF_OPTIONS: ReadonlyArray<readonly [PdfBriefField, string, number]> = [
+  ["safety", "Sécurité / vigilance", 260],
+  ["priorities", "Priorités opérationnelles", 260],
+  ["attack", "Consignes Attaque", 240],
+  ["midfield", "Consignes Milieu", 240],
+  ["defense", "Consignes Défense", 240],
+  ["decisions", "Décisions / arbitrages", 330],
+];
 
 type MatchKpiCopy = {
   injuriesValue: string;
@@ -1386,6 +1412,14 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const [celebrationMode, setCelebrationMode] = useState(false);
   const [thresholdPulse, setThresholdPulse] = useState(false);
   const [editingKpis, setEditingKpis] = useState(false);
+  const [pdfExporting, setPdfExporting] = useState(false);
+  const [pdfExportError, setPdfExportError] = useState<string | null>(null);
+  const [pdfProfile, setPdfProfile] = useState<PdfProfile | null>(null);
+  const [pdfProfileRevision, setPdfProfileRevision] = useState<string | null>(null);
+  const [pdfSettingsOpen, setPdfSettingsOpen] = useState(false);
+  const [pdfSettingsDraft, setPdfSettingsDraft] = useState<PdfProfile | null>(null);
+  const [pdfSettingsSaving, setPdfSettingsSaving] = useState(false);
+  const [pdfSettingsError, setPdfSettingsError] = useState<string | null>(null);
   const [kpiCopy, setKpiCopy] = useState<MatchKpiCopy>(() => loadMatchKpiCopy(snapshot));
   const [savedKpiCopy, setSavedKpiCopy] = useState<MatchKpiCopy>(kpiCopy);
   const [mercatoPlan, setMercatoPlan] = useState<{ key: string; plan: CauseriePlan | null } | null>(null);
@@ -1442,6 +1476,64 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
     };
   }, [mercatoPlanKey, session, snapshot, causerieRevision]);
 
+
+  useEffect(() => {
+    let cancelled = false;
+    setPdfProfile(null);
+    setPdfProfileRevision(null);
+    setPdfSettingsOpen(false);
+    setPdfSettingsDraft(null);
+    fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/export/profile`, {
+      cache: "no-store", headers: { "x-access-code": session.accessCode },
+    }).then(async response => {
+      if (!response.ok) throw new Error("Impossible de charger la personnalisation du PDF.");
+      return response.json() as Promise<PdfProfileResponse>;
+    }).then(state => {
+      if (!cancelled) {
+        setPdfProfile(state.profile);
+        setPdfProfileRevision(state.profileRevision);
+      }
+    }).catch(error => {
+      if (!cancelled) setPdfExportError(error instanceof Error ? error.message : "Profil PDF indisponible.");
+    });
+    return () => { cancelled = true; };
+  }, [mercatoPlanKey, session.agency.code, session.accessCode]);
+
+  function openPdfSettings() {
+    if (!pdfProfile || !indicatorSettingsReady || !session.agency.canImport) return;
+    const brief = pdfProfile.dailyBrief.matchDate === snapshot.match.date
+      ? pdfProfile.dailyBrief
+      : { matchDate: snapshot.match.date, safety: "", priorities: "", attack: "", midfield: "", defense: "", decisions: "" };
+    setPdfSettingsDraft({ ...pdfProfile, indicatorIds: [...pdfProfile.indicatorIds], dailyBrief: { ...brief } });
+    setPdfSettingsError(null);
+    setPdfSettingsOpen(true);
+  }
+
+  async function savePdfSettings() {
+    if (!pdfSettingsDraft || !session.agency.canImport || pdfSettingsSaving) return;
+    setPdfSettingsSaving(true);
+    setPdfSettingsError(null);
+    try {
+      const response = await fetch(`/api/agencies/${encodeURIComponent(session.agency.code)}/export/profile`, {
+        method: "PUT", cache: "no-store",
+        headers: { "Content-Type": "application/json", "x-access-code": session.accessCode },
+        body: JSON.stringify({ profile: pdfSettingsDraft, expectedRevision: pdfProfileRevision }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.message ?? "Impossible d'enregistrer le profil PDF.");
+      }
+      const result = await response.json() as PdfProfileResponse;
+      setPdfProfile(result.profile);
+      setPdfProfileRevision(result.profileRevision);
+      setPdfSettingsOpen(false);
+      setPdfSettingsDraft(null);
+    } catch (error) {
+      setPdfSettingsError(error instanceof Error ? error.message : "Enregistrement du profil impossible.");
+    } finally {
+      setPdfSettingsSaving(false);
+    }
+  }
 
   useEffect(() => {
     if (!celebrationMode || !indicatorSettingsOpen) return;
@@ -1540,6 +1632,68 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   useEffect(() => {
     slideViewportRef.current?.scrollTo({ top: 0, behavior: "auto" });
   }, [activeSlide]);
+
+  async function downloadMatchPdf() {
+    if (pdfExporting) return;
+    setPdfExporting(true);
+    setPdfExportError(null);
+    try {
+      if (!pdfProfile) throw new Error("La personnalisation du PDF n'est pas chargée. Actualise le MATCH.");
+      if (!indicatorSettingsReady) {
+        throw new Error("Le brief équipe est en cours de chargement. Réessaie après actualisation.");
+      }
+      const plan = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan : null;
+      if (!plan?.revision && plan && (
+        Boolean(plan.team.trim() || plan.manager.trim() || plan.mercato.trim() || plan.redCards.trim())
+        || [...plan.attack, ...plan.midfield, ...plan.defense].some(line => line.trim())
+        || Object.values(plan.attachments).some(images => images.length > 0)
+        || Object.values(plan.coach).some(value => value.trim())
+      )) {
+        throw new Error("Le brief affiché contient des modifications locales non enregistrées sur le serveur. Enregistre le brief avant l'export PDF.");
+      }
+      const params = new URLSearchParams({
+        leagueId: activeLeague,
+        matchDate: snapshot.match.date,
+        importedAt: snapshot.importedAt,
+        causerieRevision: plan?.revision ?? "",
+        pdfProfileRevision: pdfProfileRevision ?? "",
+        zonageMinutes: String(snapshot.performanceCriteria?.zonageMinutes ?? ""),
+        loadingSeconds: String(snapshot.performanceCriteria?.loadingSeconds ?? ""),
+        unloadingSeconds: String(snapshot.performanceCriteria?.unloadingSeconds ?? ""),
+        scoreTargetPercent: String(snapshot.performanceCriteria?.scoreTargetPercent ?? ""),
+      });
+      if (/^(?:[0-9]|[1-9][0-9])$/.test(savedKpiCopy.injuriesValue.trim())) {
+        params.set("injuries", savedKpiCopy.injuriesValue.trim());
+      }
+      if (/^[1-9][0-9]{0,5}$/.test(savedKpiCopy.expectedPlayersValue.trim())) {
+        params.set("expectedPlayers", savedKpiCopy.expectedPlayersValue.trim());
+      }
+      const response = await fetch(
+        `/api/agencies/${encodeURIComponent(session.agency.code)}/export/match.pdf?${params}`,
+        { cache: "no-store", headers: { "x-access-code": session.accessCode } },
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.message ?? "L'export PDF a échoué.");
+      }
+      if (!response.headers.get("Content-Type")?.includes("application/pdf")) {
+        throw new Error("La réponse du serveur n'est pas un PDF.");
+      }
+      const pdf = await response.blob();
+      const url = URL.createObjectURL(pdf);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `STEF_MATCH_${session.agency.code}_${snapshot.match.date}_${activeLeague}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (error) {
+      setPdfExportError(error instanceof Error ? error.message : "Impossible de télécharger le MATCH.");
+    } finally {
+      setPdfExporting(false);
+    }
+  }
 
   function moveSlide(nextIndex: number) {
     const next = Math.max(0, Math.min(slideLabels.length - 1, nextIndex));
@@ -1654,6 +1808,81 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         <div className="match-carousel-heading">
           <span>FEUILLE DE MATCH</span>
           <strong aria-live="polite">{slideLabels[activeSlide]}</strong>
+          <div className="match-pdf-actions">
+          {session.agency.canImport && (
+            <button className="match-pdf-export-button" type="button"
+              aria-label="Personnaliser l'export PDF"
+              disabled={!pdfProfile || !indicatorSettingsReady || pdfExporting}
+              onClick={openPdfSettings}>
+              <Settings2 size={15} aria-hidden="true" />
+              Personnaliser le PDF
+            </button>
+          )}
+          <button className="match-pdf-export-button" type="button"
+            aria-label="Exporter le MATCH en PDF" disabled={pdfExporting || editingKpis}
+            title={editingKpis ? "Enregistre les chiffres avant l\u0027export." : "Exporter le MATCH en PDF"}
+            onClick={downloadMatchPdf}>
+            <Download size={15} aria-hidden="true" />
+            {pdfExporting ? "Génération du PDF..." : "Exporter le MATCH en PDF"}
+          </button>
+          </div>
+          {pdfExportError && <small className="match-pdf-export-error" role="alert">{pdfExportError}</small>}
+
+          {pdfSettingsOpen && pdfSettingsDraft && createPortal(
+            <div className="match-pdf-modal-backdrop">
+              <section className="match-pdf-modal" role="dialog" aria-modal="true"
+                aria-label="Personnaliser l'export PDF"
+                onKeyDown={(event) => { if (event.key === "Escape" && !pdfSettingsSaving) setPdfSettingsOpen(false); }}>
+                <div className="match-pdf-modal-head">
+                  <div><h2>Personnaliser l'export PDF</h2><p>2 pages maximum · Choix indépendant de l'affichage du MATCH</p></div>
+                  <button className="secondary-button compact" type="button" disabled={pdfSettingsSaving}
+                    aria-label="Fermer la personnalisation PDF" onClick={() => setPdfSettingsOpen(false)}>Fermer</button>
+                </div>
+                <h3>KPI complémentaires (maximum 4)</h3>
+                <p>Seuls les KPI visibles dans le carrousel du MATCH peuvent être imprimés.</p>
+                <div className="match-pdf-kpi-list">
+                  {BRIEF_INDICATOR_OPTIONS.map(([id, label]) => {
+                    const visible = normalizeBriefIndicators(briefIndicatorIds).includes(id);
+                    const checked = pdfSettingsDraft.indicatorIds.includes(id);
+                    return <label key={id}>
+                      <input type="checkbox" checked={checked}
+                        disabled={(!visible && !checked) || (!checked && pdfSettingsDraft.indicatorIds.length >= 4)}
+                        onChange={(event) => setPdfSettingsDraft(current => current ? {
+                          ...current, indicatorIds: event.target.checked ? [...current.indicatorIds, id]
+                            : current.indicatorIds.filter(value => value !== id),
+                        } : null)} />
+                      <span>{label}{!visible ? " (masqué dans le MATCH)" : ""}</span>
+                    </label>;
+                  })}
+                </div>
+                <label className="match-pdf-chart-picker">Graphique opérationnel prioritaire
+                  <select value={pdfSettingsDraft.chartId}
+                    onChange={(event) => setPdfSettingsDraft(current => current ? { ...current, chartId: event.target.value } : null)}>
+                    {PDF_CHART_OPTIONS.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+                  </select>
+                </label>
+                <h3>Synthèse papier du {snapshot.match.date}</h3>
+                <p>Facultative : sans saisie, l'export reprend le brief enregistré. S'il dépasse la place disponible, rédige une synthèse courte pour éviter toute coupure.</p>
+                <div className="match-pdf-brief-list">
+                  {PDF_BRIEF_OPTIONS.map(([field, label, max]) => (
+                    <label key={field}>{label}
+                      <textarea rows={2} maxLength={max} value={pdfSettingsDraft.dailyBrief[field]}
+                        onChange={(event) => setPdfSettingsDraft(current => current ? {
+                          ...current, dailyBrief: { ...current.dailyBrief, matchDate: snapshot.match.date, [field]: event.target.value },
+                        } : null)} />
+                    </label>
+                  ))}
+                </div>
+                {pdfSettingsError && <p className="match-pdf-export-error" role="alert">{pdfSettingsError}</p>}
+                <div className="match-pdf-modal-actions">
+                  <button type="button" className="secondary-button compact" disabled={pdfSettingsSaving}
+                    onClick={() => setPdfSettingsOpen(false)}>Annuler</button>
+                  <button type="button" className="primary-button compact" disabled={pdfSettingsSaving}
+                    onClick={savePdfSettings}>{pdfSettingsSaving ? "Enregistrement..." : "Enregistrer le profil PDF"}</button>
+                </div>
+              </section>
+            </div>, document.body
+          )}
         </div>
         <div className="match-carousel-controls">
 

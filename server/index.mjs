@@ -12,6 +12,9 @@ import { operationalAnalysisNeedsRefresh } from "./operational-analysis.mjs";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_SELECTION_VERSION, migrateBriefLayout, normalizeBriefIndicators } from "./brief-layout.mjs";
 import { isValidCalendarDate } from "./calendar-date.mjs";
 import { calculateAccidentFreeDays } from "./accident-free-days.mjs";
+import { MatchExportError, matchExportLeague, matchExportModel } from "./match-export-model.mjs";
+import { renderMatchPdf } from "./match-export-pdf.mjs";
+import { defaultPdfProfile, normalizePdfProfile } from "./match-pdf-profile.mjs";
 import { RECEPTION_EXCLUSION_VERSION, normalizeReceptionCode, normalizeReceptionExclusions, receptionClientKey } from "./reception-exclusions.mjs";
 import { authAttemptKey, boundedAuthText, createAuthAttemptLimiter, MAX_AGENCY_CODE_LENGTH, MAX_ACCESS_CODE_LENGTH } from "./auth-attempts.mjs";
 
@@ -236,6 +239,128 @@ app.get("/api/agencies/:agencyCode/snapshot", requireAgency, async (req, res) =>
     return;
   }
   res.json({ snapshot });
+});
+
+// PDF presentation preferences are agency-scoped. The printable brief is
+// deliberately tied to its match date so yesterday's instructions never leak
+// into the following day's briefing.
+app.get("/api/agencies/:agencyCode/export/profile", requireAgency, async (req, res) => {
+  try {
+    const state = await withAgencyLock(req.agency.code, () => readPdfProfileState(req.agency.code));
+    res.set("Cache-Control", "no-store, max-age=0").json(state);
+  } catch (error) {
+    respondInternalError(res, `export:profile:get:${req.agency.code}`, error);
+  }
+});
+
+app.put("/api/agencies/:agencyCode/export/profile", requireAgency, async (req, res) => {
+  if (!req.agency.canImport) {
+    res.status(403).json({ message: "Cet accès permet seulement de consulter le briefing." });
+    return;
+  }
+  let profile;
+  try {
+    profile = normalizePdfProfile(req.body?.profile, { strict: true });
+  } catch (error) {
+    res.status(400).json({ message: error instanceof Error ? error.message : "Profil PDF invalide." });
+    return;
+  }
+  try {
+    const state = await withAgencyLock(req.agency.code, async () => {
+      const current = await readPdfProfileState(req.agency.code);
+      if (req.body?.expectedRevision !== current.profileRevision) {
+        throw new MatchExportError(409, "Le profil PDF a été modifié ailleurs. Recharge la configuration.");
+      }
+      if (profile.dailyBrief.matchDate) {
+        const latest = await readLatestSnapshot(req.agency.code);
+        if (latest?.match?.date !== profile.dailyBrief.matchDate) {
+          throw new MatchExportError(409, "Le MATCH a changé. Actualise le briefing PDF.");
+        }
+      }
+      const file = path.join(dataDir, sanitizeSegment(req.agency.code), "pdf-profile.json");
+      await writeJsonAtomic(file, profile);
+      return readPdfProfileState(req.agency.code);
+    });
+    res.set("Cache-Control", "no-store, max-age=0").json(state);
+  } catch (error) {
+    if (error instanceof MatchExportError) res.status(error.status).json({ message: error.message });
+    else respondInternalError(res, `export:profile:put:${req.agency.code}`, error);
+  }
+});
+
+// Lot E: entirely read-only. The export uses ONLY the authenticated agency's
+// sources and verifies date, import version, and official league thresholds.
+// Never accept a client-provided snapshot, PDF attachment, or agency name.
+app.get("/api/agencies/:agencyCode/export/match.pdf", requireAgency, async (req, res) => {
+  try {
+    const leagueId = req.query.leagueId;
+    const matchDate = req.query.matchDate;
+    const importedAt = req.query.importedAt;
+    if (typeof leagueId !== "string" || typeof matchDate !== "string" || typeof importedAt !== "string") {
+      throw new MatchExportError(400, "La ligue, la date du MATCH et la version importée sont requises.");
+    }
+    const rawInjuries = req.query.injuries;
+    if (rawInjuries !== undefined && (typeof rawInjuries !== "string" || !/^(?:[0-9]|[1-9][0-9])$/.test(rawInjuries))) {
+      throw new MatchExportError(400, "Le nombre de blessures A.T est invalide.");
+    }
+    const expectedPlayers = req.query.expectedPlayers;
+    if (expectedPlayers !== undefined && (typeof expectedPlayers !== "string"
+      || !/^[1-9][0-9]{0,5}$/.test(expectedPlayers) || Number(expectedPlayers) > 100000)) {
+      throw new MatchExportError(400, "L\u0027effectif prévu est invalide.");
+    }
+    const model = await withAgencyLock(req.agency.code, async () => {
+      const config = matchExportLeague(leagueId, await readLeagueConfigs(req.agency.code));
+      // The PDF must reproduce the thresholds seen on screen; if they have
+      // changed on the server, force a refresh instead of silently mixing sets.
+      for (const key of ["zonageMinutes", "loadingSeconds", "unloadingSeconds", "scoreTargetPercent"]) {
+        const selected = req.query[key];
+        if (typeof selected !== "string" || !/^[0-9]{1,5}$/.test(selected)
+          || Number(selected) !== config.criteria[key]) {
+          throw new MatchExportError(409, "Les paramètres de ligue ont changé. Actualise le MATCH avant l'export.");
+        }
+      }
+      const snapshot = await readLatestSnapshot(req.agency.code, config.criteria);
+      if (!snapshot) throw new MatchExportError(404, "Le MATCH n'est pas disponible pour cette ligue.");
+      // Fail closed on any stale match, agency or criteria before reading the brief.
+      const base = matchExportModel({
+        agency: req.agency, snapshot, league: config,
+        expectedMatchDate: matchDate, expectedImportedAt: importedAt,
+        manualInjuries: rawInjuries === undefined ? null : Number(rawInjuries),
+        manualExpectedPlayers: expectedPlayers === undefined ? null : Number(expectedPlayers),
+      });
+      const [causerieState, safety, pdfProfileState] = await Promise.all([
+        readCauserieState(req.agency.code, base.match.date),
+        readSafetyState(req.agency.code),
+        readPdfProfileState(req.agency.code),
+      ]);
+      if (req.query.pdfProfileRevision !== (pdfProfileState.profileRevision ?? "")) {
+        throw new MatchExportError(409, "La personnalisation du PDF a changé. Actualise avant l'export.");
+      }
+      if (req.query.causerieRevision !== (causerieState.causerieRevision ?? "")) {
+        throw new MatchExportError(409, "Le brief enregistré a changé. Actualise avant l\u0027export.");
+      }
+      return matchExportModel({
+        agency: req.agency, snapshot, league: config, causerie: causerieState.plan, safety,
+        pdfProfile: pdfProfileState.profile,
+        expectedMatchDate: matchDate, expectedImportedAt: importedAt,
+        manualInjuries: rawInjuries === undefined ? null : Number(rawInjuries),
+      });
+    });
+    const pdf = renderMatchPdf(model);
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="STEF_MATCH_${model.agency.code}_${model.match.date}_${model.league.id}.pdf"`,
+      "Cache-Control": "no-store, max-age=0",
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.status(200).end(pdf);
+  } catch (error) {
+    if (error instanceof MatchExportError) {
+      res.status(error.status).json({ title: "EXPORT MATCH NON DISPONIBLE", message: error.message });
+    } else {
+      respondInternalError(res, `export:match:${req.agency.code}`, error);
+    }
+  }
 });
 
 app.get("/api/agencies/:agencyCode/causerie", requireAgency, async (req, res) => {
@@ -1263,6 +1388,9 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
   const latestPath = path.join(agencyDir, "latest.json");
   try {
     let snapshot = normalizeSnapshotContract(JSON.parse(await fs.readFile(latestPath, "utf8")));
+    // import timestamp is provenance, never a recalculation timestamp.
+    // Keep it stable when a league or exclusions trigger a transient rebuild.
+    const sourceImportedAt = snapshot.importedAt;
     const agency = agencies.find((item) => String(item.code).toUpperCase() === String(agencyCode).toUpperCase());
     const persistedExcludedTravelCodes = await readExcludedTravelCodesForSnapshot(agencyCode, snapshot);
     const persistedReceptionExclusions = await readReceptionExclusionsForSnapshot(agencyCode, snapshot);
@@ -1315,7 +1443,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
           { ...period, criteria: requestedCriteria, dailyIndicators, excludedTravelCodes: persistedExcludedTravelCodes, receptionExclusions: persistedReceptionExclusions, loadingExclusions: persistedLoadingExclusions },
         );
         if (rebuilt.ok) {
-          snapshot = rebuilt.snapshot;
+          snapshot = { ...rebuilt.snapshot, importedAt: sourceImportedAt };
           shouldPersistRebuiltSnapshot = storedCriteriaMatchesRequest;
         } else if (!storedCriteriaMatchesRequest || snapshotNeedsRefresh) {
           return null;
@@ -1343,7 +1471,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
           { ...period, criteria: storedCriteria, dailyIndicators, excludedTravelCodes: persistedExcludedTravelCodes, receptionExclusions: persistedReceptionExclusions, loadingExclusions: persistedLoadingExclusions },
         );
         if (rebuilt.ok) {
-          snapshot = rebuilt.snapshot;
+          snapshot = { ...rebuilt.snapshot, importedAt: sourceImportedAt };
           await writeJsonAtomic(latestPath, snapshot);
         }
       } catch (error) {
@@ -1587,6 +1715,17 @@ async function readLatestWorkbook(agencyDir) {
     if (!candidates[0]) throw new Error("Aucun Excel disponible.", { cause: error });
     return fs.readFile(candidates[0].filePath);
   }
+}
+
+async function readPdfProfileState(agencyCode) {
+  const file = path.join(dataDir, sanitizeSegment(agencyCode), "pdf-profile.json");
+  let profile = defaultPdfProfile();
+  try {
+    profile = normalizePdfProfile(JSON.parse(await fs.readFile(file, "utf8")));
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  return { profile, profileRevision: await readFileRevision(file) };
 }
 
 async function readCauserieState(agencyCode, matchDate) {

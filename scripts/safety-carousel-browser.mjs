@@ -67,6 +67,45 @@ try {
     await page.getByRole("button", { name: "Accéder au match", exact: true }).click();
     await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
 
+    // Wait for the agency's brief personalization state to be available;
+    // the real export intentionally refuses to proceed while it is loading.
+    await page.waitForFunction(() => {
+      const control = document.querySelector(".match-indicators-customization > button");
+      return Boolean(control && !control.disabled);
+    }, { timeout: 15000 });
+
+    // Lot E: a discoverable download button must work without hiding
+    // the carrousel navigation or stealing another agency's access code.
+    const pdfButton = page.getByRole("button", { name: "Exporter le MATCH en PDF" });
+    assert.equal(await pdfButton.count(), 1, "One explicit PDF export button");
+    assert.ok(await pdfButton.isVisible(), viewport.width + "px: PDF button is visible");
+    const pdfBox = await pdfButton.boundingBox();
+    const mainNavigationBox = await page.locator(".match-carousel-controls").boundingBox();
+    assert.ok(pdfBox && mainNavigationBox, "PDF export and navigation are in the layout");
+    assert.ok(
+      pdfBox.x + pdfBox.width <= mainNavigationBox.x + 1 ||
+      mainNavigationBox.x + mainNavigationBox.width <= pdfBox.x + 1 ||
+      pdfBox.y + pdfBox.height <= mainNavigationBox.y + 1 ||
+      mainNavigationBox.y + mainNavigationBox.height <= pdfBox.y + 1,
+      viewport.width + "px: PDF export must never cover carousel position or arrows",
+    );
+    let pdfRequest = null;
+    await page.route("**/api/agencies/01K/export/match.pdf?**", route => {
+      pdfRequest = { url: route.request().url(), headers: route.request().headers() };
+      return route.fulfill({ status: 200, contentType: "application/pdf",
+        headers: { "Cache-Control": "no-store" }, body: "%PDF-1.4\\n% test file\\n" });
+    });
+    const exportDownload = page.waitForEvent("download");
+    await pdfButton.click();
+    const downloaded = await exportDownload;
+    assert.equal(downloaded.suggestedFilename(), `STEF_MATCH_01K_${built.snapshot.match.date}_argent.pdf`);
+    assert.ok(pdfRequest, "PDF export reaches the agency-specific HTTP endpoint");
+    assert.equal(pdfRequest.headers["x-access-code"], "SAFETY-CAROUSEL-TEST");
+    const pdfParams = new URL(pdfRequest.url).searchParams;
+    assert.equal(pdfParams.get("leagueId"), "argent");
+    assert.equal(pdfParams.get("loadingSeconds"), String(built.snapshot.performanceCriteria.loadingSeconds));
+    assert.equal(pdfParams.get("importedAt"), built.snapshot.importedAt);
+
     const heading = page.locator(".match-indicators-heading");
     const customize = heading.getByRole("button", { name: "Personnaliser les indicateurs" });
     const navigation = heading.locator(".match-indicators-navigation");
