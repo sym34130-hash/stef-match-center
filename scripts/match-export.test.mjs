@@ -164,8 +164,8 @@ test("Lot E V3: 4, 5 or 6 complementary KPIs do not overlap the chart or create 
     });
     const parsed = await pdfParse(renderMatchPdf(model));
     assert.equal(parsed.numpages, 2, count + " KPI");
-    assert.match(parsed.text, /Service client/);
-    assert.match(parsed.text, /EXPEDITION \/ RAMASSE & EMBALLAGE/i);
+    assert.match(parsed.text, /SERVICE CLIENT/i);
+    assert.match(parsed.text, /EXPÉDITION \/ RAMASSE & EMBALLAGE/i);
     assert.match(parsed.text, /SST/);
     assert.match(parsed.text, /Message service client/);
     assert.match(parsed.text, /Vigilance SST/);
