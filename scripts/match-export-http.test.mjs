@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import net from "node:net";
 import * as XLSX from "xlsx";
-import pdfParse from "pdf-parse";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { buildSnapshotFromWorkbook } from "../server/match-engine.mjs";
 
 async function freePort() {
