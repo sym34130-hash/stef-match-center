@@ -126,7 +126,7 @@ test("A01 V6: les dates différentes restent autorisées, mais pas une autre age
   const otherAgency = pdfAssociation({ referenceDate: "17 septembre 2026", agencyCode: "01K" }, snapshot);
   assert.equal(otherAgency.status, "mismatched-agency");
   assert.equal(canUsePdfIndicators(otherAgency), false);
-  assert.match(otherAgency.message, /autre agence/i);
+  assert.match(otherAgency.message, /Import refusé.*agence du MATCH/i);
 });
 
 test("Source affichée : une agence PDF différente reste identifiable, même après relecture", () => {
