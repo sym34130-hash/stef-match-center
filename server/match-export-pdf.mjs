@@ -605,16 +605,23 @@ function compactChart(p, m, chartId) {
   chartFrame(p, "ANALYSE INDISPONIBLE", "La sélection du graphique a changé. Recharge le MATCH.");
 }
 
-function shortBlock(p, { x, y, w, h, title, value, chars, maxLines = 3 }) {
+/** Size the text to the actual printable geometry, not an arbitrary line cap.
+ * All six fields can use their documented input limits while staying on page 2.
+ * Unknown excess still raises 422 with the exact section; never silently crop. */
+function shortBlock(p, { x, y, w, h, title, value }) {
   p.box(x, y, w, h, C.panel);
   p.box(x, y + h - 3, w, 3, C.blue);
-  p.text(x + 11, y + h - 20, 10, title.toUpperCase(), C.aqua, true);
-  const lines = wrap(value || "Non renseigné", chars ?? Math.floor((w - 22) / 5.35));
-  if (lines.length > maxLines) {
+  p.text(x + 11, y + h - 17, 9.5, title.toUpperCase(), C.aqua, true);
+  const size = 8.7, lineHeight = 9.9;
+  const maxChars = Math.max(14, Math.floor((w - 24) / (size * 0.54)));
+  const lines = wrap(value || "Non renseigné", maxChars);
+  const firstBaseline = y + h - 28;
+  const capacity = Math.max(1, 1 + Math.floor((h - 35) / lineHeight));
+  if (lines.length > capacity) {
     throw new MatchExportError(422,
-      `Le briefing papier dépasse deux pages : raccourcis la rubrique « ${title} » dans Personnaliser l'export PDF.`);
+      `La rubrique « ${title} » contient ${lines.length} lignes (maximum ${capacity} sur 2 pages). Raccourcis uniquement cette synthèse dans « Personnaliser le PDF ».`);
   }
-  lines.forEach((line, i) => p.text(x + 11, y + h - 42 - 14 * i, 9.5, line, C.text));
+  lines.forEach((line, i) => p.text(x + 11, firstBaseline - i * lineHeight, size, line, C.text));
 }
 function effectiveBriefText(m) {
   const custom = m.pdfProfile.dailyBrief;
