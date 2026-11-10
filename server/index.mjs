@@ -257,6 +257,15 @@ app.get("/api/agencies/:agencyCode/export/match.pdf", requireAgency, async (req,
     }
     const model = await withAgencyLock(req.agency.code, async () => {
       const config = matchExportLeague(leagueId, await readLeagueConfigs(req.agency.code));
+      // The PDF must reproduce the thresholds seen on screen; if they have
+      // changed on the server, force a refresh instead of silently mixing sets.
+      for (const key of ["zonageMinutes", "loadingSeconds", "unloadingSeconds", "scoreTargetPercent"]) {
+        const selected = req.query[key];
+        if (typeof selected !== "string" || !/^\\d{1,5}$/.test(selected)
+          || Number(selected) !== config.criteria[key]) {
+          throw new MatchExportError(409, "Les paramètres de ligue ont changé. Actualise le MATCH avant l'export.");
+        }
+      }
       const snapshot = await readLatestSnapshot(req.agency.code, config.criteria);
       if (!snapshot) throw new MatchExportError(404, "Le MATCH n'est pas disponible pour cette ligue.");
       // Fail closed on any stale match, agency or criteria before reading the brief.
