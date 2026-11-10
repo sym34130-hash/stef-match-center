@@ -7,7 +7,7 @@ import { renderMatchPdf } from "../server/match-export-pdf.mjs";
 const out = process.env.STEF_PDF_AUDIT_DIR || "artifacts/lot-e-audit";
 await fs.mkdir(out, { recursive: true });
 const fixtures = [
-  { code: "058", league: "argent", visible: ["performance", "injuries", "accident-free-days", "positions", "arrival"] },
+  { code: "058", league: "argent", visible: ["performance", "injuries", "accident-free-days", "positions", "arrival", "departure"] },
   { code: "059", league: "or", visible: ["performance", "tonnage-expedition", "tonnage-distribution", "temperature"] },
 ];
 const configs = [
@@ -75,7 +75,7 @@ for (const fixture of fixtures) {
   // silently cut critical text. A date-scoped short summary makes it printable.
   assert.throws(() => renderMatchPdf(model), e => e.status === 422);
   model.pdfProfile = {
-    indicatorIds: fixture.visible.filter(id => ["performance", "accident-free-days", "positions", "arrival", "tonnage-expedition"].includes(id)).slice(0, 4),
+    indicatorIds: fixture.visible.filter(id => ["performance", "injuries", "accident-free-days", "positions", "arrival", "departure", "tonnage-expedition"].includes(id)).slice(0, 6),
     chartId: code === "058" ? "passes-hourly" : "centers",
     dailyBrief: { matchDate: date, attack: "FIN-DU-BRIEF-TEST-" + code },
   };
