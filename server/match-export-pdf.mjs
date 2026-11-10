@@ -1,6 +1,9 @@
 // Zero-dependency PDF writer: vector geometry and selectable text.
 // A4 landscape, dark sport scoreboard theme aligned with the Match Center.
 // No server-side browser or external service; no files written to disk.
+import { MatchExportError } from "./match-export-model.mjs";
+import { effectivePdfProfile } from "./match-pdf-profile.mjs";
+
 const WIDTH = 842, HEIGHT = 595;
 const C = {
   bg: [0.035, 0.082, 0.153], panel: [0.085, 0.185, 0.285],
@@ -385,7 +388,7 @@ function yellowCardsPages(doc, m) {
     `${card.playerName ?? "Inconnu"} / ${card.travelCode ?? "-"} / ${card.time ?? "-"} / ${card.reason ?? "-"}`,
   ]), { chars: 105, step: 25 });
 }
-export function renderMatchPdf(model) {
+export function renderMatchPdfFull(model) {
   const doc = new Pdf(model);
   scorePage(doc, model);
   cards(doc, "01 - LE COLLECTIF EN CHIFFRES", indicatorCards(model));
@@ -395,4 +398,155 @@ export function renderMatchPdf(model) {
   causeriePages(doc, model);
   briefCapturePages(doc, model);
   return doc.render();
+}
+
+
+/** Compact two-page briefing. The complete legacy report stays available only
+ * as an exported diagnostic renderer; the HTTP endpoint calls this one. */
+function compactMetric(p, x, y, width, label, value) {
+  p.box(x, y, width, 64, C.panel);
+  p.box(x, y + 61, width, 3, C.blue);
+  p.text(x + 10, y + 43, 8.5, trim(label, 27).toUpperCase(), C.aqua, true);
+  const valueText = ascii(value ?? "Indisponible");
+  const fontSize = valueText.length > 30 ? 10 : valueText.length > 17 ? 13 : 21;
+  const parts = wrap(valueText, Math.max(12, Math.floor((width - 20) / (fontSize * 0.55))));
+  if (parts.length > 2) throw new MatchExportError(422, "Le libellé d'un KPI est trop long pour le briefing papier.");
+  parts.forEach((line, i) => p.text(x + 10, y + 18 - i * 12, fontSize, line, C.white, true));
+}
+function compactBar(p, x, y, name, fraction, caption = "") {
+  p.text(x, y + 19, 10, trim(name, 34), C.white, true);
+  p.box(x, y + 3, 350, 12, C.panel2);
+  if (Number.isFinite(fraction)) p.box(x, y + 3, 350 * clamp(fraction / 100, 0, 1), 12, C.aqua);
+  p.text(x + 360, y + 5, 10, Number.isFinite(fraction) ? percent(fraction) : "N/D", C.text, true);
+  if (caption) p.text(x + 495, y + 5, 8, trim(caption, 31), C.muted);
+}
+function compactChart(p, m, chartId) {
+  const names = {
+    "passes-hourly": "PASSES REUSSIES PAR HEURE",
+    "reception-time": "DUELS GAGNES / RECEPTION",
+    loading: "TIRS CADRES",
+    centers: "CENTRES REUSSIS",
+    "operational-diagnostic": "DIAGNOSTIC OPERATIONNEL",
+  };
+  p.box(29, 48, 784, 132, C.panel);
+  p.box(29, 177, 784, 3, C.aqua);
+  p.text(42, 158, 11.5, names[chartId] ?? "ANALYSE", C.aqua, true);
+  if (chartId === "passes-hourly") {
+    const rows = Array.isArray(m.hourlyPerformance) ? m.hourlyPerformance.filter(v => Number.isFinite(v?.rate)) : [];
+    if (!rows.length) { p.text(44, 104, 12, "Analyse horaire indisponible", C.muted); return; }
+    const x = 52, y = 72, w = 730, h = 65;
+    p.box(x, y, w, 1, C.panel2);
+    const first = rows[0], last = rows[rows.length - 1];
+    for (let i = 0; i < rows.length; i++) {
+      const pointX = x + i * w / Math.max(rows.length - 1, 1);
+      const valueY = y + clamp(rows[i].rate, 0, 100) * h / 100;
+      p.box(pointX - 2, valueY - 2, 4, 4, C.aqua);
+      if (i > 0) {
+        const previousX = x + (i - 1) * w / Math.max(rows.length - 1, 1);
+        const previousY = y + clamp(rows[i - 1].rate, 0, 100) * h / 100;
+        p.ops.push(`${rgb(C.aqua)} RG 1.6 w ${previousX.toFixed(2)} ${previousY.toFixed(2)} m ${pointX.toFixed(2)} ${valueY.toFixed(2)} l S\n`);
+      }
+    }
+    p.text(x, 58, 8, trim(first.label ?? first.hour ?? "Début", 24), C.muted);
+    p.text(x + w, 58, 8, trim(last.label ?? last.hour ?? "Fin", 24), C.muted, false, "right");
+    p.text(590, 158, 9, "Périmètre horaire du graphique (distinct du score)", C.muted);
+    return;
+  }
+  if (chartId === "reception-time") {
+    const positions = (m.unloadingHourlyAnalysis?.items ?? []).filter(entry => Number.isFinite(entry?.distinctPositions));
+    const won = m.unloadingDuelQuality?.wonPercent ?? m.score?.indicators?.unloadingPercent;
+    compactBar(p, 42, 107, "Duels gagnés", won, "KPI officiel du score");
+    p.text(42, 78, 9.5, positions.length
+      ? `Positions réceptionnées par créneau : ${positions.map(entry => fmt(entry.distinctPositions)).join(" / ").slice(0, 125)}`
+      : "Détail horaire indisponible", C.muted);
+    return;
+  }
+  if (chartId === "loading") {
+    compactBar(p, 42, 108, "Tirs cadrés", m.loadingQuality?.targetedPercent);
+    compactBar(p, 42, 65, "Chargements hors cible", m.loadingQuality?.offTargetPercent);
+    return;
+  }
+  if (chartId === "centers") {
+    compactBar(p, 42, 103, "Centres réussis (destination)", m.dailyIndicators?.punctuality?.destinationPunctuality,
+      "Source PDF 106J");
+    return;
+  }
+  compactBar(p, 42, 108, "Couverture du zonage", m.zonageDiagnostic?.coverageRate);
+  p.text(42, 82, 10,
+    `Positions hors délai : ${fmt(m.zonageDiagnostic?.latePositions)} / non vérifiables : ${fmt(m.zonageDiagnostic?.unqualifiablePositions)}`,
+    C.text);
+}
+function shortBlock(p, { x, y, w, h, title, value, chars, maxLines = 3 }) {
+  p.box(x, y, w, h, C.panel);
+  p.box(x, y + h - 3, w, 3, C.blue);
+  p.text(x + 11, y + h - 20, 10, title.toUpperCase(), C.aqua, true);
+  const lines = wrap(value || "Non renseigné", chars ?? Math.floor((w - 22) / 5.35));
+  if (lines.length > maxLines) {
+    throw new MatchExportError(422,
+      `Le briefing papier dépasse deux pages : raccourcis la rubrique « ${title} » dans Personnaliser l'export PDF.`);
+  }
+  lines.forEach((line, i) => p.text(x + 11, y + h - 42 - 14 * i, 9.5, line, C.text));
+}
+function effectiveBriefText(m) {
+  const custom = m.pdfProfile.dailyBrief;
+  const c = m.causerie ?? {};
+  const combined = values => values.filter(value => typeof value === "string" && value.trim()).join(" ; ");
+  const safetyMessage = combined([
+    Number.isFinite(m.safety?.days) ? `${fmt(m.safety.days)} jours sans accident de travail` : "",
+    c.redCards ? `Cartons rouges : ${c.redCards}` : "",
+    custom.safety,
+  ]);
+  return {
+    safety: safetyMessage,
+    priorities: custom.priorities || c.coach?.priority || "",
+    attack: custom.attack || combined(c.attack ?? []),
+    midfield: custom.midfield || combined(c.midfield ?? []),
+    defense: custom.defense || combined(c.defense ?? []),
+    decisions: custom.decisions || combined([c.coach?.tactic, c.coach?.arbitration, c.coach?.review, c.mercato]),
+  };
+}
+function compactScorePage(doc, m) {
+  const p = doc.add("01 / PERFORMANCE DU JOUR");
+  p.text(36, 477, 20, "COUP DE SIFFLET FINAL", C.white, true);
+  const score = m.score;
+  p.card(29, 366, 384, 96, "Buts marqués", score?.status === "available" ? fmt(score.goalsFor) : "Indisponible", "", C.aqua);
+  p.card(426, 366, 387, 96, "Buts encaissés", score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible", "", C.red);
+  const rates = [
+    ["Passes réussies", score?.indicators?.passRate],
+    ["Tirs cadrés", score?.indicators?.loadingPercent],
+    ["Duels gagnés", score?.indicators?.unloadingPercent],
+    ["Possession", score?.indicators?.possessionPercent],
+  ];
+  rates.forEach(([label, val], i) =>
+    p.card(29 + i * 199, 257, 187, 96, label, percent(val),
+      `Objectif ${fmt(m.criteria.scoreTargetPercent)} %`,
+      Number.isFinite(val) && val <= m.criteria.scoreTargetPercent ? C.red : C.blue));
+  const availableCards = indicatorCards(m);
+  const selected = m.pdfProfile.indicatorIds.map(id => {
+    const index = m.visibleIndicators.indexOf(id);
+    return availableCards[index] ?? null;
+  }).filter(Boolean);
+  selected.forEach((item, i) => compactMetric(p, 29 + i * 199, 186, 187, item.label, item.value));
+  if (!selected.length) p.text(41, 220, 10, "Aucun indicateur complémentaire sélectionné.", C.muted);
+  compactChart(p, m, m.pdfProfile.chartId);
+}
+function compactBriefPage(doc, m) {
+  const p = doc.add("02 / BRIEF OPERATIONNEL");
+  p.text(36, 477, 20, "LE PLAN DE JEU", C.white, true);
+  const brief = effectiveBriefText(m);
+  shortBlock(p, { x: 29, y: 380, w: 784, h: 82, title: "Sécurité / vigilance", value: brief.safety, maxLines: 3 });
+  shortBlock(p, { x: 29, y: 292, w: 784, h: 82, title: "Priorités opérationnelles", value: brief.priorities, maxLines: 3 });
+  shortBlock(p, { x: 29, y: 176, w: 254, h: 109, title: "Attaque", value: brief.attack, maxLines: 5 });
+  shortBlock(p, { x: 294, y: 176, w: 254, h: 109, title: "Milieu", value: brief.midfield, maxLines: 5 });
+  shortBlock(p, { x: 559, y: 176, w: 254, h: 109, title: "Défense", value: brief.defense, maxLines: 5 });
+  shortBlock(p, { x: 29, y: 43, w: 784, h: 127, title: "Décisions / arbitrages", value: brief.decisions, maxLines: 6 });
+}
+export function renderMatchPdf(model) {
+  if (!model?.agency?.code || !model?.match?.date) throw new MatchExportError(400, "MATCH invalide.");
+  const m = { ...model, pdfProfile: effectivePdfProfile(model.pdfProfile, model.visibleIndicators, model.match.date) };
+  const pdf = new Pdf(m);
+  compactScorePage(pdf, m);
+  compactBriefPage(pdf, m);
+  if (pdf.pages.length !== 2) throw new MatchExportError(500, "Nombre de pages inattendu.");
+  return pdf.render();
 }
