@@ -54,6 +54,7 @@ import { ReceptionScopeControls, type ReceptionExclusionChange, type LoadingExcl
 import { KickoffMusicControl } from "./KickoffMusicControl";
 import { OperationalDiagnosticCard, ReceptionHourlyChart } from "./OperationalAnalysisCards";
 import { parseMercatoEntrants, type MercatoProfile, type MercatoProfiles } from "./mercato";
+import "./match-export.css";
 
 type Session = {
   agency: Agency;
