@@ -274,12 +274,12 @@ app.get("/api/agencies/:agencyCode/export/match.pdf", requireAgency, async (req,
         expectedMatchDate: matchDate, expectedImportedAt: importedAt,
         manualInjuries: rawInjuries === undefined ? null : Number(rawInjuries),
       });
-      const [causerie, safety] = await Promise.all([
+      const [causerieState, safety] = await Promise.all([
         readCauserieState(req.agency.code, base.match.date),
         readSafetyState(req.agency.code),
       ]);
       return matchExportModel({
-        agency: req.agency, snapshot, league: config, causerie, safety,
+        agency: req.agency, snapshot, league: config, causerie: causerieState.plan, safety,
         expectedMatchDate: matchDate, expectedImportedAt: importedAt,
         manualInjuries: rawInjuries === undefined ? null : Number(rawInjuries),
       });
@@ -1326,6 +1326,9 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
   const latestPath = path.join(agencyDir, "latest.json");
   try {
     let snapshot = normalizeSnapshotContract(JSON.parse(await fs.readFile(latestPath, "utf8")));
+    // import timestamp is provenance, never a recalculation timestamp.
+    // Keep it stable when a league or exclusions trigger a transient rebuild.
+    const sourceImportedAt = snapshot.importedAt;
     const agency = agencies.find((item) => String(item.code).toUpperCase() === String(agencyCode).toUpperCase());
     const persistedExcludedTravelCodes = await readExcludedTravelCodesForSnapshot(agencyCode, snapshot);
     const persistedReceptionExclusions = await readReceptionExclusionsForSnapshot(agencyCode, snapshot);
@@ -1378,7 +1381,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
           { ...period, criteria: requestedCriteria, dailyIndicators, excludedTravelCodes: persistedExcludedTravelCodes, receptionExclusions: persistedReceptionExclusions, loadingExclusions: persistedLoadingExclusions },
         );
         if (rebuilt.ok) {
-          snapshot = rebuilt.snapshot;
+          snapshot = { ...rebuilt.snapshot, importedAt: sourceImportedAt };
           shouldPersistRebuiltSnapshot = storedCriteriaMatchesRequest;
         } else if (!storedCriteriaMatchesRequest || snapshotNeedsRefresh) {
           return null;
@@ -1406,7 +1409,7 @@ async function readLatestSnapshot(agencyCode, requestedCriteria = null) {
           { ...period, criteria: storedCriteria, dailyIndicators, excludedTravelCodes: persistedExcludedTravelCodes, receptionExclusions: persistedReceptionExclusions, loadingExclusions: persistedLoadingExclusions },
         );
         if (rebuilt.ok) {
-          snapshot = rebuilt.snapshot;
+          snapshot = { ...rebuilt.snapshot, importedAt: sourceImportedAt };
           await writeJsonAtomic(latestPath, snapshot);
         }
       } catch (error) {
