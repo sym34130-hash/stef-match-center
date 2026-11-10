@@ -507,7 +507,10 @@ function effectiveBriefText(m) {
 }
 function compactScorePage(doc, m) {
   const p = doc.add("01 / PERFORMANCE DU JOUR");
-  p.text(36, 477, 20, "COUP DE SIFFLET FINAL", C.white, true);
+  p.text(36, 486, 18, "COUP DE SIFFLET FINAL", C.white, true);
+  p.text(36, 468, 9,
+    `Zonage <= ${fmt(m.criteria.zonageMinutes)} min  |  CHG <= ${fmt(m.criteria.loadingSeconds)} s/poz  |  DECHG <= ${fmt(m.criteria.unloadingSeconds)} s/poz`,
+    C.muted);
   const score = m.score;
   p.card(29, 366, 384, 96, "Buts marqués", score?.status === "available" ? fmt(score.goalsFor) : "Indisponible", "", C.aqua);
   p.card(426, 366, 387, 96, "Buts encaissés", score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible", "", C.red);
@@ -533,6 +536,7 @@ function compactScorePage(doc, m) {
 function compactBriefPage(doc, m) {
   const p = doc.add("02 / BRIEF OPERATIONNEL");
   p.text(36, 477, 20, "LE PLAN DE JEU", C.white, true);
+  p.text(813, 479, 9, trim([m.causerie?.team, m.causerie?.manager].filter(Boolean).join(" / "), 63), C.muted, false, "right");
   const brief = effectiveBriefText(m);
   shortBlock(p, { x: 29, y: 380, w: 784, h: 82, title: "Sécurité / vigilance", value: brief.safety, maxLines: 3 });
   shortBlock(p, { x: 29, y: 292, w: 784, h: 82, title: "Priorités opérationnelles", value: brief.priorities, maxLines: 3 });
