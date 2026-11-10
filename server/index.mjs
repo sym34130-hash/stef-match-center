@@ -12,6 +12,8 @@ import { operationalAnalysisNeedsRefresh } from "./operational-analysis.mjs";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout, normalizeBriefIndicators } from "./brief-layout.mjs";
 import { isValidCalendarDate } from "./calendar-date.mjs";
 import { calculateAccidentFreeDays } from "./accident-free-days.mjs";
+import { buildMatchExportIdentity } from "./match-export-identity.mjs";
+import { renderMatchPdf } from "./match-pdf-renderer.mjs";
 import { RECEPTION_EXCLUSION_VERSION, normalizeReceptionCode, normalizeReceptionExclusions, receptionClientKey } from "./reception-exclusions.mjs";
 import { authAttemptKey, boundedAuthText, createAuthAttemptLimiter, MAX_AGENCY_CODE_LENGTH, MAX_ACCESS_CODE_LENGTH } from "./auth-attempts.mjs";
 
@@ -37,6 +39,7 @@ const importConfirmationSecret = randomBytes(32);
 // show "Non renseigné" when missing rather than inventing an incident-free run.
 // Server operators may still disable edits explicitly.
 const safetyWritesEnabled = process.env.STEF_SAFETY_WRITES_ENABLED !== "false";
+let matchPdfExportBusy = false;
 
 const app = express();
 app.disable("x-powered-by");
@@ -236,6 +239,93 @@ app.get("/api/agencies/:agencyCode/snapshot", requireAgency, async (req, res) =>
     return;
   }
   res.json({ snapshot });
+});
+
+// Lot E: read-only PDF export of the currently authenticated agency's MATCH.
+// No PDFs or credentials are persisted. One Chromium worker at a time on Render Free.
+app.post("/api/agencies/:agencyCode/match-pdf", requireAgency, async (req, res) => {
+  res.set("Cache-Control", "private, no-store, max-age=0");
+  if (matchPdfExportBusy) {
+    res.status(503).json({ message: "Un export PDF est déjà en cours. Réessaie ensuite." });
+    return;
+  }
+  const body = req.body ?? {};
+  const { matchDate, importedAt, leagueId, kpis, criteria } = body;
+  if (!isValidCalendarDate(matchDate) || typeof importedAt !== "string" || importedAt.length > 80 ||
+      !["bronze", "argent", "or", "platine"].includes(leagueId) ||
+      !kpis || typeof kpis !== "object" ||
+      !["injuriesValue", "expectedPlayersValue"].every(key =>
+        typeof kpis[key] === "string" && /^\\d{0,4}$/.test(kpis[key])) ||
+      !criteria || typeof criteria !== "object" ||
+      !["zonageMinutes", "loadingSeconds", "unloadingSeconds", "scoreTargetPercent"].every(key =>
+        typeof criteria[key] === "number" && Number.isFinite(criteria[key]))) {
+    res.status(400).json({ message: "Paramètres d'export PDF invalides. Actualise le MATCH." });
+    return;
+  }
+  matchPdfExportBusy = true;
+  try {
+    // All reads use req.agency.code (derived solely from requireAgency).
+    const [snapshot, configState] = await withAgencyLock(req.agency.code, async () => Promise.all([
+      readLatestSnapshot(req.agency.code, criteria),
+      readLeagueConfigState(req.agency.code),
+    ]));
+    if (!snapshot || snapshot.match?.date !== matchDate || snapshot.importedAt !== importedAt) {
+      res.status(409).json({ message: "La version du MATCH a changé. Actualise la page avant l'export." });
+      return;
+    }
+    const league = configState.configs.find(config => config.id === leagueId);
+    if (!league) {
+      res.status(400).json({ message: "Ligue inconnue." });
+      return;
+    }
+    const [briefState, snapshotRevision] = await withAgencyLock(req.agency.code, async () => Promise.all([
+      readCauserieState(req.agency.code, matchDate),
+      readFileRevision(path.join(dataDir, sanitizeSegment(req.agency.code), "latest.json")),
+    ]));
+    const identity = buildMatchExportIdentity({
+      sessionAgency: publicAgency(req.agency),
+      snapshot, league, briefPlan: briefState.plan,
+      briefPlanScope: [req.agency.code, matchDate, importedAt].join(":"),
+      kpis,
+    });
+    for (const key of ["zonageMinutes", "loadingSeconds", "unloadingSeconds", "scoreTargetPercent"]) {
+      if (identity.performanceCriteria[key] !== criteria[key]) {
+        res.status(409).json({ message: "Les seuils KPI ont changé. Actualise le MATCH." });
+        return;
+      }
+    }
+    const pdf = await renderMatchPdf({
+      origin: `http://127.0.0.1:${port}`,
+      agency: publicAgency(req.agency),
+      accessCode: req.header("x-access-code"),
+      identity, kpis,
+    });
+    // Reject mixed-version exports if snapshot, league or brief changed during rendering.
+    const [afterSnapshotRevision, afterConfigs, afterBrief] = await withAgencyLock(req.agency.code, async () => Promise.all([
+      readFileRevision(path.join(dataDir, sanitizeSegment(req.agency.code), "latest.json")),
+      readFileRevision(path.join(dataDir, sanitizeSegment(req.agency.code), "league-configs.json")),
+      readFileRevision(path.join(dataDir, sanitizeSegment(req.agency.code), "causeries", `${sanitizeSegment(matchDate)}.json`)),
+    ]));
+    if (snapshotRevision !== afterSnapshotRevision ||
+        configState.leagueConfigRevision !== afterConfigs ||
+        briefState.causerieRevision !== afterBrief) {
+      res.status(409).json({ message: "Les données ont changé pendant la génération. Relance l'export." });
+      return;
+    }
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${identity.filename}"`,
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.status(200).send(pdf);
+  } catch (error) {
+    console.error("[match-pdf] generation failed:", error instanceof Error ? error.message : error);
+    if (!res.headersSent) {
+      res.status(503).json({ message: "Le PDF n'a pas pu être généré. Aucune donnée n'a été modifiée." });
+    }
+  } finally {
+    matchPdfExportBusy = false;
+  }
 });
 
 app.get("/api/agencies/:agencyCode/causerie", requireAgency, async (req, res) => {
