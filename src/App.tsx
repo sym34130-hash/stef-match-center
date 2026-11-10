@@ -92,6 +92,7 @@ type MatchKpiCopy = {
 const BRIEF_INDICATOR_OPTIONS: ReadonlyArray<readonly [string, string]> = [
   ["performance", "Performance d'équipe"],
   ["injuries", "Blessures A.T"],
+  ["accident-free-days", "Jours sans accident du travail"],
   ["tonnage-distribution", "Tonnage Distribution"],
   ["tonnage-expedition", "Tonnage Expédition"],
   ["positions", "Positions"],
@@ -1676,7 +1677,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
           {session.agency.canImport && (indicatorSettingsOpen || indicatorSettingsFeedback) && (
             <div className="match-indicator-settings">
               {indicatorSettingsOpen && (
-                <div id="match-indicator-settings-panel" className="match-indicator-settings-panel" role="group" aria-label="Personnalisation des neuf cartes du carrousel">
+                <div id="match-indicator-settings-panel" className="match-indicator-settings-panel" role="group" aria-label="Personnalisation des dix cartes du carrousel">
                   <p>Choisis les cartes à afficher dans « Le collectif en chiffres ». Les quatre KPI du score restent inchangés.</p>
                   <div className="match-indicator-settings-options">
                     {BRIEF_INDICATOR_OPTIONS.map(([id, label]) => (
