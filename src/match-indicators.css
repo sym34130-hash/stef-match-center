@@ -235,3 +235,138 @@
   .match-indicator-settings-actions { justify-content: stretch; }
   .match-indicator-settings-actions button { flex: 1 1 auto; justify-content: center; }
 }
+
+
+/* Presentation mode: keep the carousel dedicated to metrics.
+   Settings live in the main slide navigation and open in a separate dialog. */
+.match-page.is-celebration-mode .match-celebration-indicator-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid #91c1e07a;
+  border-radius: 7px;
+  color: #eaf5ff;
+  background: #244c6e;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.match-page.is-celebration-mode .match-celebration-indicator-button:hover:not(:disabled) { background: #32658a; }
+.match-page.is-celebration-mode .match-celebration-indicator-button:focus-visible { outline: 2px solid #b9e4ff; outline-offset: 2px; }
+.match-page.is-celebration-mode .match-celebration-indicator-button:disabled { opacity: .5; cursor: not-allowed; }
+
+.match-indicator-settings-backdrop {
+  position: fixed;
+  z-index: 11000;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 18px;
+  background: #051322c9;
+  backdrop-filter: blur(5px);
+}
+.match-indicator-settings-dialog {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(820px, 100%);
+  max-height: calc(100dvh - 36px);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #88c2e68c;
+  border-radius: 14px;
+  background: #14334d;
+  color: #f1f7ff;
+  box-shadow: 0 24px 60px #010d19b8;
+}
+.match-indicator-settings-dialog-heading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 20px;
+  border-bottom: 1px solid #a4c8e443;
+}
+.match-indicator-settings-dialog-heading > div { display: grid; min-width: 0; gap: 4px; }
+.match-indicator-settings-dialog-heading strong { font-size: 17px; line-height: 1.3; }
+.match-indicator-settings-dialog-heading span { font-size: 12px; color: #c7deef; line-height: 1.35; }
+.match-indicator-settings-dialog-heading > button {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #9ebed64d;
+  border-radius: 7px;
+  color: #f1f7ff;
+  background: #234966;
+  cursor: pointer;
+}
+.match-indicator-settings-dialog-heading > button:hover:not(:disabled) { background: #32658a; }
+.match-indicator-settings-dialog-heading > button:focus-visible { outline: 2px solid #b9e4ff; outline-offset: 2px; }
+.match-indicator-settings-dialog-heading > button:disabled { opacity: .5; cursor: not-allowed; }
+.match-indicator-settings-dialog .match-indicator-settings {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  padding: 18px 20px 20px;
+}
+.match-indicator-settings-dialog .match-indicator-settings-panel {
+  gap: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.match-indicator-settings-dialog .match-indicator-settings-options { gap: 14px; }
+.match-indicator-settings-dialog .match-indicator-settings-actions {
+  position: sticky;
+  bottom: -20px;
+  z-index: 1;
+  padding: 12px 0 2px;
+  background: #14334d;
+}
+.match-indicator-settings-celebration-feedback {
+  position: fixed;
+  z-index: 11000;
+  top: 78px;
+  right: 22px;
+  box-sizing: border-box;
+  max-width: min(440px, calc(100vw - 30px));
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid #7dd4b484;
+  border-radius: 9px;
+  color: #e6fff3;
+  background: #143d40;
+  box-shadow: 0 8px 24px #071521a6;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+.match-indicator-settings-celebration-feedback.is-error { border-color: #ee998e89; color: #ffe8e4; background: #512a35; }
+
+@media (max-width: 640px) {
+  .match-page.is-celebration-mode .match-celebration-indicator-button { width: 34px; min-height: 34px; padding: 7px; }
+  .match-page.is-celebration-mode .match-celebration-indicator-button span { display: none; }
+  .match-indicator-settings-backdrop { padding: 8px; }
+  .match-indicator-settings-dialog { max-height: calc(100dvh - 16px); }
+  .match-indicator-settings-dialog-heading { padding: 12px 14px; }
+  .match-indicator-settings-dialog-heading strong { font-size: 15px; }
+  .match-indicator-settings-dialog .match-indicator-settings { padding: 14px; }
+  .match-indicator-settings-dialog .match-indicator-settings-actions { bottom: -14px; }
+  .match-indicator-settings-celebration-feedback { top: 65px; right: 8px; }
+}
