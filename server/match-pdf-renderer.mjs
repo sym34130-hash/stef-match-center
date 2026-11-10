@@ -168,11 +168,11 @@ export async function renderMatchPdf({ origin, agency, accessCode, identity, kpi
     const details = await page.locator(".match-page").evaluate(element => ({
       code: element.getAttribute("data-export-agency"),
       date: element.getAttribute("data-export-date"),
-      importedAt: element.getAttribute("data-export-imported"),
+      sourceName: element.getAttribute("data-export-source"),
       league: element.getAttribute("data-export-league"),
     }));
     if (details.code !== identity.agencyCode || details.date !== identity.matchDate ||
-        details.importedAt !== identity.importedAt || details.league !== identity.leagueId) {
+        details.sourceName !== identity.sourceName || details.league !== identity.leagueId) {
       throw new Error("Le MATCH affiché ne correspond pas au périmètre validé pour le PDF.");
     }
     await page.waitForFunction(() => {
