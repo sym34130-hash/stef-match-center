@@ -1553,7 +1553,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
       if (!indicatorSettingsReady) {
         throw new Error("Le brief équipe est en cours de chargement. Réessaie après actualisation.");
       }
-      const plan = mercadoPlan?.key === mercatoPlanKey ? mercatoPlan.plan : null;
+      const plan = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan : null;
       if (!plan?.revision && plan && (
         Boolean(plan.team.trim() || plan.manager.trim() || plan.mercato.trim() || plan.redCards.trim())
         || [...plan.attack, ...plan.midfield, ...plan.defense].some(line => line.trim())
