@@ -228,6 +228,9 @@ function scorePage(doc, m) {
     p.card(x, 144, 189, 133, name, percent(value), detail, value !== null && Number.isFinite(value) && value < m.criteria.scoreTargetPercent ? C.red : C.blue);
   });
   p.text(42, 104, 10, `Objectif commun : ${m.criteria.scoreTargetPercent} % | Cartons jaunes : ${m.yellowCards.length}`, C.gold, true);
+  if (Number.isFinite(m.manualExpectedPlayers) && m.manualExpectedPlayers > 0) {
+    p.text(42, 67, 9, `Effectif reel : ${fmt(m.summary?.players)} / prevu : ${fmt(m.manualExpectedPlayers)} = ${percent(Math.round(1000 * m.summary.players / m.manualExpectedPlayers) / 10)}`, C.aqua);
+  }
   p.text(42, 85, 9, `Source : ${trim(m.sourceName, 60)} / import ${trim(m.importedAt, 28)}`, C.muted);
 }
 function indicatorCards(m) {
