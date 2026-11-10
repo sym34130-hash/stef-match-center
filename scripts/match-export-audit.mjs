@@ -110,7 +110,7 @@ for (const fixture of fixtures) {
     assert.ok(pdfText.includes("DECHG <= " + league.criteria.unloadingSeconds + " s/poz"));
     assert.match(pdfText, /BRIEF OPERATIONNEL DU JOUR|SERVICE CLIENT/);
     const expectedText = {
-      "passes-hourly": "Total filtre",
+      "passes-hourly": "Total filtré",
       "reception-time": "Cible : " + league.criteria.unloadingSeconds + " s/poz",
       loading: "Temps par position",
       centers: "Source PDF 106J du 2026-11-09",
