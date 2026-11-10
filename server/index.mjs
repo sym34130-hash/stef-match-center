@@ -9,7 +9,7 @@ import { buildCompositionViewFromWorkbook, buildSnapshotFromWorkbook, isTimeRang
 import { parse106jPdf } from "./pdf-106j.mjs";
 import { pdfAssociation, canUsePdfIndicators } from "./source-provenance.mjs";
 import { operationalAnalysisNeedsRefresh } from "./operational-analysis.mjs";
-import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, migrateBriefLayout, normalizeBriefIndicators } from "./brief-layout.mjs";
+import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_SELECTION_VERSION, migrateBriefLayout, normalizeBriefIndicators } from "./brief-layout.mjs";
 import { isValidCalendarDate } from "./calendar-date.mjs";
 import { calculateAccidentFreeDays } from "./accident-free-days.mjs";
 import { RECEPTION_EXCLUSION_VERSION, normalizeReceptionCode, normalizeReceptionExclusions, receptionClientKey } from "./reception-exclusions.mjs";
@@ -1653,7 +1653,8 @@ function normalizeCauseriePlan(plan) {
     mercato: limitMultilineText(input.mercato, 240),
     mercatoProfiles: normalizeMercatoProfiles(input.mercatoProfiles),
     redCards: limitMultilineText(input.redCards, 1000),
-    visibleIndicators: normalizeBriefIndicators(input.visibleIndicators),
+    visibleIndicatorsVersion: BRIEF_INDICATOR_SELECTION_VERSION,
+    visibleIndicators: normalizeBriefIndicators(input.visibleIndicators, input.visibleIndicatorsVersion),
     coach: {
       tactic: limitText(input.coach?.tactic, 120),
       priority: limitText(input.coach?.priority, 120),
