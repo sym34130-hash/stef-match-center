@@ -35,6 +35,7 @@ export function SafetyCounter({ session }: { session: Session }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [editingDate, setEditingDate] = useState(false);
 
   const url = `/api/agencies/${encodeURIComponent(session.agency.code)}/safety`;
 
@@ -47,6 +48,7 @@ export function SafetyCounter({ session }: { session: Session }) {
     setDraftDate("");
     setDraftRevision(null);
     setReason("");
+    setEditingDate(false);
 
     const load = async (resetDraft = false) => {
       try {
@@ -110,6 +112,7 @@ export function SafetyCounter({ session }: { session: Session }) {
       setDraftRevision(payload.revision);
       setReason("");
       setNotice("Date enregistrée.");
+      setEditingDate(false);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Enregistrement impossible.");
     } finally {
@@ -121,6 +124,8 @@ export function SafetyCounter({ session }: { session: Session }) {
   const needsCorrectionReason = Boolean(state?.lastAccidentDate && draftDate && draftDate !== state.lastAccidentDate);
   const canSave = Boolean(state?.editable && draftDate && draftDate <= (state?.asOfDate ?? "")
     && draftDate !== state?.lastAccidentDate && (!needsCorrectionReason || reason.trim().length >= 5));
+  const canEditDate = Boolean(state?.editable && session.agency.canImport);
+  const showDateForm = canEditDate && (!state?.lastAccidentDate || editingDate);
   return (
     <article className="match-indicator-card is-safety" style={{ "--indicator-accent": "#a6e6c4" } as CSSProperties}
       aria-label="Jours sans accident du travail">
@@ -136,7 +141,7 @@ export function SafetyCounter({ session }: { session: Session }) {
       </div>
       <div className="safety-card-footer">
         <p className="safety-card-last-date">Dernier accident : <b>{dateLabel(state?.lastAccidentDate ?? null)}</b></p>
-        {state?.editable && session.agency.canImport ? (
+        {showDateForm ? (
           <form className="safety-card-form" onSubmit={save}>
             <label htmlFor="safety-last-date">Date du dernier accident</label>
             <div className="safety-card-entry">
@@ -145,6 +150,12 @@ export function SafetyCounter({ session }: { session: Session }) {
                 value={draftDate} onChange={event => { setDraftDate(event.target.value); setNotice(null); }} />
               <button type="submit" disabled={saving || !canSave}>{saving ? "..." : "Valider"}</button>
             </div>
+            {state?.lastAccidentDate && (
+              <button className="safety-card-cancel" type="button" disabled={saving}
+                onClick={() => { setEditingDate(false); setDraftDate(state.lastAccidentDate ?? ""); setDraftRevision(state.revision); setReason(""); setError(null); setNotice(null); }}>
+                Annuler
+              </button>
+            )}
             {needsCorrectionReason && (
               <input className="safety-card-reason" type="text" aria-label="Motif de correction de la date"
                 minLength={5} maxLength={240} required
@@ -152,11 +163,15 @@ export function SafetyCounter({ session }: { session: Session }) {
                 placeholder="Motif de correction" />
             )}
           </form>
-        ) : (
+        ) : canEditDate && state?.lastAccidentDate ? (
+          <button className="safety-card-edit" type="button" onClick={() => { setDraftDate(state.lastAccidentDate ?? ""); setDraftRevision(state.revision); setReason(""); setError(null); setNotice(null); setEditingDate(true); }}>
+            Modifier la date
+          </button>
+        ) : !canEditDate ? (
           <small className="safety-card-readonly">
             {state && !state.editable && session.agency.canImport ? "Saisie désactivée par l’administrateur" : "Date saisie par un responsable"}
           </small>
-        )}
+        ) : null}
         {error && <p className="safety-card-feedback is-error" role="alert">{error}</p>}
         {notice && <p className="safety-card-feedback is-success" role="status">{notice}</p>}
         <small className="safety-card-footnote">Date temporaire · à ressaisir après perte des données du serveur</small>
