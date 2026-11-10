@@ -16,9 +16,14 @@ const rgb = value => value.map(number => number.toFixed(3)).join(" ");
 const trim = (value, limit = 160) => String(value ?? "").replace(/[\r\n\t]/g, " ").trim().slice(0, limit);
 const ascii = value => String(value ?? "").replace(/[\r\n\t]/g, " ").slice(0, 12000).replace(/[\u2010-\u2015]/g, "-").replace(/[\u2018\u2019]/g, "'")
   .replace(/[\u201c\u201d]/g, '"').replace(/\u2026/g, "...").replace(/\u0153/g, "oe")
-  .replace(/\u0152/g, "OE").replace(/\u20ac/g, "EUR").replace(/[^\u0020-\u00ff]/g, "?");
+  .replace(/\u0152/g, "OE").replace(/\u20ac/g, "EUR").replace(/[\u202f\u00a0]/g, " ").replace(/[^\u0020-\u00ff]/g, "?");
 const escape = value => ascii(value).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-const fmt = value => Number.isFinite(value) ? new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(value) : "Indisponible";
+const printedNumber = (value, digits = 1) => Number.isFinite(value)
+  ? new Intl.NumberFormat("fr-FR", { maximumFractionDigits: digits }).format(value).replace(/[\u202f\u00a0]/g, " ")
+  : "Indisponible";
+const fmt = value => printedNumber(value, 1);
+// Keep the same precision as the live Match carousel for tonnage (2 decimals).
+const fmtTonnage = value => printedNumber(value, 2);
 const percent = value => Number.isFinite(value) ? fmt(value) + " %" : "Indisponible";
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 function wrap(value, maxChars = 70) {
@@ -246,9 +251,11 @@ function indicatorCards(m) {
       : "Reconnaissance et reprise terrain" },
     injuries: { label: "Blessures A.T", value: m.manualInjuries === null ? "Non renseigne" : String(m.manualInjuries), detail: "Saisie manuelle du navigateur" },
     "accident-free-days": { label: "Jours sans A.T", value: Number.isFinite(m.safety.days) ? fmt(m.safety.days) : "Non renseigne", detail: m.safety.lastAccidentDate ? "Dernier A.T : " + m.safety.lastAccidentDate : "Date non renseignee" },
-    "tonnage-distribution": { label: "Tonnage distribution", value: Number.isFinite(d?.distribution?.tonnage) ? fmt(d.distribution.tonnage) + " t" : "Indisponible" },
-    "tonnage-expedition": { label: "Tonnage expedition", value: Number.isFinite(d?.expedition?.tonnage) ? fmt(d.expedition.tonnage) + " t" : "Indisponible" },
-    positions: { label: "Positions", value: fmt(m.summary?.positions), detail: "Volume sur plage active" },
+    "tonnage-distribution": { label: "Tonnage distribution", value: Number.isFinite(d?.distribution?.tonnage) ? fmtTonnage(d.distribution.tonnage) + " t" : "Indisponible",
+      detail: "106J " + (d?.referenceDate ?? "date inconnue") + " · Distribution" },
+    "tonnage-expedition": { label: "Tonnage expédition", value: Number.isFinite(d?.expedition?.tonnage) ? fmtTonnage(d.expedition.tonnage) + " t" : "Indisponible",
+      detail: "106J " + (d?.referenceDate ?? "date inconnue") + " · Expédition" },
+    positions: { label: "Positions", value: fmt(m.summary?.positions), detail: "Excel · " + (m.match?.timeRangeLabel ?? "plage active") },
     arrival: { label: "Ponctualite arrivage", value: percent(p.arrivalPunctuality) },
     departure: { label: "Ponctualite depart", value: percent(p.departurePunctuality) },
     destination: { label: "Ponctualite destination", value: percent(p.destinationPunctuality) },
@@ -403,7 +410,7 @@ export function renderMatchPdfFull(model) {
 
 /** Compact two-page briefing. The complete legacy report stays available only
  * as an exported diagnostic renderer; the HTTP endpoint calls this one. */
-function compactMetric(p, x, y, width, label, value) {
+function compactMetric(p, x, y, width, label, value, detail = "") {
   p.box(x, y, width, 64, C.panel);
   p.box(x, y + 61, width, 3, C.blue);
   p.text(x + 10, y + 43, 8.5, trim(label, 27).toUpperCase(), C.aqua, true);
@@ -412,6 +419,7 @@ function compactMetric(p, x, y, width, label, value) {
   const parts = wrap(valueText, Math.max(12, Math.floor((width - 20) / (fontSize * 0.55))));
   if (parts.length > 2) throw new MatchExportError(422, "Le libellé d'un KPI est trop long pour le briefing papier.");
   parts.forEach((line, i) => p.text(x + 10, y + 18 - i * 12, fontSize, line, C.white, true));
+  if (detail && parts.length === 1) p.text(x + 10, y + 5, 7.4, trim(detail, Math.floor((width - 20) / 4.1)), C.muted);
 }
 
 /** Every printed chart is an operationally faithful *summary* of its on-screen
@@ -634,8 +642,8 @@ function compactScorePage(doc, m) {
     `Zonage <= ${fmt(m.criteria.zonageMinutes)} min  |  CHG <= ${fmt(m.criteria.loadingSeconds)} s/poz  |  DECHG <= ${fmt(m.criteria.unloadingSeconds)} s/poz`,
     C.muted);
   const score = m.score;
-  p.card(29, 386, 385, 76, "Buts marqués", score?.status === "available" ? fmt(score.goalsFor) : "Indisponible", "", C.aqua);
-  p.card(428, 386, 385, 76, "Buts encaissés", score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible", "", C.red);
+  p.card(29, 402, 385, 60, "Buts marqués", score?.status === "available" ? fmt(score.goalsFor) : "Indisponible", "", C.aqua);
+  p.card(428, 402, 385, 60, "Buts encaissés", score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible", "", C.red);
   const rates = [
     ["Passes réussies", score?.indicators?.passRate],
     ["Tirs cadrés", score?.indicators?.loadingPercent],
@@ -643,7 +651,7 @@ function compactScorePage(doc, m) {
     ["Possession", score?.indicators?.possessionPercent],
   ];
   rates.forEach(([label, val], i) =>
-    p.card(29 + i * 199, 303, 187, 76, label, percent(val), "",
+    p.card(29 + i * 199, 337, 187, 58, label, percent(val), "",
       Number.isFinite(val) && val <= m.criteria.scoreTargetPercent ? C.red : C.blue));
   // Two rows: 2 x 2 when four are selected, 3 x 2 for five or six.
   // The chart keeps its own fixed area and the font size is unchanged.
@@ -657,7 +665,7 @@ function compactScorePage(doc, m) {
     const column = i % columns;
     const x = columns === 2 ? 29 + column * 399
       : 29 + column * 266 + (selected.length === 5 && row === 1 ? 133 : 0);
-    compactMetric(p, x, 235 - row * 68, columns === 2 ? 385 : 252, card.label, card.value);
+    compactMetric(p, x, 265 - row * 69, columns === 2 ? 385 : 252, card.label, card.value, card.detail);
   });
   compactChart(p, m, m.pdfProfile.chartId);
 }
