@@ -64,7 +64,7 @@ for (const fixture of fixtures) {
     defense: ["RECEPTION : fiabiliser le creneau reel avant la promesse."],
     coach: { tactic: "Vérifier le départ camion", priority: "Suivi des écarts", arbitration: "Arbitrer à quai" },
     mercato: "Nouveau collaborateur sur la plage test", redCards: "",
-    attachments: { attack: [], midfield: [], defense: [] },
+    attachments: { attack: ["data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAsICAoIBwsKCQoNDAsNERwSEQ8PESIZGhQcKSQrKigkJyctMkA3LTA9MCcnOEw5PUNFSElIKzZPVU5GVEBHSEX/2wBDAQwNDREPESESEiFFLicuRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUVFRUX/wAARCAACAAIDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAb/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAABf/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AJgAyOf/2Q=="], midfield: [], defense: [] },
   };
   const model = matchExportModel({ agency: { code, name: "AGENCE TEST " + code },
     snapshot, causerie, league,
@@ -80,6 +80,7 @@ for (const fixture of fixtures) {
   assert.match(pdfText, /RECEPT-23/);
   assert.match(pdfText, new RegExp("TEST GROUPE-" + code));
   assert.match(pdfText, new RegExp("ATTAQUANT-" + code));
+  assert.match(pdfText, /\/Subtype \/Image/, "Brief JPEG capture must be embedded as PDF image");
   assert.doesNotMatch(pdfText, new RegExp("TEST GROUPE-" + (code === "058" ? "059" : "058")));
   const filename = path.join(out, "SYNTHETIC_MATCH_" + code + "_" + league.label.replace(/ /g, "_") + ".pdf");
   await fs.writeFile(filename, pdf);
