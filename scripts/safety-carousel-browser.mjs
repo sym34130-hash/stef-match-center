@@ -115,6 +115,17 @@ try {
     }, new Intl.NumberFormat("fr-FR").format(saved.counter.days), { timeout: 15000 });
     assert.match(await safety.locator(".safety-card-last-date").innerText(), /01\/10\/2026/);
 
+    // Once saved, the date form must collapse without a second visible date.
+    assert.equal(await safety.locator(".safety-card-form").count(), 0);
+    assert.equal(await safety.locator(".safety-card-last-date").count(), 1);
+    const editDate = safety.getByRole("button", { name: "Modifier la date" });
+    assert.ok(await editDate.isVisible());
+    await editDate.click();
+    assert.ok(await safety.locator(".safety-card-form").isVisible());
+    assert.ok(await safety.locator(".safety-card-reason").count() === 0);
+    await safety.getByRole("button", { name: "Annuler" }).click();
+    assert.equal(await safety.locator(".safety-card-form").count(), 0);
+
     const after = await safety.locator(".match-indicator-card.is-safety").evaluate(el => ({
       height: el.getBoundingClientRect().height, scrolled: el.scrollHeight > el.clientHeight + 2,
     }));
