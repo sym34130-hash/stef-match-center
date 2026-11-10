@@ -35,7 +35,7 @@ export function pdfAssociation(pdf, snapshot) {
   if (reportedAgency && targetAgency && reportedAgency !== targetAgency) return {
     status: "mismatched-agency", referenceDate: pdf?.referenceDate ?? null,
     reportedAgency: pdf.agencyCode, targetAgency: snapshot.agency.code,
-    message: `PDF 106J de l'agence ${pdf.agencyCode} (date : ${pdf.referenceDate ?? "non précisée"}), différente de l'espace ${snapshot.agency.code}. Import autorisé : les chiffres affichés proviennent de cette autre agence.`,
+    message: `PDF 106J de l'agence ${pdf.agencyCode} (date : ${pdf.referenceDate ?? "non précisée"}), différente de l'espace ${snapshot.agency.code}. Import refusé : utilise le 106J correspondant à l'agence du MATCH.`,
   };
   const night = snapshot?.zonageDiagnostic?.night ?? snapshot?.anomalySummary?.night;
   const start = night?.startDate ?? parisDay(snapshot?.match?.firstOperation);
