@@ -1,7 +1,7 @@
 /* A.T. days appear as a normal slide inside the existing collective carousel.
    Never create an extra full-width panel or alter carousel geometry. */
 .match-indicator-card.is-safety {
-  grid-template-rows: auto minmax(68px, 1fr) auto;
+  grid-template-rows: auto minmax(105px, 1fr) auto;
   gap: 10px;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -14,7 +14,7 @@
 .safety-card-body { align-self: center; min-width: 0; }
 .safety-card-body .match-indicator-value {
   white-space: nowrap;
-  font-size: clamp(36px, 4vw, 48px);
+  font-size: clamp(54px, 6vw, 68px);
   line-height: 1.06;
 }
 .safety-card-body .match-indicator-value.is-empty {
@@ -24,7 +24,7 @@
 .safety-card-unit { display: block; margin-top: 4px; color: #dff8e9; font-size: 12px; font-weight: 800; }
 .safety-card-footer {
   display: grid;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
   padding-top: 8px;
   border-top: 1px solid #c6e0f22b;
@@ -70,6 +70,21 @@
   cursor: pointer;
 }
 .safety-card-entry button:disabled { opacity: .48; cursor: default; }
+.safety-card-edit, .safety-card-cancel {
+  width: fit-content;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: #d6f8e7;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.safety-card-cancel:disabled { opacity: .5; cursor: default; }
+.safety-card-edit:focus-visible, .safety-card-cancel:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
 .safety-card-reason { font-size: 11px; }
 .safety-card-feedback { margin: 0; font-size: 10px; line-height: 1.25; overflow-wrap: anywhere; }
 .safety-card-feedback.is-error { color: #ffe0d6; }
@@ -78,5 +93,5 @@
 .safety-card-footnote { font-size: 9px; line-height: 1.25; color: #d4e6ed; }
 @media (max-width: 380px) {
   .match-indicator-card.is-safety { padding: 14px; }
-  .safety-card-body .match-indicator-value { font-size: 38px; }
+  .safety-card-body .match-indicator-value { font-size: 52px; }
 }
