@@ -357,16 +357,23 @@ function briefCapturePages(doc, m) {
   }
   for (let start = 0; start < captures.length; start += 4) {
     const page = doc.add(start ? "04 - CAPTURES DU BRIEF / SUITE" : "04 - CAPTURES DU BRIEF");
-    captures.slice(start, start + 4).forEach((item, i) => {
-      const x = 29 + (i % 2) * 395, y = 266 - Math.floor(i / 2) * 223;
-      page.box(x, y, 380, 209, C.panel);
-      page.box(x, y + 206, 380, 3, C.aqua);
-      page.text(x + 12, y + 186, 10, `${item.title} / CAPTURE ${item.index}`, C.aqua, true);
+    const group = captures.slice(start, start + 4);
+    group.forEach((item, i) => {
+      const single = group.length === 1;
+      const two = group.length === 2;
+      const width = single ? 784 : 380;
+      const height = single ? 392 : two ? 385 : 209;
+      const x = single ? 29 : 29 + (i % 2) * 395;
+      const y = single ? 86 : two ? 87 : 266 - Math.floor(i / 2) * 223;
+      page.box(x, y, width, height, C.panel);
+      page.box(x, y + height - 3, width, 3, C.aqua);
+      page.text(x + 12, y + height - 23, 10, `${item.title} / CAPTURE ${item.index}`, C.aqua, true);
       const match = typeof item.source === "string"
         ? item.source.match(/^data:image\/jpeg;base64,([A-Za-z0-9+/]+={0,2})$/) : null;
       const data = match && item.source.length <= 260_000 ? Buffer.from(match[1], "base64") : null;
-      if (!data || !page.image(x + 10, y + 9, 360, 164, data)) {
-        page.text(x + 12, y + 98, 10, "Image non exportable (format source ancien ou invalide)", C.red);
+      if (!data || !page.image(x + 10, y + 9, width - 20, height - 46, data)) {
+        page.text(x + 12, y + height / 2, 10,
+          "Image non exportable (format source ancien ou invalide)", C.red);
       }
     });
   }
