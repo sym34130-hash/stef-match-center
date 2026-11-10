@@ -246,7 +246,7 @@ try {
       innerHeight: window.innerHeight,
       visualHeight: window.visualViewport?.height,
     }));
-    assert.ok(dialogBox && dialogBox.top >= 0 && dialogBox.bottom <= viewport.height + 1,
+    assert.ok(dialogBox && dialogBox.y >= -1 && dialogBox.y + dialogBox.height <= viewport.height + 1,
       "All dialog content must fit into a scrollable viewport: " + JSON.stringify({ dialogBox, viewport, dialogDiagnostics }));
     const carouselWithDialog = await celebrationCarousel.boundingBox();
     assert.ok(carouselWithDialog && Math.abs(carouselWithDialog.height - carouselBeforeDialog.height) < 2,
