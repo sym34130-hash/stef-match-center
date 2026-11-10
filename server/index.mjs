@@ -255,6 +255,11 @@ app.get("/api/agencies/:agencyCode/export/match.pdf", requireAgency, async (req,
     if (rawInjuries !== undefined && (typeof rawInjuries !== "string" || !/^(?:[0-9]|[1-9][0-9])$/.test(rawInjuries))) {
       throw new MatchExportError(400, "Le nombre de blessures A.T est invalide.");
     }
+    const expectedPlayers = req.query.expectedPlayers;
+    if (expectedPlayers !== undefined && (typeof expectedPlayers !== "string"
+      || !/^[1-9][0-9]{0,5}$/.test(expectedPlayers) || Number(expectedPlayers) > 100000)) {
+      throw new MatchExportError(400, "L\u0027effectif prévu est invalide.");
+    }
     const model = await withAgencyLock(req.agency.code, async () => {
       const config = matchExportLeague(leagueId, await readLeagueConfigs(req.agency.code));
       // The PDF must reproduce the thresholds seen on screen; if they have
@@ -273,6 +278,7 @@ app.get("/api/agencies/:agencyCode/export/match.pdf", requireAgency, async (req,
         agency: req.agency, snapshot, league: config,
         expectedMatchDate: matchDate, expectedImportedAt: importedAt,
         manualInjuries: rawInjuries === undefined ? null : Number(rawInjuries),
+        manualExpectedPlayers: expectedPlayers === undefined ? null : Number(expectedPlayers),
       });
       const [causerieState, safety] = await Promise.all([
         readCauserieState(req.agency.code, base.match.date),
