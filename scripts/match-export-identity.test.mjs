@@ -34,6 +34,7 @@ test("Lot E: forbids a snapshot belonging to a second agency", () => {
 
 test("Lot E: forbids foreign-agency 106J, while allowing a different reference date", () => {
   assert.throws(()=>buildMatchExportIdentity(params({snapshot:{...snapshot,dailyIndicators:{...snapshot.dailyIndicators,agencyCode:"059"}}})),/106J/);
+  assert.throws(()=>buildMatchExportIdentity(params({snapshot:{...snapshot,dailyIndicators:{...snapshot.dailyIndicators,agencyCode:null}}})),/106J/);
   assert.equal(buildMatchExportIdentity(params()).pdf106j.referenceDate,"2026-09-11");
 });
 
