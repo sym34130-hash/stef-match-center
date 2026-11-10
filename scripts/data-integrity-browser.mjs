@@ -216,6 +216,64 @@ try {
     await assertTonnage(null, "478 t", 3, false);
     console.log(`Browser: AT card can be hidden and remains hidden after reload at ${viewport.width}px: OK`);
 
+
+    // In celebration mode the editor must be outside the height-constrained carousel.
+    await page.getByRole("button", { name: "Mode célébration" }).click();
+    const celebration = page.locator(".match-page.is-celebration-mode");
+    await celebration.waitFor({ state: "visible" });
+    const celebrationCarousel = celebration.locator(".match-indicators-viewport");
+    const carouselBeforeDialog = await celebrationCarousel.boundingBox();
+    assert.ok(carouselBeforeDialog?.height > 0, "The celebration carousel must remain visible");
+    assert.equal(await celebration.locator(".match-indicators-customization").count(), 0,
+      "Presentation mode must not waste a carousel header row on the settings button");
+    const celebrationSettingsButton = celebration.locator(".match-carousel-controls")
+      .getByRole("button", { name: "Personnaliser les indicateurs" });
+    await celebrationSettingsButton.click();
+    const celebrationDialog = page.getByRole("dialog", { name: "Personnaliser les indicateurs" });
+    await celebrationDialog.waitFor({ state: "visible" });
+    assert.equal(await celebration.locator(".match-indicators-area .match-indicator-settings").count(), 0,
+      "The settings form must not occupy a carousel grid row");
+    assert.equal(await page.locator("body > .match-indicator-settings-backdrop").count(), 1,
+      "The editor must be portalled outside the clipped celebration slide");
+    assert.equal(await celebrationDialog.locator('input[type="checkbox"]').count(), 10);
+    const dialogBox = await celebrationDialog.boundingBox();
+    const dialogDiagnostics = await celebrationDialog.evaluate(element => ({
+      dialog: element.getBoundingClientRect().toJSON(),
+      backdrop: element.parentElement?.getBoundingClientRect().toJSON(),
+      maxHeight: getComputedStyle(element).maxHeight,
+      overflow: getComputedStyle(element).overflow,
+      scrollHeight: element.scrollHeight,
+      innerHeight: window.innerHeight,
+      visualHeight: window.visualViewport?.height,
+    }));
+    assert.ok(dialogBox && dialogBox.y >= -1 && dialogBox.y + dialogBox.height <= viewport.height + 1,
+      "All dialog content must fit into a scrollable viewport: " + JSON.stringify({ dialogBox, viewport, dialogDiagnostics }));
+    const carouselWithDialog = await celebrationCarousel.boundingBox();
+    assert.ok(carouselWithDialog && Math.abs(carouselWithDialog.height - carouselBeforeDialog.height) < 2,
+      "Opening settings must not shrink the KPI carousel");
+    await page.keyboard.press("Escape");
+    await celebrationDialog.waitFor({ state: "hidden" });
+    assert.equal(await celebrationSettingsButton.evaluate(el => document.activeElement === el), true,
+      "Closing with Escape must restore keyboard focus");
+
+    await celebrationSettingsButton.click();
+    const celebrationSafety = celebrationDialog.locator("label")
+      .filter({ hasText: "Jours sans accident du travail" }).locator("input");
+    await celebrationSafety.check();
+    await celebrationDialog.getByRole("button", { name: "Enregistrer l'affichage" }).click();
+    await celebrationDialog.waitFor({ state: "hidden" });
+    await page.getByRole("status").getByText("Affichage du carrousel enregistré pour ce match.").waitFor({ state: "visible" });
+    assert.deepEqual((await readBrief()).plan.visibleIndicators,
+      ["accident-free-days", "tonnage-expedition", "positions", "arrival"]);
+    await assertTonnage(null, "478 t", 3, true);
+    const carouselAfterDialog = await celebrationCarousel.boundingBox();
+    assert.ok(carouselAfterDialog && carouselAfterDialog.height > 100,
+      "The KPI carousel must remain readable after the number of selected cards changes");
+    assert.equal(await celebration.locator(".match-indicators-area .match-indicator-settings").count(), 0,
+      "Saving must not reinsert the editor into the presentation carousel");
+    await page.getByRole("button", { name: "Sortir du mode Célébration" }).click();
+    console.log(`Browser: independent celebration dialog, keyboard access and unchanged carousel at ${viewport.width}px: OK`);
+
     // Lot B: reception-only travel and tri-client filtering, with an audit
     // trail and unchanged global metrics, in a strictly isolated agency.
     const readSnapshot = async () => {

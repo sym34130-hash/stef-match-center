@@ -1399,6 +1399,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const [pendingReceptionCode, setPendingReceptionCode] = useState<string | null>(null);
   const [pendingLoadingCode, setPendingLoadingCode] = useState<string | null>(null);
   const slideViewportRef = useRef<HTMLDivElement | null>(null);
+  const indicatorDialogRef = useRef<HTMLDivElement | null>(null);
   const slideTouchStart = useRef<{ x: number; y: number } | null>(null);
   const slideLabels = ["Coup de sifflet final", "Cérémonie des performances", "Statistiques du match", "Brief équipe"];
   const mercatoPlanKey = `${session.agency.code}:${snapshot.match.date}:${snapshot.importedAt}`;
@@ -1440,6 +1441,58 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
       cancelled = true;
     };
   }, [mercatoPlanKey, session, snapshot, causerieRevision]);
+
+
+  useEffect(() => {
+    if (!celebrationMode || !indicatorSettingsOpen) return;
+    const previouslyFocused = document.activeElement;
+    indicatorDialogRef.current?.querySelector<HTMLElement>(".match-indicator-settings-options input:not(:disabled)")?.focus();
+    return () => {
+      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) previouslyFocused.focus();
+    };
+  }, [celebrationMode, indicatorSettingsOpen]);
+
+  // Confirmation is transient on the presentation screen, so no banner remains
+  // over the score after the settings dialog has closed.
+  useEffect(() => {
+    if (!celebrationMode || indicatorSettingsOpen || !indicatorSettingsFeedback) return;
+    const timeout = window.setTimeout(() => setIndicatorSettingsFeedback(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [celebrationMode, indicatorSettingsOpen, indicatorSettingsFeedback]);
+
+  function closeIndicatorSettings() {
+    if (indicatorSettingsSaving) return;
+    setIndicatorSettingsOpen(false);
+    setIndicatorSettingsFeedback(null);
+  }
+
+  function toggleIndicatorSettings() {
+    if (indicatorSettingsOpen) closeIndicatorSettings();
+    else openIndicatorSettings();
+  }
+
+  function handleIndicatorDialogKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeIndicatorSettings();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const dialog = indicatorDialogRef.current;
+    if (!dialog) return;
+    const controls = Array.from(dialog.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex='-1'])"))
+      .filter(element => element.getClientRects().length > 0);
+    if (!controls.length) return;
+    const first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   function openIndicatorSettings() {
     if (!indicatorSettingsReady || !session.agency.canImport) return;
@@ -1549,6 +1602,52 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
 
   const slideClass = (index: number) => `match-slide-panel ${activeSlide === index ? `is-active is-enter-${slideDirection}` : index < activeSlide ? "is-before" : "is-after"}`;
 
+  // One editor serves the normal sheet and the presentation dialog.
+  const indicatorSettingsEditor = session.agency.canImport && (indicatorSettingsOpen || indicatorSettingsFeedback) ? (
+            <div className="match-indicator-settings">
+              {indicatorSettingsOpen && (
+                <div id="match-indicator-settings-panel" className="match-indicator-settings-panel" role="group" aria-label="Personnalisation des dix cartes du carrousel">
+                  <p>Choisis les cartes à afficher dans « Le collectif en chiffres ». Les quatre KPI du score restent inchangés.</p>
+                  <div className="match-indicator-settings-options">
+                    {BRIEF_INDICATOR_OPTIONS.map(([id, label]) => (
+                      <label key={id}>
+                        <input
+                          type="checkbox"
+                          checked={indicatorSettingsDraft.includes(id)}
+                          disabled={indicatorSettingsSaving || (indicatorSettingsDraft.length === 1 && indicatorSettingsDraft.includes(id))}
+                          onChange={(event) => setIndicatorSettingsDraft((current) => normalizeBriefIndicators(
+                            event.target.checked ? [...current, id] : current.filter((item) => item !== id)
+                          ))}
+                        />
+                        <span>{label}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="match-indicator-settings-actions">
+                    <button type="button" className="secondary-button compact" disabled={indicatorSettingsSaving}
+                      onClick={() => setIndicatorSettingsDraft([...BRIEF_INDICATOR_IDS])}>
+                      Tout afficher
+                    </button>
+                    <button type="button" className="secondary-button compact" disabled={indicatorSettingsSaving}
+                      onClick={() => { setIndicatorSettingsOpen(false); setIndicatorSettingsFeedback(null); }}>
+                      Annuler
+                    </button>
+                    <button type="button" className="primary-button compact" disabled={indicatorSettingsSaving}
+                      onClick={saveIndicatorSettings}>
+                      <Save size={15} /> {indicatorSettingsSaving ? "Enregistrement..." : "Enregistrer l'affichage"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {indicatorSettingsFeedback && (
+                <p className={`match-indicator-settings-feedback is-${indicatorSettingsFeedback.tone}`}
+                  role={indicatorSettingsFeedback.tone === "error" ? "alert" : "status"}>
+                  {indicatorSettingsFeedback.message}
+                </p>
+              )}
+            </div>
+  ) : null;
+
   return (
     <div className={`${celebrationMode ? "match-page is-celebration-mode" : "match-page"} ${outcome.tone} ${thresholdReached ? "is-threshold-reached" : ""} ${thresholdPulse ? "is-threshold-pulse" : ""}`}>
       <nav className="match-carousel-navigation" aria-label="Navigation de la feuille de match">
@@ -1557,6 +1656,22 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
           <strong aria-live="polite">{slideLabels[activeSlide]}</strong>
         </div>
         <div className="match-carousel-controls">
+
+          {celebrationMode && activeSlide === 0 && session.agency.canImport && (
+            <button
+              type="button"
+              className="match-celebration-indicator-button"
+              aria-label="Personnaliser les indicateurs"
+              title="Personnaliser les indicateurs"
+              aria-controls="match-indicator-settings-panel"
+              aria-expanded={indicatorSettingsOpen}
+              disabled={!indicatorSettingsReady || indicatorSettingsSaving}
+              onClick={toggleIndicatorSettings}
+            >
+              <Settings2 size={16} aria-hidden="true" />
+              <span>Indicateurs</span>
+            </button>
+          )}
           {celebrationMode && (
             <button
               type="button"
@@ -1675,50 +1790,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         </div>
 
         <div className="match-indicators-area">
-          {session.agency.canImport && (indicatorSettingsOpen || indicatorSettingsFeedback) && (
-            <div className="match-indicator-settings">
-              {indicatorSettingsOpen && (
-                <div id="match-indicator-settings-panel" className="match-indicator-settings-panel" role="group" aria-label="Personnalisation des dix cartes du carrousel">
-                  <p>Choisis les cartes à afficher dans « Le collectif en chiffres ». Les quatre KPI du score restent inchangés.</p>
-                  <div className="match-indicator-settings-options">
-                    {BRIEF_INDICATOR_OPTIONS.map(([id, label]) => (
-                      <label key={id}>
-                        <input
-                          type="checkbox"
-                          checked={indicatorSettingsDraft.includes(id)}
-                          disabled={indicatorSettingsSaving || (indicatorSettingsDraft.length === 1 && indicatorSettingsDraft.includes(id))}
-                          onChange={(event) => setIndicatorSettingsDraft((current) => normalizeBriefIndicators(
-                            event.target.checked ? [...current, id] : current.filter((item) => item !== id)
-                          ))}
-                        />
-                        <span>{label}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="match-indicator-settings-actions">
-                    <button type="button" className="secondary-button compact" disabled={indicatorSettingsSaving}
-                      onClick={() => setIndicatorSettingsDraft([...BRIEF_INDICATOR_IDS])}>
-                      Tout afficher
-                    </button>
-                    <button type="button" className="secondary-button compact" disabled={indicatorSettingsSaving}
-                      onClick={() => { setIndicatorSettingsOpen(false); setIndicatorSettingsFeedback(null); }}>
-                      Annuler
-                    </button>
-                    <button type="button" className="primary-button compact" disabled={indicatorSettingsSaving}
-                      onClick={saveIndicatorSettings}>
-                      <Save size={15} /> {indicatorSettingsSaving ? "Enregistrement..." : "Enregistrer l'affichage"}
-                    </button>
-                  </div>
-                </div>
-              )}
-              {indicatorSettingsFeedback && (
-                <p className={`match-indicator-settings-feedback is-${indicatorSettingsFeedback.tone}`}
-                  role={indicatorSettingsFeedback.tone === "error" ? "alert" : "status"}>
-                  {indicatorSettingsFeedback.message}
-                </p>
-              )}
-            </div>
-          )}
+          {!celebrationMode && indicatorSettingsEditor}
           <MatchIndicatorsCarousel
             snapshot={snapshot}
             performance={outcome.collectiveTitle}
@@ -1730,17 +1802,10 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
             mercatoProfiles={mercatoProfiles}
             visibleIndicatorIds={briefIndicatorIds}
             session={session}
-            indicatorCustomization={session.agency.canImport ? {
+            indicatorCustomization={!celebrationMode && session.agency.canImport ? {
               expanded: indicatorSettingsOpen,
               disabled: !indicatorSettingsReady || indicatorSettingsSaving,
-              onToggle: () => {
-                if (indicatorSettingsOpen) {
-                  setIndicatorSettingsOpen(false);
-                  setIndicatorSettingsFeedback(null);
-                } else {
-                  openIndicatorSettings();
-                }
-              },
+              onToggle: toggleIndicatorSettings,
             } : undefined}
           />
           <div className="match-kpi-wrap">
@@ -1886,8 +1951,51 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
           onPlanSaved={(plan) => setMercatoPlan({ key: mercatoPlanKey, plan })}
         />
         <MatchCoachPlan plan={mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan : null} onCoach={onCoach} />
+
       </section>
       </div>
+      {celebrationMode && indicatorSettingsOpen && indicatorSettingsEditor && createPortal(
+        <div
+          className="match-indicator-settings-backdrop"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) closeIndicatorSettings(); }}
+        >
+          <div
+            ref={indicatorDialogRef}
+            className="match-indicator-settings-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Personnaliser les indicateurs"
+            onKeyDown={handleIndicatorDialogKeyDown}
+          >
+            <div className="match-indicator-settings-dialog-heading">
+              <div>
+                <strong>Personnaliser les indicateurs</strong>
+                <span>Choisis les vignettes visibles dans le carrousel</span>
+              </div>
+              <button
+                type="button"
+                aria-label="Fermer la personnalisation"
+                title="Fermer"
+                onClick={closeIndicatorSettings}
+                disabled={indicatorSettingsSaving}
+              >
+                <XCircle size={21} aria-hidden="true" />
+              </button>
+            </div>
+            {indicatorSettingsEditor}
+          </div>
+        </div>,
+        document.body
+      )}
+      {celebrationMode && !indicatorSettingsOpen && indicatorSettingsFeedback && createPortal(
+        <p
+          className={"match-indicator-settings-celebration-feedback is-" + indicatorSettingsFeedback.tone}
+          role={indicatorSettingsFeedback.tone === "error" ? "alert" : "status"}
+        >
+          {indicatorSettingsFeedback.message}
+        </p>,
+        document.body
+      )}
     </div>
   );
 }
