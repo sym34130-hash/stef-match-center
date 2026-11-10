@@ -428,13 +428,13 @@ function compactChart(p, m, chartId) {
     centers: "CENTRES REUSSIS",
     "operational-diagnostic": "DIAGNOSTIC OPERATIONNEL",
   };
-  p.box(29, 48, 784, 132, C.panel);
-  p.box(29, 177, 784, 3, C.aqua);
-  p.text(42, 158, 11.5, names[chartId] ?? "ANALYSE", C.aqua, true);
+  p.box(29, 43, 784, 116, C.panel);
+  p.box(29, 156, 784, 3, C.aqua);
+  p.text(42, 139, 11, names[chartId] ?? "ANALYSE", C.aqua, true);
   if (chartId === "passes-hourly") {
     const rows = Array.isArray(m.hourlyPerformance) ? m.hourlyPerformance.filter(v => Number.isFinite(v?.rate)) : [];
-    if (!rows.length) { p.text(44, 104, 12, "Analyse horaire indisponible", C.muted); return; }
-    const x = 52, y = 72, w = 730, h = 65;
+    if (!rows.length) { p.text(44, 90, 11, "Analyse horaire indisponible", C.muted); return; }
+    const x = 52, y = 63, w = 730, h = 57;
     p.box(x, y, w, 1, C.panel2);
     const first = rows[0], last = rows[rows.length - 1];
     for (let i = 0; i < rows.length; i++) {
@@ -447,33 +447,33 @@ function compactChart(p, m, chartId) {
         p.ops.push(`${rgb(C.aqua)} RG 1.6 w ${previousX.toFixed(2)} ${previousY.toFixed(2)} m ${pointX.toFixed(2)} ${valueY.toFixed(2)} l S\n`);
       }
     }
-    p.text(x, 58, 8, trim(first.label ?? first.hour ?? "Début", 24), C.muted);
-    p.text(x + w, 58, 8, trim(last.label ?? last.hour ?? "Fin", 24), C.muted, false, "right");
-    p.text(590, 158, 9, "Périmètre horaire du graphique (distinct du score)", C.muted);
+    p.text(x, 51, 8, trim(first.label ?? first.hour ?? "Début", 24), C.muted);
+    p.text(x + w, 51, 8, trim(last.label ?? last.hour ?? "Fin", 24), C.muted, false, "right");
+    p.text(520, 139, 8, "Périmètre horaire du graphique (distinct du score)", C.muted);
     return;
   }
   if (chartId === "reception-time") {
     const positions = (m.unloadingHourlyAnalysis?.items ?? []).filter(entry => Number.isFinite(entry?.distinctPositions));
     const won = m.score?.indicators?.unloadingPercent;
-    compactBar(p, 42, 107, "Duels gagnés", won, "KPI officiel du score");
+    compactBar(p, 42, 89, "Duels gagnés", won, "KPI officiel du score");
     const positionCounts = positions.map(entry => entry.distinctPositions);
-    p.text(42, 78, 9.5, positions.length
+    p.text(42, 65, 9.5, positions.length
       ? `${positions.length} créneaux analysés / positions par créneau : ${fmt(Math.min(...positionCounts))} à ${fmt(Math.max(...positionCounts))}`
       : "Détail horaire indisponible", C.muted);
     return;
   }
   if (chartId === "loading") {
-    compactBar(p, 42, 108, "Tirs cadrés", m.loadingQuality?.targetedPercent);
-    compactBar(p, 42, 65, "Chargements hors cible", m.loadingQuality?.offTargetPercent);
+    compactBar(p, 42, 96, "Tirs cadrés", m.loadingQuality?.targetedPercent);
+    compactBar(p, 42, 62, "Chargements hors cible", m.loadingQuality?.offTargetPercent);
     return;
   }
   if (chartId === "centers") {
-    compactBar(p, 42, 103, "Centres réussis (destination)", m.dailyIndicators?.punctuality?.destinationPunctuality,
+    compactBar(p, 42, 90, "Centres réussis (destination)", m.dailyIndicators?.punctuality?.destinationPunctuality,
       "Source PDF 106J");
     return;
   }
-  compactBar(p, 42, 108, "Couverture du zonage", m.zonageDiagnostic?.coverageRate);
-  p.text(42, 82, 10,
+  compactBar(p, 42, 91, "Couverture du zonage", m.zonageDiagnostic?.coverageRate);
+  p.text(42, 64, 10,
     `Positions hors délai : ${fmt(m.zonageDiagnostic?.latePositions)} / non vérifiables : ${fmt(m.zonageDiagnostic?.unqualifiablePositions)}`,
     C.text);
 }
@@ -513,8 +513,8 @@ function compactScorePage(doc, m) {
     `Zonage <= ${fmt(m.criteria.zonageMinutes)} min  |  CHG <= ${fmt(m.criteria.loadingSeconds)} s/poz  |  DECHG <= ${fmt(m.criteria.unloadingSeconds)} s/poz`,
     C.muted);
   const score = m.score;
-  p.card(29, 366, 384, 96, "Buts marqués", score?.status === "available" ? fmt(score.goalsFor) : "Indisponible", "", C.aqua);
-  p.card(426, 366, 387, 96, "Buts encaissés", score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible", "", C.red);
+  p.card(29, 386, 385, 76, "Buts marqués", score?.status === "available" ? fmt(score.goalsFor) : "Indisponible", "", C.aqua);
+  p.card(428, 386, 385, 76, "Buts encaissés", score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible", "", C.red);
   const rates = [
     ["Passes réussies", score?.indicators?.passRate],
     ["Tirs cadrés", score?.indicators?.loadingPercent],
@@ -522,29 +522,42 @@ function compactScorePage(doc, m) {
     ["Possession", score?.indicators?.possessionPercent],
   ];
   rates.forEach(([label, val], i) =>
-    p.card(29 + i * 199, 257, 187, 96, label, percent(val),
+    p.card(29 + i * 199, 303, 187, 76, label, percent(val),
       `Objectif ${fmt(m.criteria.scoreTargetPercent)} %`,
       Number.isFinite(val) && val <= m.criteria.scoreTargetPercent ? C.red : C.blue));
-  const availableCards = indicatorCards(m);
-  const selected = m.pdfProfile.indicatorIds.map(id => {
-    const index = m.visibleIndicators.indexOf(id);
-    return availableCards[index] ?? null;
-  }).filter(Boolean);
-  selected.forEach((item, i) => compactMetric(p, 29 + i * 199, 186, 187, item.label, item.value));
-  if (!selected.length) p.text(41, 220, 10, "Aucun indicateur complémentaire sélectionné.", C.muted);
+  // Two rows: 2 x 2 when four are selected, 3 x 2 for five or six.
+  // The chart keeps its own fixed area and the font size is unchanged.
+  const allCards = indicatorCards(m);
+  const byId = new Map(m.visibleIndicators.map((id, index) => [id, allCards[index]]));
+  const selected = m.pdfProfile.indicatorIds.map(id => byId.get(id)).filter(Boolean);
+  if (!selected.length) p.text(41, 236, 10, "Aucun KPI complémentaire visible dans le MATCH.", C.muted);
+  const columns = selected.length <= 4 ? 2 : 3;
+  selected.forEach((card, i) => {
+    const row = Math.floor(i / columns);
+    const column = i % columns;
+    const x = columns === 2 ? 29 + column * 399
+      : 29 + column * 266 + (selected.length === 5 && row === 1 ? 133 : 0);
+    compactMetric(p, x, 235 - row * 68, columns === 2 ? 385 : 252, card.label, card.value);
+  });
   compactChart(p, m, m.pdfProfile.chartId);
 }
 function compactBriefPage(doc, m) {
-  const p = doc.add("02 / BRIEF OPERATIONNEL");
-  p.text(36, 477, 20, "LE PLAN DE JEU", C.white, true);
+  const p = doc.add("02 / BRIEF DES SERVICES");
+  p.text(36, 477, 20, "BRIEF OPERATIONNEL DU JOUR", C.white, true);
   p.text(813, 479, 9, trim([m.causerie?.team, m.causerie?.manager].filter(Boolean).join(" / "), 63), C.muted, false, "right");
   const brief = effectiveBriefText(m);
-  shortBlock(p, { x: 29, y: 380, w: 784, h: 82, title: "Sécurité / vigilance", value: brief.safety, maxLines: 3 });
-  shortBlock(p, { x: 29, y: 292, w: 784, h: 82, title: "Priorités opérationnelles", value: brief.priorities, maxLines: 3 });
-  shortBlock(p, { x: 29, y: 176, w: 254, h: 109, title: "Attaque", value: brief.attack, maxLines: 5 });
-  shortBlock(p, { x: 294, y: 176, w: 254, h: 109, title: "Milieu", value: brief.midfield, maxLines: 5 });
-  shortBlock(p, { x: 559, y: 176, w: 254, h: 109, title: "Défense", value: brief.defense, maxLines: 5 });
-  shortBlock(p, { x: 29, y: 43, w: 784, h: 127, title: "Décisions / arbitrages", value: brief.decisions, maxLines: 6 });
+  // Keep the exact labels of BRIEF ÉQUIPE, not the old football metaphors.
+  shortBlock(p, { x: 29, y: 405, w: 784, h: 58, title: "Sécurité / vigilance", value: brief.safety, maxLines: 2 });
+  shortBlock(p, { x: 29, y: 273, w: 784, h: 126, title: "Service client", value: brief.attack, maxLines: 6 });
+  shortBlock(p, { x: 29, y: 149, w: 482, h: 118, title: "Expédition / Ramasse & Emballage", value: brief.midfield, maxLines: 5 });
+  shortBlock(p, { x: 523, y: 149, w: 290, h: 118, title: "SST", value: brief.defense, maxLines: 5 });
+  shortBlock(p, { x: 29, y: 43, w: 385, h: 100, title: "Priorités opérationnelles", value: brief.priorities, maxLines: 4 });
+  shortBlock(p, { x: 428, y: 43, w: 385, h: 100, title: "Décisions / arbitrages", value: brief.decisions, maxLines: 4 });
+  const a = m.causerie?.attachmentCounts ?? {};
+  if (Object.values(a).some(count => Number(count) > 0)) {
+    p.text(36, 34, 7.5,
+      `Captures sur le site : Service client ${a.attack ?? 0} / Expedition ${a.midfield ?? 0} / SST ${a.defense ?? 0}`, C.muted);
+  }
 }
 export function renderMatchPdf(model) {
   if (!model?.agency?.code || !model?.match?.date) throw new MatchExportError(400, "MATCH invalide.");
