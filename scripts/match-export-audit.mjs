@@ -86,7 +86,9 @@ for (const fixture of fixtures) {
   assert.equal(pages, 2, "No synthetic agency configuration may exceed two pages");
   assert.match(pdfText, new RegExp("FIN-DU-BRIEF-TEST-" + code));
   assert.match(pdfText, /COUP DE SIFFLET FINAL/);
-  assert.match(pdfText, /LE PLAN DE JEU/);
+  assert.match(pdfText, /BRIEF OPERATIONNEL DU JOUR/);
+  assert.match(pdfText, /SERVICE CLIENT/);
+  assert.match(pdfText, /SST/);
   assert.doesNotMatch(pdfText, /CAPTURES DU BRIEF|CEREMONIE DES PERFORMANCES/i);
   assert.doesNotMatch(pdfText, /\/Subtype \/Image/, "Detailed JPEG annexes must not fill the two-page briefing");
   assert.doesNotMatch(pdfText, new RegExp("FIN-DU-BRIEF-TEST-" + (code === "058" ? "059" : "058")));
