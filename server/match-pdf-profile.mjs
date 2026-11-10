@@ -59,10 +59,21 @@ export function normalizePdfProfile(value, { strict = false } = {}) {
 
 export function effectivePdfProfile(value, visibleIndicators, matchDate) {
   const profile = normalizePdfProfile(value);
-  const available = new Set(Array.isArray(visibleIndicators) ? visibleIndicators : BRIEF_INDICATOR_IDS);
+  const availableIds = (Array.isArray(visibleIndicators) ? visibleIndicators : BRIEF_INDICATOR_IDS)
+    .filter((id, index, ids) => BRIEF_INDICATOR_IDS.includes(id) && ids.indexOf(id) === index);
+  const available = new Set(availableIds);
+  const selected = profile.indicatorIds.filter(id => available.has(id));
+  // A saved/default profile may become sparse when the agency hides indicators.
+  // Fill only from currently visible cards, preserving the user's selection
+  // order. Never re-enable a hidden KPI or change the stored profile on export.
+  const minimum = Math.min(PDF_MIN_KPIS, availableIds.length);
+  for (const id of availableIds) {
+    if (selected.length >= minimum) break;
+    if (!selected.includes(id)) selected.push(id);
+  }
   return {
     ...profile,
-    indicatorIds: profile.indicatorIds.filter(id => available.has(id)),
+    indicatorIds: selected,
     dailyBrief: profile.dailyBrief.matchDate === matchDate
       ? profile.dailyBrief
       : { matchDate, ...Object.fromEntries(PDF_BRIEF_FIELDS.map(key => [key, ""])) },

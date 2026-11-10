@@ -453,13 +453,46 @@ function compactChart(p, m, chartId) {
     return;
   }
   if (chartId === "reception-time") {
-    const positions = (m.unloadingHourlyAnalysis?.items ?? []).filter(entry => Number.isFinite(entry?.distinctPositions));
+    // Keep the official duel rate AND the mean seconds/position for each slot.
+    // Bar heights are time in seconds per position; red is above league target.
+    const hourly = m.unloadingHourlyAnalysis;
+    const slots = (hourly?.items ?? []).filter(slot =>
+      Number.isFinite(slot?.meanSecondsPerPosition) && slot.meanSecondsPerPosition >= 0
+      && slot?.state !== "indisponible");
+    const target = Number.isFinite(hourly?.targetSeconds) ? hourly.targetSeconds : m.criteria.unloadingSeconds;
     const won = m.score?.indicators?.unloadingPercent;
-    compactBar(p, 42, 89, "Duels gagnés", won, "KPI officiel du score");
-    const positionCounts = positions.map(entry => entry.distinctPositions);
-    p.text(42, 65, 9.5, positions.length
-      ? `${positions.length} créneaux analysés / positions par créneau : ${fmt(Math.min(...positionCounts))} à ${fmt(Math.max(...positionCounts))}`
-      : "Détail horaire indisponible", C.muted);
+    p.text(42, 124, 8.5,
+      `Duels gagnés : ${percent(won)} (score)  |  Barres : moyenne en s/position  |  Cible : ${fmt(target)} s/poz`, C.text);
+    if (!slots.length) {
+      p.text(42, 91, 10, "Aucun créneau de réception exploitable sur la période.", C.muted);
+      return;
+    }
+    const x0 = 52, baseline = 82, plotWidth = 724, plotHeight = 37;
+    const ceiling = Math.max(1, target || 0, ...slots.map(slot => slot.meanSecondsPerPosition)) * 1.15;
+    p.box(x0, baseline, plotWidth, 1, C.panel2);
+    if (Number.isFinite(target) && target > 0) {
+      const ty = baseline + Math.min(plotHeight, target / ceiling * plotHeight);
+      p.ops.push(`${rgb(C.gold)} RG 0.9 w ${x0.toFixed(2)} ${ty.toFixed(2)} m ${(x0 + plotWidth).toFixed(2)} ${ty.toFixed(2)} l S\n`);
+    }
+    const step = plotWidth / slots.length;
+    const labelEvery = Math.ceil(slots.length / 12);
+    slots.forEach((slot, index) => {
+      const left = x0 + index * step + Math.min(2, step / 8);
+      const width = Math.max(1.5, step - Math.min(4, step / 4));
+      const height = Math.max(1, Math.min(plotHeight, slot.meanSecondsPerPosition / ceiling * plotHeight));
+      const failed = Number.isFinite(target) && slot.meanSecondsPerPosition > target;
+      p.box(left, baseline, width, height, failed ? C.red : C.aqua);
+      if (index % labelEvery === 0 || index === slots.length - 1) {
+        const label = String(slot.start ?? slot.label ?? String(index + 1));
+        p.text(left, 70, 7, label.length > 8 ? `#${index + 1}` : label, C.muted);
+      }
+    });
+    const positions = slots.map(slot => slot.distinctPositions).filter(Number.isFinite);
+    const positionSummary = positions.length
+      ? `Positions/créneau : ${fmt(Math.min(...positions))} à ${fmt(Math.max(...positions))}`
+      : "Positions/créneau : indisponibles";
+    p.text(42, 52, 8,
+      `${slots.length} créneaux exploitables  |  ${positionSummary}  |  Rouge : au-dessus de la cible`, C.muted);
     return;
   }
   if (chartId === "loading") {
@@ -492,6 +525,20 @@ function effectiveBriefText(m) {
   const custom = m.pdfProfile.dailyBrief;
   const c = m.causerie ?? {};
   const combined = values => values.filter(value => typeof value === "string" && value.trim()).join(" ; ");
+  // Screenshots cannot be faithfully converted to text in the printed PDF.
+  // A section that contains ONLY captures requires a date-scoped short brief.
+  for (const [field, label] of [
+    ["attack", "Service client"],
+    ["midfield", "Expédition / Ramasse & Emballage"],
+    ["defense", "SST"],
+  ]) {
+    const captures = c.attachmentCounts?.[field] ?? c.attachments?.[field]?.length ?? 0;
+    const sourceText = combined(Array.isArray(c[field]) ? c[field] : []);
+    if (captures > 0 && !sourceText && !custom[field]?.trim()) {
+      throw new MatchExportError(422,
+        `La rubrique « ${label} » contient ${captures} capture(s) mais aucun texte imprimable. Renseigne une synthèse dans « Personnaliser le PDF » pour ce MATCH.`);
+    }
+  }
   const safetyMessage = combined([
     Number.isFinite(m.safety?.days) ? `${fmt(m.safety.days)} jours sans accident de travail` : "",
     c.redCards ? `Cartons rouges : ${c.redCards}` : "",
