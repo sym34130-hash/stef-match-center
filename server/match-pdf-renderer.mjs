@@ -122,7 +122,7 @@ function chromiumBinary() {
   for (const candidate of ["/usr/bin/chromium-browser", "/usr/bin/chromium"]) {
     if (existsSync(candidate)) return candidate;
   }
-  throw new Error("Chromium n'est pas installé pour la génération PDF.");
+  return chromium.executablePath();
 }
 
 export async function renderMatchPdf({ origin, agency, accessCode, identity, kpis }) {
