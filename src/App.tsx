@@ -1943,8 +1943,51 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
           onPlanSaved={(plan) => setMercatoPlan({ key: mercatoPlanKey, plan })}
         />
         <MatchCoachPlan plan={mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan : null} onCoach={onCoach} />
+
       </section>
       </div>
+      {celebrationMode && indicatorSettingsOpen && indicatorSettingsEditor && createPortal(
+        <div
+          className="match-indicator-settings-backdrop"
+          onMouseDown={(event) => { if (event.target === event.currentTarget) closeIndicatorSettings(); }}
+        >
+          <div
+            ref={indicatorDialogRef}
+            className="match-indicator-settings-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Personnaliser les indicateurs"
+            onKeyDown={handleIndicatorDialogKeyDown}
+          >
+            <div className="match-indicator-settings-dialog-heading">
+              <div>
+                <strong>Personnaliser les indicateurs</strong>
+                <span>Choisis les vignettes visibles dans le carrousel</span>
+              </div>
+              <button
+                type="button"
+                aria-label="Fermer la personnalisation"
+                title="Fermer"
+                onClick={closeIndicatorSettings}
+                disabled={indicatorSettingsSaving}
+              >
+                <XCircle size={21} aria-hidden="true" />
+              </button>
+            </div>
+            {indicatorSettingsEditor}
+          </div>
+        </div>,
+        document.body
+      )}
+      {celebrationMode && !indicatorSettingsOpen && indicatorSettingsFeedback && createPortal(
+        <p
+          className={"match-indicator-settings-celebration-feedback is-" + indicatorSettingsFeedback.tone}
+          role={indicatorSettingsFeedback.tone === "error" ? "alert" : "status"}
+        >
+          {indicatorSettingsFeedback.message}
+        </p>,
+        document.body
+      )}
     </div>
   );
 }
