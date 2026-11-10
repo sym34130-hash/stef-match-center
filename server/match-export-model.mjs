@@ -30,6 +30,55 @@ export class MatchExportError extends Error {
   }
 }
 
+/** Match the ceremony's attack / defense / midfield / polyvalence winners.
+ * Challengers follow the same ranking rules as buildAwardChallengers in App.tsx. */
+export function matchExportAwards(snapshot) {
+  const candidates = Array.isArray(snapshot?.players) ? snapshot.players : [];
+  const highlights = snapshot?.highlights ?? {};
+  const winners = [highlights.bestScorer, highlights.defensiveWall, highlights.bestPasser]
+    .filter(Boolean).map(item => item.name);
+  const polyvalents = candidates.filter(player => player.operationTypes >= 2 && !winners.includes(player.name))
+    .sort((a, b) => b.polyvalence - a.polyvalence || b.operations - a.operations);
+  const selected = polyvalents[0] ?? null;
+  const awards = [
+    { kind: "attack", label: "Meilleur buteur", leader: highlights.bestScorer },
+    { kind: "midfield", label: "Meilleur passeur", leader: highlights.bestPasser },
+    { kind: "defense", label: "Meilleur defenseur", leader: highlights.defensiveWall },
+    { kind: "polyvalent", label: "Meilleur polyvalent", leader: selected },
+  ].filter(award => award.leader);
+  const mid = awards.findIndex(award => award.kind === "midfield");
+  const def = awards.findIndex(award => award.kind === "defense");
+  if (mid !== -1 && def !== -1) [awards[mid], awards[def]] = [awards[def], awards[mid]];
+  return awards.map(award => {
+    const player = candidates.find(item => item.name === award.leader.name) ?? null;
+    const type = award.kind === "attack" ? "CHG"
+      : award.kind === "midfield" ? "ZONAGE" : award.kind === "defense" ? "DECHG" : null;
+    const operationCount = item => type ? (item.byType?.[type] ?? 0) : item.polyvalence;
+    const positionCount = item => type ? (item.positionsByType?.[type] ?? 0) : item.positions;
+    const eligible = award.kind === "polyvalent"
+      ? candidates.filter(item => item.operationTypes >= 2
+        && !awards.filter(value => value.kind !== "polyvalent").some(value => value.leader.name === item.name))
+      : candidates;
+    const ranked = eligible.filter(item => item.name !== award.leader.name
+      && (type ? operationCount(item) > 0 : item.operationTypes >= 2))
+      .sort((a, b) => (type ? positionCount(b) - positionCount(a) : 0)
+        || operationCount(b) - operationCount(a)
+        || b.operations - a.operations || a.name.localeCompare(b.name, "fr"))
+      .slice(0, 2);
+    return {
+      kind: award.kind, label: award.label,
+      name: award.leader.name, role: player?.role ?? award.leader.role ?? "",
+      value: award.kind === "polyvalent" ? award.leader.polyvalence : player ? positionCount(player) : 0,
+      valueLabel: award.kind === "polyvalent" ? "polyvalence (%)"
+        : type === "DECHG" ? "positions RECEPTION" : "positions " + type,
+      challengers: ranked.map(item => ({
+        name: item.name,
+        value: award.kind === "polyvalent" ? item.polyvalence : positionCount(item),
+      })),
+    };
+  });
+}
+
 /** The caller authenticates the agency first and loads ALL sources under that
  * same agency code. A mismatch is fatal: never silently fall back to another
  * agency, an older match, or KPI values calculated with different thresholds. */
@@ -72,6 +121,7 @@ export function matchExportModel({
     score: snapshot.operationalScore ?? null,
     summary: snapshot.summary,
     highlights: snapshot.highlights,
+    awards: matchExportAwards(snapshot),
     yellowCards: snapshot.yellowCards ?? [],
     yellowCardAudit: snapshot.yellowCardAudit ?? null,
     dailyIndicators: snapshot.dailyIndicators ?? null,
