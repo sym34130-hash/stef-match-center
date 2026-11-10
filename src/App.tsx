@@ -1559,8 +1559,11 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         unloadingSeconds: String(snapshot.performanceCriteria?.unloadingSeconds ?? ""),
         scoreTargetPercent: String(snapshot.performanceCriteria?.scoreTargetPercent ?? ""),
       });
-      if (/^(?:[0-9]|[1-9][0-9])$/.test(kpiCopy.injuriesValue.trim())) {
-        params.set("injuries", kpiCopy.injuriesValue.trim());
+      if (/^(?:[0-9]|[1-9][0-9])$/.test(savedKpiCopy.injuriesValue.trim())) {
+        params.set("injuries", savedKpiCopy.injuriesValue.trim());
+      }
+      if (/^[1-9][0-9]{0,5}$/.test(savedKpiCopy.expectedPlayersValue.trim())) {
+        params.set("expectedPlayers", savedKpiCopy.expectedPlayersValue.trim());
       }
       const response = await fetch(
         `/api/agencies/${encodeURIComponent(session.agency.code)}/export/match.pdf?${params}`,
@@ -1703,7 +1706,8 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
           <span>FEUILLE DE MATCH</span>
           <strong aria-live="polite">{slideLabels[activeSlide]}</strong>
           <button className="match-pdf-export-button" type="button"
-            aria-label="Exporter le MATCH en PDF" disabled={pdfExporting}
+            aria-label="Exporter le MATCH en PDF" disabled={pdfExporting || editingKpis}
+            title={editingKpis ? "Enregistre les chiffres avant l\u0027export." : "Exporter le MATCH en PDF"}
             onClick={downloadMatchPdf}>
             <Download size={15} aria-hidden="true" />
             {pdfExporting ? "Génération du PDF..." : "Exporter le MATCH en PDF"}
