@@ -85,6 +85,7 @@ export function matchExportAwards(snapshot) {
 export function matchExportModel({
   agency, snapshot, league, causerie = null, safety = null,
   expectedMatchDate, expectedImportedAt, manualInjuries = null, manualExpectedPlayers = null,
+  pdfProfile = null,
 }) {
   const agencyCode = String(agency?.code ?? "").trim().toUpperCase();
   if (!agencyCode || !snapshot) {
@@ -139,6 +140,7 @@ export function matchExportModel({
     anomalySummary: snapshot.anomalySummary ?? null,
     excludedTravelCodes: snapshot.excludedTravelCodes ?? [],
     visibleIndicators,
+    pdfProfile,
     manualInjuries,
     manualExpectedPlayers,
     safety: { lastAccidentDate: safety?.lastAccidentDate ?? null, days: safety?.counter?.days ?? null },
