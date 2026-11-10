@@ -250,12 +250,13 @@ app.post("/api/agencies/:agencyCode/match-pdf", requireAgency, async (req, res) 
     return;
   }
   const body = req.body ?? {};
-  const { matchDate, importedAt, leagueId, kpis, criteria } = body;
+  const { matchDate, importedAt, sourceName, leagueId, kpis, criteria } = body;
   if (!isValidCalendarDate(matchDate) || typeof importedAt !== "string" || importedAt.length > 80 ||
+      typeof sourceName !== "string" || sourceName.length > 200 ||
       !["bronze", "argent", "or", "platine"].includes(leagueId) ||
       !kpis || typeof kpis !== "object" ||
       !["injuriesValue", "expectedPlayersValue"].every(key =>
-        typeof kpis[key] === "string" && /^\\d{0,4}$/.test(kpis[key])) ||
+        typeof kpis[key] === "string" && /^[0-9]{0,4}$/.test(kpis[key])) ||
       !criteria || typeof criteria !== "object" ||
       !["zonageMinutes", "loadingSeconds", "unloadingSeconds", "scoreTargetPercent"].every(key =>
         typeof criteria[key] === "number" && Number.isFinite(criteria[key]))) {
@@ -269,7 +270,7 @@ app.post("/api/agencies/:agencyCode/match-pdf", requireAgency, async (req, res) 
       readLatestSnapshot(req.agency.code, criteria),
       readLeagueConfigState(req.agency.code),
     ]));
-    if (!snapshot || snapshot.match?.date !== matchDate || snapshot.importedAt !== importedAt) {
+    if (!snapshot || snapshot.match?.date !== matchDate || snapshot.sourceName !== sourceName) {
       res.status(409).json({ message: "La version du MATCH a changé. Actualise la page avant l'export." });
       return;
     }
