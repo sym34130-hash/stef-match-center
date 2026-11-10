@@ -83,7 +83,10 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
     assert.equal(badDate.status, 409);
     for (const code of ["058", "059"]) {
       const response = await fetch(uri(code), { headers: { "x-access-code": "SECRET-" + code } });
-      assert.equal(response.status, 200, "Valid PDF for agency " + code + ": " + await response.text().catch(() => ""),);
+      if (response.status !== 200) {
+        const description = await response.text();
+        assert.fail("Valid PDF for agency " + code + " expected 200, got " + response.status + ": " + description);
+      }
       assert.match(response.headers.get("Content-Type") ?? "", /application\/pdf/);
       assert.match(response.headers.get("Content-Disposition") ?? "", new RegExp("STEF_MATCH_" + code));
       assert.match(response.headers.get("Cache-Control") ?? "", /no-store/);
