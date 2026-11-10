@@ -1554,6 +1554,10 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         leagueId: activeLeague,
         matchDate: snapshot.match.date,
         importedAt: snapshot.importedAt,
+        zonageMinutes: String(snapshot.performanceCriteria?.zonageMinutes ?? ""),
+        loadingSeconds: String(snapshot.performanceCriteria?.loadingSeconds ?? ""),
+        unloadingSeconds: String(snapshot.performanceCriteria?.unloadingSeconds ?? ""),
+        scoreTargetPercent: String(snapshot.performanceCriteria?.scoreTargetPercent ?? ""),
       });
       if (/^(?:[0-9]|[1-9][0-9])$/.test(kpiCopy.injuriesValue.trim())) {
         params.set("injuries", kpiCopy.injuriesValue.trim());
