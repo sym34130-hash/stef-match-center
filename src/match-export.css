@@ -83,3 +83,9 @@
 .match-pdf-brief-warning { display: block; color: #a12720; font-size: 11px; font-weight: 700; line-height: 1.4; }
 .match-pdf-brief-note { display: block; color: #50677c; font-size: 11px; line-height: 1.4; }
 .match-pdf-brief-list textarea[aria-invalid="true"] { border-color: #c34434; background: #fff8f6; }
+
+.match-pdf-export-notice {
+  display: inline-block; max-width: 620px; padding: 6px 9px;
+  border-radius: 5px; border: 1px solid #b5cce0;
+  background: #eaf3fb; color: #163c5b; font-size: 12px;
+}

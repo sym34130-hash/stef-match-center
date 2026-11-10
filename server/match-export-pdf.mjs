@@ -71,7 +71,13 @@ class Page {
     this.text(813, 531, 10, `${m.league.label} / ${m.match.date} / ${m.match.timeRangeLabel}`, C.muted, false, "right");
     this.box(29, 509, 784, 1, C.panel2);
     this.box(29, 30, 784, 1, C.panel2);
-    this.text(30, 17, 8, "MATCH agence / document genere depuis la feuille active", C.muted);
+    // The signed-in agency and the source agencies are different concepts.
+    // Show provenance on both printed pages without changing access scope.
+    const excel = m.sourceAgency?.excel || m.agency.code;
+    const report = m.sourceAgency?.pdf106j || "non indiquée";
+    const reportDate = m.sourceAgency?.pdfDate || "date non indiquée";
+    const originNote = "Sources : Excel [" + excel + "] / 106J [" + report + "] (" + reportDate + ")";
+    this.text(30, 17, 7.8, trim(originNote, 131), C.muted);
     this.text(812, 17, 8, String(number), C.muted, false, "right");
   }
   box(x, y, w, h, fill) { this.ops.push(`${rgb(fill)} rg ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f\n`); }

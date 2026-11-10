@@ -95,10 +95,10 @@ export function matchExportModel({
   const snapshotAgency = String(snapshot.agency?.code ?? "").trim().toUpperCase();
   const detectedAgency = String(snapshot.agency?.detectedCode ?? "").trim().toUpperCase();
   const pdfAgency = String(snapshot.dailyIndicators?.agencyCode ?? "").trim().toUpperCase();
-  if (normalizedAgencyId(snapshotAgency) !== normalizedAgencyId(agencyCode)
-      || (detectedAgency && normalizedAgencyId(detectedAgency) !== normalizedAgencyId(agencyCode))
-      || (pdfAgency && normalizedAgencyId(pdfAgency) !== normalizedAgencyId(agencyCode))) {
-    throw new MatchExportError(409, "Export bloqué : les sources ne correspondent pas à cette agence.");
+  // The authenticated workspace must match its stored snapshot; origins of
+  // operator-imported Excel and 106J sources may legitimately be different.
+  if (normalizedAgencyId(snapshotAgency) !== normalizedAgencyId(agencyCode)) {
+    throw new MatchExportError(409, "Export bloqué : le MATCH stocké n'appartient pas à cet espace agence.");
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(expectedMatchDate ?? "")
     || snapshot.match?.date !== expectedMatchDate) {
@@ -164,6 +164,8 @@ export function matchExportModel({
     match: { ...snapshot.match },
     importedAt: snapshot.importedAt,
     sourceName: snapshot.sourceName,
+    sourceAgency: { excel: detectedAgency || null, pdf106j: pdfAgency || null,
+      pdfDate: snapshot.dailyIndicators?.referenceDate ?? null },
     criteria: { ...league.criteria },
     score: snapshot.operationalScore ?? null,
     summary: snapshot.summary,

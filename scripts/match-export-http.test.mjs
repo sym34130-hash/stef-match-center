@@ -113,6 +113,23 @@ test("Lot E HTTP: only the authenticated agency can receive its own match PDF", 
     const badCriteria = await fetch(base + "/api/agencies/058/export/match.pdf?" + mismatchedThreshold,
       { headers: { "x-access-code": "SECRET-058" } });
     assert.equal(badCriteria.status, 409, "Different league KPI must never be silently exported");
+    // V8: the browser must ask the server for the effective dated brief
+    // revision instead of guessing persistence from its local React state.
+    const datedBrief = await fetch(
+      base + "/api/agencies/058/causerie?matchDate=" + encodeURIComponent(snapshots["058"].match.date),
+      { headers: { "x-access-code": "SECRET-058" }, cache: "no-store" },
+    );
+    assert.equal(datedBrief.status, 200);
+    const authoritative = await datedBrief.json();
+    assert.equal(authoritative.causerieRevision, causerieRevisions["058"]);
+    assert.equal(authoritative.plan.team, "EQUIPE-058");
+    const verified = new URLSearchParams(query("058"));
+    verified.set("causerieRevision", authoritative.causerieRevision);
+    const verifiedDownload = await fetch(base + "/api/agencies/058/export/match.pdf?" + verified,
+      { headers: { "x-access-code": "SECRET-058" } });
+    assert.equal(verifiedDownload.status, 200, "Confirmed server brief must allow PDF download");
+    assert.equal((await pdfParse(Buffer.from(await verifiedDownload.arrayBuffer()))).numpages, 2);
+
     const staleBrief = new URLSearchParams(query("058"));
     staleBrief.set("causerieRevision", "outdated");
     assert.equal((await fetch(base + "/api/agencies/058/export/match.pdf?" + staleBrief,

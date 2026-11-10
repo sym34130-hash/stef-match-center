@@ -53,5 +53,5 @@ test("106J: code agence avec zeros initiaux normalisé, dates différentes toujo
   assert.equal(canUsePdfIndicators(same), true, "Different dates are allowed within the same agency");
   const other = pdfAssociation({ agencyCode: "0059", referenceDate: "11 septembre 2026" }, snapshot);
   assert.equal(other.status, "mismatched-agency");
-  assert.equal(canUsePdfIndicators(other), false, "Another agency cannot supply the displayed tonnage");
+  assert.equal(canUsePdfIndicators(other), true, "An operator-imported 106J may originate elsewhere with explicit source attribution");
 });

@@ -59,13 +59,33 @@ test("Lot E: valid league is selected with agency-specific stored criteria", () 
   rejected(() => matchExportLeague("foreign", config), 400);
 });
 
-test("Lot E: reject another agency's snapshot, Excel and PDF provenance", () => {
+test("Lot E V8: foreign source origins are permitted, but another workspace snapshot is denied", async () => {
   rejected(() => matchExportModel({
     agency: agency("058"), snapshot: makeSnapshot("059"), league,
     expectedMatchDate: date, expectedImportedAt: importedAt,
   }), 409);
-  rejected(() => build("058", { snapshot: { agency: { code: "058", detectedCode: "059" } } }), 409);
-  rejected(() => build("058", { snapshot: { dailyIndicators: { agencyCode: "059" } } }), 409);
+  const model = build("058", { snapshot: {
+    agency: { code: "058", detectedCode: "059" },
+    dailyIndicators: {
+      agencyCode: "0059", referenceDate: "11 septembre 2026",
+      expedition: { tonnage: 478 }, distribution: { tonnage: 255 }, total: { tonnage: 734 },
+      punctuality: { destinationPunctuality: 62 },
+    },
+  }, causerie: {
+    team: "EQUIPE-058", manager: "RESP-058",
+    visibleIndicators: ["tonnage-distribution", "tonnage-expedition", "positions", "destination"],
+    visibleIndicatorsVersion: 3,
+    attack: ["Brief opérationnel présent"], midfield: [], defense: [],
+  }, pdfProfile: { indicatorIds: ["tonnage-distribution", "tonnage-expedition", "positions", "destination"], chartId: "centers" } });
+  assert.equal(model.agency.code, "058");
+  assert.equal(model.sourceAgency.excel, "059");
+  assert.equal(model.sourceAgency.pdf106j, "0059");
+  const pdf = await pdfParse(renderMatchPdf(model));
+  assert.equal(pdf.numpages, 2);
+  assert.match(pdf.text, /AGENCE-058/);
+  assert.match(pdf.text, /Sources : Excel \[059\] \/ 106J \[0059\]/);
+  assert.match(pdf.text, /478 t/);
+  assert.doesNotMatch(pdf.text, /AGENCE-059/);
 });
 
 test("Lot E: reject stale match, stale import, nonmatching league KPI and invalid manual KPI", () => {
