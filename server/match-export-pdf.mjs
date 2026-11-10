@@ -450,8 +450,8 @@ function compactChart(p, m, chartId) {
     const won = rows.reduce((sum, row) => sum + (Number.isFinite(row.won) ? row.won : 0), 0);
     const total = rows.reduce((sum, row) => sum + (Number.isFinite(row.total) ? row.total : 0), 0);
     const weightedRate = total > 0 ? Math.round(won / total * 1000) / 10 : null;
-    chartFrame(p, "PASSES REUSSIES / HEURE",
-      "DECHG, segments AQ/ED/EX ou vides ; LIV exclus  |  Total filtre : " + percent(weightedRate));
+    chartFrame(p, "PASSES RÉUSSIES / HEURE",
+      "DECHG, segments AQ/ED/EX ou vides ; LIV exclus  |  Total filtré : " + percent(weightedRate));
     if (!rows.length) { p.text(43, 91, 10, "Aucune donnée horaire éligible dans la plage choisie.", C.muted); return; }
     const x = 78, baseline = 77, w = 699, h = 34;
     for (const value of [0, 50, 100]) {
@@ -473,7 +473,7 @@ function compactChart(p, m, chartId) {
     const first = rows[0], last = rows[rows.length - 1];
     p.text(x, 62, 8, trim(String(first.label ?? first.hour ?? "Début"), 22) + " : " + percent(first.rate), C.muted);
     p.text(x + w, 62, 8, trim(String(last.label ?? last.hour ?? "Fin"), 22) + " : " + percent(last.rate), C.muted, false, "right");
-    p.text(42, 49, 7.8, "Graphique horaire filtre ; perimetre distinct du KPI officiel des passes du score.", C.muted);
+    p.text(42, 49, 7.8, "Graphique horaire filtré ; périmètre distinct du KPI officiel des passes du score.", C.muted);
     return;
   }
   if (chartId === "reception-time") {
@@ -482,10 +482,10 @@ function compactChart(p, m, chartId) {
       .filter(slot => Number.isFinite(slot?.meanSecondsPerPosition)
         && slot.meanSecondsPerPosition >= 0 && slot.state !== "indisponible");
     const target = m.criteria.unloadingSeconds;
-    chartFrame(p, "DUELS GAGNES / TEMPS DE RECEPTION",
+    chartFrame(p, "DUELS GAGNÉS / TEMPS DE RÉCEPTION",
       "Duels au score : " + percent(m.score?.indicators?.unloadingPercent)
         + "  |  Barres : secondes moyennes par position  |  Cible : " + fmt(target) + " s/poz");
-    if (!slots.length) { p.text(43, 90, 10, "Aucun creneau reception exploitable (15 poz min, hors AQ).", C.muted); return; }
+    if (!slots.length) { p.text(43, 90, 10, "Aucun créneau réception exploitable (15 poz min, hors AQ).", C.muted); return; }
     const x = 78, baseline = 79, w = 699, h = 32;
     const maxRate = Math.max(target, ...slots.map(slot => slot.meanSecondsPerPosition));
     const ceiling = Math.max(60, Math.ceil(maxRate * 1.2 / 60) * 60);
@@ -507,7 +507,7 @@ function compactChart(p, m, chartId) {
     });
     const positions = slots.map(slot => slot.distinctPositions).filter(Number.isFinite);
     p.text(42, 49, 7.8,
-      String(slots.length) + " creneaux | Positions/creneau : "
+      String(slots.length) + " créneaux | Positions/créneau : "
       + (positions.length ? fmt(Math.min(...positions)) + " a " + fmt(Math.max(...positions)) : "N/D")
       + " | Rouge = au-dessus de la cible, or = seuil de ligue.", C.muted);
     return;
@@ -521,7 +521,7 @@ function compactChart(p, m, chartId) {
     if (!total || total <= 0 || !Number.isFinite(q?.targetedPercent) || !Number.isFinite(q?.offTargetPercent)) {
       p.text(43, 91, 10, "Aucun chargement exploitable sur le perimetre selectionne.", C.muted); return;
     }
-    chartPercentRow(p, 98, "Chargements cadres", q.targetedPercent, fmt(q.targeted) + " / " + fmt(total), C.aqua);
+    chartPercentRow(p, 98, "Chargements cadrés", q.targetedPercent, fmt(q.targeted) + " / " + fmt(total), C.aqua);
     chartPercentRow(p, 73, "Chargements hors cible", q.offTargetPercent, fmt(q.offTarget) + " / " + fmt(total), C.red);
     p.text(42, 49, 8, "Source : TCD PPT / exclusions chargement de l'agence appliquees au MATCH.", C.muted);
     return;
@@ -531,10 +531,10 @@ function compactChart(p, m, chartId) {
     const value = d?.punctuality?.destinationPunctuality;
     const target = d?.punctualityTargets?.destinationPunctuality;
     const date = d?.referenceDate ?? "date non renseignee";
-    chartFrame(p, "CENTRES REUSSIS / PONCTUALITE DESTINATION",
-      "Source PDF 106J du " + String(date) + "  |  Perimetre journalier, distinct de la plage Excel.");
+    chartFrame(p, "CENTRES RÉUSSIS / PONCTUALITÉ DESTINATION",
+      "Source PDF 106J du " + String(date) + "  |  Périmètre journalier, distinct de la plage Excel.");
     if (!Number.isFinite(value) || value < 0 || value > 100) {
-      p.text(43, 92, 10, "Donnee 106J indisponible : aucun taux de centres ne peut etre affiche.", C.muted); return;
+      p.text(43, 92, 10, "Donnée 106J indisponible : aucun taux de centres ne peut etre affiche.", C.muted); return;
     }
     p.text(43, 88, 21, percent(value), C.white, true);
     p.box(210, 89, 558, 17, C.panel2);
@@ -544,24 +544,24 @@ function compactChart(p, m, chartId) {
       const mark = 210 + 558 * target / 100;
       p.box(mark - 1, 86, 2, 22, C.gold);
     }
-    p.text(210, 70, 8.5, "Reussis : " + percent(value) + "  |  Hors cible : " + percent(100 - value), C.text);
+    p.text(210, 70, 8.5, "Réussis : " + percent(value) + "  |  Hors cible : " + percent(100 - value), C.text);
     p.text(42, 49, 8,
       Number.isFinite(target) ? "Objectif 106J : " + percent(target) + " (repere or ; pas le seuil de ligue)"
-        : "Objectif 106J non fourni : aucun seuil n'est presume.", C.muted);
+        : "Objectif 106J non fourni : aucun seuil n'est présumé.", C.muted);
     return;
   }
   if (chartId === "operational-diagnostic") {
     const z = m.zonageDiagnostic;
     chartFrame(p, "DIAGNOSTIC OPERATIONNEL / ZONAGE",
-      "Ligue " + m.league.label + "  |  Cible zonage <= " + fmt(m.criteria.zonageMinutes) + " min  |  Plage exploitation retenue.");
+      "Ligue " + m.league.label + "  |  Cible zonage <= " + fmt(m.criteria.zonageMinutes) + " min  |  Période d'exploitation retenue.");
     if (!z || z.state === "indisponible" || !Number.isFinite(z.receivedPositions)
       || z.receivedPositions <= 0) {
-      p.text(43, 90, 10, "Perimetre zonage indisponible ; aucun retard n'est presume.", C.muted); return;
+      p.text(43, 90, 10, "Perimetre zonage indisponible ; aucun retard n'est présumé.", C.muted); return;
     }
     p.text(43, 109, 9,
-      "Hors delai : " + fmt(z.latePositions) + "/" + fmt(z.qualifiablePositions)
-      + " verifiables   |   Delais inconnus : " + fmt(z.unqualifiablePositions)
-      + "/" + fmt(z.receivedPositions) + " recues", C.text);
+      "Hors délai : " + fmt(z.latePositions) + "/" + fmt(z.qualifiablePositions)
+      + " vérifiables   |   Délais inconnus : " + fmt(z.unqualifiablePositions)
+      + "/" + fmt(z.receivedPositions) + " reçues", C.text);
     const complete = [z.latePositions, z.onTimePositions, z.unqualifiablePositions].every(v =>
       Number.isFinite(v) && v >= 0) && z.latePositions + z.onTimePositions + z.unqualifiablePositions === z.receivedPositions;
     if (complete) {
@@ -571,17 +571,17 @@ function compactChart(p, m, chartId) {
       p.box(x + w * z.latePositions / z.receivedPositions, y, w * z.onTimePositions / z.receivedPositions, 14, C.aqua);
       p.box(x + w * (z.latePositions + z.onTimePositions) / z.receivedPositions, y,
         w * z.unqualifiablePositions / z.receivedPositions, 14, C.muted);
-    } else p.text(42, 83, 8, "Repartition indisponible : nombres de positions incoherents.", C.muted);
+    } else p.text(42, 83, 8, "Répartition indisponible : nombres de positions incohérents.", C.muted);
     p.text(42, 64, 8.5,
       "Anomalie (qualifiables) : " + percent(z.anomalyRate)
-      + "  |  Couverture (recues) : " + percent(z.coverageRate), C.text);
+      + "  |  Couverture (reçues) : " + percent(z.coverageRate), C.text);
     const worst = Array.isArray(z.top5) && z.top5.length ? z.top5[0] : null;
     p.text(42, 49, 8,
-      worst ? "Premier voyage a examiner : " + trim(worst.travelCode, 32) + " / " + fmt(worst.latePositions) + " retards"
-        : "Aucun voyage prioritaire identifie dans la population qualifiable.", C.muted);
+      worst ? "Premier voyage à examiner : " + trim(worst.travelCode, 32) + " / " + fmt(worst.latePositions) + " retards"
+        : "Aucun voyage prioritaire identifié dans la population qualifiable.", C.muted);
     return;
   }
-  chartFrame(p, "ANALYSE INDISPONIBLE", "La selection du graphique a change. Recharge le MATCH.");
+  chartFrame(p, "ANALYSE INDISPONIBLE", "La sélection du graphique a changé. Recharge le MATCH.");
 }
 
 function shortBlock(p, { x, y, w, h, title, value, chars, maxLines = 3 }) {
