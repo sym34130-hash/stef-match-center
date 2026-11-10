@@ -146,7 +146,7 @@ export function SafetyCounter({ session }: { session: Session }) {
             <label htmlFor="safety-last-date">Date du dernier accident</label>
             <div className="safety-card-entry">
               <input id="safety-last-date" type="date" aria-label="Date du dernier accident du travail"
-                required min="1900-01-01" max={state.asOfDate}
+                required min="1900-01-01" max={state?.asOfDate ?? ""}
                 value={draftDate} onChange={event => { setDraftDate(event.target.value); setNotice(null); }} />
               <button type="submit" disabled={saving || !canSave}>{saving ? "..." : "Valider"}</button>
             </div>
