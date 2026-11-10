@@ -114,8 +114,8 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await page.getByRole("button", { name: "Accéder au match" }).click();
   await expect(page.getByRole("button", { name: "02 Feuille de match", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
-  await expect(page.getByRole("button", { name: /Personnaliser le PDF/ })).toBeVisible();
-  await page.getByRole("button", { name: /Personnaliser le PDF/ }).click();
+  await expect(page.getByRole("button", { name: "Personnaliser l'export PDF", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Personnaliser l'export PDF", exact: true }).click();
   await expect(page.getByRole("button", { name: /Enregistrer et télécharger le PDF/ })).toBeVisible();
   // The bulky source-tonnage notification must never be recreated in preferences.
   await expect(page.getByText("Tonnage du PDF : vérification de la source")).toHaveCount(0);
