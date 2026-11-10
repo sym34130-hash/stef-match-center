@@ -208,11 +208,23 @@ function analyticsPages(doc, m) {
     ["Duels totaux", m.summary?.duelTotal],
   ].forEach(([label, value], i) => p.card(29 + (i % 3) * 266, 270 - Math.floor(i / 3) * 120, 252, 110, label, fmt(value), "", C.blue));
   const slots = (m.hourlyPerformance ?? []).filter(row => row && typeof row === "object");
-  const page = doc.add("03 - PASSES PAR HEURE");
-  page.text(34, 477, 12, "Passes reussies / creneau horaire", C.aqua, true);
-  const usable = slots.slice(0, 17);
-  usable.forEach((entry, i) => bar(page, 43, 448 - i * 22, entry.label || String(entry.hour ?? ""), entry.rate, 100));
-  if (slots.length > usable.length) page.text(45, 58, 9, `Suite non affichee : ${slots.length - usable.length} creneaux`, C.muted);
+  for (let start = 0; start < Math.max(1, slots.length); start += 17) {
+    const page = doc.add(start ? "03 - PASSES PAR HEURE / SUITE" : "03 - PASSES PAR HEURE");
+    page.text(34, 477, 12, "Passes reussies / creneau horaire", C.aqua, true);
+    slots.slice(start, start + 17).forEach((entry, i) => bar(page, 43, 448 - i * 22,
+      entry.label || String(entry.hour ?? ""), entry.rate, 100));
+    if (!slots.length) page.text(43, 445, 12, "Donnees horaires indisponibles", C.muted);
+  }
+  const receptionSlots = m.unloadingHourlyAnalysis?.items ?? [];
+  for (let start = 0; start < Math.max(1, receptionSlots.length); start += 17) {
+    const page = doc.add(start ? "03 - RECEPTION PAR CRENEAU / SUITE" : "03 - RECEPTION PAR CRENEAU");
+    page.text(34, 477, 12, "Temps moyen de reception par creneau - secondes / position", C.aqua, true);
+    receptionSlots.slice(start, start + 17).forEach((entry, i) =>
+      bar(page, 43, 448 - i * 22, entry.label || entry.start || "-",
+        entry.meanSecondsPerPosition, Math.max(1, m.unloadingHourlyAnalysis?.targetSeconds ?? 60,
+          entry.meanSecondsPerPosition ?? 0), C.blue));
+    if (!receptionSlots.length) page.text(43, 445, 12, "Donnees de reception par creneau indisponibles", C.muted);
+  }
   const p2 = doc.add("03 - QUALITE DES FLUX");
   let items = [
     ["CHG / tirs cadres", m.loadingQuality?.targetedPercent],
