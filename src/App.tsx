@@ -1452,6 +1452,14 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
     };
   }, [celebrationMode, indicatorSettingsOpen]);
 
+  // Confirmation is transient on the presentation screen, so no banner remains
+  // over the score after the settings dialog has closed.
+  useEffect(() => {
+    if (!celebrationMode || indicatorSettingsOpen || !indicatorSettingsFeedback) return;
+    const timeout = window.setTimeout(() => setIndicatorSettingsFeedback(null), 5000);
+    return () => window.clearTimeout(timeout);
+  }, [celebrationMode, indicatorSettingsOpen, indicatorSettingsFeedback]);
+
   function closeIndicatorSettings() {
     if (indicatorSettingsSaving) return;
     setIndicatorSettingsOpen(false);
