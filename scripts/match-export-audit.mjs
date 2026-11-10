@@ -4,9 +4,12 @@ import path from "node:path";
 import { matchExportLeague, matchExportModel } from "../server/match-export-model.mjs";
 import { renderMatchPdf } from "../server/match-export-pdf.mjs";
 import { PDF_CHART_IDS } from "../server/match-pdf-profile.mjs";
+import pdfParse from "pdf-parse";
 
 const out = process.env.STEF_PDF_AUDIT_DIR || "artifacts/lot-e-audit";
 await fs.mkdir(out, { recursive: true });
+const certified = [];
+const fmtCertified = value => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 1 }).format(value).replace(/[\u202f\u00a0]/g, " ");
 const fixtures = [
   { code: "058", league: "argent", visible: ["performance", "injuries", "accident-free-days", "positions", "arrival", "departure"] },
   { code: "059", league: "or", visible: ["performance", "tonnage-expedition", "tonnage-distribution", "temperature"] },
@@ -118,8 +121,59 @@ for (const fixture of fixtures) {
     }[chartId];
     assert.ok(pdfText.includes(expectedText), chartId + ": missing target/source " + expectedText);
     assert.doesNotMatch(pdfText, /\/Subtype \/Image/, "No screenshots in two-page summary");
+    const parsed = await pdfParse(pdf);
+    assert.equal(parsed.numpages, 2);
+    const extracted = parsed.text.replace(/[\u202f\u00a0]/g, " ");
+    const checks = [
+      ["agency", "AGENCE TEST " + code],
+      ["league", league.label],
+      ["official score", "85 %"],
+      ["brief", "FIN-DU-BRIEF-TEST-" + code],
+    ];
+    if (chartId === "passes-hourly") {
+      const won = snapshot.hourlyPerformance.reduce((sum, r) => sum + r.won, 0);
+      const all = snapshot.hourlyPerformance.reduce((sum, r) => sum + r.total, 0);
+      const rate = Math.round(won / all * 1000) / 10;
+      checks.push(["weighted hourly pass rate", "Total filtré : " + fmtCertified(rate) + " %"]);
+      checks.push(["first hourly period", snapshot.hourlyPerformance[0].label]);
+    } else if (chartId === "reception-time") {
+      checks.push(["reception target", "Cible : " + league.criteria.unloadingSeconds + " s/poz"]);
+      checks.push(["positions per slot", "Positions/créneau : 10 a 32"]);
+    } else if (chartId === "loading") {
+      checks.push(["loading target", "Temps par position <= " + league.criteria.loadingSeconds + " s/poz"]);
+      checks.push(["loading volume", "85 / 100"]);
+      checks.push(["loading percentage", "85 %"]);
+    } else if (chartId === "centers") {
+      checks.push(["106J value", "92 %"]);
+      checks.push(["106J target", "91 %"]);
+      checks.push(["106J reference", snapshot.dailyIndicators.referenceDate]);
+    } else if (chartId === "operational-diagnostic") {
+      checks.push(["zonage target", "Cible zonage <= " + league.criteria.zonageMinutes + " min"]);
+      checks.push(["late/qualifiable", "12/150"]);
+      checks.push(["unknown/received", "10/160"]);
+      checks.push(["coverage", "93,8 %"]);
+    }
+    for (const [check, expected] of checks) {
+      assert.ok(extracted.includes(expected), code + "/" + chartId + " " + check + " expected '" + expected + "'");
+    }
+    certified.push({
+      agency: code, league: league.label, chartId, pages: parsed.numpages,
+      checks: checks.map(([name, expected]) => ({ name, sourceValue: expected, status: "PASS" })),
+    });
     const filename = path.join(out, "SYNTHETIC_MATCH_" + code + "_" + league.label.replace(/ /g, "_") + "_" + chartId + ".pdf");
     await fs.writeFile(filename, pdf);
     console.log(filename + " / pages=" + pages + " / bytes=" + pdf.length);
   }
 }
+
+assert.equal(certified.length, fixtures.length * PDF_CHART_IDS.length);
+await fs.writeFile(path.join(out, "certification-graphes.json"), JSON.stringify({
+  certification: "TECHNIQUE — JEUX SYNTHETIQUES UNIQUEMENT",
+  productionCertified: false,
+  scope: "Quatre ligues, cinq graphiques, deux pages, valeurs KPI/graphes extraites du PDF comparées à leurs sources synthétiques",
+  cases: certified.length,
+  assertions: certified.reduce((sum, entry) => sum + entry.checks.length, 0),
+  results: certified,
+}, null, 2) + "\n");
+console.log("CERTIFICATION SYNTHETIQUE : " + certified.length + " scénarios, "
+  + certified.reduce((sum, entry) => sum + entry.checks.length, 0) + " comparaisons source/PDF réussies.");
