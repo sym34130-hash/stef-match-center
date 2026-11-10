@@ -24,7 +24,7 @@ export function parisDay(iso) {
   return `${p.year}-${p.month}-${p.day}`;
 }
 
-function normalizedAgencyId(value) {
+export function normalizedAgencyId(value) {
   return String(value ?? "").trim().toUpperCase().replace(/^0+(?=[0-9A-Z])/, "");
 }
 
