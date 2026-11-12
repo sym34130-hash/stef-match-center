@@ -2916,7 +2916,6 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
             {hoursWithData} h mesurées sur {snapshot.match.timeRangeLabel}.
             {smallSampleHours > 0 && ` ${smallSampleHours} h à faible volume (moins de 5 opérations).`}
             {hasHourlyGap && " Pointillés : liaison visuelle entre heures sans données, sans mesure intermédiaire."}
-            {noDataTail?.width && ` À partir de ${noDataTail.from} : aucune donnée horaire jusqu'à la fin de la plage.`}
           </small>
         </div>
         <div className="performance-chart-actions">
@@ -2961,8 +2960,11 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
             <g className="performance-chart-no-data-tail" aria-label={`Sans données après ${noDataTail.from}`}>
               <rect x={noDataTail.x} y={top} width={noDataTail.width} height={chartHeight} />
               <title>{`Aucune donnée de ${noDataTail.from} à la fin de la plage`}</title>
-              {noDataTail.width >= 130 && (
+              {noDataTail.width >= 130 ? (
                 <text x={noDataTail.x + noDataTail.width / 2} y={top + chartHeight / 2}>Sans données</text>
+              ) : (
+                <text transform={`translate(${noDataTail.x + noDataTail.width / 2} ${top + chartHeight / 2}) rotate(-90)`}
+                  x={0} y={0}>Sans données</text>
               )}
             </g>
           )}
