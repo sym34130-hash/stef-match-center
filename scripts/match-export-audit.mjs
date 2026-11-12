@@ -113,7 +113,7 @@ for (const fixture of fixtures) {
     assert.ok(pdfText.includes("DECHG <= " + league.criteria.unloadingSeconds + " s/poz"));
     assert.match(pdfText, /BRIEF OPERATIONNEL DU JOUR|SERVICE CLIENT/);
     const expectedText = {
-      "passes-hourly": "Total filtré",
+      "passes-hourly": "Tous DECHG eligibles",
       "reception-time": "Cible : " + league.criteria.unloadingSeconds + " s/poz",
       loading: "Temps par position",
       centers: "Source PDF 106J du 2026-11-09",
@@ -134,7 +134,7 @@ for (const fixture of fixtures) {
       const won = snapshot.hourlyPerformance.reduce((sum, r) => sum + r.won, 0);
       const all = snapshot.hourlyPerformance.reduce((sum, r) => sum + r.total, 0);
       const rate = Math.round(won / all * 1000) / 10;
-      checks.push(["weighted hourly pass rate", "Total filtré : " + fmtCertified(rate) + " %"]);
+      checks.push(["weighted hourly pass rate", "Total : " + fmtCertified(rate) + " %"]);
       checks.push(["first hourly period", snapshot.hourlyPerformance[0].label]);
     } else if (chartId === "reception-time") {
       checks.push(["reception target", "Cible : " + league.criteria.unloadingSeconds + " s/poz"]);

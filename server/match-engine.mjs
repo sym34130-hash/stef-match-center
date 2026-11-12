@@ -40,7 +40,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 27;
+export const KPI_DICTIONARY_VERSION = 28;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -2035,6 +2035,7 @@ function buildHourlyPassPerformance(workbook, period, scoringRows = null, source
       official.total++;
       if (row.duelWonFlag === 1) official.won++;
       officialByHour.set(hour, official);
+      // View 2/2: all eligible DECHG, regardless of segment type (LIV included).
       if (!isHourlyPassChartRow(row)) continue;
       const current = byHour.get(hour) ?? { won: 0, total: 0 };
       current.total++;

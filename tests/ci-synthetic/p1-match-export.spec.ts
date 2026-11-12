@@ -119,7 +119,7 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(page.getByRole("button", { name: /Enregistrer et télécharger le PDF/ })).toBeVisible();
   // The bulky source-tonnage notification must never be recreated in preferences.
   await expect(page.getByText("Tonnage du PDF : vérification de la source")).toHaveCount(0);
-  // Diagnostic UI: an hourly 100% may be just 1/1, and 19h can be 3/5.
+  // Display all eligible DECHG at 19h, including LIV; global KPI still differs.
   // Mock only the in-memory browser response, never mutate a server import.
   const chartSnapshot = structuredClone(snapshot);
   chartSnapshot.match.periodStart = "13:00";
@@ -127,7 +127,7 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   chartSnapshot.match.timeRangeLabel = "13:00 - 22:30";
   chartSnapshot.hourlyPerformance = [
     { label: "13h", hour: 13, won: 1, total: 1, rate: 100 },
-    { label: "19h", hour: 19, won: 3, total: 5, rate: 60 },
+    { label: "19h", hour: 19, won: 3, total: 6, rate: 50 },
     { label: "22h", hour: 22, won: 1, total: 1, rate: 100 },
   ];
   chartSnapshot.overallHourlyPerformance = [
@@ -148,15 +148,17 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(page.locator(".operational-charts-carousel-counter")).toContainText("1 / 5");
   await expect(chartPanel.locator(".performance-chart")).toHaveCount(1);
   const overallButton = chartPanel.getByRole("button", { name: /1\/2 Performance globale/ });
-  const filteredButton = chartPanel.getByRole("button", { name: /2\/2 Déchargements filtrés/ });
+  const filteredButton = chartPanel.getByRole("button", { name: /2\/2 Tous les déchargements/ });
   await expect(overallButton).toHaveAttribute("aria-pressed", "true");
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("25/30 opérations");
   await filteredButton.click();
   await expect(filteredButton).toHaveAttribute("aria-pressed", "true");
+  await expect(chartPanel.locator(".performance-chart-caption")).toContainText("tous segments dont LIV");
+  await expect(chartPanel.locator(".performance-chart-heading strong")).toContainText("déchargements dans le délai");
   await expect(overallButton).toHaveAttribute("aria-pressed", "false");
   await expect(chartPanel.locator(".performance-chart-sample")).toContainText("2 h à faible volume");
   await expect(chartPanel.locator(".performance-chart-sample")).toContainText("Pointillés");
-  await expect(chartPanel.locator(".performance-chart-total")).toContainText("5/7 opérations");
+  await expect(chartPanel.locator(".performance-chart-total")).toContainText("5/8 opérations");
   const plotted = chartPanel.locator(".performance-chart-point circle");
   await expect(plotted).toHaveCount(3);
   const x = await plotted.evaluateAll(nodes => nodes.map(node => Number(node.getAttribute("cx"))));
@@ -174,20 +176,20 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(dataRows.nth(0)).toContainText("13h");
   await expect(dataRows.nth(0)).toContainText("100%");
   await expect(dataRows.nth(1)).toContainText("19h");
-  await expect(dataRows.nth(1)).toContainText("60%");
+  await expect(dataRows.nth(1)).toContainText("50%");
   await expect(dataRows.nth(2)).toContainText("22h");
   // Both views share the unchanged zoom/modal behavior, including on mobile.
   await chartPanel.getByRole("button", { name: "Agrandir le graphique" }).click();
   const zoom = page.getByRole("dialog", { name: "Graphique Performance horaire agrandi" });
   await expect(zoom).toBeVisible();
   await expect(zoom.locator(".performance-chart")).toHaveCount(1);
-  await expect(zoom.locator(".performance-chart-total")).toContainText("5/7 opérations");
+  await expect(zoom.locator(".performance-chart-total")).toContainText("5/8 opérations");
   await zoom.getByRole("button", { name: /1\/2 Performance globale/ }).click();
   await expect(zoom.locator(".performance-chart-total")).toContainText("25/30 opérations");
-  await zoom.getByRole("button", { name: /2\/2 Déchargements filtrés/ }).click();
-  await expect(zoom.locator(".performance-chart-total")).toContainText("5/7 opérations");
+  await zoom.getByRole("button", { name: /2\/2 Tous les déchargements/ }).click();
+  await expect(zoom.locator(".performance-chart-total")).toContainText("5/8 opérations");
   await zoom.getByRole("button", { name: "Fermer le graphique agrandi" }).click();
   await expect(zoom).toHaveCount(0);
-  await expect(chartPanel.locator(".performance-chart-total")).toContainText("5/7 opérations");
+  await expect(chartPanel.locator(".performance-chart-total")).toContainText("5/8 opérations");
   await expect(page.locator(".operational-charts-carousel-counter")).toContainText("1 / 5");
 });

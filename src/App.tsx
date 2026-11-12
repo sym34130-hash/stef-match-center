@@ -2868,15 +2868,15 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
             </button>
             <button type="button" className={view === "filtered" ? "is-active" : ""}
               aria-pressed={view === "filtered"} onClick={() => changeView("filtered")}>
-              <b>2/2</b> Déchargements filtrés
+              <b>2/2</b> Tous les déchargements
             </button>
           </div>
           <span>Performance horaire · {view === "overall" ? "1/2" : "2/2"}</span>
-          <strong>% passes réussies</strong>
+          <strong>{view === "overall" ? "% passes réussies" : "% déchargements dans le délai"}</strong>
           <small className="performance-chart-caption">
             {view === "overall"
               ? "Toutes les opérations éligibles au KPI officiel, regroupées par heure sur la plage active. Les filtres opérateur, ligue et voyages restent appliqués."
-              : "Déchargements (col. C) · segments AQ, ED, EX ou vides (col. G) · LIV exclus. Le KPI officiel reste indépendant."}
+              : `Tous les déchargements éligibles (col. C), tous segments dont LIV · délai de zonage ≤ ${snapshot.performanceCriteria?.zonageMinutes ?? snapshot.match.dzTargetMinutes} min · KPI officiel indépendant.`}
           </small>
           <small className="performance-chart-sample" role="note">
             {hoursWithData} h mesurées sur {snapshot.match.timeRangeLabel}.
@@ -2886,7 +2886,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
         </div>
         <div className="performance-chart-actions">
           <div className="performance-chart-total">
-          <small>{view === "overall" ? "Total global · KPI officiel" : "Total filtré"}</small>
+          <small>{view === "overall" ? "Total global · KPI officiel" : "Total déchargements"}</small>
           <b>{formatPercent(totalPassRate)}</b>
           <small>{chartTotal > 0 ? `${chartWon}/${chartTotal} opérations` : "Volumes non disponibles"}</small>
           </div>
@@ -2958,7 +2958,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
           </div>
           <p>{view === "overall"
             ? "Ces volumes correspondent aux lignes éligibles au KPI officiel des passes réussies, avec les critères actifs de l’agence."
-            : "Ces volumes concernent uniquement les déchargements et segments autorisés dans ce graphique, distinct du KPI officiel."}</p>
+            : "Ces volumes concernent tous les déchargements éligibles, sans exclusion par segment. Ils restent distincts du KPI officiel."}</p>
         </details>
       )}
       {expanded && createPortal(

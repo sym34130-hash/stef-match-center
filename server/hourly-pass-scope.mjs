@@ -1,10 +1,7 @@
-// Chart-only scope for "% passes réussies par heure".
-// The source workbook uses DECHG for the "Déchargement" operation (column C).
-// Column G permits AQ, ED, EX and truly blank cells; LIV and any other codes
-// are not chartable. Apply per operation row before grouping by hour.
-const ALLOWED_SEGMENTS = new Set(["AQ", "ED", "EX", ""]);
-
+// The hourly "Performance des déchargements" graph (view 2/2) is limited
+// to eligible DECHG operations, WITHOUT any filter on the segment column.
+// AQ, ED, EX, LIV, blank and any other segment are included if they pass
+// the existing operator / time-window / unzoned / league / travel filters.
 export function isHourlyPassChartRow(row) {
-  return row?.operationType === "DECHG"
-    && ALLOWED_SEGMENTS.has(String(row.segmentType ?? "").trim().toUpperCase());
+  return String(row?.operationType ?? "").trim().toUpperCase() === "DECHG";
 }
