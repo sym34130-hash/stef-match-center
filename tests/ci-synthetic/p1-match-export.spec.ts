@@ -170,6 +170,9 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(chartPanel.locator(".performance-chart-area")).toHaveCount(3);
   await expect(chartPanel.locator(".performance-chart-empty-hour")).toHaveCount(7);
   await expect(chartPanel.locator(".performance-chart-empty-hour").first()).toContainText("14h");
+  // Even when the 22h bucket has data, show the exact selected end at 22h30.
+  await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
+  await expect(chartPanel.locator(".performance-chart-no-data-tail")).toHaveCount(0);
   await chartPanel.locator(".performance-chart-breakdown summary").click();
   const dataRows = chartPanel.locator(".performance-chart-breakdown tbody tr");
   await expect(dataRows).toHaveCount(3);
@@ -192,4 +195,53 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(zoom).toHaveCount(0);
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("5/8 opérations");
   await expect(page.locator(".operational-charts-carousel-counter")).toContainText("1 / 5");
+
+  // Regression: 1/2 has no operations after 21h, 2/2 after 20h,
+  // but BOTH must display empty 22h and the 22h30 selected-period boundary.
+  chartSnapshot.overallHourlyPerformance = [
+    { label: "13h", hour: 13, won: 10, total: 12, rate: 83.3 },
+    { label: "19h", hour: 19, won: 6, total: 8, rate: 75 },
+    { label: "21h", hour: 21, won: 9, total: 10, rate: 90 },
+  ];
+  chartSnapshot.hourlyPerformance = [
+    { label: "13h", hour: 13, won: 1, total: 1, rate: 100 },
+    { label: "19h", hour: 19, won: 3, total: 6, rate: 50 },
+    { label: "20h", hour: 20, won: 1, total: 1, rate: 100 },
+  ];
+  await page.reload();
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  await nav.getByRole("button", { name: "Aller à Statistiques du match", exact: true }).click();
+  await expect(chartPanel.locator(".performance-chart-point")).toHaveCount(3);
+  await expect(chartPanel.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("21h");
+  await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
+  await expect(chartPanel.locator(".performance-chart-empty-hour")).toContainText(["14h","15h","16h","17h","18h","20h","22h"]);
+  await expect(chartPanel.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
+  await expect(chartPanel.locator(".performance-chart-total")).toContainText("25/30 opérations");
+
+  await chartPanel.getByRole("button", { name: /2\\/2 Tous les déchargements/ }).click();
+  await expect(chartPanel.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("20h");
+  await expect(chartPanel.locator(".performance-chart-empty-hour")).toContainText(["14h","15h","16h","17h","18h","21h","22h"]);
+  await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
+  await expect(chartPanel.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
+  await expect(chartPanel.locator(".performance-chart-total")).toContainText("5/8 opérations");
+  await chartPanel.getByRole("button", { name: "Agrandir le graphique" }).click();
+  await expect(zoom.locator(".performance-chart-end-boundary")).toContainText("22h30");
+  await expect(zoom.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
+  await zoom.getByRole("button", { name: /1\\/2 Performance globale/ }).click();
+  await expect(zoom.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("21h");
+  await expect(zoom.locator(".performance-chart-end-boundary")).toContainText("22h30");
+  await zoom.getByRole("button", { name: "Fermer le graphique agrandi" }).click();
+
+  // Even if no measured points exist, the time window must remain visible.
+  chartSnapshot.overallHourlyPerformance = [];
+  chartSnapshot.hourlyPerformance = [];
+  await page.reload();
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  await nav.getByRole("button", { name: "Aller à Statistiques du match", exact: true }).click();
+  await expect(chartPanel.locator(".performance-chart")).toHaveCount(1);
+  await expect(chartPanel.locator(".performance-chart-point")).toHaveCount(0);
+  await expect(chartPanel.locator(".performance-chart-empty-hour")).toHaveCount(10);
+  await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
+  await expect(chartPanel.locator(".performance-chart-no-data-message")).toContainText("Aucune opération éligible");
+  await expect(chartPanel.locator(".performance-chart-total")).toContainText("Volumes non disponibles");
 });
