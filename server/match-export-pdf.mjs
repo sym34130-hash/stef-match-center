@@ -314,7 +314,7 @@ function analyticsPages(doc, m) {
   const slots = (m.hourlyPerformance ?? []).filter(row => row && typeof row === "object");
   for (let start = 0; start < Math.max(1, slots.length); start += 17) {
     const page = doc.add(start ? "03 - PASSES PAR HEURE / SUITE" : "03 - PASSES PAR HEURE");
-    page.text(34, 477, 12, "Passes reussies / creneau horaire", C.aqua, true);
+    page.text(34, 477, 12, "Passes reussies - tous dechargements / heure", C.aqua, true);
     slots.slice(start, start + 17).forEach((entry, i) => bar(page, 43, 448 - i * 22,
       entry.label || String(entry.hour ?? ""), entry.rate, 100));
     if (!slots.length) page.text(43, 445, 12, "Donnees horaires indisponibles", C.muted);
@@ -479,7 +479,7 @@ function compactChart(p, m, chartId) {
     const total = rows.reduce((sum, row) => sum + (Number.isFinite(row.total) ? row.total : 0), 0);
     const weightedRate = total > 0 ? Math.round(won / total * 1000) / 10 : null;
     chartFrame(p, "PASSES RÉUSSIES / HEURE",
-      "DECHG, segments AQ/ED/EX ou vides ; LIV exclus  |  Total filtré : " + percent(weightedRate));
+      "Tous DECHG eligibles, tous segments dont LIV ; zonage <= " + fmt(m.criteria?.zonageMinutes) + " min  |  Total : " + percent(weightedRate));
     if (!rows.length) { p.text(43, 91, 10, "Aucune donnée horaire éligible dans la plage choisie.", C.muted); return; }
     const x = 78, baseline = 85, w = 699, h = 51;
     for (const value of [0, 50, 100]) {
@@ -501,7 +501,7 @@ function compactChart(p, m, chartId) {
     const first = rows[0], last = rows[rows.length - 1];
     p.text(x, 67, 8, trim(String(first.label ?? first.hour ?? "Début"), 22) + " : " + percent(first.rate), C.muted);
     p.text(x + w, 67, 8, trim(String(last.label ?? last.hour ?? "Fin"), 22) + " : " + percent(last.rate), C.muted, false, "right");
-    p.text(42, 49, 8.4, "Graphique horaire filtré ; périmètre distinct du KPI officiel des passes du score.", C.muted);
+    p.text(42, 49, 8.4, "Tous dechargements eligibles ; perimetre distinct du KPI officiel tous types.", C.muted);
     return;
   }
   if (chartId === "reception-time") {
