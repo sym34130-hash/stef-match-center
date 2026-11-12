@@ -167,10 +167,10 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   expect((d?.match(/M /g) ?? []).length).toBe(3);
   // The line remains readable across gaps: dashed bridges are NOT measurements.
   await expect(chartPanel.locator(".performance-chart-gap")).toHaveCount(2);
-  await expect(chartPanel.locator(".performance-chart-area")).toHaveCount(3);
+  await expect(chartPanel.locator(".performance-chart-area")).toHaveCount(2);
   await expect(chartPanel.locator(".performance-chart-empty-hour")).toHaveCount(7);
   await expect(chartPanel.locator(".performance-chart-empty-bucket")).toHaveCount(7);
-  await expect(chartPanel.locator(".performance-chart-last-bucket")).toHaveCount(1);
+  await expect(chartPanel.locator(".performance-chart-last-bucket")).toHaveCount(0);
   await expect(chartPanel.locator(".performance-chart-empty-hour").first()).toContainText("14h");
   // Even when the 22h bucket has data, show the exact selected end at 22h30.
   await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
@@ -218,55 +218,52 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
   await expect(chartPanel.locator(".performance-chart-empty-hour")).toContainText(["14h","15h","16h","17h","18h","20h","22h"]);
   await expect(chartPanel.locator(".performance-chart-empty-bucket")).toHaveCount(7);
-  await expect(chartPanel.locator(".performance-chart-last-bucket")).toHaveCount(1);
-  await expect(chartPanel.locator(".performance-chart-last-bucket")).toContainText("21h mesuré");
-  // No green percentage fill is allowed after the last data point.
-  await expect(chartPanel.locator(".performance-chart-last-bucket-area")).toHaveCount(0);
-  expect(await chartPanel.locator(".performance-chart-last-bucket rect").evaluate(el =>
-    getComputedStyle(el).fill)).not.toBe("rgba(72, 199, 142, 0.16)");
+  await expect(chartPanel.locator(".performance-chart-last-bucket")).toHaveCount(0);
+  await expect(chartPanel.locator(".performance-chart")).not.toContainText("21h mesuré");
+  // All green area paths must terminate at/before the final observed dot.
+  // The trailing empty hours remain on the selected time axis.
+  const expectNoGreenAfterLastPoint = async (expectedNoDataFrom: string) => {
+    const geometry = await chartPanel.locator(".performance-chart").evaluate(svg => {
+      const dots = [...svg.querySelectorAll<SVGCircleElement>(".performance-chart-point circle")];
+      const lastX = dots.length ? Number(dots[dots.length - 1].getAttribute("cx")) : null;
+      const greenRight = [...svg.querySelectorAll<SVGPathElement>(".performance-chart-area")].reduce(
+        (max, path) => Math.max(max, path.getBBox().x + path.getBBox().width), -Infinity);
+      const empty = svg.querySelector<SVGRectElement>(".performance-chart-no-data-tail rect");
+      return { lastX, greenRight, emptyX: empty ? Number(empty.getAttribute("x")) : null };
+    });
+    expect(geometry.lastX).not.toBeNull();
+    expect(geometry.greenRight).toBeLessThanOrEqual(geometry.lastX! + 0.5);
+    expect(geometry.emptyX).toBeGreaterThan(geometry.lastX!);
+    await expect(chartPanel.locator(".performance-chart-no-data-tail")).toHaveAttribute(
+      "aria-label", `Sans données après ${expectedNoDataFrom}`);
+    await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toContainText("Sans données");
+  };
+  await expectNoGreenAfterLastPoint("22h");
   await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toContainText("Sans données");
   // Short final half-hour: rotate the label rather than increasing card height.
   await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toHaveAttribute("transform", /rotate\(-90\)/);
   await expect(chartPanel.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
-  // The final measured hourly bucket reaches the BEGINNING of the no-data
-  // zone: no unexplained blank strip is left between the two regions.
-  const alignedChartBands = async () => {
-    const bounds = await chartPanel.locator(".performance-chart").evaluate((svg) => {
-      const last = svg.querySelector<SVGRectElement>(".performance-chart-last-bucket > rect");
-      const tail = svg.querySelector<SVGRectElement>(".performance-chart-no-data-tail > rect");
-      if (!last || !tail) return null;
-      const x1 = Number(last.getAttribute("x"));
-      const width1 = Number(last.getAttribute("width"));
-      const x2 = Number(tail.getAttribute("x"));
-      const width2 = Number(tail.getAttribute("width"));
-      return { measuredEnd: x1 + width1, emptyStart: x2, emptyWidth: width2 };
-    });
-    expect(bounds).not.toBeNull();
-    expect(bounds!.measuredEnd).toBeCloseTo(bounds!.emptyStart, 4);
-    expect(bounds!.emptyWidth).toBeGreaterThan(0);
-  };
-  await alignedChartBands();
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("25/30 opérations");
 
   await chartPanel.getByRole("button", { name: /2\/2 Tous les déchargements/ }).click();
   await expect(chartPanel.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("20h");
   await expect(chartPanel.locator(".performance-chart-empty-hour")).toContainText(["14h","15h","16h","17h","18h","21h","22h"]);
   await expect(chartPanel.locator(".performance-chart-empty-bucket")).toHaveCount(7);
-  await expect(chartPanel.locator(".performance-chart-last-bucket")).toContainText("20h mesuré");
-  await expect(chartPanel.locator(".performance-chart-last-bucket-area")).toHaveCount(0);
+  await expect(chartPanel.locator(".performance-chart-last-bucket")).toHaveCount(0);
+  await expect(chartPanel.locator(".performance-chart")).not.toContainText("20h mesuré");
+  await expectNoGreenAfterLastPoint("21h");
   await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toContainText("Sans données");
   // 21h–22h30 has room for a horizontal label.
   await expect(chartPanel.locator(".performance-chart-no-data-tail text")).not.toHaveAttribute("transform", /rotate\(-90\)/);
-  await alignedChartBands();
   await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
   await expect(chartPanel.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("5/8 opérations");
   await chartPanel.getByRole("button", { name: "Agrandir le graphique" }).click();
   await expect(zoom.locator(".performance-chart-end-boundary")).toContainText("22h30");
   await expect(zoom.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
-  await expect(zoom.locator(".performance-chart-last-bucket")).toContainText("20h mesuré");
+  await expect(zoom.locator(".performance-chart-last-bucket")).toHaveCount(0);
   await zoom.getByRole("button", { name: /1\/2 Performance globale/ }).click();
-  await expect(zoom.locator(".performance-chart-last-bucket")).toContainText("21h mesuré");
+  await expect(zoom.locator(".performance-chart-last-bucket")).toHaveCount(0);
   await expect(zoom.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("21h");
   await expect(zoom.locator(".performance-chart-end-boundary")).toContainText("22h30");
   await zoom.getByRole("button", { name: "Fermer le graphique agrandi" }).click();

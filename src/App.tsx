@@ -2861,17 +2861,6 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
       from: `${String((firstHour + firstTrailingEmptyOffset) % 24).padStart(2, "0")}h`,
     }
     : null;
-  // The last point describes an entire hourly bucket, but is NOT a measured
-  // rate for each instant after its time tick. Delimit that hour with a neutral
-  // background (not a green filled value or extrapolated area), and reserve
-  // the stronger neutral "Sans données" band for hours with zero eligible rows.
-  const lastPoint = points.at(-1);
-  const lastMeasuredBucket = lastPoint && selectedMinutes !== null ? {
-    x: lastPoint.x,
-    width: Math.max(0, Math.min(1, displayedSpan - lastPoint.hourOffset) / spanHours * chartWidth),
-    label: `${String((firstHour + lastPoint.hourOffset) % 24).padStart(2, "0")}h`,
-  } : null;
-
   // Shade only measured continuous runs; a lone hour gets a narrow
   // vertical column so it still reads as part of the chart.
   const areaPaths: string[] = [];
@@ -2881,10 +2870,14 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
     if (index < points.length && points[index].hourOffset - points[index - 1].hourOffset <= 1) continue;
     const run = points.slice(segmentStart, index);
     if (run.length === 1) {
-      const point = run[0];
-      const minX = Math.max(left, point.x - 14);
-      const maxX = Math.min(left + chartWidth, point.x + 14);
-      areaPaths.push(`M ${minX} ${baseY} L ${minX} ${point.y} L ${maxX} ${point.y} L ${maxX} ${baseY} Z`);
+      // An isolated LAST observation must remain a point only: no green
+      // strip beyond the final sample that could imply later measurements.
+      if (index < points.length) {
+        const point = run[0];
+        const minX = Math.max(left, point.x - 14);
+        const maxX = Math.min(left + chartWidth, point.x + 14);
+        areaPaths.push(`M ${minX} ${baseY} L ${minX} ${point.y} L ${maxX} ${point.y} L ${maxX} ${baseY} Z`);
+      }
     } else if (run.length > 1) {
       const first = run[0], last = run[run.length - 1];
       areaPaths.push(`M ${first.x} ${baseY} L ${run.map(point => `${point.x} ${point.y}`).join(" L ")} L ${last.x} ${baseY} Z`);
@@ -2942,18 +2935,6 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
             <rect key={`empty-${hour.label}`} className="performance-chart-empty-bucket"
               x={hour.x} y={top} width={hour.width} height={chartHeight} />
           ))}
-          {/* The final measured hour must not look like a projected green
-              percentage after the final point. Show an hour-scope marker only. */}
-          {lastMeasuredBucket && lastMeasuredBucket.width > 0 && (
-            <g className="performance-chart-last-bucket" aria-label={`Créneau ${lastMeasuredBucket.label} mesuré`}>
-              <rect x={lastMeasuredBucket.x} y={top} width={lastMeasuredBucket.width} height={chartHeight} />
-              {lastMeasuredBucket.width >= 96 && (
-                <text x={lastMeasuredBucket.x + lastMeasuredBucket.width / 2} y={top + 28}>
-                  {lastMeasuredBucket.label} mesuré
-                </text>
-              )}
-            </g>
-          )}
           {[0, 20, 40, 60, 80, 100].map((value) => {
             const y = top + ((100 - value) / 100) * chartHeight;
             return <g key={value}><line x1={left} x2={width - right} y1={y} y2={y} /><text x={left - 12} y={y + 4}>{value}%</text></g>;
