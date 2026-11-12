@@ -318,7 +318,7 @@ test("Lot E V5: compare five PDF summaries with canonical source metrics across 
       assert.ok(parsed.text.includes("DECHG <= " + criteria.unloadingSeconds + " s/poz"));
       assert.ok(parsed.text.includes("Zonage <= " + criteria.zonageMinutes + " min"));
       if (chartId === "passes-hourly") {
-        assert.match(parsed.text, /Total filtré : 66,7 %/i);
+        assert.match(parsed.text, /Total : 66,7 %/i);
         assert.match(parsed.text, /périmètre distinct du KPI officiel/i);
       } else if (chartId === "reception-time") {
         assert.ok(parsed.text.includes("Cible : " + criteria.unloadingSeconds + " s/poz"));
