@@ -2945,7 +2945,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
               <text x={left + chartWidth} y={height - 20}>{endBoundaryLabel}</text>
             </g>
           )}
-          {gapConnectors.map((gap, index) => <path className="performance-chart-gap" key={index} d={gap} />}
+          {gapConnectors.map((gap, index) => <path className="performance-chart-gap" key={index} d={gap} />)}
           <path className="performance-chart-line" d={path} />
           {data.length === 0 && (
             <g className="performance-chart-no-data-message">
