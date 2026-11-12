@@ -3263,15 +3263,30 @@ body.match-celebration-active .main-area {
   text-anchor: end;
 }
 
-/* Visually distinguish the remaining unmeasured time from the measured curve. */
+/* An unmeasured hour is an intentionally shaded bucket, not a chart hole. */
+.performance-chart .performance-chart-empty-bucket {
+  fill: rgba(29, 78, 137, 0.10);
+  stroke: rgba(29, 78, 137, 0.16);
+  stroke-width: 0.6;
+}
+.performance-chart .performance-chart-last-bucket > rect:first-child {
+  fill: rgba(72, 199, 142, 0.065);
+}
+.performance-chart .performance-chart-last-bucket-area {
+  fill: rgba(72, 199, 142, 0.16);
+}
+/* Visible, but not a projected or calculated rate. */
 .performance-chart .performance-chart-no-data-tail rect {
-  fill: rgba(29, 78, 137, 0.035);
+  fill: rgba(29, 78, 137, 0.13);
+  stroke: rgba(29, 78, 137, 0.28);
+  stroke-width: 1;
+  stroke-dasharray: 5 7;
 }
 .performance-chart .performance-chart-no-data-tail text {
   text-anchor: middle;
-  fill: var(--muted);
-  font-size: 13px;
-  font-weight: 800;
+  fill: var(--navy-900);
+  font-size: 16px;
+  font-weight: 900;
 }
 .performance-chart .performance-chart-no-data-message text {
   text-anchor: middle;

@@ -2843,6 +2843,9 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const missingHours = emptyHourOffsets.map((hourOffset) => ({
     label: `${String((firstHour + hourOffset) % 24).padStart(2, "0")}h`,
     x: left + (hourOffset / spanHours) * chartWidth,
+    // Shade the unobserved hourly bucket, clipped at the selected-period end.
+    // A bucket ending at the boundary contributes no area.
+    width: Math.max(0, Math.min(1, displayedSpan - hourOffset) / spanHours * chartWidth),
   }));
   // A partial final hour must be visible on the X axis (e.g. 22h30), even
   // when 21h was the last measured point. Do not extend the success curve.
@@ -2855,8 +2858,19 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
     ? {
       x: left + (firstTrailingEmptyOffset / spanHours) * chartWidth,
       width: Math.max(0, (displayedSpan - firstTrailingEmptyOffset) / spanHours * chartWidth),
+      from: `${String((firstHour + firstTrailingEmptyOffset) % 24).padStart(2, "0")}h`,
     }
     : null;
+  // Each plotted rate aggregates its full selected hourly bucket. Show the
+  // rest of that SAME measured bucket (20h -> 21h, for example) as a band;
+  // otherwise an unexplained blank hour appears between the last point and
+  // the explicitly unmeasured tail. This adds NO extra observations/rates.
+  const lastPoint = points.at(-1);
+  const lastMeasuredBucket = lastPoint && selectedMinutes !== null ? {
+    x: lastPoint.x,
+    width: Math.max(0, Math.min(1, displayedSpan - lastPoint.hourOffset) / spanHours * chartWidth),
+    y: lastPoint.y,
+  } : null;
 
   // Shade only measured continuous runs; a lone hour gets a narrow
   // vertical column so it still reads as part of the chart.
@@ -2922,14 +2936,36 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const chart = (large = false) => (data.length > 0 || selectedMinutes !== null) ? (
         <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="group" aria-label="Évolution horaire du pourcentage de passes réussies">
           <rect className="performance-chart-plot" x={left} y={top} width={chartWidth} height={chartHeight} rx="10" />
+          {/* Neutral full-height bands explicitly mark hours WITHOUT readings,
+              including internal gaps and the time after the final sample. */}
+          {missingHours.filter(hour => hour.width > 0).map((hour) => (
+            <rect key={`empty-${hour.label}`} className="performance-chart-empty-bucket"
+              x={hour.x} y={top} width={hour.width} height={chartHeight} />
+          ))}
+          {/* Within the last measured hour, the aggregate rate applies to the
+              bucket, not only to the point placed at its starting tick. */}
+          {lastMeasuredBucket && lastMeasuredBucket.width > 0 && (
+            <g className="performance-chart-last-bucket" aria-label="Dernier créneau mesuré">
+              <rect x={lastMeasuredBucket.x} y={top} width={lastMeasuredBucket.width} height={chartHeight} />
+              <rect className="performance-chart-last-bucket-area" x={lastMeasuredBucket.x}
+                y={lastMeasuredBucket.y} width={lastMeasuredBucket.width}
+                height={Math.max(0, top + chartHeight - lastMeasuredBucket.y)} />
+            </g>
+          )}
           {[0, 20, 40, 60, 80, 100].map((value) => {
             const y = top + ((100 - value) / 100) * chartHeight;
             return <g key={value}><line x1={left} x2={width - right} y1={y} y2={y} /><text x={left - 12} y={y + 4}>{value}%</text></g>;
           })}
           {data.length > 0 && noDataTail && noDataTail.width > 0 && (
-            <g className="performance-chart-no-data-tail" aria-label="Période sans données après la dernière mesure">
+            <g className="performance-chart-no-data-tail" aria-label={`Sans données après ${noDataTail.from}`}>
               <rect x={noDataTail.x} y={top} width={noDataTail.width} height={chartHeight} />
-              <text x={noDataTail.x + noDataTail.width / 2} y={top + chartHeight / 2}>Aucune donnée</text>
+              <title>{`Aucune donnée de ${noDataTail.from} à la fin de la plage`}</title>
+              {noDataTail.width >= 130 ? (
+                <text x={noDataTail.x + noDataTail.width / 2} y={top + chartHeight / 2}>Sans données</text>
+              ) : (
+                <text transform={`translate(${noDataTail.x + noDataTail.width / 2} ${top + chartHeight / 2}) rotate(-90)`}
+                  x={0} y={0}>Sans données</text>
+              )}
             </g>
           )}
           {areaPaths.map((area, index) => <path className="performance-chart-area" key={index} d={area} />)}
