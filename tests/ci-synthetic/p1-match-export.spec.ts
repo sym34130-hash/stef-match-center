@@ -169,6 +169,8 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(chartPanel.locator(".performance-chart-gap")).toHaveCount(2);
   await expect(chartPanel.locator(".performance-chart-area")).toHaveCount(3);
   await expect(chartPanel.locator(".performance-chart-empty-hour")).toHaveCount(7);
+  await expect(chartPanel.locator(".performance-chart-empty-bucket")).toHaveCount(7);
+  await expect(chartPanel.locator(".performance-chart-last-bucket")).toHaveCount(1);
   await expect(chartPanel.locator(".performance-chart-empty-hour").first()).toContainText("14h");
   // Even when the 22h bucket has data, show the exact selected end at 22h30.
   await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
@@ -215,12 +217,36 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(chartPanel.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("21h");
   await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
   await expect(chartPanel.locator(".performance-chart-empty-hour")).toContainText(["14h","15h","16h","17h","18h","20h","22h"]);
+  await expect(chartPanel.locator(".performance-chart-empty-bucket")).toHaveCount(7);
+  await expect(chartPanel.locator(".performance-chart-last-bucket")).toHaveCount(1);
+  await expect(chartPanel.locator(".performance-chart-sample")).toContainText("À partir de 22h");
   await expect(chartPanel.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
+  // The final measured hourly bucket reaches the BEGINNING of the no-data
+  // zone: no unexplained blank strip is left between the two regions.
+  const alignedChartBands = async () => {
+    const bounds = await chartPanel.locator(".performance-chart").evaluate((svg) => {
+      const last = svg.querySelector<SVGRectElement>(".performance-chart-last-bucket > rect");
+      const tail = svg.querySelector<SVGRectElement>(".performance-chart-no-data-tail > rect");
+      if (!last || !tail) return null;
+      const x1 = Number(last.getAttribute("x"));
+      const width1 = Number(last.getAttribute("width"));
+      const x2 = Number(tail.getAttribute("x"));
+      const width2 = Number(tail.getAttribute("width"));
+      return { measuredEnd: x1 + width1, emptyStart: x2, emptyWidth: width2 };
+    });
+    expect(bounds).not.toBeNull();
+    expect(bounds!.measuredEnd).toBeCloseTo(bounds!.emptyStart, 4);
+    expect(bounds!.emptyWidth).toBeGreaterThan(0);
+  };
+  await alignedChartBands();
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("25/30 opérations");
 
   await chartPanel.getByRole("button", { name: /2\/2 Tous les déchargements/ }).click();
   await expect(chartPanel.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("20h");
   await expect(chartPanel.locator(".performance-chart-empty-hour")).toContainText(["14h","15h","16h","17h","18h","21h","22h"]);
+  await expect(chartPanel.locator(".performance-chart-empty-bucket")).toHaveCount(7);
+  await expect(chartPanel.locator(".performance-chart-sample")).toContainText("À partir de 21h");
+  await alignedChartBands();
   await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
   await expect(chartPanel.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("5/8 opérations");
@@ -241,6 +267,8 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(chartPanel.locator(".performance-chart")).toHaveCount(1);
   await expect(chartPanel.locator(".performance-chart-point")).toHaveCount(0);
   await expect(chartPanel.locator(".performance-chart-empty-hour")).toHaveCount(10);
+  await expect(chartPanel.locator(".performance-chart-empty-bucket")).toHaveCount(10);
+  await expect(chartPanel.locator(".performance-chart-last-bucket")).toHaveCount(0);
   await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
   await expect(chartPanel.locator(".performance-chart-no-data-message")).toContainText("Aucune opération éligible");
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("Volumes non disponibles");
