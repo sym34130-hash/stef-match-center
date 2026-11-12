@@ -119,4 +119,38 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(page.getByRole("button", { name: /Enregistrer et télécharger le PDF/ })).toBeVisible();
   // The bulky source-tonnage notification must never be recreated in preferences.
   await expect(page.getByText("Tonnage du PDF : vérification de la source")).toHaveCount(0);
+  // Diagnostic UI: an hourly 100% may be just 1/1, and 19h can be 3/5.
+  // Mock only the in-memory browser response, never mutate a server import.
+  const chartSnapshot = structuredClone(snapshot);
+  chartSnapshot.match.periodStart = "13:00";
+  chartSnapshot.match.periodEnd = "22:30";
+  chartSnapshot.match.timeRangeLabel = "13:00 - 22:30";
+  chartSnapshot.hourlyPerformance = [
+    { label: "13h", hour: 13, won: 1, total: 1, rate: 100 },
+    { label: "19h", hour: 19, won: 3, total: 5, rate: 60 },
+    { label: "22h", hour: 22, won: 1, total: 1, rate: 100 },
+  ];
+  await page.route(`**/api/agencies/${agency}/snapshot**`, route =>
+    route.fulfill({ json: { snapshot: chartSnapshot } }));
+  await page.reload();
+  await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+  const nav = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
+  await nav.getByRole("button", { name: "Aller à Statistiques du match", exact: true }).click();
+  const chartPanel = page.locator(".performance-chart-panel");
+  await expect(chartPanel.locator(".performance-chart-sample")).toContainText("2 heure(s) ont moins de 5 opérations");
+  await expect(chartPanel.locator(".performance-chart-total")).toContainText("5/7 opérations");
+  const plotted = chartPanel.locator(".performance-chart-point circle");
+  await expect(plotted).toHaveCount(3);
+  const x = await plotted.evaluateAll(nodes => nodes.map(node => Number(node.getAttribute("cx"))));
+  expect((x[1] - x[0]) / (x[2] - x[0])).toBeCloseTo(6 / 9, 2);
+  const d = await chartPanel.locator(".performance-chart-line").getAttribute("d");
+  expect((d?.match(/M /g) ?? []).length).toBe(3);
+  await chartPanel.locator(".performance-chart-breakdown summary").click();
+  const dataRows = chartPanel.locator(".performance-chart-breakdown tbody tr");
+  await expect(dataRows).toHaveCount(3);
+  await expect(dataRows.nth(0)).toContainText("13h");
+  await expect(dataRows.nth(0)).toContainText("100 %");
+  await expect(dataRows.nth(1)).toContainText("19h");
+  await expect(dataRows.nth(1)).toContainText("60 %");
+  await expect(dataRows.nth(2)).toContainText("22h");
 });
