@@ -2950,7 +2950,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
             <g className="performance-chart-no-data-tail"
               aria-label={`Pas de nouveau point après ${noDataTail.lastPoint} ; aucun créneau éligible à partir de ${noDataTail.from}`}>
               <rect x={noDataTail.x} y={top} width={noDataTail.width} height={chartHeight} />
-              <title>{`Le point ${noDataTail.lastPoint} représente son créneau horaire. Aucun autre point après celui-ci ; premiers créneaux sans opération éligible à partir de ${noDataTail.from}.`}</title>
+              <title>{`Aucune donnée horaire supplémentaire après le point ${noDataTail.lastPoint}, qui représente son créneau horaire. Les créneaux entièrement sans opération éligible commencent à ${noDataTail.from}.`}</title>
               {noDataTail.width >= 130 ? (
                 <text x={noDataTail.x + noDataTail.width / 2} y={top + chartHeight / 2}>Sans données</text>
               ) : (
