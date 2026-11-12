@@ -467,7 +467,7 @@ function slotClock(slot, index) {
       timeZone: "Europe/Paris", hour: "2-digit", hourCycle: "h23",
     }).formatToParts(date);
     const hour = parts.find(part => part.type === "hour")?.value;
-    if (hour && /^\\d{1,2}$/.test(hour)) return hour.padStart(2, "0") + "h";
+    if (hour && /^\d{1,2}$/.test(hour)) return hour.padStart(2, "0") + "h";
   }
   return label && label.length <= 7 ? label : String(index + 1);
 }
