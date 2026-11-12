@@ -2916,7 +2916,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
             {hoursWithData} h mesurées sur {snapshot.match.timeRangeLabel}.
             {smallSampleHours > 0 && ` ${smallSampleHours} h à faible volume (moins de 5 opérations).`}
             {hasHourlyGap && " Pointillés : liaison visuelle entre heures sans données, sans mesure intermédiaire."}
-            {noDataTail?.width && ` Après ${noDataTail.from} : aucun résultat horaire jusqu'à la fin de la plage.`}
+            {noDataTail?.width && ` À partir de ${noDataTail.from} : aucune donnée horaire jusqu'à la fin de la plage.`}
           </small>
         </div>
         <div className="performance-chart-actions">
