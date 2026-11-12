@@ -243,8 +243,9 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   };
   await expectNoGreenAfterLastPoint("21h", "22h");
   await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toContainText("Sans données");
-  // Short final half-hour: rotate the label rather than increasing card height.
-  await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toHaveAttribute("transform", /rotate\(-90\)/);
+  // The neutral tail now fills the space directly after 21h, so the label
+  // fits horizontally instead of being restricted to only 22h–22h30.
+  await expect(chartPanel.locator(".performance-chart-no-data-tail text")).not.toHaveAttribute("transform", /rotate\(-90\)/);
   await expect(chartPanel.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("25/30 opérations");
 
