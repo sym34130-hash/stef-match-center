@@ -2852,12 +2852,19 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const endBoundaryLabel = periodEnd !== null && periodEnd % 60 !== 0
     ? `${String(Math.floor(periodEnd / 60)).padStart(2, "0")}h${String(periodEnd % 60).padStart(2, "0")}`
     : null;
-  const lastMeasuredOffset = points.length ? points[points.length - 1].hourOffset : -1;
+  const finalPoint = points.at(-1);
+  const lastMeasuredOffset = finalPoint?.hourOffset ?? -1;
   const firstTrailingEmptyOffset = emptyHourOffsets.find((hour) => hour > lastMeasuredOffset);
-  const noDataTail = firstTrailingEmptyOffset !== undefined && selectedMinutes !== null
+  // Visually join the no-following-measurement region to the LAST plotted dot:
+  // otherwise an unexplained blank strip sits between the dot and grey area.
+  // IMPORTANT: the dot at 21h aggregates operations from 21:00 to 21:59,
+  // whereas the first truly empty bucket is 22:00. Do not change either
+  // the sample's clock label or its underlying numerator/denominator.
+  const noDataTail = firstTrailingEmptyOffset !== undefined && finalPoint && selectedMinutes !== null
     ? {
-      x: left + (firstTrailingEmptyOffset / spanHours) * chartWidth,
-      width: Math.max(0, (displayedSpan - firstTrailingEmptyOffset) / spanHours * chartWidth),
+      x: finalPoint.x,
+      width: Math.max(0, left + chartWidth - finalPoint.x),
+      lastPoint: finalPoint.label,
       from: `${String((firstHour + firstTrailingEmptyOffset) % 24).padStart(2, "0")}h`,
     }
     : null;
@@ -2940,9 +2947,10 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
             return <g key={value}><line x1={left} x2={width - right} y1={y} y2={y} /><text x={left - 12} y={y + 4}>{value}%</text></g>;
           })}
           {data.length > 0 && noDataTail && noDataTail.width > 0 && (
-            <g className="performance-chart-no-data-tail" aria-label={`Sans données après ${noDataTail.from}`}>
+            <g className="performance-chart-no-data-tail"
+              aria-label={`Pas de nouveau point après ${noDataTail.lastPoint} ; aucun créneau éligible à partir de ${noDataTail.from}`}>
               <rect x={noDataTail.x} y={top} width={noDataTail.width} height={chartHeight} />
-              <title>{`Aucune donnée de ${noDataTail.from} à la fin de la plage`}</title>
+              <title>{`Aucune donnée horaire supplémentaire après le point ${noDataTail.lastPoint}, qui représente son créneau horaire. Les créneaux entièrement sans opération éligible commencent à ${noDataTail.from}.`}</title>
               {noDataTail.width >= 130 ? (
                 <text x={noDataTail.x + noDataTail.width / 2} y={top + chartHeight / 2}>Sans données</text>
               ) : (
