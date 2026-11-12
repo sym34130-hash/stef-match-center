@@ -2637,6 +2637,8 @@ function ReceptionQualityCard({ snapshot }: { snapshot: Snapshot }) {
 
 function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const [expanded, setExpanded] = useState(false);
+  // Two views inside the SAME operational-card slot (outer carousel stays 1/5).
+  const [view, setView] = useState<"overall" | "filtered">("overall");
   const [selectedHour, setSelectedHour] = useState<string | null>(null);
   const expandedPanel = useRef<HTMLDialogElement>(null);
   const expandTrigger = useRef<HTMLButtonElement>(null);
@@ -2745,15 +2747,20 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
     const top = Math.max(12, Math.min(desiredTop, window.innerHeight - height - 12));
     setArrivalDetail({ hour, codes, left, top, width, height });
   };
-  const data = snapshot.hourlyPerformance ?? [];
-  // The graph is intentionally restricted to DECHG + AQ/ED/EX/blank.
-  // Its weighted total must come from the displayed chart rows, NOT from the
-  // separate official pass KPI (which retains all eligible scoring operations).
+  const changeView = (next: "overall" | "filtered") => {
+    setArrivalDetail(null);
+    setSelectedHour(null);
+    setView(next);
+  };
+  // Each view receives an independent series from the server. Do not use the
+  // Excel cached chart, and never apply filtered-graph rules to the official KPI.
+  const data = view === "overall"
+    ? (snapshot.overallHourlyPerformance ?? [])
+    : (snapshot.hourlyPerformance ?? []);
   const chartWon = data.reduce((sum, point) => sum + (point.won ?? 0), 0);
   const chartTotal = data.reduce((sum, point) => sum + (point.total ?? 0), 0);
   const totalPassRate = chartTotal > 0 ? Math.round(chartWon / chartTotal * 1000) / 10 : null;
-  // The chart shows a strictly filtered population, not the official KPI:
-  // make the actual denominators visible before interpreting 100% as a trend.
+  // Always expose actual denominators: 100% can represent only one operation.
   const eligibleHours = data.filter(point => Number.isFinite(point.total) && (point.total ?? 0) > 0);
   const smallSampleHours = eligibleHours.filter(point => (point.total ?? 0) < 5).length;
   const hoursWithData = eligibleHours.length;
@@ -2854,9 +2861,23 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const heading = (large: boolean) => (
       <div className="performance-chart-heading">
         <div>
-          <span>Performance horaire</span>
+          <div className="performance-chart-views" role="group" aria-label="Choisir la vue du graphique des passes">
+            <button type="button" className={view === "overall" ? "is-active" : ""}
+              aria-pressed={view === "overall"} onClick={() => changeView("overall")}>
+              <b>1/2</b> Performance globale
+            </button>
+            <button type="button" className={view === "filtered" ? "is-active" : ""}
+              aria-pressed={view === "filtered"} onClick={() => changeView("filtered")}>
+              <b>2/2</b> Déchargements filtrés
+            </button>
+          </div>
+          <span>Performance horaire · {view === "overall" ? "1/2" : "2/2"}</span>
           <strong>% passes réussies</strong>
-          <small className="performance-chart-caption">Graphique seulement : déchargement (C) · segments AQ, ED, EX ou vides (G) · LIV exclus. KPI du score inchangé.</small>
+          <small className="performance-chart-caption">
+            {view === "overall"
+              ? "Toutes les opérations éligibles au KPI officiel, regroupées par heure sur la plage active. Les filtres opérateur, ligue et voyages restent appliqués."
+              : "Déchargements (col. C) · segments AQ, ED, EX ou vides (col. G) · LIV exclus. Le KPI officiel reste indépendant."}
+          </small>
           <small className="performance-chart-sample" role="note">
             {hoursWithData} h mesurées sur {snapshot.match.timeRangeLabel}.
             {smallSampleHours > 0 && ` ${smallSampleHours} h à faible volume (moins de 5 opérations).`}
@@ -2865,7 +2886,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
         </div>
         <div className="performance-chart-actions">
           <div className="performance-chart-total">
-          <small>Total filtré</small>
+          <small>{view === "overall" ? "Total global · KPI officiel" : "Total filtré"}</small>
           <b>{formatPercent(totalPassRate)}</b>
           <small>{chartTotal > 0 ? `${chartWon}/${chartTotal} opérations` : "Volumes non disponibles"}</small>
           </div>
@@ -2913,14 +2934,14 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
           ))}
         </svg>
       ) : (
-        <div className="performance-chart-empty">Aucune donnée horaire disponible sur cette plage.</div>
+        <div className="performance-chart-empty">Aucune donnée horaire {view === "overall" ? "globale" : "filtrée"} disponible sur cette plage.</div>
       );
   return (
     <div className="performance-chart-panel">
       {heading(false)}
       {chart()}
       {data.length > 0 && (
-        <details className="performance-chart-breakdown">
+        <details className="performance-chart-breakdown" key={view}>
           <summary>Contrôler le calcul de chaque heure (réussites / opérations éligibles)</summary>
           <div className="performance-chart-breakdown-scroll">
             <table>
@@ -2935,7 +2956,9 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
               ))}</tbody>
             </table>
           </div>
-          <p>Ces volumes concernent uniquement les déchargements et segments autorisés dans le graphique. Le KPI officiel du score a un périmètre différent.</p>
+          <p>{view === "overall"
+            ? "Ces volumes correspondent aux lignes éligibles au KPI officiel des passes réussies, avec les critères actifs de l’agence."
+            : "Ces volumes concernent uniquement les déchargements et segments autorisés dans ce graphique, distinct du KPI officiel."}</p>
         </details>
       )}
       {expanded && createPortal(
