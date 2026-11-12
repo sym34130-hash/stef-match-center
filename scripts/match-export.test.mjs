@@ -323,10 +323,9 @@ test("Lot E V5: compare five PDF summaries with canonical source metrics across 
       } else if (chartId === "reception-time") {
         assert.ok(parsed.text.includes("Cible : " + criteria.unloadingSeconds + " s/poz"));
         assert.match(parsed.text, /22h/);
-        // P2 known display defect: fr-FR formats midnight as "00 h" and the
-        // PDF adds another "h". Keep the data check active; visual normalization
-        // is covered by a separate deferred regression, not hidden by this CI.
-        assert.match(parsed.text, /00\s?h{1,2}/);
+        // Strict P2 regression: labels must contain the unit exactly once.
+        assert.match(parsed.text, /00h/);
+        assert.doesNotMatch(parsed.text, /00\s+hh|00hh|00\s+h\b/);
         assert.match(parsed.text, /Positions\/créneau : 15 a 30/);
         assert.match(parsed.text, /Duels au score : 72 %/i);
       } else if (chartId === "loading") {
@@ -512,4 +511,73 @@ test("Lot E V7: excessively long unedited source brief refuses explicitly, not s
   assert.throws(() => renderMatchPdf(model), error =>
     error instanceof MatchExportError && error.status === 422
     && /Service client/.test(error.message) && /lignes/.test(error.message));
+});
+
+
+test("P2: reception slots render one correct French hour unit at 23h and 00h in winter and summer", async () => {
+  const cases = [
+    { stamp: "2026-11-10T22:00:00.000Z", matchDate: "2026-11-10", hour: "23h" },
+    { stamp: "2026-11-10T23:00:00.000Z", matchDate: "2026-11-11", hour: "00h" },
+    { stamp: "2026-07-01T21:00:00.000Z", matchDate: "2026-07-01", hour: "23h" },
+    { stamp: "2026-07-01T22:00:00.000Z", matchDate: "2026-07-02", hour: "00h" },
+  ];
+  for (const { stamp, matchDate, hour } of cases) {
+    const snapshot = makeSnapshot("058");
+    const model = build("058", {
+      snapshot: {
+        match: { ...snapshot.match, date: matchDate },
+        unloadingHourlyAnalysis: {
+          state: "disponible", targetSeconds: league.criteria.unloadingSeconds,
+          items: [{ start: stamp, state: "disponible",
+            meanSecondsPerPosition: 42, distinctPositions: 25 }],
+        },
+      },
+      expectedMatchDate: matchDate,
+      pdfProfile: {
+        indicatorIds: ["performance", "injuries", "accident-free-days", "arrival"],
+        chartId: "reception-time",
+      },
+    });
+    const parsed = await pdfParse(renderMatchPdf(model));
+    assert.equal(parsed.numpages, 2, stamp);
+    assert.ok(parsed.text.includes(hour), stamp + ": expected " + hour);
+    assert.doesNotMatch(parsed.text, /\b(?:00|23)\s+h+h?\b/,
+      stamp + ": the hour unit must not be duplicated or separated");
+    assert.match(parsed.text, /25 pos/);
+    assert.match(parsed.text, /Cible : 60 s\/poz/);
+  }
+});
+
+test("P2: unknown Excel origin is disclosed, never replaced by the signed-in agency code", async () => {
+  const model = build("058", {
+    snapshot: {
+      agency: { code: "058", name: "AGENCE-058" },
+      sourceName: "FICHIER_SOURCE_NON_IDENTIFIABLE.xlsx",
+      dailyIndicators: {
+        agencyCode: "0059", referenceDate: "11 septembre 2026",
+        punctuality: { destinationPunctuality: 62 },
+      },
+    },
+  });
+  assert.equal(model.agency.code, "058", "The authenticated agency remains 058");
+  assert.equal(model.sourceAgency.excel, null, "Unknown is distinct from agency 058");
+  assert.equal(model.sourceAgency.pdf106j, "0059", "The original 106J agency is retained");
+  const parsed = await pdfParse(renderMatchPdf(model));
+  assert.equal(parsed.numpages, 2);
+  const expected = "Sources : Excel [origine indéterminée] / 106J [0059]";
+  assert.equal(parsed.text.split(expected).length - 1, 2,
+    "Every PDF page must disclose the unknown Excel source");
+  assert.doesNotMatch(parsed.text, /Sources : Excel \[058\]/,
+    "The authenticated workspace cannot be used as a fabricated Excel source");
+});
+
+test("P2: known Excel origin remains explicit even when it differs from the workspace", async () => {
+  const model = build("058", {
+    snapshot: { agency: { code: "058", detectedCode: "059" } },
+  });
+  assert.equal(model.sourceAgency.excel, "059");
+  const parsed = await pdfParse(renderMatchPdf(model));
+  assert.equal(parsed.numpages, 2);
+  assert.match(parsed.text, /Sources : Excel \[059\]/);
+  assert.doesNotMatch(parsed.text, /Sources : Excel \[origine indéterminée\]/);
 });

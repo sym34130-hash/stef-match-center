@@ -73,7 +73,7 @@ class Page {
     this.box(29, 30, 784, 1, C.panel2);
     // The signed-in agency and the source agencies are different concepts.
     // Show provenance on both printed pages without changing access scope.
-    const excel = m.sourceAgency?.excel || m.agency.code;
+    const excel = m.sourceAgency?.excel || "origine indéterminée";
     const report = m.sourceAgency?.pdf106j || "non indiquée";
     const reportDate = m.sourceAgency?.pdfDate || "date non indiquée";
     const originNote = "Sources : Excel [" + excel + "] / 106J [" + report + "] (" + reportDate + ")";
@@ -461,7 +461,13 @@ function slotClock(slot, index) {
   if (/^\d{1,2}:\d{2}$/.test(start)) return start.slice(0, 2) + "h";
   const date = new Date(start);
   if (start && Number.isFinite(date.getTime())) {
-    return new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", hourCycle: "h23" }).format(date) + "h";
+    // fr-FR may already include an hour unit ("00 h"). Read only the
+    // numeric hour part, then append the unit exactly once, across DST dates.
+    const parts = new Intl.DateTimeFormat("fr-FR", {
+      timeZone: "Europe/Paris", hour: "2-digit", hourCycle: "h23",
+    }).formatToParts(date);
+    const hour = parts.find(part => part.type === "hour")?.value;
+    if (hour && /^\d{1,2}$/.test(hour)) return hour.padStart(2, "0") + "h";
   }
   return label && label.length <= 7 ? label : String(index + 1);
 }

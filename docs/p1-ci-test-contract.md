@@ -32,12 +32,14 @@ dans un environnement de test fermé, puis lancer `pnpm test` et
 `pnpm test:ui` sans modifier une instance de production.
 Les tests synthétiques obligatoires n'en constituent pas un remplacement métier.
 
-## Défauts connus en dehors du lot P1
-- P2 : minuit peut être imprimé `00 hh` dans un graphique de réception.
-  Une assertion tolère temporairement l'ancien et le bon format sans
-  neutraliser le contrôle des volumes/cibles/ligues. À fermer dans le lot P2.
-- P2 : origine Excel inconnue : pied de page PDF à corriger pour indiquer
-  « origine indéterminée » plutôt que supposer une agence.
+## Lot P2 — contrôles désormais stricts
+- Le test de réception valide `23h` et `00h` en hiver et en été, sans
+  accepter de double unité `00 hh` : vérification du PDF extrait.
+- L'origine Excel inconnue est imprimée « origine indéterminée » sur
+  **les deux pages**, sans déduction depuis l'agence connectée.
+- Une origine Excel détectée provenant d'une autre agence reste autorisée
+  et explicitement attribuée. Ces corrections n'affectent ni les seuils
+  des ligues, ni les calculs ni les accès aux espaces agences.
 
 ## Limites des garanties
 Une CI verte ne prouve pas l'absence totale de bugs ni la concordance avec
