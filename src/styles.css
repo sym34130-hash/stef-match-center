@@ -3250,6 +3250,36 @@ body.match-celebration-active .main-area {
   opacity: 0.7;
 }
 
+/* Keep the selected-period end visible even when the last observation is earlier. */
+.performance-chart .performance-chart-end-boundary line {
+  stroke: rgba(29, 78, 137, 0.32);
+  stroke-width: 2;
+  stroke-dasharray: 5 6;
+}
+.performance-chart .performance-chart-end-boundary text {
+  font-size: 13px;
+  fill: var(--navy-900);
+  font-weight: 900;
+  text-anchor: end;
+}
+
+/* Visually distinguish the remaining unmeasured time from the measured curve. */
+.performance-chart .performance-chart-no-data-tail rect {
+  fill: rgba(29, 78, 137, 0.035);
+}
+.performance-chart .performance-chart-no-data-tail text {
+  text-anchor: middle;
+  fill: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+.performance-chart .performance-chart-no-data-message text {
+  text-anchor: middle;
+  fill: var(--navy-900);
+  font-size: 16px;
+  font-weight: 800;
+}
+
 .performance-chart-point circle {
   fill: var(--green-field);
   stroke: #ffffff;
