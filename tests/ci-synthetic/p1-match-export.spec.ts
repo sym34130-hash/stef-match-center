@@ -149,8 +149,8 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   const dataRows = chartPanel.locator(".performance-chart-breakdown tbody tr");
   await expect(dataRows).toHaveCount(3);
   await expect(dataRows.nth(0)).toContainText("13h");
-  await expect(dataRows.nth(0)).toContainText("100 %");
+  await expect(dataRows.nth(0)).toContainText("100%");
   await expect(dataRows.nth(1)).toContainText("19h");
-  await expect(dataRows.nth(1)).toContainText("60 %");
+  await expect(dataRows.nth(1)).toContainText("60%");
   await expect(dataRows.nth(2)).toContainText("22h");
 });
