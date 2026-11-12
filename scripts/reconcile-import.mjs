@@ -72,7 +72,7 @@ assert.equal(snapshot.summary.duelRate, 71.9, "Taux duels gagnés recalculé");
 assert.equal(snapshot.summary.passRate, snapshot.summary.duelRate, "Passes : même population et même cible que les duels de zonage");
 assert.ok(sourceChartRates.size > 0, "La courbe historique X est disponible à titre de diagnostic, sans piloter la période active");
 assert.ok(snapshot.hourlyPerformance.reduce((n, x) => n + x.total, 0) <= snapshot.summary.duelTotal,
-  "Graphique passes limité aux déchargements segmentés, score non filtré");
+  "Graphique des déchargements (tous segments), score global non filtré");
 assert.ok(snapshot.hourlyPerformance.reduce((n, x) => n + x.won, 0) <= snapshot.summary.duelWon,
   "Numérateur filtré du graphique ne peut dépasser le KPI officiel");
 assert.equal(snapshot.hourlyPerformance.every(item => item.total > 0 && item.rate === Math.round(item.won / item.total * 1000) / 10), true,
@@ -119,13 +119,33 @@ const referencePassWon = rawScoreRows.filter(row => rawSuccess(row, snapshot.per
 assert.equal(rawScoreRows.length, 3517, "Dénominateur officiel contrôlé sur les lignes Excel brutes");
 assert.equal(referencePassWon, 2528, "Numérateur officiel indépendant de la courbe segmentée");
 assert.equal(snapshot.summary.passRate, Math.round(referencePassWon / rawScoreRows.length * 1000) / 10);
-const rawChartRows = rawScoreRows.filter(row => row["Type d'opération"] === "DECHG" &&
-  ["AQ", "ED", "EX", ""].includes(String(row["Type Segment"] ?? "").trim().toUpperCase()));
+const rawChartRows = rawScoreRows.filter(row => row["Type d'opération"] === "DECHG");
 const referenceChartWon = rawChartRows.filter(row => rawSuccess(row, snapshot.performanceCriteria.zonageMinutes)).length;
-assert.equal(rawChartRows.length, 111, "Courbe jour : dénominateur filtré distinct des 3517 lignes officielles");
-assert.equal(referenceChartWon, 66, "Courbe jour : 66/111 = 59,5 %, pas le KPI officiel 71,9 %");
+assert.ok(rawChartRows.length > 111, "Tous les DECHG éligibles, y compris LIV et autres segments, doivent être retenus");
+assert.ok(referenceChartWon > 66, "Le nouveau numérateur doit couvrir tous les segments éligibles");
 assert.equal(snapshot.hourlyPerformance.reduce((sum, item) => sum + item.total, 0), rawChartRows.length);
 assert.equal(snapshot.hourlyPerformance.reduce((sum, item) => sum + item.won, 0), referenceChartWon);
+// Independent hourly reconciliation against original Excel serials (Paris wall time).
+const independentByHour = new Map();
+for (const row of rawChartRows) {
+  const serial = row["Date/Heure de début d'opération"];
+  const minuteOfDay = Math.floor(((serial % 1) * 1440) + 1e-5);
+  const hour = Math.floor(minuteOfDay / 60);
+  const previous = independentByHour.get(hour) ?? { won: 0, total: 0 };
+  previous.total += 1;
+  if (rawSuccess(row, snapshot.performanceCriteria.zonageMinutes)) previous.won += 1;
+  independentByHour.set(hour, previous);
+}
+for (const point of snapshot.hourlyPerformance) {
+  const expected = independentByHour.get(point.hour);
+  assert.ok(expected, `Heure ${point.label} issue des DECHG Excel`);
+  assert.deepEqual([point.won, point.total, point.rate],
+    [expected.won, expected.total, Math.round(expected.won / expected.total * 1000) / 10],
+    `Déchargements à ${point.label} : numérateur et dénominateur concordants`);
+}
+assert.equal(snapshot.hourlyPerformance.length, independentByHour.size,
+  "Aucune heure ne doit être inventée ou écartée sans justification");
+
 const dateVolumes = new Map();
 for (const row of rawMatchRows) {
   const date = Math.floor(row["Date/Heure de début d'opération"]);
