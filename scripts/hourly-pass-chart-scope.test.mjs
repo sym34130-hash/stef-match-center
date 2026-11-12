@@ -82,3 +82,37 @@ test("graph has no values if no allowed source rows, while official KPI is avail
   assert.deepEqual(result.snapshot.hourlyPerformance,[]);
   assert.equal(result.snapshot.summary.passRate,100);
 });
+
+
+test("13:00–22:30: 100% hourly rates can be 1/1 while 19h is 3/5 = 60%, without corrupting the official KPI", () => {
+  const scenario = [];
+  for (let hour = 13; hour <= 22; hour++) {
+    const time = String(hour).padStart(2, "0") + ":05:00";
+    scenario.push(entry("DECHG", "EX", time, true, "CI-H" + hour));
+  }
+  scenario.push(entry("DECHG", "EX", "19:10:00", true, "CI-H19-A"));
+  scenario.push(entry("DECHG", "ED", "19:15:00", true, "CI-H19-B"));
+  scenario.push(entry("DECHG", "AQ", "19:20:00", false, "CI-H19-C"));
+  scenario.push(entry("DECHG", "", "19:25:00", false, "CI-H19-D"));
+  // Same time, but outside the chart population: official KPI counts this LIV.
+  scenario.push(entry("DECHG", "LIV", "19:30:00", false, "CI-LIV"));
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([headings, ...scenario]), "Données");
+  const result = buildSnapshotFromWorkbook(XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }),
+    "CI_13_22H30.xlsx", "01K", { start: "13:00", end: "22:30", criteria });
+  assert.equal(result.ok, true, JSON.stringify(result.error));
+  const chart = result.snapshot.hourlyPerformance;
+  assert.equal(chart.length, 10);
+  for (const row of chart) {
+    if (row.label === "19h") {
+      assert.deepEqual([row.won, row.total, row.rate], [3, 5, 60]);
+    } else {
+      assert.deepEqual([row.won, row.total, row.rate], [1, 1, 100], row.label);
+    }
+  }
+  assert.equal(chart.reduce((sum, row) => sum + row.won, 0), 12);
+  assert.equal(chart.reduce((sum, row) => sum + row.total, 0), 14);
+  assert.equal(result.snapshot.summary.passRate, 80,
+    "Official KPI includes the excluded LIV record, unlike the curve");
+  assert.equal(result.snapshot.match.timeRangeLabel, "13:00 - 22:30");
+});
