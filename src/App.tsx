@@ -2770,7 +2770,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const chartWidth = width - left - right;
   const chartHeight = height - top - bottom;
   const parseTimeMinutes = (value?: string) => {
-    const m = /^(\\d{1,2}):(\\d{2})$/.exec(value ?? "");
+    const m = /^(\d{1,2}):(\d{2})$/.exec(value ?? "");
     if (!m) return null;
     const h = Number(m[1]), min = Number(m[2]);
     return h < 24 && min < 60 ? h * 60 + min : null;
