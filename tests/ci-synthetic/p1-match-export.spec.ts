@@ -219,7 +219,9 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(chartPanel.locator(".performance-chart-empty-hour")).toContainText(["14h","15h","16h","17h","18h","20h","22h"]);
   await expect(chartPanel.locator(".performance-chart-empty-bucket")).toHaveCount(7);
   await expect(chartPanel.locator(".performance-chart-last-bucket")).toHaveCount(1);
-  await expect(chartPanel.locator(".performance-chart-sample")).toContainText("À partir de 22h");
+  await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toContainText("Sans données");
+  // Short final half-hour: rotate the label rather than increasing card height.
+  await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toHaveAttribute("transform", /rotate\(-90\)/);
   await expect(chartPanel.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
   // The final measured hourly bucket reaches the BEGINNING of the no-data
   // zone: no unexplained blank strip is left between the two regions.
@@ -245,7 +247,9 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(chartPanel.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("20h");
   await expect(chartPanel.locator(".performance-chart-empty-hour")).toContainText(["14h","15h","16h","17h","18h","21h","22h"]);
   await expect(chartPanel.locator(".performance-chart-empty-bucket")).toHaveCount(7);
-  await expect(chartPanel.locator(".performance-chart-sample")).toContainText("À partir de 21h");
+  await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toContainText("Sans données");
+  // 21h–22h30 has room for a horizontal label.
+  await expect(chartPanel.locator(".performance-chart-no-data-tail text")).not.toHaveAttribute("transform", /rotate\(-90\)/);
   await alignedChartBands();
   await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
   await expect(chartPanel.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
