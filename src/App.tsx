@@ -2825,18 +2825,38 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
     const previous = points[index - 1];
     return [`M ${previous.x} ${previous.y} L ${point.x} ${point.y}`];
   });
-  const missingHours = points.flatMap((point, index) => {
-    if (index === 0) return [];
-    const previous = points[index - 1];
-    const count = Math.min(23, Math.max(0, point.hourOffset - previous.hourOffset - 1));
-    return Array.from({ length: count }, (_, offset) => {
-      const missingOffset = previous.hourOffset + offset + 1;
-      return {
-        label: `${String((firstHour + missingOffset) % 24).padStart(2, "0")}h`,
-        x: left + (missingOffset / spanHours) * chartWidth,
-      };
+  // Show the COMPLETE selected period, including empty hours before the first
+  // observation and after the last one. Empty buckets never enter any KPI
+  // numerator/denominator or create a plotted rate.
+  const plottedHours = new Set(points.map((point) => point.hourOffset));
+  const emptyHourOffsets = selectedMinutes !== null
+    ? Array.from({ length: Math.min(24, Math.floor(displayedSpan) + 1) }, (_, hour) => hour)
+      .filter((hour) => !plottedHours.has(hour))
+    : points.flatMap((point, index) => {
+      if (index === 0) return [];
+      const previous = points[index - 1];
+      return Array.from(
+        { length: Math.min(23, Math.max(0, point.hourOffset - previous.hourOffset - 1)) },
+        (_, offset) => previous.hourOffset + offset + 1,
+      );
     });
-  });
+  const missingHours = emptyHourOffsets.map((hourOffset) => ({
+    label: `${String((firstHour + hourOffset) % 24).padStart(2, "0")}h`,
+    x: left + (hourOffset / spanHours) * chartWidth,
+  }));
+  // A partial final hour must be visible on the X axis (e.g. 22h30), even
+  // when 21h was the last measured point. Do not extend the success curve.
+  const endBoundaryLabel = periodEnd !== null && periodEnd % 60 !== 0
+    ? `${String(Math.floor(periodEnd / 60)).padStart(2, "0")}h${String(periodEnd % 60).padStart(2, "0")}`
+    : null;
+  const lastMeasuredOffset = points.length ? points[points.length - 1].hourOffset : -1;
+  const firstTrailingEmptyOffset = emptyHourOffsets.find((hour) => hour > lastMeasuredOffset);
+  const noDataTail = firstTrailingEmptyOffset !== undefined && selectedMinutes !== null
+    ? {
+      x: left + (firstTrailingEmptyOffset / spanHours) * chartWidth,
+      width: Math.max(0, (displayedSpan - firstTrailingEmptyOffset) / spanHours * chartWidth),
+    }
+    : null;
 
   // Shade only measured continuous runs; a lone hour gets a narrow
   // vertical column so it still reads as part of the chart.
@@ -2899,13 +2919,19 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
         </div>
       </div>
   );
-  const chart = (large = false) => data.length > 0 ? (
+  const chart = (large = false) => (data.length > 0 || selectedMinutes !== null) ? (
         <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="group" aria-label="Évolution horaire du pourcentage de passes réussies">
           <rect className="performance-chart-plot" x={left} y={top} width={chartWidth} height={chartHeight} rx="10" />
           {[0, 20, 40, 60, 80, 100].map((value) => {
             const y = top + ((100 - value) / 100) * chartHeight;
             return <g key={value}><line x1={left} x2={width - right} y1={y} y2={y} /><text x={left - 12} y={y + 4}>{value}%</text></g>;
           })}
+          {noDataTail && noDataTail.width > 0 && (
+            <g className="performance-chart-no-data-tail" aria-label="Période sans données après la dernière mesure">
+              <rect x={noDataTail.x} y={top} width={noDataTail.width} height={chartHeight} />
+              <text x={noDataTail.x + noDataTail.width / 2} y={top + chartHeight / 2}>Aucune donnée</text>
+            </g>
+          )}
           {areaPaths.map((area, index) => <path className="performance-chart-area" key={index} d={area} />)}
           {missingHours.map((hour, index) => (
             <g className="performance-chart-empty-hour" key={`${hour.label}-${index}`}>
@@ -2913,8 +2939,19 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
               <text x={hour.x} y={height - 20}>{hour.label}</text>
             </g>
           ))}
-          {gapConnectors.map((gap, index) => <path className="performance-chart-gap" key={index} d={gap} />)}
+          {endBoundaryLabel && (
+            <g className="performance-chart-end-boundary" aria-label={`Fin de la plage : ${endBoundaryLabel}`}>
+              <line x1={left + chartWidth} x2={left + chartWidth} y1={top} y2={baseY} />
+              <text x={left + chartWidth} y={height - 20}>{endBoundaryLabel}</text>
+            </g>
+          )}
+          {gapConnectors.map((gap, index) => <path className="performance-chart-gap" key={index} d={gap} />}
           <path className="performance-chart-line" d={path} />
+          {data.length === 0 && (
+            <g className="performance-chart-no-data-message">
+              <text x={left + chartWidth / 2} y={top + chartHeight / 2 + 32}>Aucune opération éligible sur cette plage</text>
+            </g>
+          )}
           {points.map((point, index) => (
             <g className={`performance-chart-point${selectedHour === point.label ? " is-selected" : ""}`} key={point.label}>
               <circle cx={point.x} cy={point.y} r="6" />
