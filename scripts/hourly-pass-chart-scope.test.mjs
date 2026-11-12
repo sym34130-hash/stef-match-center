@@ -57,6 +57,11 @@ test("passes hourly graph excludes LIV/other operations, not the official pass K
   ]);
   assert.deepEqual([s.summary.duelWon,s.summary.duelTotal,s.summary.passRate],[9,12,75]);
   assert.equal(s.operationalScore.indicators.passRate,75);
+  assert.deepEqual(s.overallHourlyPerformance.map(({label,won,total}) => [label,won,total]), [
+    ["21h",1,1],["22h",2,5],["23h",6,6],
+  ]);
+  assert.equal(s.overallHourlyPerformance.reduce((n,item)=>n+item.total,0),s.summary.duelTotal);
+  assert.equal(s.overallHourlyPerformance.reduce((n,item)=>n+item.won,0),s.summary.duelWon);
   assert.equal(s.hourlyPerformance.reduce((n,item) => n + item.total,0),7);
   assert.equal(s.hourlyPerformance.reduce((n,item) => n + item.won,0),6);
   assert.equal(s.hourlyPerformance.some(item => item.arrivingTravelCodes?.includes("LIV")),false);
@@ -66,9 +71,11 @@ test("passes hourly graph excludes LIV/other operations, not the official pass K
 test("active league threshold recalculates both independently; trip exclusions affect both", () => {
   const strict = run({...criteria,zonageMinutes:5});
   assert.equal(strict.summary.passRate,0);
+  assert.equal(strict.overallHourlyPerformance.reduce((n,item)=>n+item.won,0),0);
   assert.equal(strict.hourlyPerformance.reduce((n,item)=>n+item.won,0),0);
   const excluded = run(criteria,["MIXED"]);
   assert.equal(excluded.summary.duelTotal,10,"Both EX and LIV rows of excluded travel leave official population");
+  assert.equal(excluded.overallHourlyPerformance.reduce((n,item)=>n+item.total,0),10);
   assert.equal(excluded.hourlyPerformance.reduce((n,item)=>n+item.total,0),6,"Only EX row of excluded travel leaves chart");
   assert.equal(excluded.hourlyPerformance.find(item=>item.label==="22h").arrivingTravelCodes.includes("MIXED"),false);
 });
@@ -80,6 +87,9 @@ test("graph has no values if no allowed source rows, while official KPI is avail
     "liv.xlsx","01K",{start:"21:30",end:"06:30",criteria});
   assert.equal(result.ok,true);
   assert.deepEqual(result.snapshot.hourlyPerformance,[]);
+  assert.deepEqual(result.snapshot.overallHourlyPerformance.map(({label,won,total,rate})=>[label,won,total,rate]),[
+    ["22h",1,1,100],
+  ]);
   assert.equal(result.snapshot.summary.passRate,100);
 });
 
@@ -114,5 +124,18 @@ test("13:00–22:30: 100% hourly rates can be 1/1 while 19h is 3/5 = 60%, withou
   assert.equal(chart.reduce((sum, row) => sum + row.total, 0), 14);
   assert.equal(result.snapshot.summary.passRate, 80,
     "Official KPI includes the excluded LIV record, unlike the curve");
+  const official = result.snapshot.overallHourlyPerformance;
+  assert.equal(official.length, 10);
+  assert.deepEqual(
+    official.find(item => item.label === "19h"),
+    { label: "19h", hour: 19, won: 3, total: 6, rate: 50 },
+    "The extra LIV failure belongs only to overall 1/2",
+  );
+  assert.deepEqual([
+    official.reduce((sum, item) => sum + item.won, 0),
+    official.reduce((sum, item) => sum + item.total, 0),
+  ], [12, 15]);
+  assert.equal(official.reduce((sum, item) => sum + item.won, 0) /
+    official.reduce((sum, item) => sum + item.total, 0) * 100, result.snapshot.summary.passRate);
   assert.equal(result.snapshot.match.timeRangeLabel, "13:00 - 22:30");
 });

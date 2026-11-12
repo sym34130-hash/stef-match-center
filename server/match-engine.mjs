@@ -40,7 +40,7 @@ const DEFAULT_PERIOD_START = "13:00";
 const DEFAULT_PERIOD_END = "22:30";
 // Increment when a persisted snapshot's calculation semantics change so the
 // API rebuilds older snapshots instead of serving stale KPI values.
-export const KPI_DICTIONARY_VERSION = 26;
+export const KPI_DICTIONARY_VERSION = 27;
 
 const WORKBOOK_PARSE_CACHE_LIMIT = 6;
 const workbookParseCache = new Map();
@@ -746,6 +746,8 @@ function buildMatchSnapshot({ sourceRows, matchRows, scoringRows, sourceName, ex
       excludedFromScore: filterStats.excludedFromScore,
     },
     hourlyPerformance: hourlyPassPerformance.items,
+    // Same authoritative scoring rows as the official pass-rate KPI, aggregated by hour.
+    overallHourlyPerformance: hourlyPassPerformance.officialItems,
     loadingQuality,
     unloadingDuelQuality,
     unloadingQuality,
@@ -2014,6 +2016,7 @@ function buildHourlyPassPerformance(workbook, period, scoringRows = null, source
   // boundary hours and may reflect a different selected Excel time range.
   if (Array.isArray(scoringRows)) {
     const byHour = new Map();
+    const officialByHour = new Map();
     let officialWon = 0;
     let officialTotal = 0;
     for (const row of scoringRows) {
@@ -2023,12 +2026,16 @@ function buildHourlyPassPerformance(workbook, period, scoringRows = null, source
       // This is the official KPI numerator/denominator; never segment-filter it.
       officialTotal++;
       if (row.duelWonFlag === 1) officialWon++;
-      if (!isHourlyPassChartRow(row)) continue;
-      if (!isInActiveTimeRange(row.startedAt, period)) continue;
-      if (row.duelWonFlag !== 0 && row.duelWonFlag !== 1) continue;
       const minute = parisMinutes(row.startedAt);
       if (!Number.isFinite(minute)) continue;
       const hour = Math.floor(minute / 60);
+      // Do not read Excel X!FG here: that cached chart may represent a different
+      // period. All scoring operations (including LIV/CHG/ZONAGE) qualify.
+      const official = officialByHour.get(hour) ?? { won: 0, total: 0 };
+      official.total++;
+      if (row.duelWonFlag === 1) official.won++;
+      officialByHour.set(hour, official);
+      if (!isHourlyPassChartRow(row)) continue;
       const current = byHour.get(hour) ?? { won: 0, total: 0 };
       current.total++;
       if (row.duelWonFlag === 1) current.won++;
@@ -2045,10 +2052,20 @@ function buildHourlyPassPerformance(workbook, period, scoringRows = null, source
       return period.isOvernight && minute < firstHour ? minute + 1440 - firstHour : minute - firstHour;
     };
     values.sort((a, b) => toOffset(a.hour) - toOffset(b.hour));
-    return { items: values, sourceAvailable: true, totalRate: officialTotal ? percent(officialWon, officialTotal) : null };
+    const officialItems = [...officialByHour.entries()].map(([hour, result]) => ({
+      label: `${String(hour).padStart(2, "0")}h`,
+      hour, won: result.won, total: result.total, rate: percent(result.won, result.total),
+    })).sort((a, b) => toOffset(a.hour) - toOffset(b.hour));
+    return {
+      items: values,
+      officialItems,
+      sourceAvailable: true,
+      // Preserve the existing score and official KPI formula unchanged.
+      totalRate: officialTotal ? percent(officialWon, officialTotal) : null,
+    };
   }
 
-  const empty = { items: [], totalRate: null, sourceAvailable: false };
+  const empty = { items: [], officialItems: [], totalRate: null, sourceAvailable: false };
   const sheetName = workbook?.SheetNames?.find((name) => normalizeKey(name) === "x");
   const sheet = sheetName ? workbook.Sheets[sheetName] : null;
   if (!sheet) return empty;
@@ -2130,6 +2147,9 @@ function buildHourlyPassPerformance(workbook, period, scoringRows = null, source
   const weightedTotal = values.reduce((sum, item) => sum + (Number.isFinite(item.total) ? item.total : 0), 0);
   return {
     items: values,
+    // Legacy X fallback has no authoritative scoring rows: do not mislabel
+    // the Excel cached chart as a period-filtered official data series.
+    officialItems: [],
     sourceAvailable: true,
     totalRate: weightedTotal > 0 ? percent(weightedWon, weightedTotal) : null,
   };

@@ -2949,6 +2949,54 @@ body.match-celebration-active .main-area {
   min-width: 0;
 }
 
+.performance-chart-views {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.performance-chart-views button {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 6px 11px;
+  border: 1px solid rgba(29, 78, 137, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--navy-900);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.performance-chart-views button.is-active {
+  border-color: var(--green-field);
+  background: rgba(72, 199, 142, 0.15);
+  box-shadow: inset 0 0 0 1px var(--green-field);
+}
+
+.performance-chart-views button:focus-visible {
+  outline: 3px solid var(--green-field);
+  outline-offset: 2px;
+}
+
+.performance-chart-views button b {
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+}
+
+@media (max-width: 640px) {
+  .performance-chart-views { gap: 6px; }
+  .performance-chart-views button { padding: 6px 8px; font-size: 11px; }
+}
+
+
 .performance-chart-actions {
   display: grid;
   grid-template-columns: auto auto;
