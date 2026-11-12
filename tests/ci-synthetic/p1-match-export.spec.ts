@@ -220,9 +220,10 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(chartPanel.locator(".performance-chart-empty-bucket")).toHaveCount(7);
   await expect(chartPanel.locator(".performance-chart-last-bucket")).toHaveCount(0);
   await expect(chartPanel.locator(".performance-chart")).not.toContainText("21h mesuré");
-  // All green area paths must terminate at/before the final observed dot.
-  // The trailing empty hours remain on the selected time axis.
-  const expectNoGreenAfterLastPoint = async (expectedNoDataFrom: string) => {
+  // The visual no-data band must begin DIRECTLY at the last plotted dot,
+  // without a one-hour hole. A 21h reading still describes 21:00–21:59:
+  // the first truly empty bucket remains 22h, not 21h.
+  const expectNoGreenAfterLastPoint = async (expectedLastPoint: string, expectedNoDataFrom: string) => {
     const geometry = await chartPanel.locator(".performance-chart").evaluate(svg => {
       const dots = [...svg.querySelectorAll<SVGCircleElement>(".performance-chart-point circle")];
       const lastX = dots.length ? Number(dots[dots.length - 1].getAttribute("cx")) : null;
@@ -233,12 +234,14 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
     });
     expect(geometry.lastX).not.toBeNull();
     expect(geometry.greenRight).toBeLessThanOrEqual(geometry.lastX! + 0.5);
-    expect(geometry.emptyX).toBeGreaterThan(geometry.lastX!);
+    expect(geometry.emptyX).toBeCloseTo(geometry.lastX!, 4);
     await expect(chartPanel.locator(".performance-chart-no-data-tail")).toHaveAttribute(
-      "aria-label", `Sans données après ${expectedNoDataFrom}`);
+      "aria-label", `Pas de nouveau point après ${expectedLastPoint} ; aucun créneau éligible à partir de ${expectedNoDataFrom}`);
+    await expect(chartPanel.locator(".performance-chart-no-data-tail title")).toContainText(
+      `Les créneaux entièrement sans opération éligible commencent à ${expectedNoDataFrom}`);
     await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toContainText("Sans données");
   };
-  await expectNoGreenAfterLastPoint("22h");
+  await expectNoGreenAfterLastPoint("21h", "22h");
   await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toContainText("Sans données");
   // Short final half-hour: rotate the label rather than increasing card height.
   await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toHaveAttribute("transform", /rotate\(-90\)/);
@@ -251,7 +254,7 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(chartPanel.locator(".performance-chart-empty-bucket")).toHaveCount(7);
   await expect(chartPanel.locator(".performance-chart-last-bucket")).toHaveCount(0);
   await expect(chartPanel.locator(".performance-chart")).not.toContainText("20h mesuré");
-  await expectNoGreenAfterLastPoint("21h");
+  await expectNoGreenAfterLastPoint("20h", "21h");
   await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toContainText("Sans données");
   // 21h–22h30 has room for a horizontal label.
   await expect(chartPanel.locator(".performance-chart-no-data-tail text")).not.toHaveAttribute("transform", /rotate\(-90\)/);
@@ -261,6 +264,8 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await chartPanel.getByRole("button", { name: "Agrandir le graphique" }).click();
   await expect(zoom.locator(".performance-chart-end-boundary")).toContainText("22h30");
   await expect(zoom.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
+  await expect(zoom.locator(".performance-chart-no-data-tail")).toHaveAttribute(
+    "aria-label", "Pas de nouveau point après 20h ; aucun créneau éligible à partir de 21h");
   await expect(zoom.locator(".performance-chart-last-bucket")).toHaveCount(0);
   await zoom.getByRole("button", { name: /1\/2 Performance globale/ }).click();
   await expect(zoom.locator(".performance-chart-last-bucket")).toHaveCount(0);
