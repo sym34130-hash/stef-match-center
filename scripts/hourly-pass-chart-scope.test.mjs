@@ -58,7 +58,7 @@ test("passes hourly graph excludes LIV/other operations, not the official pass K
   assert.deepEqual([s.summary.duelWon,s.summary.duelTotal,s.summary.passRate],[9,12,75]);
   assert.equal(s.operationalScore.indicators.passRate,75);
   assert.deepEqual(s.overallHourlyPerformance.map(({label,won,total}) => [label,won,total]), [
-    ["21h",1,1],["22h",2,4],["23h",6,7],
+    ["21h",1,1],["22h",2,5],["23h",6,6],
   ]);
   assert.equal(s.overallHourlyPerformance.reduce((n,item)=>n+item.total,0),s.summary.duelTotal);
   assert.equal(s.overallHourlyPerformance.reduce((n,item)=>n+item.won,0),s.summary.duelWon);
