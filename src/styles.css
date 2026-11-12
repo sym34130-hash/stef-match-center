@@ -3270,10 +3270,16 @@ body.match-celebration-active .main-area {
   stroke-width: 0.6;
 }
 .performance-chart .performance-chart-last-bucket > rect:first-child {
-  fill: rgba(72, 199, 142, 0.065);
+  fill: rgba(29, 78, 137, 0.025);
+  stroke: rgba(29, 78, 137, 0.24);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 6;
 }
-.performance-chart .performance-chart-last-bucket-area {
-  fill: rgba(72, 199, 142, 0.16);
+.performance-chart .performance-chart-last-bucket > text {
+  fill: var(--navy-900);
+  text-anchor: middle;
+  font-size: 12px;
+  font-weight: 800;
 }
 /* Visible, but not a projected or calculated rate. */
 .performance-chart .performance-chart-no-data-tail rect {
