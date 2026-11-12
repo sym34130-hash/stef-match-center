@@ -218,7 +218,7 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(chartPanel.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("25/30 opérations");
 
-  await chartPanel.getByRole("button", { name: /2\\/2 Tous les déchargements/ }).click();
+  await chartPanel.getByRole("button", { name: /2\/2 Tous les déchargements/ }).click();
   await expect(chartPanel.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("20h");
   await expect(chartPanel.locator(".performance-chart-empty-hour")).toContainText(["14h","15h","16h","17h","18h","21h","22h"]);
   await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
@@ -227,7 +227,7 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await chartPanel.getByRole("button", { name: "Agrandir le graphique" }).click();
   await expect(zoom.locator(".performance-chart-end-boundary")).toContainText("22h30");
   await expect(zoom.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
-  await zoom.getByRole("button", { name: /1\\/2 Performance globale/ }).click();
+  await zoom.getByRole("button", { name: /1\/2 Performance globale/ }).click();
   await expect(zoom.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("21h");
   await expect(zoom.locator(".performance-chart-end-boundary")).toContainText("22h30");
   await zoom.getByRole("button", { name: "Fermer le graphique agrandi" }).click();
