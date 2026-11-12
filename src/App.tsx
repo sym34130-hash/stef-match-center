@@ -2765,7 +2765,8 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const height = 600;
   const left = 92;
   const right = data.some(item => item.arrivingTravels != null) ? 92 : 42;
-  const top = 30;
+  // Reserve label room above points at 100%.
+  const top = 52;
   const bottom = data.some(item => item.arrivingTravels != null) ? 100 : 76;
   const chartWidth = width - left - right;
   const chartHeight = height - top - bottom;
@@ -2794,8 +2795,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const points = data.map((item, index) => ({
     ...item,
     hourOffset: offsets[index],
-    x: data.length <= 1 ? left + chartWidth / 2
-      : left + (offsets[index] / spanHours) * chartWidth,
+    x: left + (offsets[index] / spanHours) * chartWidth,
     y: top + ((100 - item.rate) / 100) * chartHeight,
   }));
   // Keep the detail lines below neighboring curve segments, especially at peaks.
@@ -2807,15 +2807,49 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
       point.y + (neighbor.y - point.y) * Math.min(radius / Math.abs(neighbor.x - point.x || 1), 1)
     )));
   });
-  // An absent hour is not 0% and not a continuous measurement: do not connect
-  // a curve across unobserved hours. Only fill areas with no missing hours.
+  // A solid trace covers observed consecutive hours. Dashed connectors
+  // preserve the graph's shape across gaps without inventing observations.
   const hasHourlyGap = points.some((point, index) =>
     index > 0 && point.hourOffset - points[index - 1].hourOffset > 1);
   const path = points.map((point, index) =>
     `${index === 0 || point.hourOffset - points[index - 1].hourOffset > 1 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-  const areaPath = points.length > 1 && !hasHourlyGap
-    ? `${path} L ${points[points.length - 1].x} ${top + chartHeight} L ${points[0].x} ${top + chartHeight} Z`
-    : "";
+  const gapConnectors = points.flatMap((point, index) => {
+    if (index === 0 || point.hourOffset - points[index - 1].hourOffset <= 1) return [];
+    const previous = points[index - 1];
+    return [`M ${previous.x} ${previous.y} L ${point.x} ${point.y}`];
+  });
+  const missingHours = points.flatMap((point, index) => {
+    if (index === 0) return [];
+    const previous = points[index - 1];
+    const count = Math.min(23, Math.max(0, point.hourOffset - previous.hourOffset - 1));
+    return Array.from({ length: count }, (_, offset) => {
+      const missingOffset = previous.hourOffset + offset + 1;
+      return {
+        label: `${String((firstHour + missingOffset) % 24).padStart(2, "0")}h`,
+        x: left + (missingOffset / spanHours) * chartWidth,
+      };
+    });
+  });
+
+  // Shade only measured continuous runs; a lone hour gets a narrow
+  // vertical column so it still reads as part of the chart.
+  const areaPaths: string[] = [];
+  const baseY = top + chartHeight;
+  let segmentStart = 0;
+  for (let index = 1; index <= points.length; index += 1) {
+    if (index < points.length && points[index].hourOffset - points[index - 1].hourOffset <= 1) continue;
+    const run = points.slice(segmentStart, index);
+    if (run.length === 1) {
+      const point = run[0];
+      const minX = Math.max(left, point.x - 14);
+      const maxX = Math.min(left + chartWidth, point.x + 14);
+      areaPaths.push(`M ${minX} ${baseY} L ${minX} ${point.y} L ${maxX} ${point.y} L ${maxX} ${baseY} Z`);
+    } else if (run.length > 1) {
+      const first = run[0], last = run[run.length - 1];
+      areaPaths.push(`M ${first.x} ${baseY} L ${run.map(point => `${point.x} ${point.y}`).join(" L ")} L ${last.x} ${baseY} Z`);
+    }
+    segmentStart = index;
+  }
 
   const heading = (large: boolean) => (
       <div className="performance-chart-heading">
@@ -2824,9 +2858,9 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
           <strong>% passes réussies</strong>
           <small className="performance-chart-caption">Graphique seulement : déchargement (C) · segments AQ, ED, EX ou vides (G) · LIV exclus. KPI du score inchangé.</small>
           <small className="performance-chart-sample" role="note">
-            {hoursWithData} heure(s) avec données sur la plage {snapshot.match.timeRangeLabel}.
-            {smallSampleHours > 0 && ` Attention : ${smallSampleHours} heure(s) ont moins de 5 opérations ; un taux de 100 % peut reposer sur 1/1.`}
-            {hasHourlyGap && " Les heures sans données ne sont pas reliées sur la courbe."}
+            {hoursWithData} h mesurées sur {snapshot.match.timeRangeLabel}.
+            {smallSampleHours > 0 && ` ${smallSampleHours} h à faible volume (moins de 5 opérations).`}
+            {hasHourlyGap && " Pointillés : liaison visuelle entre heures sans données, sans mesure intermédiaire."}
           </small>
         </div>
         <div className="performance-chart-actions">
@@ -2851,7 +2885,14 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
             const y = top + ((100 - value) / 100) * chartHeight;
             return <g key={value}><line x1={left} x2={width - right} y1={y} y2={y} /><text x={left - 12} y={y + 4}>{value}%</text></g>;
           })}
-          <path className="performance-chart-area" d={areaPath} />
+          {areaPaths.map((area, index) => <path className="performance-chart-area" key={index} d={area} />)}
+          {missingHours.map((hour, index) => (
+            <g className="performance-chart-empty-hour" key={`${hour.label}-${index}`}>
+              <line x1={hour.x} x2={hour.x} y1={top} y2={baseY} />
+              <text x={hour.x} y={height - 20}>{hour.label}</text>
+            </g>
+          ))}
+          {gapConnectors.map((gap, index) => <path className="performance-chart-gap" key={index} d={gap} />)}
           <path className="performance-chart-line" d={path} />
           {points.map((point, index) => (
             <g className={`performance-chart-point${selectedHour === point.label ? " is-selected" : ""}`} key={point.label}>
