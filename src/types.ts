@@ -315,6 +315,14 @@ export type Snapshot = {
     arrivingTravels?: number | null;
     arrivingTravelCodes?: string[];
   }>;
+  /** Official, unsegmented KPI population grouped by the observed operation start hour. */
+  overallHourlyPerformance?: Array<{
+    label: string;
+    hour: number;
+    won: number;
+    total: number;
+    rate: number;
+  }>;
   loadingQuality?: {
     targeted: number;
     offTarget: number;
