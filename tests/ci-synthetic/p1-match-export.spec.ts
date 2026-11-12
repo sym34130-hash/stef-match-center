@@ -137,7 +137,8 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   const nav = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
   await nav.getByRole("button", { name: "Aller à Statistiques du match", exact: true }).click();
   const chartPanel = page.locator(".performance-chart-panel");
-  await expect(chartPanel.locator(".performance-chart-sample")).toContainText("2 heure(s) ont moins de 5 opérations");
+  await expect(chartPanel.locator(".performance-chart-sample")).toContainText("2 h à faible volume");
+  await expect(chartPanel.locator(".performance-chart-sample")).toContainText("Pointillés");
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("5/7 opérations");
   const plotted = chartPanel.locator(".performance-chart-point circle");
   await expect(plotted).toHaveCount(3);
@@ -145,6 +146,11 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   expect((x[1] - x[0]) / (x[2] - x[0])).toBeCloseTo(6 / 9, 2);
   const d = await chartPanel.locator(".performance-chart-line").getAttribute("d");
   expect((d?.match(/M /g) ?? []).length).toBe(3);
+  // The line remains readable across gaps: dashed bridges are NOT measurements.
+  await expect(chartPanel.locator(".performance-chart-gap")).toHaveCount(2);
+  await expect(chartPanel.locator(".performance-chart-area")).toHaveCount(3);
+  await expect(chartPanel.locator(".performance-chart-empty-hour")).toHaveCount(7);
+  await expect(chartPanel.locator(".performance-chart-empty-hour").first()).toContainText("14h");
   await chartPanel.locator(".performance-chart-breakdown summary").click();
   const dataRows = chartPanel.locator(".performance-chart-breakdown tbody tr");
   await expect(dataRows).toHaveCount(3);
