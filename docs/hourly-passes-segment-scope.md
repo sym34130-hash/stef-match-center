@@ -51,3 +51,25 @@ ne sont pas recréées depuis le TCD historique. Les contrôles indépendants
 figurent dans `scripts/reconcile-import.mjs` ; les fixtures synthétiques de
 `scripts/hourly-pass-chart-scope.test.mjs` couvrent aussi les segments rejetés,
 les exclusions et les critères actifs. Le DST reste ouvert, accepté et hors périmètre.
+
+## Lecture et fiabilité visuelle du graphique (correctif novembre 2026)
+
+Une courbe à `100 %` ne signifie pas qu'un grand volume d'opérations a été
+traité : `1/1` et `50/50` valent tous deux 100 %. Aucune correction
+statistique ni seuil d'éligibilité supplémentaire n'est appliqué aux KPI.
+
+L'interface affiche :
+- le total du **sous-ensemble filtré** avec son nombre de réussites et
+  d'opérations éligibles ;
+- le nombre de créneaux avec données et un avertissement purement informatif
+  lorsqu'au moins un créneau a moins de cinq opérations ;
+- un tableau dépliable des numérateurs, dénominateurs et pourcentages **par heure** ;
+- les points aux heures réellement écoulées, **sans interpolation à travers
+  une heure absente**. Une absence de données n'est jamais remplacée par 0 %.
+
+Les calculs métier, la population retenue (DECHG avec segments
+AQ/ED/EX/vides), les ligues, les exclusions et le KPI officiel restent
+inchangés. Test synthétique 13:00–22:30 : les taux peuvent être 100 % (1/1)
+sur neuf heures et 60 % (3/5) à 19 h, pour un total graphique de 12/14
+et un KPI officiel différent. Pour confirmer une extraction **réelle**, il
+faut contrôler les volumes du classeur importé, non les seuls pourcentages.

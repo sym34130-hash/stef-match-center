@@ -3068,6 +3068,64 @@ body.match-celebration-active .main-area {
   line-height: 1.35;
 }
 
+.performance-chart-sample {
+  display: block;
+  margin-top: 7px;
+  color: var(--navy-900);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.performance-chart-breakdown {
+  margin-top: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--navy-900);
+}
+
+.performance-chart-breakdown > summary {
+  cursor: pointer;
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.performance-chart-breakdown[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.performance-chart-breakdown-scroll {
+  max-height: 300px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.performance-chart-breakdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  text-align: right;
+}
+
+.performance-chart-breakdown th,
+.performance-chart-breakdown td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.performance-chart-breakdown th:first-child {
+  text-align: left;
+}
+
+.performance-chart-breakdown p {
+  padding: 0 12px 9px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
 .performance-chart-total {
   flex: 0 0 auto;
   padding: 8px 12px;
