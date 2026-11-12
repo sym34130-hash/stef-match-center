@@ -2861,15 +2861,15 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
       from: `${String((firstHour + firstTrailingEmptyOffset) % 24).padStart(2, "0")}h`,
     }
     : null;
-  // Each plotted rate aggregates its full selected hourly bucket. Show the
-  // rest of that SAME measured bucket (20h -> 21h, for example) as a band;
-  // otherwise an unexplained blank hour appears between the last point and
-  // the explicitly unmeasured tail. This adds NO extra observations/rates.
+  // The last point describes an entire hourly bucket, but is NOT a measured
+  // rate for each instant after its time tick. Delimit that hour with a neutral
+  // background (not a green filled value or extrapolated area), and reserve
+  // the stronger neutral "Sans données" band for hours with zero eligible rows.
   const lastPoint = points.at(-1);
   const lastMeasuredBucket = lastPoint && selectedMinutes !== null ? {
     x: lastPoint.x,
     width: Math.max(0, Math.min(1, displayedSpan - lastPoint.hourOffset) / spanHours * chartWidth),
-    y: lastPoint.y,
+    label: `${String((firstHour + lastPoint.hourOffset) % 24).padStart(2, "0")}h`,
   } : null;
 
   // Shade only measured continuous runs; a lone hour gets a narrow
@@ -2942,14 +2942,16 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
             <rect key={`empty-${hour.label}`} className="performance-chart-empty-bucket"
               x={hour.x} y={top} width={hour.width} height={chartHeight} />
           ))}
-          {/* Within the last measured hour, the aggregate rate applies to the
-              bucket, not only to the point placed at its starting tick. */}
+          {/* The final measured hour must not look like a projected green
+              percentage after the final point. Show an hour-scope marker only. */}
           {lastMeasuredBucket && lastMeasuredBucket.width > 0 && (
-            <g className="performance-chart-last-bucket" aria-label="Dernier créneau mesuré">
+            <g className="performance-chart-last-bucket" aria-label={`Créneau ${lastMeasuredBucket.label} mesuré`}>
               <rect x={lastMeasuredBucket.x} y={top} width={lastMeasuredBucket.width} height={chartHeight} />
-              <rect className="performance-chart-last-bucket-area" x={lastMeasuredBucket.x}
-                y={lastMeasuredBucket.y} width={lastMeasuredBucket.width}
-                height={Math.max(0, top + chartHeight - lastMeasuredBucket.y)} />
+              {lastMeasuredBucket.width >= 96 && (
+                <text x={lastMeasuredBucket.x + lastMeasuredBucket.width / 2} y={top + 28}>
+                  {lastMeasuredBucket.label} mesuré
+                </text>
+              )}
             </g>
           )}
           {[0, 20, 40, 60, 80, 100].map((value) => {
