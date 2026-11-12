@@ -2754,7 +2754,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   };
   // Each view receives an independent series from the server. Do not use the
   // Excel cached chart, and never apply filtered-graph rules to the official KPI.
-  const data = view === "overall"
+  const data: NonNullable<Snapshot["hourlyPerformance"]> = view === "overall"
     ? (snapshot.overallHourlyPerformance ?? [])
     : (snapshot.hourlyPerformance ?? []);
   const chartWon = data.reduce((sum, point) => sum + (point.won ?? 0), 0);
