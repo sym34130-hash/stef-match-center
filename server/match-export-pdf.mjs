@@ -501,7 +501,7 @@ function compactChart(p, m, chartId) {
     const first = rows[0], last = rows[rows.length - 1];
     p.text(x, 67, 8, trim(String(first.label ?? first.hour ?? "Début"), 22) + " : " + percent(first.rate), C.muted);
     p.text(x + w, 67, 8, trim(String(last.label ?? last.hour ?? "Fin"), 22) + " : " + percent(last.rate), C.muted, false, "right");
-    p.text(42, 49, 8.4, "Tous dechargements eligibles ; perimetre distinct du KPI officiel tous types.", C.muted);
+    p.text(42, 49, 8.4, "Tous dechargements eligibles ; périmètre distinct du KPI officiel toutes opérations.", C.muted);
     return;
   }
   if (chartId === "reception-time") {
