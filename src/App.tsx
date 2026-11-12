@@ -2752,19 +2752,50 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const chartWon = data.reduce((sum, point) => sum + (point.won ?? 0), 0);
   const chartTotal = data.reduce((sum, point) => sum + (point.total ?? 0), 0);
   const totalPassRate = chartTotal > 0 ? Math.round(chartWon / chartTotal * 1000) / 10 : null;
-  // Keep the SVG coordinate system stable. CSS scales this native ratio on
-  // every screen, so the curve and its labels stay proportional.
+  // The chart shows a strictly filtered population, not the official KPI:
+  // make the actual denominators visible before interpreting 100% as a trend.
+  const eligibleHours = data.filter(point => Number.isFinite(point.total) && (point.total ?? 0) > 0);
+  const smallSampleHours = eligibleHours.filter(point => (point.total ?? 0) < 5).length;
+  const hoursWithData = eligibleHours.length;
+
+  // Use elapsed CLOCK HOURS, never equally-spaced array indices: missing hours
+  // must have a real gap instead of making 13h, 19h and 22h look consecutive.
+  // The 13:00–22:30 window keeps the last half-hour at the right edge.
   const width = 1440;
   const height = 600;
   const left = 92;
-  const right = data.some((item) => item.arrivingTravels != null) ? 92 : 42;
+  const right = data.some(item => item.arrivingTravels != null) ? 92 : 42;
   const top = 30;
-  const bottom = data.some((item) => item.arrivingTravels != null) ? 100 : 76;
+  const bottom = data.some(item => item.arrivingTravels != null) ? 100 : 76;
   const chartWidth = width - left - right;
   const chartHeight = height - top - bottom;
+  const parseTimeMinutes = (value?: string) => {
+    const m = /^(\\d{1,2}):(\\d{2})$/.exec(value ?? "");
+    if (!m) return null;
+    const h = Number(m[1]), min = Number(m[2]);
+    return h < 24 && min < 60 ? h * 60 + min : null;
+  };
+  const periodStart = parseTimeMinutes(snapshot.match.periodStart);
+  const periodEnd = parseTimeMinutes(snapshot.match.periodEnd);
+  const firstHour = periodStart !== null ? Math.floor(periodStart / 60)
+    : (Number.isInteger(data[0]?.hour) ? data[0].hour : Number.parseInt(data[0]?.label ?? "0", 10)) || 0;
+  const hourOffset = (hour: number, index: number) =>
+    Number.isInteger(hour) && hour >= 0 && hour < 24
+      ? (hour - firstHour + 24) % 24
+      : index;
+  const offsets = data.map((point, index) => hourOffset(point.hour, index));
+  const selectedMinutes = periodStart !== null && periodEnd !== null
+    ? ((periodEnd - periodStart + 1440) % 1440 || 1440)
+    : null;
+  const displayedSpan = selectedMinutes !== null
+    ? (periodStart! % 60 + selectedMinutes) / 60
+    : Math.max(1, ...offsets);
+  const spanHours = Math.max(1, displayedSpan, ...offsets);
   const points = data.map((item, index) => ({
     ...item,
-    x: data.length <= 1 ? left + chartWidth / 2 : left + (index / (data.length - 1)) * chartWidth,
+    hourOffset: offsets[index],
+    x: data.length <= 1 ? left + chartWidth / 2
+      : left + (offsets[index] / spanHours) * chartWidth,
     y: top + ((100 - item.rate) / 100) * chartHeight,
   }));
   // Keep the detail lines below neighboring curve segments, especially at peaks.
@@ -2772,12 +2803,17 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
     if (point.arrivingTravels == null) return point.y;
     const radius = 90;
     const neighbors = [points[index - 1], points[index + 1]].filter(Boolean);
-    return Math.max(point.y, ...neighbors.map((neighbor) => (
-      point.y + (neighbor.y - point.y) * Math.min(radius / Math.abs(neighbor.x - point.x), 1)
+    return Math.max(point.y, ...neighbors.map(neighbor => (
+      point.y + (neighbor.y - point.y) * Math.min(radius / Math.abs(neighbor.x - point.x || 1), 1)
     )));
   });
-  const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-  const areaPath = points.length > 0
+  // An absent hour is not 0% and not a continuous measurement: do not connect
+  // a curve across unobserved hours. Only fill areas with no missing hours.
+  const hasHourlyGap = points.some((point, index) =>
+    index > 0 && point.hourOffset - points[index - 1].hourOffset > 1);
+  const path = points.map((point, index) =>
+    `${index === 0 || point.hourOffset - points[index - 1].hourOffset > 1 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  const areaPath = points.length > 1 && !hasHourlyGap
     ? `${path} L ${points[points.length - 1].x} ${top + chartHeight} L ${points[0].x} ${top + chartHeight} Z`
     : "";
 
@@ -2787,11 +2823,17 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
           <span>Performance horaire</span>
           <strong>% passes réussies</strong>
           <small className="performance-chart-caption">Graphique seulement : déchargement (C) · segments AQ, ED, EX ou vides (G) · LIV exclus. KPI du score inchangé.</small>
+          <small className="performance-chart-sample" role="note">
+            {hoursWithData} heure(s) avec données sur la plage {snapshot.match.timeRangeLabel}.
+            {smallSampleHours > 0 && ` Attention : ${smallSampleHours} heure(s) ont moins de 5 opérations ; un taux de 100 % peut reposer sur 1/1.`}
+            {hasHourlyGap && " Les heures sans données ne sont pas reliées sur la courbe."}
+          </small>
         </div>
         <div className="performance-chart-actions">
           <div className="performance-chart-total">
           <small>Total filtré</small>
           <b>{formatPercent(totalPassRate)}</b>
+          <small>{chartTotal > 0 ? `${chartWon}/${chartTotal} opérations` : "Volumes non disponibles"}</small>
           </div>
           {large ? (
             <button className="secondary-button compact performance-chart-close" type="button" aria-label="Fermer le graphique agrandi" title="Fermer" onClick={closeExpanded}><XCircle size={22} /></button>
@@ -2836,6 +2878,25 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
     <div className="performance-chart-panel">
       {heading(false)}
       {chart()}
+      {data.length > 0 && (
+        <details className="performance-chart-breakdown">
+          <summary>Contrôler le calcul de chaque heure (réussites / opérations éligibles)</summary>
+          <div className="performance-chart-breakdown-scroll">
+            <table>
+              <thead><tr><th>Heure</th><th>Réussites</th><th>Éligibles</th><th>Taux</th></tr></thead>
+              <tbody>{data.map(point => (
+                <tr key={point.label}>
+                  <th scope="row">{point.label}</th>
+                  <td>{point.won ?? "—"}</td>
+                  <td>{point.total ?? "—"}</td>
+                  <td>{formatPercent(point.rate)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+          <p>Ces volumes concernent uniquement les déchargements et segments autorisés dans le graphique. Le KPI officiel du score a un périmètre différent.</p>
+        </details>
+      )}
       {expanded && createPortal(
         <dialog ref={expandedPanel} className="performance-chart-expanded" aria-label="Graphique Performance horaire agrandi" aria-modal="true"
           onKeyDown={(event) => {
