@@ -2926,7 +2926,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
             const y = top + ((100 - value) / 100) * chartHeight;
             return <g key={value}><line x1={left} x2={width - right} y1={y} y2={y} /><text x={left - 12} y={y + 4}>{value}%</text></g>;
           })}
-          {noDataTail && noDataTail.width > 0 && (
+          {data.length > 0 && noDataTail && noDataTail.width > 0 && (
             <g className="performance-chart-no-data-tail" aria-label="Période sans données après la dernière mesure">
               <rect x={noDataTail.x} y={top} width={noDataTail.width} height={chartHeight} />
               <text x={noDataTail.x + noDataTail.width / 2} y={top + chartHeight / 2}>Aucune donnée</text>
