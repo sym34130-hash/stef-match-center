@@ -90,12 +90,17 @@ try {
       "Dashed line and labels must share the same target height");
     const chartPlot=await graph.locator(".reception-hour-plot").boundingBox();
     assert.ok(chartPlot,"Chart plot should have measurable bounds");
+    const ceiling=Math.max(60,Math.ceil(Math.max(snapshot.unloadingHourlyAnalysis.targetSeconds,...slots.map(s=>s.meanSecondsPerPosition??0))*1.2/60)*60);
+    const mmss=seconds=>Math.floor(seconds/60)+":"+String(seconds%60).padStart(2,"0");
+    assert.deepEqual(await graph.locator(".reception-hour-axis span").allInnerTexts(),
+      [mmss(ceiling),mmss(ceiling/2),"0:00"],"The scale must use the same minutes:seconds units as each bar");
+    assert.equal(mmss(206),"3:26");
+    assert.equal(mmss(300),"5:00");
     for (const slot of slots) {
       const b=graph.getByRole("button",{name:new RegExp("^"+slot.label.slice(0,2)+":00–")});
       const value=b.locator(".reception-hour-value");
       const rounded=Math.max(0,Math.round(slot.meanSecondsPerPosition));
-      const expectedDuration=rounded<60 ? rounded+"s"
-        : Math.floor(rounded/60)+":"+String(rounded%60).padStart(2,"0");
+      const expectedDuration=Math.floor(rounded/60)+":"+String(rounded%60).padStart(2,"0");
       assert.equal((await value.innerText()).trim(),expectedDuration,
         "Above each bar must be mean duration per position, not the position count");
       assert.equal(await value.isVisible(),true,viewport.width+"px: mean duration must remain visible");
@@ -125,6 +130,9 @@ try {
         && renderedTime.right<=renderedTime.plotRight+2,
         viewport.width+"px: mean duration rendered text must fit inside graph: "+
         JSON.stringify(renderedTime));
+      const height=await b.evaluate(el=>parseFloat(el.style.getPropertyValue("--bar-height")));
+      assert.ok(Math.abs(height-slot.meanSecondsPerPosition/ceiling*100)<0.02,
+        "Bar height must still be proportional to its duration in seconds");
       const volume=b.locator(".reception-hour-bar-volume");
       assert.equal((await volume.innerText()).trim(),String(slot.distinctPositions),
         "Inside each bar must be the count of distinct positions");
