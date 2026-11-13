@@ -102,6 +102,18 @@ class Page {
   outline(x, y, w, h, color = C.pitchLine, width = 0.8) {
     this.ops.push(`q ${rgb(color)} RG ${width} w ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re S Q\n`);
   }
+  dot(x, y, r, color = C.gold) {
+    const k = r * 0.5522847498;
+    this.ops.push(`q ${rgb(color)} rg ${(x+r).toFixed(2)} ${y.toFixed(2)} m `
+      + `${(x+r).toFixed(2)} ${(y+k).toFixed(2)} ${(x+k).toFixed(2)} ${(y+r).toFixed(2)} ${x.toFixed(2)} ${(y+r).toFixed(2)} c `
+      + `${(x-k).toFixed(2)} ${(y+r).toFixed(2)} ${(x-r).toFixed(2)} ${(y+k).toFixed(2)} ${(x-r).toFixed(2)} ${y.toFixed(2)} c `
+      + `${(x-r).toFixed(2)} ${(y-k).toFixed(2)} ${(x-k).toFixed(2)} ${(y-r).toFixed(2)} ${x.toFixed(2)} ${(y-r).toFixed(2)} c `
+      + `${(x+k).toFixed(2)} ${(y-r).toFixed(2)} ${(x+r).toFixed(2)} ${(y-k).toFixed(2)} ${(x+r).toFixed(2)} ${y.toFixed(2)} c f Q\n`);
+  }
+  display(x, y, size, content, color = C.white, tracking = 78) {
+    // Helvetica-Bold with condensed horizontal scale for sports-editorial display.
+    this.ops.push(`${rgb(color)} rg BT /F2 ${size} Tf ${tracking} Tz 1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm (${escape(content)}) Tj ET\n`);
+  }
   circle(x, y, r, color = C.pitchLine, width = 0.8) {
     const k = r * 0.5522847498;
     this.ops.push(`q ${rgb(color)} RG ${width} w ${(x+r).toFixed(2)} ${y.toFixed(2)} m `
@@ -454,27 +466,28 @@ export function renderMatchPdfFull(model) {
 
 /** Compact two-page briefing. The complete legacy report stays available only
  * as an exported diagnostic renderer; the HTTP endpoint calls this one. */
-function compactMetric(p, x, y, width, label, value, detail = "") {
-  p.box(x, y, width, 64, C.panel);
-  p.box(x, y + 61, width, 3, C.blue);
-  p.box(x, y, 3, 61, C.panel2);
-  p.text(x + 10, y + 43, 8.5, trim(label, 27).toUpperCase(), C.aqua, true);
-  const valueText = ascii(value ?? "Indisponible");
-  const fontSize = valueText.length > 30 ? 10 : valueText.length > 17 ? 13 : 21;
-  const parts = wrap(valueText, Math.max(12, Math.floor((width - 20) / (fontSize * 0.55))));
-  if (parts.length > 2) throw new MatchExportError(422, "Le libellé d'un KPI est trop long pour le briefing papier.");
-  parts.forEach((line, i) => p.text(x + 10, y + 18 - i * 12, fontSize, line, C.white, true));
-  if (detail && parts.length === 1) p.text(x + 10, y + 5, 7.4, trim(detail, Math.floor((width - 20) / 4.1)), C.muted);
+function compactMetric(p, x, top, width, label, value, detail = "", accent = C.aqua) {
+  // Match report index: value-led typesetting rather than a KPI card grid.
+  p.box(x, top - 40, 2.8, 38, accent);
+  const labelSize = clamp((width - 18) / Math.max(1, ascii(label).length * 0.55), 7.7, 8.7);
+  p.text(x + 10, top - 10, labelSize, trim(label, 38).toUpperCase(), C.muted, true);
+  const shown = ascii(value ?? "Indisponible");
+  const size = clamp((width - 22) / Math.max(1, shown.length * 0.56), 10.5, 20);
+  p.text(x + 10, top - 31, size, shown, C.white, true);
+  if (detail) p.text(x + 10, top - 41, 7.2, trim(detail, Math.floor((width - 15) / 4)), C.muted);
 }
 
 /** Every printed chart is an operationally faithful *summary* of its on-screen
  * carousel source, never a reinterpreted percentage or a screenshot crop.
  * All vector primitives are confined to the same 784 x 116 pt page-one panel. */
 function chartFrame(p, title, subtitle) {
-  p.box(29, 43, 784, 146, C.panel);
-  p.box(29, 186, 784, 3, C.aqua);
-  p.box(29, 43, 3, 143, C.panel2);
-  p.text(42, 170, 11, title, C.aqua, true);
+  // One full-width post-match analytics strip, not a floating dashboard tile.
+  p.box(29, 42, 784, 146, C.panel);
+  p.box(29, 185, 784, 3, C.aqua);
+  p.box(29, 42, 2.5, 143, C.gold);
+  p.box(804, 42, 9, 143, C.bg);
+  for (let tick = 0; tick < 9; tick++) p.box(785 + tick * 2, 176, 1, 4, C.pitchLine);
+  p.text(42, 170, 10.8, title, C.aqua, true);
   if (subtitle) p.text(42, 155, 9, subtitle, C.text);
 }
 function chartPercentRow(p, y, label, rate, volume, color = C.aqua) {
@@ -701,17 +714,12 @@ function compactChart(p, m, chartId) {
  * All six fields can use their documented input limits while staying on page 2.
  * Unknown excess still raises 422 with the exact section; never silently crop. */
 function shortBlock(p, { x, y, w, h, title, value, accent = C.aqua, marker = "" }) {
-  // V3 tactile editorial surface: light tactical panels over a navy pitch.
-  // Padding and available line capacity match the historical brief exactly.
-  const fill = title === "Sécurité / vigilance" ? C.paperWarm : C.paper;
-  p.box(x, y, w, h, fill);
-  p.box(x, y + h - 3, w, 3, accent);
-  p.box(x, y, 4, h - 3, accent);
-  p.text(x + 11, y + h - 17, 9.5, title.toUpperCase(), C.navyInk, true);
-  if (marker) {
-    // Section identifiers are informational, not extra brief content.
-    p.text(x + w - 12, y + h - 17, 7.6, marker, C.slateInk, true, "right");
-  }
+  // Sections sit on one uninterrupted light tactical sheet. Fine rules,
+  // oversized cues and typography replace the former six rectangle cards.
+  p.box(x, y + h - 2.5, w, 2.5, accent);
+  p.box(x, y + 3, 3, h - 6, accent);
+  p.text(x + 11, y + h - 16.5, 9.8, title.toUpperCase(), C.navyInk, true);
+  if (marker) p.text(x + w - 10, y + h - 16.5, 7.3, marker, C.slateInk, true, "right");
   const size = 8.7, lineHeight = 9.9;
   const maxChars = Math.max(14, Math.floor((w - 24) / (size * 0.54)));
   const lines = wrap(value || "Non renseigné", maxChars);
@@ -757,75 +765,140 @@ function effectiveBriefText(m) {
   };
 }
 function compactScorePage(doc, m) {
-  const p = doc.add("01 / PERFORMANCE DU JOUR");
-  p.text(36, 486, 18, "COUP DE SIFFLET FINAL", C.white, true);
-  p.text(806, 486, 8.2, "RÉSULTAT DU MATCH", C.gold, true, "right");
-  p.text(36, 468, 9,
-    `Zonage <= ${fmt(m.criteria.zonageMinutes)} min  |  CHG <= ${fmt(m.criteria.loadingSeconds)} s/poz  |  DECHG <= ${fmt(m.criteria.unloadingSeconds)} s/poz`,
-    C.muted);
+  const p = doc.add("01 / RÉSULTAT DU MATCH");
+  // Broadcast masthead. The chronology and league thresholds remain untouched.
+  p.display(35, 483, 23, "COUP DE SIFFLET FINAL", C.white, 86);
+  p.text(804, 489, 8, "MATCH / COMPTE RENDU", C.gold, true, "right");
+  p.text(35, 467, 8.3,
+    `Zonage <= ${fmt(m.criteria.zonageMinutes)} min  |  CHG <= ${fmt(m.criteria.loadingSeconds)} s/poz  |  DECHG <= ${fmt(m.criteria.unloadingSeconds)} s/poz`, C.muted);
   const score = m.score;
-  // Full-width match scoreboard: gold top rail, subtle pitch geometry,
-  // oversized result numbers, and two contrasting performance territories.
-  p.box(29, 400, 784, 66, C.panel);
-  p.box(29, 463, 784, 3, C.gold);
-  p.box(29, 400, 16, 63, C.panel2);
-  p.box(797, 400, 16, 63, C.panel2);
-  // Stadium / pitch center circle: deliberately subtle to keep the score dominant.
-  p.circle(421, 433, 19, C.pitchLine, 1.2);
-  p.line(421, 411, 421, 455, C.pitchLine, 0.8);
-  p.outline(374, 410, 94, 46, C.pitchLine, 0.65);
-  p.text(229, 448, 9.5, "BUTS MARQUÉS", C.aqua, true, "center");
-  p.text(613, 448, 9.5, "BUTS ENCAISSÉS", C.red, true, "center");
+  // Football stadium / TV post-match hero: the score IS the composition.
+  p.box(29, 353, 784, 110, C.panel);
+  p.box(29, 459.5, 784, 3.5, C.gold);
+  p.box(29, 353, 784, 3, C.aqua);
+  // Stylised floodlights and pitch perspective, all vector shapes.
+  for (let i = 0; i < 12; i++) {
+    const edge = 29 + i * 19;
+    p.line(edge, 357, edge + 85, 453, C.pitchLine, .37);
+    p.line(813 - i * 19, 357, 728 - i * 19, 453, C.pitchLine, .37);
+  }
+  p.outline(147, 359, 548, 94, C.pitchLine, .75);
+  p.line(421, 360, 421, 452, C.pitchLine, .75);
+  p.circle(421, 405, 39, C.pitchLine, .85);
+  p.outline(150, 376, 86, 60, C.pitchLine, .55);
+  p.outline(606, 376, 86, 60, C.pitchLine, .55);
+  p.text(304, 435, 10.2, "BUTS MARQUÉS", C.aqua, true, "center");
+  p.text(539, 435, 10.2, "BUTS ENCAISSÉS", C.red, true, "center");
   const scored = score?.status === "available" ? fmt(score.goalsFor) : "Indisponible";
   const conceded = score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible";
-  const scoreFont = value => value.length > 8 ? 15 : 31;
-  p.text(229, 409, scoreFont(scored), scored, C.white, true, "center");
-  p.text(613, 409, scoreFont(conceded), conceded, C.white, true, "center");
-  p.text(421, 423, 16, "-", C.gold, true, "center");
+  const scoreSize = value => value.length > 8 ? 17 : 55;
+  p.text(304, 375, scoreSize(scored), scored, C.white, true, "center");
+  p.text(539, 375, scoreSize(conceded), conceded, C.white, true, "center");
+  p.text(421, 392, 20, "-", C.gold, true, "center");
+  p.text(55, 371, 8.6, "RÉSULTAT /", C.gold, true);
+  p.text(55, 360, 8.3, "EXÉCUTION", C.muted, true);
+  p.text(787, 371, 8, m.league.label, C.gold, true, "right");
+  p.text(787, 360, 7.8, trim(m.match.timeRangeLabel ?? "", 21), C.muted, false, "right");
+
+  // Score-derived quartet is a single TV lower-third with big figures and
+  // separators. Values are still the original official four indicators.
   const rates = [
-    ["Passes réussies", score?.indicators?.passRate],
-    ["Tirs cadrés", score?.indicators?.loadingPercent],
-    ["Duels gagnés", score?.indicators?.unloadingPercent],
-    ["Possession", score?.indicators?.possessionPercent],
+    ["PASSES RÉUSSIES", score?.indicators?.passRate],
+    ["TIRS CADRÉS", score?.indicators?.loadingPercent],
+    ["DUELS GAGNÉS", score?.indicators?.unloadingPercent],
+    ["POSSESSION", score?.indicators?.possessionPercent],
   ];
-  rates.forEach(([label, val], i) =>
-    p.card(29 + i * 199, 337, 187, 58, label, percent(val), "",
-      Number.isFinite(val) && val <= m.criteria.scoreTargetPercent ? C.red : C.blue));
-  // Two rows: 2 x 2 when four are selected, 3 x 2 for five or six.
-  // The chart keeps its own fixed area and the font size is unchanged.
+  p.box(29, 302, 784, 45, C.paper);
+  rates.forEach(([label, value], i) => {
+    const left = 29 + i * 196;
+    const failed = Number.isFinite(value) && value <= m.criteria.scoreTargetPercent;
+    const accent = failed ? C.red : C.aqua;
+    if (i > 0) p.box(left, 309, 0.9, 30, C.panel2);
+    p.box(left + 12, 342, 26, 2, accent);
+    p.text(left + 12, 330, 8, label, C.slateInk, true);
+    p.text(left + 12, 308, 21, percent(value), failed ? C.navyInk : C.navyInk, true);
+    if (failed) p.box(left + 175, 310, 5, 26, accent);
+  });
+  // Editorial match report statistics: no six floating cards. Keep 4–6
+  // selectable KPIs, exact provenance and optional detail, over two baselines.
+  p.text(32, 290, 9.4, "LE COLLECTIF EN CHIFFRES", C.gold, true);
+  p.line(254, 292, 811, 292, C.pitchLine, 0.7);
   const allCards = indicatorCards(m);
   const byId = new Map(m.visibleIndicators.map((id, index) => [id, allCards[index]]));
   const selected = m.pdfProfile.indicatorIds.map(id => byId.get(id)).filter(Boolean);
   if (!selected.length) p.text(41, 236, 10, "Aucun KPI complémentaire visible dans le MATCH.", C.muted);
   const columns = selected.length <= 4 ? 2 : 3;
+  const width = columns === 2 ? 382 : 249;
   selected.forEach((card, i) => {
-    const row = Math.floor(i / columns);
-    const column = i % columns;
-    const x = columns === 2 ? 29 + column * 399
-      : 29 + column * 266 + (selected.length === 5 && row === 1 ? 133 : 0);
-    compactMetric(p, x, 265 - row * 69, columns === 2 ? 385 : 252, card.label, card.value, card.detail);
+    const row = Math.floor(i / columns), column = i % columns;
+    const left = columns === 2 ? 30 + column * 399
+      : 30 + column * 266 + (selected.length === 5 && row === 1 ? 133 : 0);
+    compactMetric(p, left, 279 - row * 47, width, card.label, card.value, card.detail,
+      column % 2 === 0 ? C.aqua : C.gold);
   });
   compactChart(p, m, m.pdfProfile.chartId);
 }
+
 function compactBriefPage(doc, m) {
-  const p = doc.add("02 / LE PLAN DE JEU");
-  p.text(36, 477, 20, "BRIEF OPERATIONNEL DU JOUR", C.white, true);
-  p.box(29, 469, 784, 2, C.gold);
-  p.text(777, 479, 8, trim([m.causerie?.team, m.causerie?.manager].filter(Boolean).join(" / "), 42), C.muted, false, "right");
+  const p = doc.add("02 / DÉBRIEF TACTIQUE");
+  p.display(36, 480, 22, "LE PLAN DE JEU", C.white, 86);
+  p.text(36, 466, 9, "BRIEF OPÉRATIONNEL / PRIORITÉS, FLUX, ARBITRAGES", C.gold, true);
+  p.text(811, 479, 8, trim([m.causerie?.team, m.causerie?.manager].filter(Boolean).join(" / "), 42), C.muted, false, "right");
   const brief = effectiveBriefText(m);
-  // Keep the exact labels of BRIEF ÉQUIPE, not the old football metaphors.
-  shortBlock(p, { x: 29, y: 405, w: 784, h: 58, title: "Sécurité / vigilance", value: brief.safety, accent: C.gold, marker: "00 / VIGILANCE" });
-  shortBlock(p, { x: 29, y: 273, w: 784, h: 126, title: "Service client", value: brief.attack, accent: C.blue, marker: "01 / PROMESSE CLIENT" });
-  shortBlock(p, { x: 29, y: 149, w: 482, h: 118, title: "Expédition / Ramasse & Emballage", value: brief.midfield, accent: C.aqua, marker: "02 / FLUX" });
-  shortBlock(p, { x: 523, y: 149, w: 290, h: 118, title: "SST", value: brief.defense, accent: C.red, marker: "03 / PROTECTION" });
-  shortBlock(p, { x: 29, y: 43, w: 385, h: 100, title: "Priorités opérationnelles", value: brief.priorities, accent: C.gold, marker: "04 / PRIORITÉS" });
-  shortBlock(p, { x: 428, y: 43, w: 385, h: 100, title: "Décisions / arbitrages", value: brief.decisions, accent: C.aqua, marker: "05 / DÉCISIONS" });
+
+  // Full-sheet newspaper treatment: paper background + rules, not isolated
+  // dashboard tiles. The tactical pitch is a visual structure, not data.
+  p.box(29, 43, 784, 418, C.paper);
+  p.box(29, 401, 784, 60, C.paperWarm);
+  p.box(29, 461, 784, 2.8, C.gold);
+  p.box(29, 398, 784, 1, C.panel2);
+  p.box(29, 266, 784, 1, C.panel2);
+  p.box(29, 146, 784, 1, C.panel2);
+  p.box(512, 148, 1, 247, C.panel2);
+  p.box(421, 44, 1, 99, C.panel2);
+  // Safety first is a broadcast warning rail, not a free-form card.
+  shortBlock(p, { x: 29, y: 402, w: 784, h: 59,
+    title: "Sécurité / vigilance", value: brief.safety,
+    accent: C.gold, marker: "00 / VIGILANCE" });
+  // Text-led left column; right column becomes a tactical football pitch.
+  shortBlock(p, { x: 29, y: 269, w: 482, h: 128,
+    title: "Service client", value: brief.attack,
+    accent: C.blue, marker: "01 / PROMESSE" });
+  shortBlock(p, { x: 29, y: 149, w: 482, h: 115,
+    title: "Expédition / Ramasse & Emballage", value: brief.midfield,
+    accent: C.aqua, marker: "02 / FLUX" });
+  shortBlock(p, { x: 523, y: 149, w: 290, h: 115,
+    title: "SST", value: brief.defense,
+    accent: C.red, marker: "03 / PROTECTION" });
+  shortBlock(p, { x: 29, y: 44, w: 384, h: 99,
+    title: "Priorités opérationnelles", value: brief.priorities,
+    accent: C.gold, marker: "04 / PRIORITÉS" });
+  shortBlock(p, { x: 428, y: 44, w: 385, h: 99,
+    title: "Décisions / arbitrages", value: brief.decisions,
+    accent: C.aqua, marker: "05 / DÉCISIONS" });
+  // Tactical board: explicitly decorative (no invented travel/KPI claims).
+  p.text(535, 382, 8.8, "LECTURE TACTIQUE DU MATCH", C.navyInk, true);
+  p.box(535, 278, 263, 98, C.panel);
+  p.outline(542, 284, 249, 86, C.blue, .7);
+  p.line(666, 284, 666, 370, C.blue, .7);
+  p.circle(666, 327, 19, C.blue, .7);
+  p.outline(542, 303, 25, 49, C.blue, .7);
+  p.outline(766, 303, 25, 49, C.blue, .7);
+  for (const [x, y, c, name] of [[602,327,C.gold,"1"],[669,350,C.aqua,"2"],[740,312,C.red,"3"]]) {
+    p.dot(x, y, 11, c);
+    p.text(x, y - 3.3, 10.2, name, C.navyInk, true, "center");
+  }
+  p.line(613, 327, 656, 350, C.gold, 1.4, [3, 2]);
+  p.line(680, 350, 728, 314, C.aqua, 1.4, [3, 2]);
+  p.text(536, 272, 6.7, "1 CLIENT     2 FLUX     3 SST", C.slateInk, true);
+
   const a = m.causerie?.attachmentCounts ?? {};
   if (Object.values(a).some(count => Number(count) > 0)) {
     p.text(36, 34, 7.5,
       `Captures sur le site : Service client ${a.attack ?? 0} / Expedition ${a.midfield ?? 0} / SST ${a.defense ?? 0}`, C.muted);
   }
 }
+
 export function renderMatchPdf(model) {
   if (!model?.agency?.code || !model?.match?.date) throw new MatchExportError(400, "MATCH invalide.");
   const m = { ...model, pdfProfile: effectivePdfProfile(model.pdfProfile, model.visibleIndicators, model.match.date) };
