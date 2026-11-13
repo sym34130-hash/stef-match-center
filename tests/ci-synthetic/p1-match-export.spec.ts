@@ -322,6 +322,65 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await diagnostic.locator(".diagnostic-more > summary").click();
   await expect(diagnostic.locator(".diagnostic-top5 > li")).toHaveCount(1);
 
+  // Regression: the expanded ranking must never print two texts on top of
+  // each other, including unusually long journey codes on narrow screens.
+  const shortTrip = chartSnapshot.zonageDiagnostic.top5[0];
+  chartSnapshot.zonageDiagnostic = {
+    ...chartSnapshot.zonageDiagnostic,
+    top5: [
+      { ...shortTrip, travelCode: "VOYAGE-AVEC-UN-CODE-EXCEPTIONNELLEMENT-LONG", latePositions: 3 },
+      ...[2, 3, 4, 5].map((n) => ({ ...shortTrip, travelCode: `CI-TRIP-${n}`, latePositions: Math.max(1, 6 - n) })),
+    ],
+  };
+  await openDiagnostic();
+  await diagnostic.locator(".diagnostic-more > summary").click();
+  const ranking = diagnostic.locator(".diagnostic-ranking");
+  await expect(ranking.locator(".diagnostic-top5 > li")).toHaveCount(5);
+  for (const width of [320, 390, 768, 1024, 1536]) {
+    await page.setViewportSize({ width, height: width < 400 ? 740 : 864 });
+    const geometry = await ranking.evaluate((root) => {
+      const rect = (element) => element.getBoundingClientRect();
+      const textRect = (element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return range.getBoundingClientRect();
+      };
+      const overlap = (a, b) => Math.min(a.right,b.right)-Math.max(a.left,b.left)>1
+        && Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1;
+      const bounds = rect(root);
+      const rows = Array.from(root.querySelectorAll(".diagnostic-top5 > li"));
+      const measured = rows.map(row => {
+        const box = rect(row);
+        const code = textRect(row.querySelector(".diagnostic-trip-main strong"));
+        const count = textRect(row.querySelector(".diagnostic-trip-main > span"));
+        const button = row.querySelector(".diagnostic-detail-button");
+        const arrow = button ? rect(button) : null;
+        return {
+          inSection: box.left >= bounds.left - 2 && box.right <= bounds.right + 2,
+          noOverlap: !overlap(code,count) && (!arrow || (!overlap(code,arrow) && !overlap(count,arrow))),
+          inRow: code.left >= box.left - 2 && code.right <= box.right + 2
+            && count.left >= box.left - 2 && count.right <= box.right + 2,
+          top: box.top, bottom: box.bottom,
+        };
+      });
+      return {
+        measured,
+        headerEndsBeforeRows: rect(root.querySelector("h4")).bottom <= measured[0].top,
+        noInterRowOverlap: measured.every((item,index) => !index || item.top >= measured[index-1].bottom-1),
+        noPageOverflow: document.documentElement.scrollWidth <= window.innerWidth+1,
+      };
+    });
+    expect(geometry.measured, `${width}px should contain five rows`).toHaveLength(5);
+    expect(geometry.headerEndsBeforeRows, `${width}px heading/ranking collision`).toBe(true);
+    expect(geometry.noInterRowOverlap, `${width}px adjacent ranking rows collide`).toBe(true);
+    expect(geometry.noPageOverflow, `${width}px page overflow`).toBe(true);
+    for (const [index,row] of geometry.measured.entries()) {
+      expect(row.inSection, `${width}px row ${index} exceeds ranking`).toBe(true);
+      expect(row.noOverlap, `${width}px row ${index} overlaps text or button`).toBe(true);
+      expect(row.inRow, `${width}px row ${index} text outside card`).toBe(true);
+    }
+  }
+
   chartSnapshot.zonageDiagnostic = {
     ...chartSnapshot.zonageDiagnostic,
     latePositions: 0, top5: [], details: [], unqualifiablePositions: 0,
@@ -329,8 +388,14 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await openDiagnostic();
   await expect(diagnostic.locator(".diagnostic-big-number")).toHaveText("0");
   await expect(diagnostic.locator(".diagnostic-priority")).toContainText("Aucun voyage en retard");
-  chartSnapshot.zonageDiagnostic = { ...chartSnapshot.zonageDiagnostic, state: "indisponible" };
+  chartSnapshot.zonageDiagnostic = {
+    ...chartSnapshot.zonageDiagnostic,
+    state: "indisponible", onTimePositions: 0, qualifiablePositions: 0,
+    unqualifiablePositions: 7, receivedPositions: 7,
+  };
   await openDiagnostic();
   await expect(diagnostic.locator(".diagnostic-big-number")).toHaveText("—");
   await expect(diagnostic.locator(".diagnostic-priority")).toContainText("Analyse indisponible");
+  await expect(diagnostic.locator(".diagnostic-unknown")).toContainText("7 positions à vérifier");
+  await expect(diagnostic.locator(".diagnostic-unknown")).toContainText("ne sont pas comptées comme des retards");
 });
