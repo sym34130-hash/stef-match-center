@@ -276,4 +276,61 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
   await expect(chartPanel.locator(".performance-chart-no-data-message")).toContainText("Aucune opération éligible");
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("Volumes non disponibles");
+
+  // Lot B: the first diagnostic screen exposes three facts only; all details
+  // remain optional. Synthetic data only, never a real agency snapshot.
+  chartSnapshot.zonageDiagnostic = {
+    ...(chartSnapshot.zonageDiagnostic ?? {}),
+    state: "disponible",
+    night: chartSnapshot.zonageDiagnostic?.night ?? null,
+    latePositions: 3,
+    onTimePositions: 2,
+    qualifiablePositions: 5,
+    unqualifiablePositions: 2,
+    receivedPositions: 7,
+    anomalyRate: 60,
+    coverageRate: 71.4,
+    targetMinutes: 30,
+    top5: [{
+      travelCode: "CI-TRIP", latePositions: 3, onTimePositions: 2,
+      unqualifiablePositions: 2, qualifiablePositions: 5, receivedPositions: 7,
+      anomalyRate: 60, coverageRate: 71.4,
+    }],
+    travels: [],
+    details: [{ travelCode: "CI-TRIP", position: "CI-P01", classification: "hors_delai", delaySeconds: 2100 }],
+  };
+  const openDiagnostic = async () => {
+    await page.reload();
+    await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
+    await nav.getByRole("button", { name: "Aller à Statistiques du match", exact: true }).click();
+    await page.locator(".operational-charts-carousel-dots")
+      .getByRole("tab", { name: "Afficher Diagnostic opérationnel" }).click();
+  };
+  await openDiagnostic();
+  const diagnostic = page.locator(".operational-diagnostic-card");
+  await expect(diagnostic.locator(".diagnostic-big-number")).toHaveText("3");
+  await expect(diagnostic.locator(".diagnostic-priority")).toContainText("CI-TRIP");
+  await expect(diagnostic.locator(".diagnostic-priority")).toContainText("3 positions en retard");
+  await expect(diagnostic.locator(".diagnostic-unknown")).toContainText("2 positions à vérifier");
+  await expect(diagnostic.locator(".diagnostic-more")).not.toHaveAttribute("open", "");
+  await expect(diagnostic.locator(".diagnostic-ranking")).not.toBeVisible();
+  await diagnostic.getByRole("button", { name: "Voir les positions du voyage CI-TRIP" }).click();
+  const details = page.getByRole("dialog", { name: "Positions à examiner · CI-TRIP" });
+  await expect(details).toBeVisible();
+  await expect(details.locator(".zonage-detail-list li")).toHaveCount(1);
+  await details.getByRole("button", { name: "Fermer les positions à examiner" }).click();
+  await diagnostic.locator(".diagnostic-more > summary").click();
+  await expect(diagnostic.locator(".diagnostic-top5 > li")).toHaveCount(1);
+
+  chartSnapshot.zonageDiagnostic = {
+    ...chartSnapshot.zonageDiagnostic,
+    latePositions: 0, top5: [], details: [], unqualifiablePositions: 0,
+  };
+  await openDiagnostic();
+  await expect(diagnostic.locator(".diagnostic-big-number")).toHaveText("0");
+  await expect(diagnostic.locator(".diagnostic-priority")).toContainText("Aucun voyage en retard");
+  chartSnapshot.zonageDiagnostic = { ...chartSnapshot.zonageDiagnostic, state: "indisponible" };
+  await openDiagnostic();
+  await expect(diagnostic.locator(".diagnostic-big-number")).toHaveText("—");
+  await expect(diagnostic.locator(".diagnostic-priority")).toContainText("Analyse indisponible");
 });
