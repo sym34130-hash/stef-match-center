@@ -18,7 +18,7 @@ function nightLabel(night: OperatingNight | null | undefined) {
 const duration = (seconds: number | null | undefined) => seconds == null ? "Indisponible" : formatKpiDuration(seconds);
 const compactDuration = (seconds: number) => {
   const rounded = Math.max(0, Math.round(seconds));
-  return rounded < 60 ? `${rounded}s` : `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
+  return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
 };
 // Keep historical snapshots intact while presenting their legacy warning neutrally.
 const warningLabel = (warning: string) => warning.replace(/^(\d+) opération\(s\) d'autres nuits exclues des nouvelles analyses\.$/, "$1 opération(s) appartenant à d'autres périodes d'exploitation exclues du diagnostic.");
@@ -35,10 +35,10 @@ export function ReceptionHourlyChart({ snapshot }: { snapshot: Snapshot }) {
       <div><h3>Temps de réception par créneau</h3><p>Moyenne des voyages réceptionnés éligibles commencés dans l'heure</p></div>
       {analysis && <span className="analysis-target">Cible {duration(analysis.targetSeconds)}/position</span>}
     </header>
-    <p className="analysis-provenance">{nightLabel(analysis?.night)} · Même périmètre que les duels gagnés (15 positions minimum, hors activité AQ). Hauteur : moyenne en secondes/position · Au-dessus : temps moyen/position · Dans les barres : positions distinctes.</p>
+    <p className="analysis-provenance">{nightLabel(analysis?.night)} · Même périmètre que les duels gagnés (15 positions minimum, hors activité AQ). Hauteur : moyenne par position · Axe et valeurs : minutes:secondes (3:26 = 206 secondes) · Dans les barres : positions distinctes.</p>
     {!available ? <p className="analysis-empty" role="status">Analyse indisponible : aucune réception exploitable sur la période retenue.</p> : <>
       <div className="reception-hour-chart" role="group" aria-label="Histogramme des temps moyens, en secondes par position">
-        <div className="reception-hour-axis" aria-hidden="true"><span>{ceiling} s</span><span>{ceiling / 2} s</span><span>0 s</span></div>
+        <div className="reception-hour-axis" aria-hidden="true"><span>{compactDuration(ceiling)}</span><span>{compactDuration(ceiling / 2)}</span><span>{compactDuration(0)}</span></div>
         <div className="reception-hour-plot" style={{ "--target-height": `${analysis.targetSeconds / ceiling * 100}%` } as CSSProperties}>
           <div className="reception-hour-target" aria-hidden="true" />
           <div className="reception-hour-bars" style={{ gridTemplateColumns: `repeat(${slots.length}, minmax(0, 1fr))` }}>

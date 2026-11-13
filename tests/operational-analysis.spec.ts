@@ -114,13 +114,16 @@ test("analyses : quatre slides, rendu normal/Célébration, responsive et détai
           await expect(graph).toBeVisible();
           await expect(graph.getByRole("button")).toHaveCount(snapshot.unloadingHourlyAnalysis!.items.length);
           const analysis = snapshot.unloadingHourlyAnalysis!;
+          const ceiling = Math.max(60, Math.ceil(Math.max(analysis.targetSeconds, ...analysis.items.map(slot => slot.meanSecondsPerPosition ?? 0)) * 1.2 / 60) * 60);
+          const asMinutesSeconds = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+          await expect(graph.locator(".reception-hour-axis span")).toHaveText([asMinutesSeconds(ceiling), asMinutesSeconds(ceiling / 2), "0:00"]);
           for (const [slotIndex, slot] of analysis.items.entries()) {
             const button = graph.getByRole("button").nth(slotIndex);
             const value = button.locator(".reception-hour-value");
             const measured = slot.state === "disponible" && slot.meanSecondsPerPosition != null;
             const secs = measured ? Math.max(0, Math.round(slot.meanSecondsPerPosition!)) : null;
-            const expectedDuration = secs === null ? "—" : secs < 60
-              ? `${secs}s` : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+            const expectedDuration = secs === null ? "—"
+              : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
             await expect(value).toHaveText(expectedDuration);
             const inside = button.locator(".reception-hour-bar-volume");
             if (measured) await expect(inside).toHaveText(slot.distinctPositions.toLocaleString("fr-FR"));
