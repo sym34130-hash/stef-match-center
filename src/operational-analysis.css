@@ -348,19 +348,20 @@
   align-items: stretch;
   gap: 16px;
   min-width: 0;
-  margin-top: 16px;
+  margin-top: 20px;
 }
 .diagnostic-simple .diagnostic-ranking {
   grid-area: auto;
   display: block;
+  position: static;
+  flex: 0 0 auto;
   min-width: 0;
   width: 100%;
 }
-.diagnostic-simple .diagnostic-ranking h4 {
-  margin: 0 0 10px;
-  color: var(--navy-900);
-  font-size: 14px;
-  line-height: 1.35;
+/* Remove the legacy grid placement in celebration mode, too. */
+.match-page.is-celebration-mode .operational-diagnostic-card.diagnostic-simple .diagnostic-more-content > .diagnostic-ranking {
+  grid-area: auto;
+  position: static;
 }
 .diagnostic-simple .diagnostic-top5 {
   display: flex;
