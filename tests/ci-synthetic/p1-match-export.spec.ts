@@ -344,6 +344,9 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await openDiagnostic();
   await diagnostic.locator(".diagnostic-more > summary").click();
   const ranking = diagnostic.locator(".diagnostic-ranking");
+  await expect(ranking).toHaveAttribute("aria-label", "Voyages avec le plus de retards");
+  // The duplicate visible heading caused the reported title/row overlap.
+  await expect(ranking.locator("h4")).toHaveCount(0);
   await expect(ranking.locator(".diagnostic-top5 > li")).toHaveCount(5);
   for (const width of [320, 390, 768, 1024, 1536]) {
     await page.setViewportSize({ width, height: width < 400 ? 740 : 864 });
@@ -373,15 +376,16 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
           top: box.top, bottom: box.bottom,
         };
       });
+      const summary = root.closest(".diagnostic-more")?.querySelector(":scope > summary");
       return {
         measured,
-        headerEndsBeforeRows: rect(root.querySelector("h4")!).bottom <= measured[0].top,
+        summaryAboveRows: summary ? rect(summary).bottom + 8 <= measured[0].top : false,
         noInterRowOverlap: measured.every((item,index) => !index || item.top >= measured[index-1].bottom-1),
         noPageOverflow: document.documentElement.scrollWidth <= window.innerWidth+1,
       };
     });
     expect(geometry.measured, `${width}px should contain five rows`).toHaveLength(5);
-    expect(geometry.headerEndsBeforeRows, `${width}px heading/ranking collision`).toBe(true);
+    expect(geometry.summaryAboveRows, `${width}px disclosure label/ranking collision`).toBe(true);
     expect(geometry.noInterRowOverlap, `${width}px adjacent ranking rows collide`).toBe(true);
     expect(geometry.noPageOverflow, `${width}px page overflow`).toBe(true);
     for (const [index,row] of geometry.measured.entries()) {
