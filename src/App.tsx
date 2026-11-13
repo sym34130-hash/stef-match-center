@@ -4725,7 +4725,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                   <li><strong>Déchargements par heure.</strong> Comparez les taux horaires. Les voyages arrivés indiquent les codes dont la première opération connue se situe dans l’heure ; cliquez pour les consulter. Agrandir ouvre le graphique sans déplacer la carte ; X ou Échap le ferme.</li>
                   <li><strong>Duels gagnés et analyse horaire.</strong> Repérez les voyages hors cible et comparez les temps moyens de réception par créneau.</li>
                   <li><strong>Tirs cadrés.</strong> Consultez la part des voyages de chargement dans le temps cible et le détail des voyages hors cible.</li>
-                  <li><strong>Diagnostic opérationnel.</strong> Distinguez retards confirmés et délais inconnus, puis examinez les voyages du FLOP.</li>
+                  <li><strong>Diagnostic opérationnel.</strong> Lisez les retards confirmés, le voyage prioritaire et les positions à vérifier. Ouvrez les détails seulement si nécessaire.</li>
                 </ol>
               </section>
               <div className="guide-legend"><span className="legend-dot green" /> Vert = acquis ou action positive <span className="legend-dot orange" /> Orange = à surveiller <span className="legend-dot red" /> Rouge = action prioritaire</div>
@@ -4736,16 +4736,14 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
 
           {section === "anomalies" && (
             <GuidePanel eyebrow="05 · Analyser les anomalies" title="Repérer les retards, puis vérifier les faits" icon={ListFilter}>
-              <p>Dans Feuille de match → Statistiques du match → Lecture opérationnelle, ouvrez la cinquième slide : <strong>Diagnostic opérationnel</strong>. Vérifiez la date et les heures affichées avant de comparer les résultats.</p>
+              <p>Dans Feuille de match → Statistiques du match → Lecture opérationnelle, ouvrez la quatrième vignette : <strong>Diagnostic opérationnel</strong>. Vous voyez immédiatement les retards confirmés et le voyage à contrôler en premier. Vérifiez la période indiquée.</p>
               <dl className="guide-diagnostic-definitions">
-                <div><dt>Positions hors délai</dt><dd>Positions dont le zonage a dépassé le temps autorisé. Le sous-texte rapporte ces retards aux seules positions vérifiables.</dd></div>
-                <div><dt>Délais non vérifiables</dt><dd>Positions pour lesquelles le site ne peut pas calculer un délai fiable. La couverture indique la part des positions réceptionnées dont le délai est vérifiable.</dd></div>
-                <div><dt>Premier voyage à examiner</dt><dd>Voyage qui concentre le plus grand nombre de retards confirmés. Commencez par son détail ; il ne s’agit pas d’une cause automatiquement identifiée.</dd></div>
+                <div><dt>Positions en retard</dt><dd>Nombre de positions dont le zonage dépasse l'objectif, parmi celles dont le délai est vérifiable.</dd></div>
+                <div><dt>À contrôler en premier</dt><dd>Voyage avec le plus grand nombre de retards confirmés. Cliquez sur « Voir les positions » pour vérifier les faits.</dd></div>
+                <div><dt>Positions à vérifier</dt><dd>Positions dont le délai est inconnu. Elles ne sont jamais comptées comme des retards confirmés.</dd></div>
               </dl>
-              <section className="guide-topic"><h4>FLOP Zonage - TOP 5</h4>
-                <p>Le FLOP présente les cinq voyages ayant le plus de positions en retard de zonage. Le classement se fait par <strong>nombre de retards</strong>, pas par pourcentage.</p>
-                <div className="guide-zonage-legend" aria-label="Légende du FLOP"><span><i className="is-late" aria-hidden="true" /><strong>Rouge</strong> : en retard</span><span><i className="is-ontime" aria-hidden="true" /><strong>Vert</strong> : dans le délai</span><span><i className="is-unknown" aria-hidden="true" /><strong>Gris</strong> : délai inconnu</span></div>
-                <p>Chaque barre représente toutes les positions réceptionnées du voyage : les trois segments totalisent 100 %. Une barre très grise contient beaucoup de délais non vérifiables. Une part rouge plus grande ne signifie pas forcément un plus grand nombre de retards.</p>
+              <section className="guide-topic"><h4>Voir les détails (facultatif)</h4>
+                <p>Le lien « Voir les détails » ouvre la liste des voyages en retard, les chiffres complémentaires et les explications. Le classement des cinq voyages est établi par <strong>nombre de retards</strong>, jamais par pourcentage.</p>
               </section>
               <div className="guide-callout info"><CircleHelp size={20} /><span><strong>Délai impossible à calculer avec les données disponibles. Ces positions ne sont pas comptées comme des retards.</strong> Une opération de zonage peut être introuvable ou son association à la réception incertaine. Non vérifiable ne veut donc pas automatiquement dire non zoné.</span></div>
               <details className="guide-topic guide-disclosure"><summary>Comprendre les motifs « Non qualifiable »</summary>
@@ -4754,9 +4752,9 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
               </details>
               <section className="guide-topic"><h4>Du constat au brief</h4>
                 <ol className="guide-steps compact">
-                  <li><b>Repérez le premier voyage du FLOP.</b><span>Utilisez la flèche à droite de sa ligne pour ouvrir ses positions à examiner.</span></li>
-                  <li><b>Vérifiez les positions en retard.</b><span>Le panneau indique les positions reçues, conformes et non vérifiables, le taux d’anomalie et la couverture. La liste détaille les retards et les positions non qualifiables, avec le délai ou le motif disponible.</span></li>
-                  <li><b>Préparez la consigne après vérification terrain.</b><span>Fermez le panneau avec X ou Échap. Le bouton Voir les positions à examiner ouvre le détail global ; Qualité des données affiche les avertissements. Le site aide à examiner les faits, pas à déterminer automatiquement leur cause.</span></li>
+                  <li><b>Lisez les retards confirmés.</b><span>Le grand chiffre indique les positions ayant réellement dépassé le délai autorisé.</span></li>
+                  <li><b>Contrôlez le voyage prioritaire.</b><span>Utilisez « Voir les positions » pour examiner les retards et les délais inconnus, sans en déduire automatiquement une cause.</span></li>
+                  <li><b>Vérifiez si nécessaire les autres voyages.</b><span>Ouvrez « Voir les détails » puis la liste des voyages. « Problèmes de données » affiche les avertissements. Préparez la consigne après vérification terrain, pas sur une cause supposée.</span></li>
                 </ol>
               </section>
               <details className="guide-topic guide-disclosure"><summary>Réception par créneau horaire : que mesure le graphique ?</summary>

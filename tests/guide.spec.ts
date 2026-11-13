@@ -79,10 +79,10 @@ test("Guide V2 : huit rubriques, progression et six agences avec/sans Excel", as
       expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width + 1);
       expect(await guide.locator(".guide-nav-item, .guide-panel-heading, .guide-actions button, .guide-steps li").evaluateAll(elements => elements.every(el => el.scrollWidth <= el.clientWidth + 1))).toBe(true);
       if (index === 4 && agency.code === "058" && imported) {
-        await expect(guide.getByRole("heading", { name: "FLOP Zonage - TOP 5", exact: true })).toBeVisible();
+        await expect(guide.getByRole("heading", { name: "Voir les détails (facultatif)", exact: true })).toBeVisible();
         await expect(guide).toContainText("nombre de retards");
-        await expect(guide).toContainText("Les trois segments totalisent 100 %", { ignoreCase: true });
-        await expect(guide.locator(".guide-zonage-legend > span")).toHaveCount(3);
+        await expect(guide).toContainText("À contrôler en premier");
+        await expect(guide).toContainText("quatrième vignette");
         await expect(guide).toContainText("Ces positions ne sont pas comptées comme des retards.");
         await expect(guide).not.toContainText(/SORG02|184|188/);
         for (const summary of await guide.locator(".guide-disclosure summary").all()) {
