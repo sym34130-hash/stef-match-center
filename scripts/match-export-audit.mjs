@@ -64,7 +64,7 @@ for (const fixture of fixtures) {
         won, total, rate: Math.round(won / total * 1000) / 10 };
     }),
     unloadingHourlyAnalysis: { state: "disponible", targetSeconds: league.criteria.unloadingSeconds,
-      items: Array.from({ length: 23 }, (_, i) => ({
+      items: Array.from({ length: 10 }, (_, i) => ({
         start: new Date(Date.UTC(2026, 10, 10, 12 + i)).toISOString(),
         label: String((13 + i) % 24).padStart(2, "0") + "h",
         meanSecondsPerPosition: 22+i*3, distinctPositions: 10+i, state: "disponible" })) },
@@ -141,7 +141,7 @@ for (const fixture of fixtures) {
       checks.push(["actual selected period end", "22h30"]);
     } else if (chartId === "reception-time") {
       checks.push(["reception target", "Cible : " + league.criteria.unloadingSeconds + " s/poz"]);
-      checks.push(["positions per slot", "Positions/créneau : 10 a 32"]);
+      checks.push(["positions per slot", "Positions/créneau : 10 a 19"]);
     } else if (chartId === "loading") {
       checks.push(["loading target", "Temps par position <= " + league.criteria.loadingSeconds + " s/poz"]);
       checks.push(["loading volume", "85 / 100"]);
