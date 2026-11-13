@@ -106,8 +106,25 @@ try {
         JSON.stringify({labelRect,targetRect,mean:slot.meanSecondsPerPosition,target:60}));
       assert.ok(labelRect.x>=chartPlot.x-3 && labelRect.x+labelRect.width<=chartPlot.x+chartPlot.width+3,
         viewport.width+"px: mean duration must not extend outside graph");
-      assert.ok(await value.evaluate(el=>el.scrollWidth<=el.clientWidth+1),
-        viewport.width+"px: mean duration must not be cut off");
+      const renderedTime = await value.evaluate(el => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const textRect = range.getBoundingClientRect();
+        const plotRect = el.closest(".reception-hour-plot").getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return {
+          left: textRect.left, right: textRect.right, width: textRect.width,
+          plotLeft: plotRect.left, plotRight: plotRect.right,
+          overflow: style.overflowX,
+        };
+      });
+      assert.equal(renderedTime.overflow, "visible",
+        viewport.width+"px: average duration must not be masked by its slot");
+      assert.ok(renderedTime.width>0
+        && renderedTime.left>=renderedTime.plotLeft-2
+        && renderedTime.right<=renderedTime.plotRight+2,
+        viewport.width+"px: mean duration rendered text must fit inside graph: "+
+        JSON.stringify(renderedTime));
       const volume=b.locator(".reception-hour-bar-volume");
       assert.equal((await volume.innerText()).trim(),String(slot.distinctPositions),
         "Inside each bar must be the count of distinct positions");
