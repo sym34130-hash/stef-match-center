@@ -73,8 +73,9 @@ test("jour/nuit : dates, libellés et anciens avertissements dans les deux modes
       await expect(page.locator(".reception-hourly-analysis")).toContainText(`${start.replace(":", "h")}–${end.replace(":", "h")}`);
       await tab(page, "Diagnostic opérationnel").click();
       const diagnostic = page.locator(".operational-diagnostic-card");
-      await expect(diagnostic).toContainText("Période d'exploitation retenue");
+      await expect(diagnostic).toContainText("Période analysée");
       await expect(diagnostic).toContainText("réceptions hors cible — période analysée");
+      await diagnostic.locator(".diagnostic-more > summary").click();
       await diagnostic.locator(".diagnostic-warnings summary").click();
       await expect(diagnostic).toContainText("2 opération(s) appartenant à d'autres périodes d'exploitation exclues du diagnostic.");
       await expect(diagnostic).not.toContainText(/nuit/);
@@ -158,40 +159,35 @@ test("analyses : quatre slides, rendu normal/Célébration, responsive et détai
           expect(bounds!.x + bounds!.width, `${width} diagnostic right`).toBeLessThanOrEqual(viewportBounds!.x + viewportBounds!.width + 2);
           expect(bounds!.x, `${width} diagnostic screen left`).toBeGreaterThanOrEqual(-1);
           expect(bounds!.x + bounds!.width, `${width} diagnostic screen right`).toBeLessThanOrEqual(width + 1);
-          await expect(diagnostic.locator(".diagnostic-top5 > li")).toHaveCount(snapshot.zonageDiagnostic!.top5.length);
-          await expect(diagnostic.locator(".diagnostic-metrics dd").nth(0)).toHaveText(String(snapshot.zonageDiagnostic!.latePositions));
-          for (const metric of await diagnostic.locator(".diagnostic-metrics dd").all()) {
-            expect(await metric.evaluate(el => el.scrollWidth <= el.clientWidth + 1 && el.clientHeight <= parseFloat(getComputedStyle(el).fontSize) * 1.2), "Compteur lisible sur une seule ligne").toBe(true);
-          }
-          for (const label of await diagnostic.locator(".diagnostic-metrics dt").all()) {
-            expect(await label.evaluate(el => {
-              const range = document.createRange(); range.setStart(el.firstChild!, 0); range.setEnd(el.firstChild!, el.textContent!.indexOf(" "));
-              return range.getClientRects().length;
-            }), "Le premier mot du libellé ne doit pas être cassé").toBe(1);
-          }
-          await expect(diagnostic.getByRole("heading", { name: "FLOP Zonage - TOP 5", exact: true })).toBeVisible();
-          await expect(diagnostic.locator(".diagnostic-coverage-note")).toHaveText("Gris = délai impossible à vérifier. Ces positions ne sont pas comptées comme des retards.");
-          const priority = snapshot.anomalySummary!.topZonageTravel!;
-          await expect(diagnostic.getByRole("region", { name: "Priorité du brief" })).toContainText(`Premier voyage à examiner : ${priority.travelCode} — ${priority.latePositions} retards`);
+          // Three-second reading: only confirmed delays, first journey and unknown delays.
           const z = snapshot.zonageDiagnostic!;
-          expect(z.latePositions + z.onTimePositions + z.unqualifiablePositions).toBe(z.receivedPositions);
-          expect(z.latePositions + z.onTimePositions).toBe(z.qualifiablePositions);
+          await expect(diagnostic.locator(".diagnostic-big-number")).toHaveText(String(z.latePositions));
+          await expect(diagnostic.locator(".diagnostic-essential")).toContainText("positions en retard");
+          await expect(diagnostic.locator(".diagnostic-essential")).toContainText(`sur ${z.qualifiablePositions} positions vérifiables`);
+          await expect(diagnostic.locator(".diagnostic-priority")).toContainText(z.top5[0].travelCode);
+          await expect(diagnostic.locator(".diagnostic-priority")).toContainText(`${z.top5[0].latePositions} positions en retard`);
+          await expect(diagnostic.locator(".diagnostic-more")).not.toHaveAttribute("open", "");
+          await expect(diagnostic.locator(".diagnostic-ranking")).not.toBeVisible();
+          if (z.unqualifiablePositions > 0) {
+            await expect(diagnostic.locator(".diagnostic-unknown")).toContainText(`${z.unqualifiablePositions} positions à vérifier`);
+            await expect(diagnostic.locator(".diagnostic-unknown")).toContainText("ne sont pas comptées comme des retards");
+          }
           if (realFile) {
             expect([z.latePositions, z.onTimePositions, z.unqualifiablePositions, z.qualifiablePositions, z.receivedPositions, z.anomalyRate, z.coverageRate]).toEqual([184, 304, 188, 488, 676, 37.7, 72.2]);
             expect(z.top5.map(t => [t.travelCode, t.latePositions, t.onTimePositions, t.unqualifiablePositions, t.receivedPositions])).toEqual([
               ["SORG02", 19, 13, 0, 32], ["710000", 16, 5, 6, 27], ["TOUL00", 14, 1, 5, 20], ["VENDAR", 13, 1, 24, 38], ["MR3402", 12, 14, 3, 29],
             ]);
           }
-          for (const [rank, trip] of snapshot.zonageDiagnostic!.top5.entries()) {
+          await diagnostic.locator(".diagnostic-more > summary").click();
+          await expect(diagnostic.locator(".diagnostic-ranking")).toBeVisible();
+          await expect(diagnostic.locator(".diagnostic-top5 > li")).toHaveCount(z.top5.length);
+          for (const [rank, trip] of z.top5.entries()) {
             const row = diagnostic.locator(".diagnostic-top5 > li").nth(rank);
             await expect(row.locator(".diagnostic-trip-main strong")).toHaveText(trip.travelCode);
-            await expect(row.locator(".diagnostic-trip-main > span")).toHaveAttribute("aria-label", `${trip.latePositions} positions hors délai sur ${trip.receivedPositions} reçues`);
-            const widths = await row.locator(".diagnostic-bar-track > span").evaluateAll(segments => segments.map(segment => parseFloat((segment as HTMLElement).style.width)));
-            expect(widths).toHaveLength(3);
-            expect(widths.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 4);
-            for (const [i, value] of [trip.latePositions, trip.onTimePositions, trip.unqualifiablePositions].entries()) expect(widths[i]).toBeCloseTo(value / trip.receivedPositions * 100, 4);
+            await expect(row.locator(".diagnostic-trip-main > span")).toContainText(`${trip.latePositions} positions en retard`);
+            await expect(row.locator(".diagnostic-bar-track")).toHaveCount(0);
           }
-          const first = snapshot.zonageDiagnostic!.top5[0];
+          const first = z.top5[0];
           const trigger = diagnostic.getByRole("button", { name: `Voir les positions du voyage ${first.travelCode}`, exact: true });
           await trigger.focus(); await page.keyboard.press("Enter");
           const dialog = page.getByRole("dialog", { name: `Positions à examiner · ${first.travelCode}`, exact: true });
@@ -222,7 +218,7 @@ test("analyses : quatre slides, rendu normal/Célébration, responsive et détai
         }
       }
       await carousel(page).focus(); await page.keyboard.press("Home"); await expect(tab(page, labels[0])).toHaveAttribute("aria-selected", "true");
-      await page.keyboard.press("End"); await expect(tab(page, labels[4])).toHaveAttribute("aria-selected", "true");
+      await page.keyboard.press("End"); await expect(tab(page, labels[3])).toHaveAttribute("aria-selected", "true");
       if (info.project.use.hasTouch) {
         const diagnostic = page.locator(".operational-diagnostic-card");
         const settle = () => carousel(page).evaluate(el => new Promise<void>(resolve => {
@@ -253,11 +249,11 @@ test("analyses : quatre slides, rendu normal/Célébration, responsive et détai
         await swipe(x, y, box.width * .8, 0);
         await settle();
         await expect.poll(() => carousel(page).evaluate(el => el.scrollLeft)).toBeLessThan(scrollBefore - 50);
-        await expect(tab(page, labels[4])).toHaveAttribute("aria-selected", "false");
-        await tab(page, labels[4]).tap();
+        await expect(tab(page, labels[3])).toHaveAttribute("aria-selected", "false");
+        await tab(page, labels[3]).tap();
         await diagnostic.locator("h3").scrollIntoViewIfNeeded();
         await settle();
-        await expect(tab(page, labels[4])).toHaveAttribute("aria-selected", "true");
+        await expect(tab(page, labels[3])).toHaveAttribute("aria-selected", "true");
         if (await diagnostic.evaluate(el => el.scrollHeight > el.clientHeight + 20)) {
           const current = (await diagnostic.boundingBox())!;
           const y = Math.min(height - 40, Math.max(100, current.y + 200));
@@ -280,21 +276,21 @@ test("analyses : ancien snapshot, absence de données et absence d'anomalies", a
   await page.route("**/api/agencies/01K/snapshot**", route => route.fulfill({ json: { snapshot } }));
   await login(page); await stats(page); await tab(page, "Diagnostic opérationnel").click();
   const diagnostic = page.locator(".operational-diagnostic-card");
-  await expect(diagnostic.locator(".diagnostic-metrics dd")).toHaveText(["—", "—"]);
+  await expect(diagnostic.locator(".diagnostic-big-number")).toHaveText("—");
   await expect(diagnostic).toContainText("Analyse indisponible");
   await tab(page, "% duels gagnés").click(); await expect(page.locator(".reception-hourly-analysis")).toContainText("Analyse indisponible");
   snapshot = fixture(); snapshot.zonageDiagnostic = { ...snapshot.zonageDiagnostic!, top5: [], latePositions: 0, anomalyRate: 0 };
   await page.getByRole("button", { name: "Actualiser", exact: true }).click();
   await tab(page, "Diagnostic opérationnel").click(); await expect(diagnostic).toContainText("Aucun voyage hors délai");
-  await expect(diagnostic.locator(".diagnostic-metrics dd").first()).toHaveText("0");
+  await expect(diagnostic.locator(".diagnostic-big-number")).toHaveText("0");
   snapshot.zonageDiagnostic = { ...snapshot.zonageDiagnostic!, state: "indisponible", qualifiablePositions: 0, coverageRate: 0, anomalyRate: null };
   await page.getByRole("button", { name: "Actualiser", exact: true }).click();
-  await expect(diagnostic.locator(".diagnostic-metrics dd").first()).toHaveText("—");
+  await expect(diagnostic.locator(".diagnostic-big-number")).toHaveText("—");
   snapshot = fixture();
   snapshot.zonageDiagnostic!.top5[0] = { ...snapshot.zonageDiagnostic!.top5[0], receivedPositions: 0 };
   await page.getByRole("button", { name: "Actualiser", exact: true }).click();
-  await expect(diagnostic.locator(".diagnostic-top5 > li").first()).toContainText("Répartition indisponible");
-  await expect(diagnostic.locator(".diagnostic-top5 > li").first().locator(".diagnostic-bar-track")).toHaveCount(0);
+  await expect(diagnostic.locator(".diagnostic-priority")).toContainText(snapshot.zonageDiagnostic!.top5[0].travelCode);
+  await expect(diagnostic.locator(".diagnostic-priority")).toContainText("positions en retard");
   snapshot = fixture();
   const laterNight = { ...snapshot.zonageDiagnostic!.night!, startDate: "2026-09-19", endDate: "2026-09-20", start: "2026-09-19T19:30:00.000Z", end: "2026-09-20T04:30:00.000Z" };
   snapshot.zonageDiagnostic = { ...snapshot.zonageDiagnostic!, night: laterNight };
@@ -331,6 +327,7 @@ test("analyses : seuils, plage, exclusions/réintégration et agences actualisé
   await page.locator(".league-card.gold").getByRole("button", { name: "Activer", exact: true }).click();
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click(); await stats(page);
   await tab(page, "Diagnostic opérationnel").click();
+  await page.locator(".diagnostic-more > summary").click();
   await page.locator(".diagnostic-method summary").click();
   await expect(page.locator(".diagnostic-method")).toContainText("cible 25 min");
   await page.getByLabel("Début", { exact: true }).selectOption("22:00"); await page.getByRole("button", { name: "Appliquer", exact: true }).click();
@@ -345,6 +342,7 @@ test("analyses : seuils, plage, exclusions/réintégration et agences actualisé
   await hide.click(); await expect(page.getByRole("button", { name: `Réintégrer ${code}`, exact: true })).toBeVisible();
   if (realFile) expect(snapshot.anomalySummary!.unloading.eligibleTravels).toBe(receptionBefore - 1);
   await tab(page, "Diagnostic opérationnel").click();
+  if (!await page.locator(".diagnostic-more").evaluate(el => el.hasAttribute("open"))) await page.locator(".diagnostic-more > summary").click();
   await expect(page.locator(".diagnostic-secondary")).toContainText(`/${snapshot.anomalySummary!.unloading.eligibleTravels} réceptions hors cible`);
   await page.getByRole("button", { name: `Réintégrer ${code}`, exact: true }).click();
   await expect(page.getByRole("button", { name: `Réintégrer ${code}`, exact: true })).toHaveCount(0);
@@ -356,6 +354,6 @@ test("analyses : seuils, plage, exclusions/réintégration et agences actualisé
   if (!independent) await switchButton.click();
   await other.route("**/api/agencies/04H/snapshot**", route => route.fulfill({ json: { snapshot: { ...fixture(), agency: { code: "04H", detectedCode: "04H", name: "Brive - 04H" }, zonageDiagnostic: undefined, anomalySummary: undefined, unloadingHourlyAnalysis: undefined } } }));
   await login(other, "04H"); await stats(other); await tab(other, "Diagnostic opérationnel").click();
-  await expect(other.locator(".diagnostic-metrics dd")).toHaveText(["—", "—"]);
+  await expect(other.locator(".diagnostic-big-number")).toHaveText("—");
   await independent?.close();
 });
