@@ -823,12 +823,12 @@ function compactScorePage(doc, m) {
   const score=m.score;
   const scored=score?.status==="available"?fmt(score.goalsFor):"Indisponible";
   const conceded=score?.status==="available"?fmt(score.goalsAgainst):"Indisponible";
-  const scoreSize=value=>value.length>8?17:value.length>3?38:58;
-  p.text(329,366,scoreSize(scored),scored,C.white,true,"center");
-  p.text(512,366,scoreSize(conceded),conceded,C.white,true,"center");
+  const scoreSize=value=>value.length>8?17:value.length>3?36:50;
+  p.text(329,378,scoreSize(scored),scored,C.white,true,"center");
+  p.text(512,378,scoreSize(conceded),conceded,C.white,true,"center");
   p.text(421,383,27,"-",C.gold,true,"center");
-  p.text(329,359,8.5,"BUTS MARQUÉS",C.aqua,true,"center");
-  p.text(512,359,8.5,"BUTS ENCAISSÉS",C.red,true,"center");
+  p.text(329,362,8.5,"BUTS MARQUÉS",C.aqua,true,"center");
+  p.text(512,362,8.5,"BUTS ENCAISSÉS",C.red,true,"center");
 
   // Crest-like football emblems with stylized ball; no actual club logo.
   for(const [cx,accent] of [[125,C.aqua],[717,C.red]]){
