@@ -2676,7 +2676,6 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
     };
   }, [arrivalDetail]);
   const openArrivals = (trigger: SVGTextElement, hour: string, codes: string[]) => {
-    setSelectedHour(hour);
     trigger.focus({ preventScroll: true });
     if (arrivalDetail?.hour === hour) { setArrivalDetail(null); return; }
     arrivalTrigger.current = trigger;
