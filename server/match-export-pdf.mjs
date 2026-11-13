@@ -564,6 +564,12 @@ function compactChart(p, m, chartId) {
       const tickX = x + hour / spanHours * w;
       p.text(tickX, 76, 7, String((axisStart + hour) % 24).padStart(2, "0") + "h", C.muted);
     }
+    if (periodEnd !== null && periodEnd % 60 !== 0) {
+      const endLabel = String(Math.floor(periodEnd / 60)).padStart(2, "0") + "h"
+        + String(periodEnd % 60).padStart(2, "0");
+      p.text(x + w, 76, 7.4, endLabel, C.gold, true, "right");
+      p.line(x + w, baseline, x + w, baseline + h, C.gold, 0.65);
+    }
     // Preserve both exact source labels in the printed recap, including
     // historical/synthetic snapshots whose numeric hour field is inconsistent.
     const first = rows[0], last = rows[rows.length - 1];
@@ -802,10 +808,9 @@ function compactScorePage(doc, m) {
   compactChart(p, m, m.pdfProfile.chartId);
 }
 function compactBriefPage(doc, m) {
-  const p = doc.add("02 / BRIEF DES SERVICES");
+  const p = doc.add("02 / LE PLAN DE JEU");
   p.text(36, 477, 20, "BRIEF OPERATIONNEL DU JOUR", C.white, true);
   p.box(29, 469, 784, 2, C.gold);
-  p.text(36, 487, 8.7, "LE PLAN DE JEU  /  SÉCURISER L'EXÉCUTION", C.gold, true);
   p.text(777, 479, 8, trim([m.causerie?.team, m.causerie?.manager].filter(Boolean).join(" / "), 42), C.muted, false, "right");
   const brief = effectiveBriefText(m);
   // Keep the exact labels of BRIEF ÉQUIPE, not the old football metaphors.
