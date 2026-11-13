@@ -6,11 +6,17 @@ import { effectivePdfProfile } from "./match-pdf-profile.mjs";
 
 const WIDTH = 842, HEIGHT = 595;
 const C = {
-  bg: [0.035, 0.082, 0.153], panel: [0.085, 0.185, 0.285],
-  panel2: [0.145, 0.29, 0.405], white: [1, 1, 1],
-  text: [0.85, 0.92, 0.98], muted: [0.63, 0.75, 0.84],
-  aqua: [0.49, 0.88, 0.80], blue: [0.58, 0.79, 0.95],
-  gold: [0.94, 0.78, 0.50], red: [1, 0.59, 0.53],
+  // V3: mid-navy broadcast palette. Lighter differentiated surfaces improve
+  // print contrast without changing the underlying operational data.
+  bg: [0.075, 0.145, 0.235], panel: [0.145, 0.265, 0.375],
+  panel2: [0.255, 0.395, 0.505], white: [1, 1, 1],
+  text: [0.94, 0.97, 1], muted: [0.78, 0.86, 0.92],
+  aqua: [0.47, 0.94, 0.83], blue: [0.69, 0.86, 1],
+  gold: [1, 0.82, 0.48], red: [1, 0.52, 0.49],
+  // Separate print surfaces create an editorial tactical-board contrast.
+  paper: [0.925, 0.958, 0.975], paperWarm: [0.995, 0.962, 0.895],
+  navyInk: [0.09, 0.20, 0.31], slateInk: [0.30, 0.40, 0.48],
+  pitchLine: [0.25, 0.39, 0.49],
 };
 const rgb = value => value.map(number => number.toFixed(3)).join(" ");
 const trim = (value, limit = 160) => String(value ?? "").replace(/[\r\n\t]/g, " ").trim().slice(0, limit);
@@ -64,12 +70,20 @@ class Page {
   constructor(title, m, number) {
     this.title = title; this.ops = []; this.images = []; this.number = number;
     this.box(0, 0, WIDTH, HEIGHT, C.bg);
+    // Stadium-inspired top rail and floodlight ticks: vector-only.
     this.box(0, HEIGHT - 8, WIDTH, 8, C.aqua);
+    this.box(0, HEIGHT - 14, 273, 6, C.panel2);
+    this.box(273, HEIGHT - 14, 296, 6, C.gold);
+    this.box(569, HEIGHT - 14, 273, 6, C.panel2);
+    for (let i = 0; i < 16; i++) {
+      this.box(35 + i * 48, 577, 21, 1, C.pitchLine);
+    }
     this.text(29, 552, 17, "STEF MATCH CENTER", C.white, true);
     this.text(29, 528, 10, title, C.aqua, true);
     this.text(813, 552, 12, `${m.agency.name} [${m.agency.code}]`, C.white, true, "right");
     this.text(813, 531, 10, `${m.league.label} / ${m.match.date} / ${m.match.timeRangeLabel}`, C.muted, false, "right");
-    this.box(29, 509, 784, 1, C.panel2);
+    this.box(29, 509, 784, 1.4, C.panel2);
+    this.box(29, 509, 160, 2.5, C.gold);
     this.box(29, 30, 784, 1, C.panel2);
     // The signed-in agency and the source agencies are different concepts.
     // Show provenance on both printed pages without changing access scope.
@@ -81,6 +95,33 @@ class Page {
     this.text(812, 17, 8, String(number), C.muted, false, "right");
   }
   box(x, y, w, h, fill) { this.ops.push(`${rgb(fill)} rg ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f\n`); }
+  line(x1, y1, x2, y2, color = C.pitchLine, width = 0.8, dash = null) {
+    const stroke = dash?.length ? "[" + dash.join(" ") + "] 0 d" : "[] 0 d";
+    this.ops.push(`q ${rgb(color)} RG ${width} w ${stroke} ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S Q\n`);
+  }
+  outline(x, y, w, h, color = C.pitchLine, width = 0.8) {
+    this.ops.push(`q ${rgb(color)} RG ${width} w ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re S Q\n`);
+  }
+  dot(x, y, r, color = C.gold) {
+    const k = r * 0.5522847498;
+    this.ops.push(`q ${rgb(color)} rg ${(x+r).toFixed(2)} ${y.toFixed(2)} m `
+      + `${(x+r).toFixed(2)} ${(y+k).toFixed(2)} ${(x+k).toFixed(2)} ${(y+r).toFixed(2)} ${x.toFixed(2)} ${(y+r).toFixed(2)} c `
+      + `${(x-k).toFixed(2)} ${(y+r).toFixed(2)} ${(x-r).toFixed(2)} ${(y+k).toFixed(2)} ${(x-r).toFixed(2)} ${y.toFixed(2)} c `
+      + `${(x-r).toFixed(2)} ${(y-k).toFixed(2)} ${(x-k).toFixed(2)} ${(y-r).toFixed(2)} ${x.toFixed(2)} ${(y-r).toFixed(2)} c `
+      + `${(x+k).toFixed(2)} ${(y-r).toFixed(2)} ${(x+r).toFixed(2)} ${(y-k).toFixed(2)} ${(x+r).toFixed(2)} ${y.toFixed(2)} c f Q\n`);
+  }
+  display(x, y, size, content, color = C.white, tracking = 78) {
+    // Helvetica-Bold with condensed horizontal scale for sports-editorial display.
+    this.ops.push(`${rgb(color)} rg BT /F2 ${size} Tf ${tracking} Tz 1 0 0 1 ${x.toFixed(2)} ${y.toFixed(2)} Tm (${escape(content)}) Tj ET\n`);
+  }
+  circle(x, y, r, color = C.pitchLine, width = 0.8) {
+    const k = r * 0.5522847498;
+    this.ops.push(`q ${rgb(color)} RG ${width} w ${(x+r).toFixed(2)} ${y.toFixed(2)} m `
+      + `${(x+r).toFixed(2)} ${(y+k).toFixed(2)} ${(x+k).toFixed(2)} ${(y+r).toFixed(2)} ${x.toFixed(2)} ${(y+r).toFixed(2)} c `
+      + `${(x-k).toFixed(2)} ${(y+r).toFixed(2)} ${(x-r).toFixed(2)} ${(y+k).toFixed(2)} ${(x-r).toFixed(2)} ${y.toFixed(2)} c `
+      + `${(x-r).toFixed(2)} ${(y-k).toFixed(2)} ${(x-k).toFixed(2)} ${(y-r).toFixed(2)} ${x.toFixed(2)} ${(y-r).toFixed(2)} c `
+      + `${(x+k).toFixed(2)} ${(y-r).toFixed(2)} ${(x+r).toFixed(2)} ${(y-k).toFixed(2)} ${(x+r).toFixed(2)} ${y.toFixed(2)} c S Q\n`);
+  }
   text(x, y, size, content, color = C.text, bold = false, align = "left") {
     const str = ascii(content);
     const estimated = str.length * size * (bold ? 0.55 : 0.50);
@@ -90,6 +131,7 @@ class Page {
   card(x, y, w, h, label, value, detail = "", accent = C.aqua) {
     this.box(x, y, w, h, C.panel);
     this.box(x, y + h - 3, w, 3, accent);
+    this.box(x, y, 3, h - 3, C.panel2);
     const labelText = ascii(label).toUpperCase();
     const labelSize = clamp((w - 25) / Math.max(1, labelText.length * 0.56), 7.5, 10);
     const compact = h <= 75;
@@ -424,25 +466,17 @@ export function renderMatchPdfFull(model) {
 
 /** Compact two-page briefing. The complete legacy report stays available only
  * as an exported diagnostic renderer; the HTTP endpoint calls this one. */
-function compactMetric(p, x, y, width, label, value, detail = "") {
-  p.box(x, y, width, 64, C.panel);
-  p.box(x, y + 61, width, 3, C.blue);
-  p.text(x + 10, y + 43, 8.5, trim(label, 27).toUpperCase(), C.aqua, true);
-  const valueText = ascii(value ?? "Indisponible");
-  const fontSize = valueText.length > 30 ? 10 : valueText.length > 17 ? 13 : 21;
-  const parts = wrap(valueText, Math.max(12, Math.floor((width - 20) / (fontSize * 0.55))));
-  if (parts.length > 2) throw new MatchExportError(422, "Le libellé d'un KPI est trop long pour le briefing papier.");
-  parts.forEach((line, i) => p.text(x + 10, y + 18 - i * 12, fontSize, line, C.white, true));
-  if (detail && parts.length === 1) p.text(x + 10, y + 5, 7.4, trim(detail, Math.floor((width - 20) / 4.1)), C.muted);
-}
-
 /** Every printed chart is an operationally faithful *summary* of its on-screen
  * carousel source, never a reinterpreted percentage or a screenshot crop.
  * All vector primitives are confined to the same 784 x 116 pt page-one panel. */
 function chartFrame(p, title, subtitle) {
-  p.box(29, 43, 784, 146, C.panel);
-  p.box(29, 186, 784, 3, C.aqua);
-  p.text(42, 170, 11, title, C.aqua, true);
+  // One full-width post-match analytics strip, not a floating dashboard tile.
+  p.box(29, 42, 784, 146, C.panel);
+  p.box(29, 185, 784, 3, C.aqua);
+  p.box(29, 42, 2.5, 143, C.gold);
+  p.box(804, 42, 9, 143, C.bg);
+  for (let tick = 0; tick < 9; tick++) p.box(785 + tick * 2, 176, 1, 4, C.pitchLine);
+  p.text(42, 170, 10.8, title, C.aqua, true);
   if (subtitle) p.text(42, 155, 9, subtitle, C.text);
 }
 function chartPercentRow(p, y, label, rate, volume, color = C.aqua) {
@@ -487,20 +521,68 @@ function compactChart(p, m, chartId) {
       p.box(x, y, w, 0.6, C.panel2);
       p.text(42, y - 2.5, 7.4, String(value) + "%", C.muted);
     }
-    for (let i = 0; i < rows.length; i++) {
-      const xx = rows.length === 1 ? x + w / 2 : x + i * w / (rows.length - 1);
-      const yy = baseline + rows[i].rate * h / 100;
+    // Match the website's temporal scale: use the selected period and true
+    // clock-hour offsets, not equally spaced array indices. Missing hours
+    // remain gaps and use dashed connectors rather than fabricated samples.
+    const parseMinutes = value => {
+      const match = /^(\d{1,2}):(\d{2})$/.exec(String(value ?? ""));
+      if (!match) return null;
+      const hour = Number(match[1]), minute = Number(match[2]);
+      return hour < 24 && minute < 60 ? hour * 60 + minute : null;
+    };
+    const periodStart = parseMinutes(m.match?.periodStart);
+    const periodEnd = parseMinutes(m.match?.periodEnd);
+    const firstHour = periodStart == null
+      ? (Number.isInteger(rows[0]?.hour) ? rows[0].hour : Number.parseInt(rows[0]?.label ?? "0", 10) || 0)
+      : Math.floor(periodStart / 60);
+    const offsets = rows.map((row, index) => Number.isInteger(row.hour) && row.hour >= 0 && row.hour < 24
+      ? (row.hour - firstHour + 24) % 24 : index);
+    const selectedMinutes = periodStart != null && periodEnd != null
+      ? ((periodEnd - periodStart + 1440) % 1440 || 1440) : null;
+    const selectedSpan = selectedMinutes == null ? 0 : (periodStart % 60 + selectedMinutes) / 60;
+    const spanHours = Math.max(1, selectedSpan, ...offsets);
+    const points = rows.map((row, i) => ({
+      row, offset: offsets[i], x: x + offsets[i] / spanHours * w,
+      y: baseline + row.rate / 100 * h,
+    }));
+    for (let i = 0; i < points.length; i++) {
+      const point = points[i];
       if (i > 0) {
-        const previous = rows.length === 1 ? xx : x + (i - 1) * w / (rows.length - 1);
-        const py = baseline + rows[i - 1].rate * h / 100;
-        p.ops.push(rgb(C.aqua) + " RG 1.6 w " + previous.toFixed(2) + " " + py.toFixed(2)
-          + " m " + xx.toFixed(2) + " " + yy.toFixed(2) + " l S\n");
+        const prev = points[i - 1];
+        const gap = point.offset - prev.offset > 1;
+        // The line itself is continuous only between consecutive observed hours.
+        p.ops.push(rgb(C.aqua) + " RG 1.6 w " + (gap ? "[3 3] 0 d " : "[] 0 d ")
+          + prev.x.toFixed(2) + " " + prev.y.toFixed(2) + " m "
+          + point.x.toFixed(2) + " " + point.y.toFixed(2) + " l S [] 0 d\n");
       }
-      p.box(xx - 1.8, yy - 1.8, 3.6, 3.6, C.aqua);
+      p.box(point.x - 1.8, point.y - 1.8, 3.6, 3.6, C.aqua);
     }
+    // Include the complete selected time window, even when observations start
+    // late or stop early. This also distinguishes an empty hour from 0%.
+    const axisStart = firstHour;
+    const lastTick = Math.floor(spanHours);
+    const labelEvery = Math.max(1, Math.ceil((lastTick + 1) / 10));
+    for (let hour = 0; hour <= lastTick; hour += labelEvery) {
+      const tickX = x + hour / spanHours * w;
+      p.text(tickX, 76, 7, String((axisStart + hour) % 24).padStart(2, "0") + "h", C.muted);
+    }
+    if (periodEnd !== null && periodEnd % 60 !== 0) {
+      const endLabel = String(Math.floor(periodEnd / 60)).padStart(2, "0") + "h"
+        + String(periodEnd % 60).padStart(2, "0");
+      p.text(x + w, 76, 7.4, endLabel, C.gold, true, "right");
+      p.line(x + w, baseline, x + w, baseline + h, C.gold, 0.65);
+    }
+    // Preserve both exact source labels in the printed recap, including
+    // historical/synthetic snapshots whose numeric hour field is inconsistent.
     const first = rows[0], last = rows[rows.length - 1];
-    p.text(x, 67, 8, trim(String(first.label ?? first.hour ?? "Début"), 22) + " : " + percent(first.rate), C.muted);
-    p.text(x + w, 67, 8, trim(String(last.label ?? last.hour ?? "Fin"), 22) + " : " + percent(last.rate), C.muted, false, "right");
+    p.text(x, 62, 8, trim(String(first.label ?? first.hour ?? "Début"), 20) + " : " + percent(first.rate), C.text);
+    p.text(x + w, 62, 8, trim(String(last.label ?? last.hour ?? "Fin"), 20) + " : " + percent(last.rate), C.text, false, "right");
+    const empty = [];
+    const observed = new Set(offsets);
+    for (let hour = 0; hour <= lastTick; hour++) {
+      if (!observed.has(hour)) empty.push(hour);
+    }
+    if (empty.length) p.text(x + w / 2, 61, 7.3, empty.length + " h sans donnée", C.muted, false, "center");
     p.text(42, 49, 8.4, "Tous dechargements eligibles ; périmètre distinct du KPI officiel toutes opérations.", C.muted);
     return;
   }
@@ -620,10 +702,13 @@ function compactChart(p, m, chartId) {
 /** Size the text to the actual printable geometry, not an arbitrary line cap.
  * All six fields can use their documented input limits while staying on page 2.
  * Unknown excess still raises 422 with the exact section; never silently crop. */
-function shortBlock(p, { x, y, w, h, title, value }) {
-  p.box(x, y, w, h, C.panel);
-  p.box(x, y + h - 3, w, 3, C.blue);
-  p.text(x + 11, y + h - 17, 9.5, title.toUpperCase(), C.aqua, true);
+function shortBlock(p, { x, y, w, h, title, value, accent = C.aqua, marker = "" }) {
+  // Sections sit on one uninterrupted light tactical sheet. Fine rules,
+  // oversized cues and typography replace the former six rectangle cards.
+  p.box(x, y + h - 2.5, w, 2.5, accent);
+  p.box(x, y + 3, 3, h - 6, accent);
+  p.text(x + 11, y + h - 16.5, 9.8, title.toUpperCase(), C.navyInk, true);
+  if (marker) p.text(x + w - 10, y + h - 16.5, 7.3, marker, C.slateInk, true, "right");
   const size = 8.7, lineHeight = 9.9;
   const maxChars = Math.max(14, Math.floor((w - 24) / (size * 0.54)));
   const lines = wrap(value || "Non renseigné", maxChars);
@@ -633,8 +718,9 @@ function shortBlock(p, { x, y, w, h, title, value }) {
     throw new MatchExportError(422,
       `La rubrique « ${title} » contient ${lines.length} lignes (maximum ${capacity} sur 2 pages). Raccourcis uniquement cette synthèse dans « Personnaliser le PDF ».`);
   }
-  lines.forEach((line, i) => p.text(x + 11, firstBaseline - i * lineHeight, size, line, C.text));
+  lines.forEach((line, i) => p.text(x + 11, firstBaseline - i * lineHeight, size, line, C.navyInk));
 }
+
 function effectiveBriefText(m) {
   const custom = m.pdfProfile.dailyBrief;
   const c = m.causerie ?? {};
@@ -667,58 +753,205 @@ function effectiveBriefText(m) {
     decisions: custom.decisions || combined([c.coach?.tactic, c.coach?.arbitration, c.coach?.review, c.mercato]),
   };
 }
+// Page 1 / broadcast scoreboard. Page 2 deliberately unchanged.
 function compactScorePage(doc, m) {
-  const p = doc.add("01 / PERFORMANCE DU JOUR");
-  p.text(36, 486, 18, "COUP DE SIFFLET FINAL", C.white, true);
-  p.text(36, 468, 9,
-    `Zonage <= ${fmt(m.criteria.zonageMinutes)} min  |  CHG <= ${fmt(m.criteria.loadingSeconds)} s/poz  |  DECHG <= ${fmt(m.criteria.unloadingSeconds)} s/poz`,
-    C.muted);
-  const score = m.score;
-  p.card(29, 402, 385, 60, "Buts marqués", score?.status === "available" ? fmt(score.goalsFor) : "Indisponible", "", C.aqua);
-  p.card(428, 402, 385, 60, "Buts encaissés", score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible", "", C.red);
-  const rates = [
-    ["Passes réussies", score?.indicators?.passRate],
-    ["Tirs cadrés", score?.indicators?.loadingPercent],
-    ["Duels gagnés", score?.indicators?.unloadingPercent],
-    ["Possession", score?.indicators?.possessionPercent],
+  const p = doc.add("01 / RÉSULTAT DU MATCH");
+  const S = {
+    sky:[0.030,0.066,0.137],deep:[0.021,0.046,0.094],
+    night:[0.043,0.109,0.185],steel:[0.095,0.203,0.277],
+    crowd:[0.15,0.285,0.335],edge:[0.24,0.50,0.55],
+    pitch:[0.058,0.193,0.189],brighter:[0.13,0.31,0.31]
+  };
+  const poly=(coords,fill)=>p.ops.push(rgb(fill)+" rg "+coords.map(([x,y],i)=>
+    x.toFixed(2)+" "+y.toFixed(2)+(i===0?" m ":" l ")).join("")+"h f\n");
+  const mix=(a,b,t)=>a.map((v,i)=>v*(1-t)+b[i]*t);
+  const line=(x1,y1,x2,y2,color,width=.6)=>p.line(x1,y1,x2,y2,color,width);
+
+  // Sport TV masthead. Brand / agency / league headers remain in the PDF.
+  p.display(35,488,21.5,"FIN DU MATCH",C.white,87);
+  p.text(804,490,9.3,m.league.label,C.gold,true,"right");
+  p.box(35,477,116,2.1,C.gold);
+  p.text(35,466,8.2,"COUP DE SIFFLET FINAL / SYNTHÈSE DE PERFORMANCE",C.muted,true);
+  p.text(807,466,8.2,trim(m.match.timeRangeLabel??"",24),C.blue,true,"right");
+
+  // Night stadium background: roof, crowd terraces, floodlights and pitch.
+  const X=29,Y=332,W=784,H=128;
+  p.box(X,Y,W,H,S.sky);
+  for(let i=0;i<26;i++) {
+    const yy=Y+i*H/26;
+    p.box(X,yy,W,H/26+.45,mix(S.deep,S.night,i/25));
+  }
+  poly([[29,432],[813,432],[813,405],[29,405]],S.deep);
+  poly([[29,405],[813,405],[813,382],[29,382]],S.steel);
+  poly([[29,383],[813,383],[813,360],[29,360]],S.pitch);
+  for(let tier=0;tier<4;tier++){
+    const yy=419-tier*10;
+    line(29,yy,813,yy,S.edge,.42);
+    for(let i=0;i<108;i++){
+      const xx=35+i*7.2+(tier%2)*2.6;
+      const c=(i+tier*3)%11===0?C.gold:(i+tier)%5===0?C.aqua:S.crowd;
+      p.box(xx,yy+2,1.1,1.35,c);
+    }
+  }
+  poly([[29,450],[813,450],[813,435],[29,435]],S.deep);
+  for(let i=0;i<22;i++){
+    const xx=37+i*35;
+    line(xx,450,xx+13,437,S.steel,.55);
+  }
+  for(const fx of [80,200,642,762]){
+    poly([[fx-7,452],[fx+7,452],[fx+102,365],[fx-102,365]],mix(S.sky,S.steel,.40));
+    p.box(fx-19,449,38,2.2,mix(C.white,C.blue,.38));
+    for(let l=0;l<5;l++)p.box(fx-14+l*7,451.5,3,1.4,C.blue);
+  }
+  poly([[29,362],[813,362],[792,334],[50,334]],S.pitch);
+  for(let i=0;i<14;i++){
+    const xl=60+i*52;
+    poly([[xl,336],[xl+18,336],[xl+31,360],[xl+14,360]],
+      i%2?S.pitch:mix(S.pitch,S.brighter,.33));
+  }
+  line(50,343,792,343,S.edge,.55);
+  line(421,338,421,358,S.edge,.75);
+  p.circle(421,347,11,S.edge,.65);
+
+  // Central TV scorebug; no fake opponent/team information.
+  p.box(202,355,438,86,S.deep);
+  p.box(202,438,438,2.6,C.gold);
+  p.box(202,355,438,2.5,C.aqua);
+  p.box(211,361,420,1,S.edge);
+  p.box(419.8,367,2,61,S.steel);
+  p.text(421,425,10.2,"RÉSULTAT FINAL",C.gold,true,"center");
+  const score=m.score;
+  const scored=score?.status==="available"?fmt(score.goalsFor):"Indisponible";
+  const conceded=score?.status==="available"?fmt(score.goalsAgainst):"Indisponible";
+  const scoreSize=value=>value.length>8?17:value.length>3?36:50;
+  p.text(329,378,scoreSize(scored),scored,C.white,true,"center");
+  p.text(512,378,scoreSize(conceded),conceded,C.white,true,"center");
+  p.text(421,383,27,"-",C.gold,true,"center");
+  p.text(329,362,8.5,"BUTS MARQUÉS",C.aqua,true,"center");
+  p.text(512,362,8.5,"BUTS ENCAISSÉS",C.red,true,"center");
+
+  // Crest-like football emblems with stylized ball; no actual club logo.
+  for(const [cx,accent] of [[125,C.aqua],[717,C.red]]){
+    poly([[cx-28,424],[cx+28,424],[cx+24,375],[cx,362],[cx-24,375]],S.deep);
+    p.circle(cx,394,23,accent,1.6);
+    p.circle(cx,394,15,S.edge,.8);
+    p.dot(cx,394,4,accent);
+    for(let a=0;a<5;a++){
+      const theta=a*Math.PI*2/5-Math.PI/2;
+      p.dot(cx+14*Math.cos(theta),394+14*Math.sin(theta),2.3,accent);
+    }
+    p.text(cx,361,7.5,"MATCH",accent,true,"center");
+  }
+  p.box(X,Y,W,2,C.gold);
+
+  // Broadcast lower third: four official metrics as one continuous ribbon.
+  const rates=[
+    ["PASSES RÉUSSIES",score?.indicators?.passRate],
+    ["TIRS CADRÉS",score?.indicators?.loadingPercent],
+    ["DUELS GAGNÉS",score?.indicators?.unloadingPercent],
+    ["POSSESSION",score?.indicators?.possessionPercent],
   ];
-  rates.forEach(([label, val], i) =>
-    p.card(29 + i * 199, 337, 187, 58, label, percent(val), "",
-      Number.isFinite(val) && val <= m.criteria.scoreTargetPercent ? C.red : C.blue));
-  // Two rows: 2 x 2 when four are selected, 3 x 2 for five or six.
-  // The chart keeps its own fixed area and the font size is unchanged.
-  const allCards = indicatorCards(m);
-  const byId = new Map(m.visibleIndicators.map((id, index) => [id, allCards[index]]));
-  const selected = m.pdfProfile.indicatorIds.map(id => byId.get(id)).filter(Boolean);
-  if (!selected.length) p.text(41, 236, 10, "Aucun KPI complémentaire visible dans le MATCH.", C.muted);
-  const columns = selected.length <= 4 ? 2 : 3;
-  selected.forEach((card, i) => {
-    const row = Math.floor(i / columns);
-    const column = i % columns;
-    const x = columns === 2 ? 29 + column * 399
-      : 29 + column * 266 + (selected.length === 5 && row === 1 ? 133 : 0);
-    compactMetric(p, x, 265 - row * 69, columns === 2 ? 385 : 252, card.label, card.value, card.detail);
+  p.box(29,286,784,45,S.deep);
+  p.box(29,328,784,3.4,C.gold);
+  rates.forEach(([label,value],i)=>{
+    const xl=29+i*196;
+    const failed=Number.isFinite(value)&&value<=m.criteria.scoreTargetPercent;
+    if(i>0)line(xl,292,xl,325,S.edge,.7);
+    p.box(xl+11,292,3,29,failed?C.red:C.aqua);
+    p.text(xl+20,314,8.2,label,C.muted,true);
+    p.text(xl+20,291,23,percent(value),failed?C.red:C.white,true);
   });
-  compactChart(p, m, m.pdfProfile.chartId);
+
+  p.text(35,278,7.6,
+    "Zonage <= "+fmt(m.criteria.zonageMinutes)+" min  |  CHG <= "+
+    fmt(m.criteria.loadingSeconds)+" s/poz  |  DECHG <= "+
+    fmt(m.criteria.unloadingSeconds)+" s/poz",C.muted);
+
+  // Match-statistics sheet: typographic tape rather than six dashboard tiles.
+  p.text(34,265,10.3,"LE MATCH EN CHIFFRES",C.gold,true);
+  line(258,268,813,268,S.edge,.65);
+  const allCards=indicatorCards(m);
+  const byId=new Map(m.visibleIndicators.map((id,index)=>[id,allCards[index]]));
+  const selected=m.pdfProfile.indicatorIds.map(id=>byId.get(id)).filter(Boolean);
+  if(!selected.length)p.text(41,235,10,"Aucun KPI complémentaire visible dans le MATCH.",C.muted);
+  selected.forEach((card,i)=>{
+    const row=Math.floor(i/3),col=i%3;
+    const x=30+col*266,y=254-row*33.5;
+    if(col>0)line(x-10,y-20,x-10,y+2,S.edge,.55);
+    const label=trim(card.label,32).toUpperCase();
+    const labelSize=clamp(233/Math.max(1,label.length*.55),7.3,8.1);
+    p.text(x,y-6,labelSize,label,C.muted,true);
+    const shown=ascii(card.value??"Indisponible");
+    const size=clamp(233/Math.max(1,shown.length*.57),10,18);
+    p.text(x,y-27,size,shown,C.white,true);
+    if(card.detail&&shown.length<12){
+      const max=Math.max(3,Math.floor((242-shown.length*size*.57-15)/4));
+      if(max>9)p.text(x+Math.min(245,shown.length*size*.57+14),y-25,7.1,trim(card.detail,max),C.muted);
+    }
+  });
+  compactChart(p,m,m.pdfProfile.chartId);
 }
+
 function compactBriefPage(doc, m) {
-  const p = doc.add("02 / BRIEF DES SERVICES");
-  p.text(36, 477, 20, "BRIEF OPERATIONNEL DU JOUR", C.white, true);
-  p.text(777, 479, 8, trim([m.causerie?.team, m.causerie?.manager].filter(Boolean).join(" / "), 42), C.muted, false, "right");
+  const p = doc.add("02 / DÉBRIEF TACTIQUE");
+  p.display(36, 480, 22, "LE PLAN DE JEU", C.white, 86);
+  p.text(36, 466, 9, "BRIEF OPÉRATIONNEL / PRIORITÉS, FLUX, ARBITRAGES", C.gold, true);
+  p.text(811, 479, 8, trim([m.causerie?.team, m.causerie?.manager].filter(Boolean).join(" / "), 42), C.muted, false, "right");
   const brief = effectiveBriefText(m);
-  // Keep the exact labels of BRIEF ÉQUIPE, not the old football metaphors.
-  shortBlock(p, { x: 29, y: 405, w: 784, h: 58, title: "Sécurité / vigilance", value: brief.safety, maxLines: 2 });
-  shortBlock(p, { x: 29, y: 273, w: 784, h: 126, title: "Service client", value: brief.attack, maxLines: 6 });
-  shortBlock(p, { x: 29, y: 149, w: 482, h: 118, title: "Expédition / Ramasse & Emballage", value: brief.midfield, maxLines: 5 });
-  shortBlock(p, { x: 523, y: 149, w: 290, h: 118, title: "SST", value: brief.defense, maxLines: 5 });
-  shortBlock(p, { x: 29, y: 43, w: 385, h: 100, title: "Priorités opérationnelles", value: brief.priorities, maxLines: 4 });
-  shortBlock(p, { x: 428, y: 43, w: 385, h: 100, title: "Décisions / arbitrages", value: brief.decisions, maxLines: 4 });
+
+  // Full-sheet newspaper treatment: paper background + rules, not isolated
+  // dashboard tiles. The tactical pitch is a visual structure, not data.
+  p.box(29, 43, 784, 418, C.paper);
+  p.box(29, 401, 784, 60, C.paperWarm);
+  p.box(29, 461, 784, 2.8, C.gold);
+  p.box(29, 398, 784, 1, C.panel2);
+  p.box(29, 266, 784, 1, C.panel2);
+  p.box(29, 146, 784, 1, C.panel2);
+  p.box(512, 148, 1, 247, C.panel2);
+  p.box(421, 44, 1, 99, C.panel2);
+  // Safety first is a broadcast warning rail, not a free-form card.
+  shortBlock(p, { x: 29, y: 402, w: 784, h: 59,
+    title: "Sécurité / vigilance", value: brief.safety,
+    accent: C.gold, marker: "00 / VIGILANCE" });
+  // Text-led left column; right column becomes a tactical football pitch.
+  shortBlock(p, { x: 29, y: 269, w: 482, h: 128,
+    title: "Service client", value: brief.attack,
+    accent: C.blue, marker: "01 / PROMESSE" });
+  shortBlock(p, { x: 29, y: 149, w: 482, h: 115,
+    title: "Expédition / Ramasse & Emballage", value: brief.midfield,
+    accent: C.aqua, marker: "02 / FLUX" });
+  shortBlock(p, { x: 523, y: 149, w: 290, h: 115,
+    title: "SST", value: brief.defense,
+    accent: C.red, marker: "03 / PROTECTION" });
+  shortBlock(p, { x: 29, y: 44, w: 384, h: 99,
+    title: "Priorités opérationnelles", value: brief.priorities,
+    accent: C.gold, marker: "04 / PRIORITÉS" });
+  shortBlock(p, { x: 428, y: 44, w: 385, h: 99,
+    title: "Décisions / arbitrages", value: brief.decisions,
+    accent: C.aqua, marker: "05 / DÉCISIONS" });
+  // Tactical board: explicitly decorative (no invented travel/KPI claims).
+  p.text(535, 382, 8.8, "LECTURE TACTIQUE DU MATCH", C.navyInk, true);
+  p.box(535, 278, 263, 98, C.panel);
+  p.outline(542, 284, 249, 86, C.blue, .7);
+  p.line(666, 284, 666, 370, C.blue, .7);
+  p.circle(666, 327, 19, C.blue, .7);
+  p.outline(542, 303, 25, 49, C.blue, .7);
+  p.outline(766, 303, 25, 49, C.blue, .7);
+  for (const [x, y, c, name] of [[602,327,C.gold,"1"],[669,350,C.aqua,"2"],[740,312,C.red,"3"]]) {
+    p.dot(x, y, 11, c);
+    p.text(x, y - 3.3, 10.2, name, C.navyInk, true, "center");
+  }
+  p.line(613, 327, 656, 350, C.gold, 1.4, [3, 2]);
+  p.line(680, 350, 728, 314, C.aqua, 1.4, [3, 2]);
+  p.text(536, 272, 6.7, "1 CLIENT     2 FLUX     3 SST", C.slateInk, true);
+
   const a = m.causerie?.attachmentCounts ?? {};
   if (Object.values(a).some(count => Number(count) > 0)) {
     p.text(36, 34, 7.5,
       `Captures sur le site : Service client ${a.attack ?? 0} / Expedition ${a.midfield ?? 0} / SST ${a.defense ?? 0}`, C.muted);
   }
 }
+
 export function renderMatchPdf(model) {
   if (!model?.agency?.code || !model?.match?.date) throw new MatchExportError(400, "MATCH invalide.");
   const m = { ...model, pdfProfile: effectivePdfProfile(model.pdfProfile, model.visibleIndicators, model.match.date) };

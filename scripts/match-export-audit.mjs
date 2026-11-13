@@ -56,13 +56,15 @@ for (const fixture of fixtures) {
       arrivalPunctuality: 96, departurePunctuality: 94,
       destinationPunctuality: 92, temperatureReturn: 97 },
       distribution: { tonnage: 7.2 }, expedition: { tonnage: 14.4 } },
-    hourlyPerformance: Array.from({ length: 24 }, (_, i) => {
+    // Realistic 13:00–22:30 period: numeric hours must agree with labels.
+    hourlyPerformance: Array.from({ length: 10 }, (_, i) => {
+      const hour = (13 + i) % 24;
       const won = 10 + i, total = 25 + i;
-      return { label: String((13 + i) % 24).padStart(2, "0") + "h", hour: i,
+      return { label: String(hour).padStart(2, "0") + "h", hour,
         won, total, rate: Math.round(won / total * 1000) / 10 };
     }),
     unloadingHourlyAnalysis: { state: "disponible", targetSeconds: league.criteria.unloadingSeconds,
-      items: Array.from({ length: 23 }, (_, i) => ({
+      items: Array.from({ length: 10 }, (_, i) => ({
         start: new Date(Date.UTC(2026, 10, 10, 12 + i)).toISOString(),
         label: String((13 + i) % 24).padStart(2, "0") + "h",
         meanSecondsPerPosition: 22+i*3, distinctPositions: 10+i, state: "disponible" })) },
@@ -136,9 +138,10 @@ for (const fixture of fixtures) {
       const rate = Math.round(won / all * 1000) / 10;
       checks.push(["weighted hourly pass rate", "Total : " + fmtCertified(rate) + " %"]);
       checks.push(["first hourly period", snapshot.hourlyPerformance[0].label]);
+      checks.push(["actual selected period end", "22h30"]);
     } else if (chartId === "reception-time") {
       checks.push(["reception target", "Cible : " + league.criteria.unloadingSeconds + " s/poz"]);
-      checks.push(["positions per slot", "Positions/créneau : 10 a 32"]);
+      checks.push(["positions per slot", "Positions/créneau : 10 a 19"]);
     } else if (chartId === "loading") {
       checks.push(["loading target", "Temps par position <= " + league.criteria.loadingSeconds + " s/poz"]);
       checks.push(["loading volume", "85 / 100"]);
