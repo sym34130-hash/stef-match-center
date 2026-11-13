@@ -129,8 +129,7 @@ export function OperationalDiagnosticCard({ snapshot }: { snapshot: Snapshot }) 
     <details className="diagnostic-more">
       <summary>Voir les détails</summary>
       <div className="diagnostic-more-content">
-        {hasZonage && z.top5.length > 0 && <section className="diagnostic-ranking" aria-label="Voyages à examiner">
-          <h4>Voyages avec le plus de retards</h4>
+        {hasZonage && z.top5.length > 0 && <section className="diagnostic-ranking" aria-label="Voyages avec le plus de retards">
           <ol className="diagnostic-top5">
             {z.top5.map(trip => <li key={trip.travelCode}>
               <div className="diagnostic-trip-main">
