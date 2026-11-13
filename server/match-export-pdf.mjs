@@ -6,11 +6,13 @@ import { effectivePdfProfile } from "./match-pdf-profile.mjs";
 
 const WIDTH = 842, HEIGHT = 595;
 const C = {
-  bg: [0.035, 0.082, 0.153], panel: [0.085, 0.185, 0.285],
-  panel2: [0.145, 0.29, 0.405], white: [1, 1, 1],
-  text: [0.85, 0.92, 0.98], muted: [0.63, 0.75, 0.84],
-  aqua: [0.49, 0.88, 0.80], blue: [0.58, 0.79, 0.95],
-  gold: [0.94, 0.78, 0.50], red: [1, 0.59, 0.53],
+  // V3: mid-navy broadcast palette. Lighter differentiated surfaces improve
+  // print contrast without changing the underlying operational data.
+  bg: [0.075, 0.145, 0.235], panel: [0.145, 0.265, 0.375],
+  panel2: [0.255, 0.395, 0.505], white: [1, 1, 1],
+  text: [0.94, 0.97, 1], muted: [0.78, 0.86, 0.92],
+  aqua: [0.47, 0.94, 0.83], blue: [0.69, 0.86, 1],
+  gold: [1, 0.82, 0.48], red: [1, 0.52, 0.49],
 };
 const rgb = value => value.map(number => number.toFixed(3)).join(" ");
 const trim = (value, limit = 160) => String(value ?? "").replace(/[\r\n\t]/g, " ").trim().slice(0, limit);
@@ -427,6 +429,7 @@ export function renderMatchPdfFull(model) {
 function compactMetric(p, x, y, width, label, value, detail = "") {
   p.box(x, y, width, 64, C.panel);
   p.box(x, y + 61, width, 3, C.blue);
+  p.box(x, y, 3, 61, C.panel2);
   p.text(x + 10, y + 43, 8.5, trim(label, 27).toUpperCase(), C.aqua, true);
   const valueText = ascii(value ?? "Indisponible");
   const fontSize = valueText.length > 30 ? 10 : valueText.length > 17 ? 13 : 21;
@@ -442,6 +445,7 @@ function compactMetric(p, x, y, width, label, value, detail = "") {
 function chartFrame(p, title, subtitle) {
   p.box(29, 43, 784, 146, C.panel);
   p.box(29, 186, 784, 3, C.aqua);
+  p.box(29, 43, 3, 143, C.panel2);
   p.text(42, 170, 11, title, C.aqua, true);
   if (subtitle) p.text(42, 155, 9, subtitle, C.text);
 }
@@ -487,20 +491,57 @@ function compactChart(p, m, chartId) {
       p.box(x, y, w, 0.6, C.panel2);
       p.text(42, y - 2.5, 7.4, String(value) + "%", C.muted);
     }
-    for (let i = 0; i < rows.length; i++) {
-      const xx = rows.length === 1 ? x + w / 2 : x + i * w / (rows.length - 1);
-      const yy = baseline + rows[i].rate * h / 100;
+    // Match the website's temporal scale: use the selected period and true
+    // clock-hour offsets, not equally spaced array indices. Missing hours
+    // remain gaps and use dashed connectors rather than fabricated samples.
+    const parseMinutes = value => {
+      const match = /^(\\d{1,2}):(\\d{2})$/.exec(String(value ?? ""));
+      if (!match) return null;
+      const hour = Number(match[1]), minute = Number(match[2]);
+      return hour < 24 && minute < 60 ? hour * 60 + minute : null;
+    };
+    const periodStart = parseMinutes(m.match?.periodStart);
+    const periodEnd = parseMinutes(m.match?.periodEnd);
+    const firstHour = periodStart == null
+      ? (Number.isInteger(rows[0]?.hour) ? rows[0].hour : Number.parseInt(rows[0]?.label ?? "0", 10) || 0)
+      : Math.floor(periodStart / 60);
+    const offsets = rows.map((row, index) => Number.isInteger(row.hour) && row.hour >= 0 && row.hour < 24
+      ? (row.hour - firstHour + 24) % 24 : index);
+    const selectedMinutes = periodStart != null && periodEnd != null
+      ? ((periodEnd - periodStart + 1440) % 1440 || 1440) : null;
+    const selectedSpan = selectedMinutes == null ? 0 : (periodStart % 60 + selectedMinutes) / 60;
+    const spanHours = Math.max(1, selectedSpan, ...offsets);
+    const points = rows.map((row, i) => ({
+      row, offset: offsets[i], x: x + offsets[i] / spanHours * w,
+      y: baseline + row.rate / 100 * h,
+    }));
+    for (let i = 0; i < points.length; i++) {
+      const point = points[i];
       if (i > 0) {
-        const previous = rows.length === 1 ? xx : x + (i - 1) * w / (rows.length - 1);
-        const py = baseline + rows[i - 1].rate * h / 100;
-        p.ops.push(rgb(C.aqua) + " RG 1.6 w " + previous.toFixed(2) + " " + py.toFixed(2)
-          + " m " + xx.toFixed(2) + " " + yy.toFixed(2) + " l S\n");
+        const prev = points[i - 1];
+        const gap = point.offset - prev.offset > 1;
+        // The line itself is continuous only between consecutive observed hours.
+        p.ops.push(rgb(C.aqua) + " RG 1.6 w " + (gap ? "[3 3] 0 d " : "[] 0 d ")
+          + prev.x.toFixed(2) + " " + prev.y.toFixed(2) + " m "
+          + point.x.toFixed(2) + " " + point.y.toFixed(2) + " l S [] 0 d\\n");
       }
-      p.box(xx - 1.8, yy - 1.8, 3.6, 3.6, C.aqua);
+      p.box(point.x - 1.8, point.y - 1.8, 3.6, 3.6, C.aqua);
     }
-    const first = rows[0], last = rows[rows.length - 1];
-    p.text(x, 67, 8, trim(String(first.label ?? first.hour ?? "Début"), 22) + " : " + percent(first.rate), C.muted);
-    p.text(x + w, 67, 8, trim(String(last.label ?? last.hour ?? "Fin"), 22) + " : " + percent(last.rate), C.muted, false, "right");
+    // Include the complete selected time window, even when observations start
+    // late or stop early. This also distinguishes an empty hour from 0%.
+    const axisStart = firstHour;
+    const lastTick = Math.floor(spanHours);
+    const labelEvery = Math.max(1, Math.ceil((lastTick + 1) / 10));
+    for (let hour = 0; hour <= lastTick; hour += labelEvery) {
+      const tickX = x + hour / spanHours * w;
+      p.text(tickX, 76, 7, String((axisStart + hour) % 24).padStart(2, "0") + "h", C.muted);
+    }
+    const empty = [];
+    const observed = new Set(offsets);
+    for (let hour = 0; hour <= lastTick; hour++) {
+      if (!observed.has(hour)) empty.push(hour);
+    }
+    if (empty.length) p.text(x + w, 49, 7.5, empty.length + " créneau(x) sans donnée", C.muted, false, "right");
     p.text(42, 49, 8.4, "Tous dechargements eligibles ; périmètre distinct du KPI officiel toutes opérations.", C.muted);
     return;
   }
@@ -623,6 +664,7 @@ function compactChart(p, m, chartId) {
 function shortBlock(p, { x, y, w, h, title, value }) {
   p.box(x, y, w, h, C.panel);
   p.box(x, y + h - 3, w, 3, C.blue);
+  p.box(x, y, 3, h - 3, C.panel2);
   p.text(x + 11, y + h - 17, 9.5, title.toUpperCase(), C.aqua, true);
   const size = 8.7, lineHeight = 9.9;
   const maxChars = Math.max(14, Math.floor((w - 24) / (size * 0.54)));
@@ -670,12 +712,19 @@ function effectiveBriefText(m) {
 function compactScorePage(doc, m) {
   const p = doc.add("01 / PERFORMANCE DU JOUR");
   p.text(36, 486, 18, "COUP DE SIFFLET FINAL", C.white, true);
+  p.text(806, 486, 8.2, "RÉSULTAT DU MATCH", C.gold, true, "right");
   p.text(36, 468, 9,
     `Zonage <= ${fmt(m.criteria.zonageMinutes)} min  |  CHG <= ${fmt(m.criteria.loadingSeconds)} s/poz  |  DECHG <= ${fmt(m.criteria.unloadingSeconds)} s/poz`,
     C.muted);
   const score = m.score;
-  p.card(29, 402, 385, 60, "Buts marqués", score?.status === "available" ? fmt(score.goalsFor) : "Indisponible", "", C.aqua);
-  p.card(428, 402, 385, 60, "Buts encaissés", score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible", "", C.red);
+  // V3 score hero: one contiguous broadcast scoreboard, not two unrelated cards.
+  p.box(29, 402, 784, 60, C.panel);
+  p.box(29, 459, 784, 3, C.gold);
+  p.box(419, 410, 1.5, 41, C.panel2);
+  p.text(226, 444, 9.2, "BUTS MARQUÉS", C.aqua, true, "center");
+  p.text(616, 444, 9.2, "BUTS ENCAISSÉS", C.red, true, "center");
+  p.text(226, 411, 26, score?.status === "available" ? fmt(score.goalsFor) : "Indisponible", C.white, true, "center");
+  p.text(616, 411, 26, score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible", C.white, true, "center");
   const rates = [
     ["Passes réussies", score?.indicators?.passRate],
     ["Tirs cadrés", score?.indicators?.loadingPercent],
@@ -704,6 +753,7 @@ function compactScorePage(doc, m) {
 function compactBriefPage(doc, m) {
   const p = doc.add("02 / BRIEF DES SERVICES");
   p.text(36, 477, 20, "BRIEF OPERATIONNEL DU JOUR", C.white, true);
+  p.box(29, 469, 784, 2, C.gold);
   p.text(777, 479, 8, trim([m.causerie?.team, m.causerie?.manager].filter(Boolean).join(" / "), 42), C.muted, false, "right");
   const brief = effectiveBriefText(m);
   // Keep the exact labels of BRIEF ÉQUIPE, not the old football metaphors.
