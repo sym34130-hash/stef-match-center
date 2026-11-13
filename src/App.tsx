@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { ceremonyPolyvalents } from "./ceremony-selection";
 import { formatKpiDuration } from "./kpi-duration";
 import { isKpiGoalConceded } from "./kpi-goal-status";
-import { pdfSourceLabel } from "./pdf-source";
 import { qualificationReasons } from "./qualification-reasons";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, BRIEF_INDICATOR_SELECTION_VERSION, migrateBriefLayout, normalizeBriefIndicators } from "../server/brief-layout.mjs";
 import {
@@ -2323,7 +2322,7 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
   const cards = [
     {
       id: "passes-hourly",
-      label: "% passes réussies par heure",
+      label: "% déchargements dans le délai",
       content: <PerformanceChart snapshot={snapshot} />,
     },
     {
@@ -2335,11 +2334,6 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
       id: "loading",
       label: "% tirs cadrés",
       content: <LoadingQualityCard snapshot={snapshot} />,
-    },
-    {
-      id: "centers",
-      label: "% centres réussis",
-      content: <CentersQualityCard snapshot={snapshot} />,
     },
     {
       id: "operational-diagnostic",
@@ -2468,55 +2462,6 @@ function OperationalChartsCarousel({ snapshot, canEditTravelScope, onToggleTrave
   );
 }
 
-function CentersQualityCard({ snapshot }: { snapshot: Snapshot }) {
-  const pdf = snapshot.dailyIndicators;
-  const percent = pdf?.punctuality.destinationPunctuality;
-  const target = pdf?.punctualityTargets?.destinationPunctuality;
-  const hasData = Number.isFinite(percent);
-  const successfulPercent = hasData ? Math.max(0, Math.min(100, percent as number)) : 0;
-  const offTargetPercent = hasData ? 100 - successfulPercent : null;
-  const pdfDetail = pdfSourceLabel(pdf, snapshot.agency.code);
-
-  return (
-    <section className="loading-quality-card centers-quality-card" aria-label="Pourcentage de centres réussis">
-      <div className="loading-quality-heading">
-        <div>
-          <span>Centres</span>
-          <strong>% centres réussis</strong>
-          <p className="loading-quality-explanation">Ponctualité destination issue du PDF 106J.</p>
-        </div>
-        {hasData && <b>{formatPercent(percent)}</b>}
-      </div>
-      {hasData ? (
-        <div className="loading-quality-overview">
-          <div
-            className="loading-quality-pie centers-quality-pie"
-            style={{ background: `conic-gradient(#73b9a6 0 ${successfulPercent}%, #ef0b45 ${successfulPercent}% 100%)` }}
-            aria-label={`${formatPercent(percent)} centres réussis, ${formatPercent(offTargetPercent)} hors cible${target === undefined ? "" : `, objectif ${formatPercent(target)}`}`}
-          >
-            <span>{formatPercent(percent)}</span>
-          </div>
-          <div className="loading-quality-legend">
-            <span><i className="is-targeted" />Réussis <b>{formatPercent(percent)}{target === undefined ? "" : ` · objectif ${formatPercent(target)}`}</b></span>
-            <span><i className="is-off-target" />Hors cible <b>{formatPercent(offTargetPercent)}</b></span>
-          </div>
-        </div>
-      ) : (
-        <p className="loading-quality-empty">Importe le PDF 106J pour afficher le taux de centres réussis.</p>
-      )}
-      <details className="duel-quality-details centers-quality-details">
-        <summary>Voir les éléments hors cible <span>{formatPercent(offTargetPercent)}</span></summary>
-        <p className="loading-quality-empty">
-          {hasData
-            ? `${pdfDetail} fournit un taux consolidé de ponctualité destination, mais pas le détail par voyage ou par position.`
-            : "Le détail sera disponible après import du PDF 106J."}
-        </p>
-      </details>
-    </section>
-  );
-}
-
-
 function LoadingQualityCard({ snapshot }: { snapshot: Snapshot }) {
   const quality = snapshot.loadingQuality;
   if (!quality) return null;
@@ -2618,11 +2563,11 @@ function ReceptionQualityCard({ snapshot }: { snapshot: Snapshot }) {
             <div className="duel-quality-table-wrap">
               <div className="duel-quality-table" role="table" aria-label="Duels perdus">
                 <div className="duel-quality-table-row is-head" role="row">
-                  <span>Voyage</span><span>Destination</span><span>Agence</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>
+                  <span>Voyage</span><span>Heure</span><span>Nb poz</span><span>Temps/poz</span><span>Résultat</span>
                 </div>
                 {duelQuality.lostDuels.map((duel) => (
                   <div className="duel-quality-table-row" role="row" key={`${duel.travelCode}-${duel.time}`}>
-                    <span>{duel.travelCode}</span><span className="duel-destination" title={duel.destination ?? undefined}>{duel.destination || "—"}</span><span>{duel.agency}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className="duel-result duel-result-perdu">perdu</span>
+                    <span>{duel.travelCode}</span><span>{duel.time}</span><span>{formatNumber(duel.positions)}</span><span>{duel.timePerPosition}</span><span className="duel-result duel-result-perdu">perdu</span>
                   </div>
                 ))}
               </div>
@@ -2637,9 +2582,6 @@ function ReceptionQualityCard({ snapshot }: { snapshot: Snapshot }) {
 
 function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const [expanded, setExpanded] = useState(false);
-  // Two views inside the SAME operational-card slot (outer carousel stays 1/5).
-  const [view, setView] = useState<"overall" | "filtered">("overall");
-  const [selectedHour, setSelectedHour] = useState<string | null>(null);
   const expandedPanel = useRef<HTMLDialogElement>(null);
   const expandTrigger = useRef<HTMLButtonElement>(null);
   const restoreBackgroundScroll = useRef<() => void>(() => {});
@@ -2747,16 +2689,9 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
     const top = Math.max(12, Math.min(desiredTop, window.innerHeight - height - 12));
     setArrivalDetail({ hour, codes, left, top, width, height });
   };
-  const changeView = (next: "overall" | "filtered") => {
-    setArrivalDetail(null);
-    setSelectedHour(null);
-    setView(next);
-  };
-  // Each view receives an independent series from the server. Do not use the
-  // Excel cached chart, and never apply filtered-graph rules to the official KPI.
-  const data: NonNullable<Snapshot["hourlyPerformance"]> = view === "overall"
-    ? (snapshot.overallHourlyPerformance ?? [])
-    : (snapshot.hourlyPerformance ?? []);
+  // Display only eligible unloading operations. The official KPI and its
+  // overall series remain in the server snapshot, unchanged.
+  const data: NonNullable<Snapshot["hourlyPerformance"]> = snapshot.hourlyPerformance ?? [];
   const chartWon = data.reduce((sum, point) => sum + (point.won ?? 0), 0);
   const chartTotal = data.reduce((sum, point) => sum + (point.total ?? 0), 0);
   const totalPassRate = chartTotal > 0 ? Math.round(chartWon / chartTotal * 1000) / 10 : null;
@@ -2895,22 +2830,10 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
   const heading = (large: boolean) => (
       <div className="performance-chart-heading">
         <div>
-          <div className="performance-chart-views" role="group" aria-label="Choisir la vue du graphique des passes">
-            <button type="button" className={view === "overall" ? "is-active" : ""}
-              aria-pressed={view === "overall"} onClick={() => changeView("overall")}>
-              <b>1/2</b> Performance globale
-            </button>
-            <button type="button" className={view === "filtered" ? "is-active" : ""}
-              aria-pressed={view === "filtered"} onClick={() => changeView("filtered")}>
-              <b>2/2</b> Tous les déchargements
-            </button>
-          </div>
-          <span>Performance horaire · {view === "overall" ? "1/2" : "2/2"}</span>
-          <strong>{view === "overall" ? "% passes réussies" : "% déchargements dans le délai"}</strong>
+          <span>Performance horaire</span>
+          <strong>% déchargements dans le délai</strong>
           <small className="performance-chart-caption">
-            {view === "overall"
-              ? "Toutes les opérations éligibles au KPI officiel, regroupées par heure sur la plage active. Les filtres opérateur, ligue et voyages restent appliqués."
-              : `Tous les déchargements éligibles (col. C), tous segments dont LIV · délai de zonage ≤ ${snapshot.performanceCriteria?.zonageMinutes ?? snapshot.match.dzTargetMinutes} min · KPI officiel indépendant.`}
+            Tous les déchargements éligibles (col. C), tous segments dont LIV · délai de zonage ≤ {snapshot.performanceCriteria?.zonageMinutes ?? snapshot.match.dzTargetMinutes} min · KPI officiel indépendant.
           </small>
           <small className="performance-chart-sample" role="note">
             {hoursWithData} h mesurées sur {snapshot.match.timeRangeLabel}.
@@ -2920,7 +2843,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
         </div>
         <div className="performance-chart-actions">
           <div className="performance-chart-total">
-          <small>{view === "overall" ? "Total global · KPI officiel" : "Total déchargements"}</small>
+          <small>Total déchargements</small>
           <b>{formatPercent(totalPassRate)}</b>
           <small>{chartTotal > 0 ? `${chartWon}/${chartTotal} opérations` : "Volumes non disponibles"}</small>
           </div>
@@ -2980,13 +2903,13 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
             </g>
           )}
           {points.map((point, index) => (
-            <g className={`performance-chart-point${selectedHour === point.label ? " is-selected" : ""}`} key={point.label}>
+            <g className={`performance-chart-point${arrivalDetail?.hour === point.label ? " is-selected" : ""}`} key={point.label}>
               <circle cx={point.x} cy={point.y} r="6" />
               <text x={point.x + (large && index === 0 ? 38 : 0)} y={point.y - (large ? 24 : 14)}>{point.rate}%</text>
               <text className="performance-chart-volume" x={point.x + (large && index === 0 ? 70 : 0)} y={detailBases[index] + 25}>{point.won !== null && point.total !== null ? `${point.won}/${point.total}` : "Excel"}</text>
               {point.arrivingTravels != null && point.arrivingTravelCodes?.length === point.arrivingTravels && (
                 <text className="performance-chart-travels" x={point.x + (large && index === 0 ? 70 : 0)} y={detailBases[index] + (large ? 56 : 46)}
-                  role="button" tabIndex={0} aria-pressed={selectedHour === point.label} aria-expanded={arrivalDetail?.hour === point.label} aria-controls="hourly-arrivals-detail"
+                  role="button" tabIndex={0} aria-pressed={arrivalDetail?.hour === point.label} aria-expanded={arrivalDetail?.hour === point.label} aria-controls="hourly-arrivals-detail"
                   aria-label={`${point.arrivingTravels} ${point.arrivingTravels === 1 ? "voyage arrivé" : "voyages arrivés"} à ${point.label}`}
                   onClick={(event) => openArrivals(event.currentTarget, point.label, point.arrivingTravelCodes!)}
                   onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openArrivals(event.currentTarget, point.label, point.arrivingTravelCodes!); } }}>
@@ -2998,14 +2921,14 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
           ))}
         </svg>
       ) : (
-        <div className="performance-chart-empty">Aucune donnée horaire {view === "overall" ? "globale" : "filtrée"} disponible sur cette plage.</div>
+        <div className="performance-chart-empty">Aucune donnée horaire de déchargement disponible sur cette plage.</div>
       );
   return (
     <div className="performance-chart-panel">
       {heading(false)}
       {chart()}
       {data.length > 0 && (
-        <details className="performance-chart-breakdown" key={view}>
+        <details className="performance-chart-breakdown">
           <summary>Contrôler le calcul de chaque heure (réussites / opérations éligibles)</summary>
           <div className="performance-chart-breakdown-scroll">
             <table>
@@ -3020,9 +2943,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
               ))}</tbody>
             </table>
           </div>
-          <p>{view === "overall"
-            ? "Ces volumes correspondent aux lignes éligibles au KPI officiel des passes réussies, avec les critères actifs de l’agence."
-            : "Ces volumes concernent tous les déchargements éligibles, sans exclusion par segment. Ils restent distincts du KPI officiel."}</p>
+          <p>Ces volumes concernent tous les déchargements éligibles, sans exclusion par segment. Ils restent distincts du KPI officiel.</p>
         </details>
       )}
       {expanded && createPortal(
@@ -4800,12 +4721,11 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
               <section className="guide-topic"><h4>Feuille de match : trois carrousels à ne pas confondre</h4>
                 <p>Le carrousel principal comporte quatre sections : Coup de sifflet final, Cérémonie des performances, Statistiques du match et Brief équipe. Utilisez les flèches ou les repères de navigation.</p>
                 <p><strong>Le collectif en chiffres</strong> est un carrousel distinct : ses cartes présentent les volumes Excel, les données PDF journalières et les compléments manuels selon leur source affichée.</p>
-                <p><strong>Lecture opérationnelle</strong>, dans Statistiques du match, comporte cinq slides :</p>
+                <p><strong>Lecture opérationnelle</strong>, dans Statistiques du match, comporte quatre slides :</p>
                 <ol className="guide-reading-list">
-                  <li><strong>Passes réussies par heure.</strong> Comparez les taux horaires. Les voyages arrivés indiquent les codes dont la première opération connue se situe dans l’heure ; cliquez pour les consulter. Agrandir ouvre le graphique sans déplacer la carte ; X ou Échap le ferme.</li>
+                  <li><strong>Déchargements par heure.</strong> Comparez les taux horaires. Les voyages arrivés indiquent les codes dont la première opération connue se situe dans l’heure ; cliquez pour les consulter. Agrandir ouvre le graphique sans déplacer la carte ; X ou Échap le ferme.</li>
                   <li><strong>Duels gagnés et analyse horaire.</strong> Repérez les voyages hors cible et comparez les temps moyens de réception par créneau.</li>
                   <li><strong>Tirs cadrés.</strong> Consultez la part des voyages de chargement dans le temps cible et le détail des voyages hors cible.</li>
-                  <li><strong>Centres réussis.</strong> Consultez la ponctualité destination du PDF 106J. C’est un taux journalier consolidé, sans détail des voyages et indépendant de la plage Excel.</li>
                   <li><strong>Diagnostic opérationnel.</strong> Distinguez retards confirmés et délais inconnus, puis examinez les voyages du FLOP.</li>
                 </ol>
               </section>
