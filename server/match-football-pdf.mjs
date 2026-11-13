@@ -144,7 +144,7 @@ function briefBlock(p, x, y, w, h, label, content, errorType) {
   }
   if (current) lines.push(current);
   if (!lines.length) lines.push("Non renseigné");
-  const capacity = Math.max(1, 1 + Math.floor((h - 41) / leading));
+  const capacity = Math.max(1, 1 + Math.floor((h - 35) / leading));
   if (lines.length > capacity) {
     throw new errorType(422, "La rubrique « " + label + " » contient " + lines.length
       + " lignes (maximum " + capacity + " sur 2 pages). Raccourcis uniquement cette synthèse dans « Personnaliser le PDF ».");
