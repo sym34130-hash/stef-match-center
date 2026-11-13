@@ -142,20 +142,17 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   const nav = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
   await nav.getByRole("button", { name: "Aller à Statistiques du match", exact: true }).click();
   const chartPanel = page.locator(".performance-chart-panel");
-  // One outer carousel vignette, two mutually exclusive inner views.
+  // Four operational slides; the hourly chart exposes unloading data only.
   const operational = page.getByRole("region", { name: "Graphiques de lecture opérationnelle" });
+  await expect(operational.locator(".operational-chart-slide")).toHaveCount(4);
   await expect(operational.locator(".performance-chart-panel")).toHaveCount(1);
-  await expect(page.locator(".operational-charts-carousel-counter")).toContainText("1 / 5");
+  await expect(page.locator(".operational-charts-carousel-counter")).toContainText("1 / 4");
+  await expect(page.locator(".operational-charts-carousel-dots button")).toHaveCount(4);
+  await expect(page.getByRole("tab", { name: "Afficher % centres réussis" })).toHaveCount(0);
   await expect(chartPanel.locator(".performance-chart")).toHaveCount(1);
-  const overallButton = chartPanel.getByRole("button", { name: /1\/2 Performance globale/ });
-  const filteredButton = chartPanel.getByRole("button", { name: /2\/2 Tous les déchargements/ });
-  await expect(overallButton).toHaveAttribute("aria-pressed", "true");
-  await expect(chartPanel.locator(".performance-chart-total")).toContainText("25/30 opérations");
-  await filteredButton.click();
-  await expect(filteredButton).toHaveAttribute("aria-pressed", "true");
+  await expect(chartPanel.getByRole("button", { name: /Performance globale|Tous les déchargements/ })).toHaveCount(0);
   await expect(chartPanel.locator(".performance-chart-caption")).toContainText("tous segments dont LIV");
   await expect(chartPanel.locator(".performance-chart-heading strong")).toContainText("déchargements dans le délai");
-  await expect(overallButton).toHaveAttribute("aria-pressed", "false");
   await expect(chartPanel.locator(".performance-chart-sample")).toContainText("2 h à faible volume");
   await expect(chartPanel.locator(".performance-chart-sample")).toContainText("Pointillés");
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("5/8 opérations");
@@ -183,28 +180,20 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(dataRows.nth(1)).toContainText("19h");
   await expect(dataRows.nth(1)).toContainText("50%");
   await expect(dataRows.nth(2)).toContainText("22h");
-  // Both views share the unchanged zoom/modal behavior, including on mobile.
+  // Zoom remains functional with the unloading-only series.
   await chartPanel.getByRole("button", { name: "Agrandir le graphique" }).click();
   const zoom = page.getByRole("dialog", { name: "Graphique Performance horaire agrandi" });
   await expect(zoom).toBeVisible();
   await expect(zoom.locator(".performance-chart")).toHaveCount(1);
   await expect(zoom.locator(".performance-chart-total")).toContainText("5/8 opérations");
-  await zoom.getByRole("button", { name: /1\/2 Performance globale/ }).click();
-  await expect(zoom.locator(".performance-chart-total")).toContainText("25/30 opérations");
-  await zoom.getByRole("button", { name: /2\/2 Tous les déchargements/ }).click();
-  await expect(zoom.locator(".performance-chart-total")).toContainText("5/8 opérations");
+  await expect(zoom.getByRole("button", { name: /Performance globale|Tous les déchargements/ })).toHaveCount(0);
   await zoom.getByRole("button", { name: "Fermer le graphique agrandi" }).click();
   await expect(zoom).toHaveCount(0);
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("5/8 opérations");
-  await expect(page.locator(".operational-charts-carousel-counter")).toContainText("1 / 5");
+  await expect(page.locator(".operational-charts-carousel-counter")).toContainText("1 / 4");
 
-  // Regression: 1/2 has no operations after 21h, 2/2 after 20h,
-  // but BOTH must display empty 22h and the 22h30 selected-period boundary.
-  chartSnapshot.overallHourlyPerformance = [
-    { label: "13h", hour: 13, won: 10, total: 12, rate: 83.3 },
-    { label: "19h", hour: 19, won: 6, total: 8, rate: 75 },
-    { label: "21h", hour: 21, won: 9, total: 10, rate: 90 },
-  ];
+  // Regression: the unloading curve ends at 20h; the official 21h
+  // observations must never reappear as an extra plotted point.
   chartSnapshot.hourlyPerformance = [
     { label: "13h", hour: 13, won: 1, total: 1, rate: 100 },
     { label: "19h", hour: 19, won: 3, total: 6, rate: 50 },
@@ -214,15 +203,12 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
   await nav.getByRole("button", { name: "Aller à Statistiques du match", exact: true }).click();
   await expect(chartPanel.locator(".performance-chart-point")).toHaveCount(3);
-  await expect(chartPanel.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("21h");
+  await expect(chartPanel.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("20h");
   await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
-  await expect(chartPanel.locator(".performance-chart-empty-hour")).toContainText(["14h","15h","16h","17h","18h","20h","22h"]);
+  await expect(chartPanel.locator(".performance-chart-empty-hour")).toContainText(["14h","15h","16h","17h","18h","21h","22h"]);
   await expect(chartPanel.locator(".performance-chart-empty-bucket")).toHaveCount(7);
   await expect(chartPanel.locator(".performance-chart-last-bucket")).toHaveCount(0);
-  await expect(chartPanel.locator(".performance-chart")).not.toContainText("21h mesuré");
-  // The visual no-data band must begin DIRECTLY at the last plotted dot,
-  // without a one-hour hole. A 21h reading still describes 21:00–21:59:
-  // the first truly empty bucket remains 22h, not 21h.
+  await expect(chartPanel.locator(".performance-chart")).not.toContainText("20h mesuré");
   const expectNoGreenAfterLastPoint = async (expectedLastPoint: string, expectedNoDataFrom: string) => {
     const geometry = await chartPanel.locator(".performance-chart").evaluate(svg => {
       const dots = [...svg.querySelectorAll<SVGCircleElement>(".performance-chart-point circle")];
@@ -241,38 +227,40 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
       `Les créneaux entièrement sans opération éligible commencent à ${expectedNoDataFrom}`);
     await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toContainText("Sans données");
   };
-  await expectNoGreenAfterLastPoint("21h", "22h");
-  await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toContainText("Sans données");
-  // The neutral tail now fills the space directly after 21h, so the label
-  // fits horizontally instead of being restricted to only 22h–22h30.
-  await expect(chartPanel.locator(".performance-chart-no-data-tail text")).not.toHaveAttribute("transform", /rotate\(-90\)/);
-  await expect(chartPanel.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
-  await expect(chartPanel.locator(".performance-chart-total")).toContainText("25/30 opérations");
-
-  await chartPanel.getByRole("button", { name: /2\/2 Tous les déchargements/ }).click();
-  await expect(chartPanel.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("20h");
-  await expect(chartPanel.locator(".performance-chart-empty-hour")).toContainText(["14h","15h","16h","17h","18h","21h","22h"]);
-  await expect(chartPanel.locator(".performance-chart-empty-bucket")).toHaveCount(7);
-  await expect(chartPanel.locator(".performance-chart-last-bucket")).toHaveCount(0);
-  await expect(chartPanel.locator(".performance-chart")).not.toContainText("20h mesuré");
   await expectNoGreenAfterLastPoint("20h", "21h");
-  await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toContainText("Sans données");
-  // 21h–22h30 has room for a horizontal label.
+  await expect(chartPanel.locator(".performance-chart-no-data-tail text")).toHaveText("Sans données");
   await expect(chartPanel.locator(".performance-chart-no-data-tail text")).not.toHaveAttribute("transform", /rotate\(-90\)/);
-  await expect(chartPanel.locator(".performance-chart-end-boundary")).toContainText("22h30");
-  await expect(chartPanel.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
   await expect(chartPanel.locator(".performance-chart-total")).toContainText("5/8 opérations");
   await chartPanel.getByRole("button", { name: "Agrandir le graphique" }).click();
   await expect(zoom.locator(".performance-chart-end-boundary")).toContainText("22h30");
-  await expect(zoom.locator(".performance-chart-no-data-tail")).toContainText("Aucune donnée");
   await expect(zoom.locator(".performance-chart-no-data-tail")).toHaveAttribute(
     "aria-label", "Pas de nouveau point après 20h ; aucun créneau éligible à partir de 21h");
-  await expect(zoom.locator(".performance-chart-last-bucket")).toHaveCount(0);
-  await zoom.getByRole("button", { name: /1\/2 Performance globale/ }).click();
-  await expect(zoom.locator(".performance-chart-last-bucket")).toHaveCount(0);
-  await expect(zoom.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("21h");
-  await expect(zoom.locator(".performance-chart-end-boundary")).toContainText("22h30");
+  await expect(zoom.locator(".performance-chart-point").last().locator(".performance-chart-hour")).toHaveText("20h");
   await zoom.getByRole("button", { name: "Fermer le graphique agrandi" }).click();
+
+  // The duel-details columns are narrowed ONLY in this card. No data-model change.
+  await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % duels gagnés" }).click();
+  const duelDetails = page.locator(".reception-quality-card .duel-quality-details");
+  await duelDetails.locator("summary").click();
+  await expect(duelDetails.locator(".duel-quality-table-row.is-head > span")).toHaveText(
+    ["Voyage", "Heure", "Nb poz", "Temps/poz", "Résultat"]);
+  await expect(duelDetails.locator(".duel-destination")).toHaveCount(0);
+  const hourly = page.locator(".reception-hourly-analysis");
+  const slots = chartSnapshot.unloadingHourlyAnalysis?.items ?? [];
+  const measured = slots.find((slot: { state: string; meanSecondsPerPosition: number | null }) =>
+    slot.state === "disponible" && slot.meanSecondsPerPosition != null);
+  expect(measured, "Fixture must cover the available reception average").toBeTruthy();
+  const measuredIndex = slots.indexOf(measured!);
+  const timeLabel = (seconds: number) => {
+    const rounded = Math.max(0, Math.round(seconds));
+    return rounded < 60 ? `${rounded}s` : `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
+  };
+  const measuredBar = hourly.locator(".reception-hour-button").nth(measuredIndex);
+  await expect(measuredBar.locator(".reception-hour-bar-volume")).toHaveText(measured!.distinctPositions.toLocaleString("fr-FR"));
+  await expect(measuredBar.locator(".reception-hour-value")).toHaveText(timeLabel(measured!.meanSecondsPerPosition!));
+  await measuredBar.click();
+  await expect(page.locator("#reception-hour-detail")).toContainText("Positions distinctes");
+  await expect(page.locator("#reception-hour-detail")).toContainText("Moyenne");
 
   // Even if no measured points exist, the time window must remain visible.
   chartSnapshot.overallHourlyPerformance = [];
