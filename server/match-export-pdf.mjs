@@ -764,79 +764,143 @@ function effectiveBriefText(m) {
     decisions: custom.decisions || combined([c.coach?.tactic, c.coach?.arbitration, c.coach?.review, c.mercato]),
   };
 }
+// Page 1 / broadcast scoreboard. Page 2 deliberately unchanged.
 function compactScorePage(doc, m) {
   const p = doc.add("01 / RÉSULTAT DU MATCH");
-  // Broadcast masthead. The chronology and league thresholds remain untouched.
-  p.display(35, 483, 23, "COUP DE SIFFLET FINAL", C.white, 86);
-  p.text(804, 489, 8, "MATCH / COMPTE RENDU", C.gold, true, "right");
-  p.text(35, 467, 8.3,
-    `Zonage <= ${fmt(m.criteria.zonageMinutes)} min  |  CHG <= ${fmt(m.criteria.loadingSeconds)} s/poz  |  DECHG <= ${fmt(m.criteria.unloadingSeconds)} s/poz`, C.muted);
-  const score = m.score;
-  // Football stadium / TV post-match hero: the score IS the composition.
-  p.box(29, 353, 784, 110, C.panel);
-  p.box(29, 459.5, 784, 3.5, C.gold);
-  p.box(29, 353, 784, 3, C.aqua);
-  // Stylised floodlights and pitch perspective, all vector shapes.
-  for (let i = 0; i < 12; i++) {
-    const edge = 29 + i * 19;
-    p.line(edge, 357, edge + 85, 453, C.pitchLine, .37);
-    p.line(813 - i * 19, 357, 728 - i * 19, 453, C.pitchLine, .37);
-  }
-  p.outline(147, 359, 548, 94, C.pitchLine, .75);
-  p.line(421, 360, 421, 452, C.pitchLine, .75);
-  p.circle(421, 405, 39, C.pitchLine, .85);
-  p.outline(150, 376, 86, 60, C.pitchLine, .55);
-  p.outline(606, 376, 86, 60, C.pitchLine, .55);
-  p.text(304, 435, 10.2, "BUTS MARQUÉS", C.aqua, true, "center");
-  p.text(539, 435, 10.2, "BUTS ENCAISSÉS", C.red, true, "center");
-  const scored = score?.status === "available" ? fmt(score.goalsFor) : "Indisponible";
-  const conceded = score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible";
-  const scoreSize = value => value.length > 8 ? 17 : 55;
-  p.text(304, 375, scoreSize(scored), scored, C.white, true, "center");
-  p.text(539, 375, scoreSize(conceded), conceded, C.white, true, "center");
-  p.text(421, 392, 20, "-", C.gold, true, "center");
-  p.text(55, 371, 8.6, "RÉSULTAT /", C.gold, true);
-  p.text(55, 360, 8.3, "EXÉCUTION", C.muted, true);
-  p.text(787, 371, 8, m.league.label, C.gold, true, "right");
-  p.text(787, 360, 7.8, trim(m.match.timeRangeLabel ?? "", 21), C.muted, false, "right");
+  const S = {
+    sky:[0.030,0.066,0.137],deep:[0.021,0.046,0.094],
+    night:[0.043,0.109,0.185],steel:[0.095,0.203,0.277],
+    crowd:[0.15,0.285,0.335],edge:[0.24,0.50,0.55],
+    pitch:[0.058,0.193,0.189],brighter:[0.13,0.31,0.31]
+  };
+  const poly=(coords,fill)=>p.ops.push(rgb(fill)+" rg "+coords.map(([x,y],i)=>
+    x.toFixed(2)+" "+y.toFixed(2)+(i===0?" m ":" l ")).join("")+"h f\n");
+  const mix=(a,b,t)=>a.map((v,i)=>v*(1-t)+b[i]*t);
+  const line=(x1,y1,x2,y2,color,width=.6)=>p.line(x1,y1,x2,y2,color,width);
 
-  // Score-derived quartet is a single TV lower-third with big figures and
-  // separators. Values are still the original official four indicators.
-  const rates = [
-    ["PASSES RÉUSSIES", score?.indicators?.passRate],
-    ["TIRS CADRÉS", score?.indicators?.loadingPercent],
-    ["DUELS GAGNÉS", score?.indicators?.unloadingPercent],
-    ["POSSESSION", score?.indicators?.possessionPercent],
+  // Sport TV masthead. Brand / agency / league headers remain in the PDF.
+  p.display(35,488,21.5,"FIN DU MATCH",C.white,87);
+  p.text(804,490,9.3,m.league.label,C.gold,true,"right");
+  p.box(35,477,116,2.1,C.gold);
+  p.text(35,466,8.2,"COUP DE SIFFLET FINAL / SYNTHÈSE DE PERFORMANCE",C.muted,true);
+  p.text(807,466,8.2,trim(m.match.timeRangeLabel??"",24),C.blue,true,"right");
+
+  // Night stadium background: roof, crowd terraces, floodlights and pitch.
+  const X=29,Y=332,W=784,H=128;
+  p.box(X,Y,W,H,S.sky);
+  for(let i=0;i<26;i++) {
+    const yy=Y+i*H/26;
+    p.box(X,yy,W,H/26+.45,mix(S.deep,S.night,i/25));
+  }
+  poly([[29,432],[813,432],[813,405],[29,405]],S.deep);
+  poly([[29,405],[813,405],[813,382],[29,382]],S.steel);
+  poly([[29,383],[813,383],[813,360],[29,360]],S.pitch);
+  for(let tier=0;tier<4;tier++){
+    const yy=419-tier*10;
+    line(29,yy,813,yy,S.edge,.42);
+    for(let i=0;i<108;i++){
+      const xx=35+i*7.2+(tier%2)*2.6;
+      const c=(i+tier*3)%11===0?C.gold:(i+tier)%5===0?C.aqua:S.crowd;
+      p.box(xx,yy+2,1.1,1.35,c);
+    }
+  }
+  poly([[29,450],[813,450],[813,435],[29,435]],S.deep);
+  for(let i=0;i<22;i++){
+    const xx=37+i*35;
+    line(xx,450,xx+13,437,S.steel,.55);
+  }
+  for(const fx of [80,200,642,762]){
+    poly([[fx-7,452],[fx+7,452],[fx+102,365],[fx-102,365]],mix(S.sky,S.steel,.40));
+    p.box(fx-19,449,38,2.2,mix(C.white,C.blue,.38));
+    for(let l=0;l<5;l++)p.box(fx-14+l*7,451.5,3,1.4,C.blue);
+  }
+  poly([[29,362],[813,362],[792,334],[50,334]],S.pitch);
+  for(let i=0;i<14;i++){
+    const xl=60+i*52;
+    poly([[xl,336],[xl+18,336],[xl+31,360],[xl+14,360]],
+      i%2?S.pitch:mix(S.pitch,S.brighter,.33));
+  }
+  line(50,343,792,343,S.edge,.55);
+  line(421,338,421,358,S.edge,.75);
+  p.circle(421,347,11,S.edge,.65);
+
+  // Central TV scorebug; no fake opponent/team information.
+  p.box(202,355,438,86,S.deep);
+  p.box(202,438,438,2.6,C.gold);
+  p.box(202,355,438,2.5,C.aqua);
+  p.box(211,361,420,1,S.edge);
+  p.box(419.8,367,2,61,S.steel);
+  p.text(421,425,10.2,"RÉSULTAT FINAL",C.gold,true,"center");
+  const score=m.score;
+  const scored=score?.status==="available"?fmt(score.goalsFor):"Indisponible";
+  const conceded=score?.status==="available"?fmt(score.goalsAgainst):"Indisponible";
+  const scoreSize=value=>value.length>8?17:value.length>3?38:58;
+  p.text(329,366,scoreSize(scored),scored,C.white,true,"center");
+  p.text(512,366,scoreSize(conceded),conceded,C.white,true,"center");
+  p.text(421,383,27,"-",C.gold,true,"center");
+  p.text(329,359,8.5,"BUTS MARQUÉS",C.aqua,true,"center");
+  p.text(512,359,8.5,"BUTS ENCAISSÉS",C.red,true,"center");
+
+  // Crest-like football emblems with stylized ball; no actual club logo.
+  for(const [cx,accent] of [[125,C.aqua],[717,C.red]]){
+    poly([[cx-28,424],[cx+28,424],[cx+24,375],[cx,362],[cx-24,375]],S.deep);
+    p.circle(cx,394,23,accent,1.6);
+    p.circle(cx,394,15,S.edge,.8);
+    p.dot(cx,394,4,accent);
+    for(let a=0;a<5;a++){
+      const theta=a*Math.PI*2/5-Math.PI/2;
+      p.dot(cx+14*Math.cos(theta),394+14*Math.sin(theta),2.3,accent);
+    }
+    p.text(cx,361,7.5,"MATCH",accent,true,"center");
+  }
+  p.box(X,Y,W,2,C.gold);
+
+  // Broadcast lower third: four official metrics as one continuous ribbon.
+  const rates=[
+    ["PASSES RÉUSSIES",score?.indicators?.passRate],
+    ["TIRS CADRÉS",score?.indicators?.loadingPercent],
+    ["DUELS GAGNÉS",score?.indicators?.unloadingPercent],
+    ["POSSESSION",score?.indicators?.possessionPercent],
   ];
-  p.box(29, 302, 784, 45, C.paper);
-  rates.forEach(([label, value], i) => {
-    const left = 29 + i * 196;
-    const failed = Number.isFinite(value) && value <= m.criteria.scoreTargetPercent;
-    const accent = failed ? C.red : C.aqua;
-    if (i > 0) p.box(left, 309, 0.9, 30, C.panel2);
-    p.box(left + 12, 342, 26, 2, accent);
-    p.text(left + 12, 330, 8, label, C.slateInk, true);
-    p.text(left + 12, 308, 21, percent(value), failed ? C.navyInk : C.navyInk, true);
-    if (failed) p.box(left + 175, 310, 5, 26, accent);
+  p.box(29,286,784,45,S.deep);
+  p.box(29,328,784,3.4,C.gold);
+  rates.forEach(([label,value],i)=>{
+    const xl=29+i*196;
+    const failed=Number.isFinite(value)&&value<=m.criteria.scoreTargetPercent;
+    if(i>0)line(xl,292,xl,325,S.edge,.7);
+    p.box(xl+11,292,3,29,failed?C.red:C.aqua);
+    p.text(xl+20,314,8.2,label,C.muted,true);
+    p.text(xl+20,291,23,percent(value),failed?C.red:C.white,true);
   });
-  // Editorial match report statistics: no six floating cards. Keep 4–6
-  // selectable KPIs, exact provenance and optional detail, over two baselines.
-  p.text(32, 290, 9.4, "LE COLLECTIF EN CHIFFRES", C.gold, true);
-  p.line(254, 292, 811, 292, C.pitchLine, 0.7);
-  const allCards = indicatorCards(m);
-  const byId = new Map(m.visibleIndicators.map((id, index) => [id, allCards[index]]));
-  const selected = m.pdfProfile.indicatorIds.map(id => byId.get(id)).filter(Boolean);
-  if (!selected.length) p.text(41, 236, 10, "Aucun KPI complémentaire visible dans le MATCH.", C.muted);
-  const columns = selected.length <= 4 ? 2 : 3;
-  const width = columns === 2 ? 382 : 249;
-  selected.forEach((card, i) => {
-    const row = Math.floor(i / columns), column = i % columns;
-    const left = columns === 2 ? 30 + column * 399
-      : 30 + column * 266 + (selected.length === 5 && row === 1 ? 133 : 0);
-    compactMetric(p, left, 279 - row * 47, width, card.label, card.value, card.detail,
-      column % 2 === 0 ? C.aqua : C.gold);
+
+  p.text(35,278,7.6,
+    "Zonage <= "+fmt(m.criteria.zonageMinutes)+" min  |  CHG <= "+
+    fmt(m.criteria.loadingSeconds)+" s/poz  |  DECHG <= "+
+    fmt(m.criteria.unloadingSeconds)+" s/poz",C.muted);
+
+  // Match-statistics sheet: typographic tape rather than six dashboard tiles.
+  p.text(34,265,10.3,"LE MATCH EN CHIFFRES",C.gold,true);
+  line(258,268,813,268,S.edge,.65);
+  const allCards=indicatorCards(m);
+  const byId=new Map(m.visibleIndicators.map((id,index)=>[id,allCards[index]]));
+  const selected=m.pdfProfile.indicatorIds.map(id=>byId.get(id)).filter(Boolean);
+  if(!selected.length)p.text(41,235,10,"Aucun KPI complémentaire visible dans le MATCH.",C.muted);
+  selected.forEach((card,i)=>{
+    const row=Math.floor(i/3),col=i%3;
+    const x=30+col*266,y=254-row*33.5;
+    if(col>0)line(x-10,y-20,x-10,y+2,S.edge,.55);
+    const label=trim(card.label,32).toUpperCase();
+    const labelSize=clamp(233/Math.max(1,label.length*.55),7.3,8.1);
+    p.text(x,y-6,labelSize,label,C.muted,true);
+    const shown=ascii(card.value??"Indisponible");
+    const size=clamp(233/Math.max(1,shown.length*.57),10,18);
+    p.text(x,y-27,size,shown,C.white,true);
+    if(card.detail&&shown.length<12){
+      const max=Math.max(3,Math.floor((242-shown.length*size*.57-15)/4));
+      if(max>9)p.text(x+Math.min(245,shown.length*size*.57+14),y-25,7.1,trim(card.detail,max),C.muted);
+    }
   });
-  compactChart(p, m, m.pdfProfile.chartId);
+  compactChart(p,m,m.pdfProfile.chartId);
 }
 
 function compactBriefPage(doc, m) {
