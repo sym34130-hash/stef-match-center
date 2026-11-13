@@ -3,6 +3,7 @@
 // No server-side browser or external service; no files written to disk.
 import { MatchExportError } from "./match-export-model.mjs";
 import { effectivePdfProfile } from "./match-pdf-profile.mjs";
+import { renderFootballPdf } from "./match-football-pdf.mjs";
 
 const WIDTH = 842, HEIGHT = 595;
 const C = {
@@ -722,9 +723,7 @@ function compactBriefPage(doc, m) {
 export function renderMatchPdf(model) {
   if (!model?.agency?.code || !model?.match?.date) throw new MatchExportError(400, "MATCH invalide.");
   const m = { ...model, pdfProfile: effectivePdfProfile(model.pdfProfile, model.visibleIndicators, model.match.date) };
-  const pdf = new Pdf(m);
-  compactScorePage(pdf, m);
-  compactBriefPage(pdf, m);
-  if (pdf.pages.length !== 2) throw new MatchExportError(500, "Nombre de pages inattendu.");
-  return pdf.render();
+  return renderFootballPdf(m, {
+    Pdf, indicatorCards, compactChart, effectiveBriefText, fmt, percent, MatchExportError,
+  });
 }
