@@ -67,14 +67,12 @@ test("le carrousel KPI conserve ses sources, sa profondeur et ses saisies", asyn
   await expect(carousel.locator('[data-indicator="temperature"] .match-indicator-target')).toHaveCSS("left", /.+/);
   await expect(carousel.locator('[data-indicator="temperature"] .match-indicator-meter-scale')).toHaveText("0%Objectif 100%100%");
   await expect(carousel.locator('[data-indicator="arrival"] .match-indicator-source')).toContainText("objectif 85%");
-  await expect(page.locator(".operational-chart-slide")).toHaveCount(5);
+  await expect(page.locator(".operational-chart-slide")).toHaveCount(4);
   const matchNavigation = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
   await matchNavigation.getByRole("button", { name: "Aller à Statistiques du match" }).click();
-  await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % centres réussis" }).click();
-  await expect(page.locator(".operational-charts-carousel").getByText("% centres réussis", { exact: true })).toBeVisible();
-  await expect(page.locator(".centers-quality-pie span")).toHaveText("62%");
-  await page.locator(".centers-quality-details summary").click();
-  await expect(page.locator(".centers-quality-details")).toContainText("taux consolidé de ponctualité destination");
+  await expect(page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % centres réussis" })).toHaveCount(0);
+  // The 106J destination punctuality card remains available in the collective KPI carousel.
+  await expect(value("destination")).toBeVisible();
   await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % duels gagnés" }).click();
   await expect(page.locator(".operational-charts-carousel").getByText("% Duels gagnés", { exact: true })).toBeVisible();
   await matchNavigation.getByRole("button", { name: "Aller à Coup de sifflet final" }).click();
