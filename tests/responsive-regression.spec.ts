@@ -527,7 +527,7 @@ async function captureReference(page: Page, scene: string, viewport: ViewportCas
   await page.evaluate(() => window.scrollTo(0, 0));
   const operational = scene.endsWith("slide-3");
   const counter = page.locator(".operational-charts-carousel-counter");
-  if (operational) await expect(counter).toHaveText("5 / 5");
+  if (operational) await expect(counter).toHaveText("4 / 4");
   // Chromium's full-page capture can re-snap this nested carousel while
   // resizing the capture surface. Keep its proof at the requested viewport.
   await page.screenshot({ path: test.info().outputPath(`${viewport.name}-${scene}-full.png`), fullPage: !scene.startsWith("brief-") && !operational });
@@ -539,5 +539,5 @@ async function captureReference(page: Page, scene: string, viewport: ViewportCas
     maxDiffPixelRatio: 0.02,
     threshold: 0.2,
   });
-  if (operational) await expect(counter).toHaveText("5 / 5");
+  if (operational) await expect(counter).toHaveText("4 / 4");
 }
