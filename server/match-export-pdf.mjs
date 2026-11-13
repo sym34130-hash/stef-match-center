@@ -541,7 +541,7 @@ function compactChart(p, m, chartId) {
     for (let hour = 0; hour <= lastTick; hour++) {
       if (!observed.has(hour)) empty.push(hour);
     }
-    if (empty.length) p.text(x + w, 49, 7.5, empty.length + " créneau(x) sans donnée", C.muted, false, "right");
+    if (empty.length) p.text(x + w, 60, 7.5, empty.length + " créneau(x) sans donnée", C.muted, false, "right");
     p.text(42, 49, 8.4, "Tous dechargements eligibles ; périmètre distinct du KPI officiel toutes opérations.", C.muted);
     return;
   }
