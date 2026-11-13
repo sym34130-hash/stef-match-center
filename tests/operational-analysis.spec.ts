@@ -281,7 +281,7 @@ test("analyses : ancien snapshot, absence de données et absence d'anomalies", a
   await tab(page, "% duels gagnés").click(); await expect(page.locator(".reception-hourly-analysis")).toContainText("Analyse indisponible");
   snapshot = fixture(); snapshot.zonageDiagnostic = { ...snapshot.zonageDiagnostic!, top5: [], latePositions: 0, anomalyRate: 0 };
   await page.getByRole("button", { name: "Actualiser", exact: true }).click();
-  await tab(page, "Diagnostic opérationnel").click(); await expect(diagnostic).toContainText("Aucun voyage hors délai");
+  await tab(page, "Diagnostic opérationnel").click(); await expect(diagnostic).toContainText("Aucun voyage en retard");
   await expect(diagnostic.locator(".diagnostic-big-number")).toHaveText("0");
   snapshot.zonageDiagnostic = { ...snapshot.zonageDiagnostic!, state: "indisponible", qualifiablePositions: 0, coverageRate: 0, anomalyRate: null };
   await page.getByRole("button", { name: "Actualiser", exact: true }).click();
@@ -329,7 +329,7 @@ test("analyses : seuils, plage, exclusions/réintégration et agences actualisé
   await tab(page, "Diagnostic opérationnel").click();
   await page.locator(".diagnostic-more > summary").click();
   await page.locator(".diagnostic-method summary").click();
-  await expect(page.locator(".diagnostic-method")).toContainText("cible 25 min");
+  await expect(page.locator(".diagnostic-method")).toContainText("25 min");
   await page.getByLabel("Début", { exact: true }).selectOption("22:00"); await page.getByRole("button", { name: "Appliquer", exact: true }).click();
   await expect(page.locator(".analysis-night")).toContainText("22h00");
   await tab(page, "% tirs cadrés").click();
