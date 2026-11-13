@@ -523,7 +523,7 @@ function compactChart(p, m, chartId) {
     // clock-hour offsets, not equally spaced array indices. Missing hours
     // remain gaps and use dashed connectors rather than fabricated samples.
     const parseMinutes = value => {
-      const match = /^(\\d{1,2}):(\\d{2})$/.exec(String(value ?? ""));
+      const match = /^(\d{1,2}):(\d{2})$/.exec(String(value ?? ""));
       if (!match) return null;
       const hour = Number(match[1]), minute = Number(match[2]);
       return hour < 24 && minute < 60 ? hour * 60 + minute : null;
