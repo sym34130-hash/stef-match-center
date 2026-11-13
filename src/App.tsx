@@ -2856,7 +2856,7 @@ function PerformanceChart({ snapshot }: { snapshot: Snapshot }) {
       </div>
   );
   const chart = (large = false) => (data.length > 0 || selectedMinutes !== null) ? (
-        <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="group" aria-label="Évolution horaire du pourcentage de passes réussies">
+        <svg className="performance-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" role="group" aria-label="Évolution horaire du pourcentage de déchargements dans le délai">
           <rect className="performance-chart-plot" x={left} y={top} width={chartWidth} height={chartHeight} rx="10" />
           {/* Neutral full-height bands explicitly mark hours WITHOUT readings,
               including internal gaps and the time after the final sample. */}
