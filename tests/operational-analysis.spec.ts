@@ -180,6 +180,15 @@ test("analyses : quatre slides, rendu normal/Célébration, responsive et détai
           }
           await diagnostic.locator(".diagnostic-more > summary").click();
           await expect(diagnostic.locator(".diagnostic-ranking")).toBeVisible();
+          await expect(diagnostic.locator(".diagnostic-ranking h4")).toHaveCount(0);
+          await expect(diagnostic.locator(".diagnostic-ranking")).toHaveAttribute("aria-label", "Voyages avec le plus de retards");
+          const separated = await diagnostic.locator(".diagnostic-more").evaluate(section => {
+            const summary = section.querySelector(":scope > summary");
+            const first = section.querySelector(".diagnostic-top5 > li");
+            if (!summary || !first) return false;
+            return summary.getBoundingClientRect().bottom + 8 <= first.getBoundingClientRect().top;
+          });
+          expect(separated, "Le libellé Voir les détails doit rester distinct des lignes, y compris en Célébration").toBe(true);
           await expect(diagnostic.locator(".diagnostic-top5 > li")).toHaveCount(z.top5.length);
           for (const [rank, trip] of z.top5.entries()) {
             const row = diagnostic.locator(".diagnostic-top5 > li").nth(rank);
