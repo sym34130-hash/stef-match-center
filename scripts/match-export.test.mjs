@@ -581,3 +581,33 @@ test("P2: known Excel origin remains explicit even when it differs from the work
   assert.match(parsed.text, /Sources : Excel \[059\]/);
   assert.doesNotMatch(parsed.text, /Sources : Excel \[origine indéterminée\]/);
 });
+
+
+test("PDF Football V1: la feuille de match et le plan de jeu restent lisibles sur deux pages", async () => {
+  const model = build("058", {
+    causerie: {
+      team: "Équipe soirée", manager: "Manager exploitation",
+      visibleIndicators: ["performance", "positions", "arrival", "injuries", "departure", "temperature"],
+      visibleIndicatorsVersion: 2,
+      attack: ["Fiabiliser les créneaux destinataires"],
+      midfield: ["Contrôler les départs de ramasse"],
+      defense: ["Renforcer la vigilance SST"],
+      coach: { priority: "Priorité au départ camions", arbitration: "Décider avant le quai" },
+    },
+    pdfProfile: {
+      indicatorIds: ["performance", "positions", "arrival", "injuries", "departure", "temperature"],
+      chartId: "operational-diagnostic",
+    },
+  });
+  const parsed = await pdfParse(renderMatchPdf(model));
+  assert.equal(parsed.numpages, 2);
+  for (const marker of [
+    "FEUILLE DE MATCH", "PLAN DE JEU", "BUTS MARQUÉS", "BUTS ENCAISSÉS",
+    "PASSES RÉUSSIES", "TIRS CADRÉS", "DUELS GAGNÉS", "POSSESSION",
+    "SÉCURITÉ / VIGILANCE", "SERVICE CLIENT", "EXPÉDITION / RAMASSE & EMBALLAGE",
+    "SST", "PRIORITÉS OPÉRATIONNELLES", "DÉCISIONS / ARBITRAGES",
+  ]) assert.ok(parsed.text.includes(marker), "Libellé absent : " + marker);
+  assert.match(parsed.text, /Priorité au départ camions/);
+  assert.match(parsed.text, /Contrôler les départs de ramasse/);
+  assert.equal((parsed.text.match(/Sources : Excel \[/g) ?? []).length, 2);
+});
