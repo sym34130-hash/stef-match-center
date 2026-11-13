@@ -138,6 +138,7 @@ for (const fixture of fixtures) {
       const rate = Math.round(won / all * 1000) / 10;
       checks.push(["weighted hourly pass rate", "Total : " + fmtCertified(rate) + " %"]);
       checks.push(["first hourly period", snapshot.hourlyPerformance[0].label]);
+      checks.push(["actual selected period end", "22h30"]);
     } else if (chartId === "reception-time") {
       checks.push(["reception target", "Cible : " + league.criteria.unloadingSeconds + " s/poz"]);
       checks.push(["positions per slot", "Positions/créneau : 10 a 32"]);
