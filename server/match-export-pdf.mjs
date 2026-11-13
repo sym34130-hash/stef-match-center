@@ -523,7 +523,7 @@ function compactChart(p, m, chartId) {
         // The line itself is continuous only between consecutive observed hours.
         p.ops.push(rgb(C.aqua) + " RG 1.6 w " + (gap ? "[3 3] 0 d " : "[] 0 d ")
           + prev.x.toFixed(2) + " " + prev.y.toFixed(2) + " m "
-          + point.x.toFixed(2) + " " + point.y.toFixed(2) + " l S [] 0 d\\n");
+          + point.x.toFixed(2) + " " + point.y.toFixed(2) + " l S [] 0 d\n");
       }
       p.box(point.x - 1.8, point.y - 1.8, 3.6, 3.6, C.aqua);
     }
