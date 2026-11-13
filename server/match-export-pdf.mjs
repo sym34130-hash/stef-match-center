@@ -466,17 +466,6 @@ export function renderMatchPdfFull(model) {
 
 /** Compact two-page briefing. The complete legacy report stays available only
  * as an exported diagnostic renderer; the HTTP endpoint calls this one. */
-function compactMetric(p, x, top, width, label, value, detail = "", accent = C.aqua) {
-  // Match report index: value-led typesetting rather than a KPI card grid.
-  p.box(x, top - 40, 2.8, 38, accent);
-  const labelSize = clamp((width - 18) / Math.max(1, ascii(label).length * 0.55), 7.7, 8.7);
-  p.text(x + 10, top - 10, labelSize, trim(label, 38).toUpperCase(), C.muted, true);
-  const shown = ascii(value ?? "Indisponible");
-  const size = clamp((width - 22) / Math.max(1, shown.length * 0.56), 10.5, 20);
-  p.text(x + 10, top - 31, size, shown, C.white, true);
-  if (detail) p.text(x + 10, top - 41, 7.2, trim(detail, Math.floor((width - 15) / 4)), C.muted);
-}
-
 /** Every printed chart is an operationally faithful *summary* of its on-screen
  * carousel source, never a reinterpreted percentage or a screenshot crop.
  * All vector primitives are confined to the same 784 x 116 pt page-one panel. */
