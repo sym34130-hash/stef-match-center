@@ -81,6 +81,40 @@ test("zonage : taux sur qualifiables, couverture et classement déterministe", (
   assert.deepEqual(analyze([...rows].reverse()).zonageDiagnostic, z);
 });
 
+test("diagnostic : six voyages, classement TOP 5 et totaux réconciliés sans compter les inconnus", () => {
+  const rows = [];
+  for (let travel = 0; travel < 6; travel++) {
+    const code = `V${travel}`;
+    for (let index = 0; index < 6 - travel; index++) {
+      const position = `${code}-${index}`;
+      rows.push(row("DECHG", position, "22:00:00", code));
+      rows.push(row("ZONAGE", position, "22:40:00", ""));
+    }
+  }
+  rows.push(row("DECHG", "UNKNOWN", "22:00:00", "V0"));
+  rows.push(row("DECHG", "ONTIME", "22:00:00", "V5"));
+  rows.push(row("ZONAGE", "ONTIME", "22:30:00", ""));
+  const z = analyze(rows).zonageDiagnostic;
+
+  // A precise 30 min deadline is on time; 40 min is late.
+  assert.deepEqual([z.latePositions, z.onTimePositions, z.unqualifiablePositions], [21, 1, 1]);
+  assert.equal(z.receivedPositions, 23);
+  assert.equal(z.qualifiablePositions, 22);
+  assert.equal(z.anomalyRate, Math.round(21 / 22 * 1000) / 10);
+  assert.equal(z.coverageRate, Math.round(22 / 23 * 1000) / 10);
+  assert.equal(z.latePositions + z.onTimePositions, z.qualifiablePositions);
+  assert.equal(z.qualifiablePositions + z.unqualifiablePositions, z.receivedPositions);
+  assert.deepEqual(z.top5.map(t => [t.travelCode, t.latePositions]),
+    [["V0", 6], ["V1", 5], ["V2", 4], ["V3", 3], ["V4", 2]]);
+  // The sixth voyage still belongs to the global total, not the visible top five.
+  assert.equal(z.top5.reduce((total, trip) => total + trip.latePositions, 0), 20);
+  assert.equal(z.travels.reduce((total, trip) => total + trip.latePositions, 0), z.latePositions);
+  assert.equal(z.details.filter(entry => entry.classification === "hors_delai").length, z.latePositions);
+  assert.equal(z.details.filter(entry => entry.classification === "non_qualifiable").length, z.unqualifiablePositions);
+  assert.equal(z.details.find(entry => entry.position === "UNKNOWN").reason, "zonage_absent");
+  assert.deepEqual(analyze([...rows].reverse()).zonageDiagnostic, z);
+});
+
 test("réception : convention par lignes conservée et absence de durée exclue", () => {
   const h = analyze([row("DECHG", "P", "22:00:00"), row("DECHG", "P", "22:02:00"),
     row("DECHG", "Q", "22:01:00", "SINGLE")]).unloadingHourlyAnalysis;
