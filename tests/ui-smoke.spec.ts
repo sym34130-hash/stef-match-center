@@ -596,13 +596,13 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
       await matchCarouselNavigation.getByRole("button", { name: "Aller à Statistiques du match" }).click();
       await expect(matchCarouselNavigation.locator(".match-carousel-count")).toHaveText("03 / 04");
       await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % duels gagnés" }).click();
-      await expect(page.locator(".operational-charts-carousel-counter")).toHaveText("2 / 5");
+      await expect(page.locator(".operational-charts-carousel-counter")).toHaveText("2 / 4");
       await expect(page.locator(".operational-charts-carousel").getByText("% Duels gagnés", { exact: true })).toBeVisible();
       await page.locator(".operational-charts-carousel-dots").getByRole("tab", { name: "Afficher % tirs cadrés" }).click();
-      await expect(page.locator(".operational-charts-carousel-counter")).toHaveText("3 / 5");
+      await expect(page.locator(".operational-charts-carousel-counter")).toHaveText("3 / 4");
       await expect(page.locator(".operational-charts-carousel").getByText("% tirs cadrés", { exact: true })).toBeVisible();
       await expect(page.locator(".loading-duel-quality-card .duel-quality-details summary")).toContainText("Voir les duels perdus");
-      await expect(page.locator(".operational-chart-slide")).toHaveCount(5);
+      await expect(page.locator(".operational-chart-slide")).toHaveCount(4);
       const qualityCarouselLayout = await page.evaluate(() => {
         const viewport = document.querySelector<HTMLElement>(".operational-charts-carousel-viewport");
         const slides = Array.from(document.querySelectorAll<HTMLElement>(".operational-chart-slide"));
@@ -616,9 +616,9 @@ test("les vues principales restent lisibles sur desktop, tablette et mobile", as
           horizontalOverflow: Boolean(viewport && viewport.scrollWidth > viewport.clientWidth + 1),
         };
       });
-      expect(qualityCarouselLayout).toEqual({ slideCount: 5, sameSlideWidth: true, sameCardHeight: true, horizontalOverflow: true });
+      expect(qualityCarouselLayout).toEqual({ slideCount: 4, sameSlideWidth: true, sameCardHeight: true, horizontalOverflow: true });
       await page.getByRole("button", { name: "Graphique précédent", exact: true }).click();
-      await expect(page.locator(".operational-charts-carousel-counter")).toHaveText("2 / 5");
+      await expect(page.locator(".operational-charts-carousel-counter")).toHaveText("2 / 4");
       await expect(page.locator(".operational-charts-carousel-dots button.is-active")).toHaveCount(1);
       await expect(page.locator(".loading-duel-quality-card .duel-quality-details summary")).toContainText("Voir les duels perdus");
       await matchCarouselNavigation.getByRole("button", { name: "Aller à Coup de sifflet final" }).click();
