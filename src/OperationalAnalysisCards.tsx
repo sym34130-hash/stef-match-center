@@ -120,7 +120,7 @@ export function OperationalDiagnosticCard({ snapshot }: { snapshot: Snapshot }) 
         <span>{hasZonage ? "Aucun retard confirmé sur les positions vérifiables." : "Aucune réception vérifiable pour cette période."}</span>
       </div>}
     </section>
-    {hasZonage && z.unqualifiablePositions > 0 && (
+    {z && z.unqualifiablePositions > 0 && (
       <p className="diagnostic-unknown">
         <Info size={17} aria-hidden="true" />
         <span><b>{count(z.unqualifiablePositions)} positions à vérifier</b><small>Délai inconnu : elles ne sont pas comptées comme des retards.</small></span>
