@@ -3,6 +3,7 @@
 // No server-side browser or external service; no files written to disk.
 import { MatchExportError } from "./match-export-model.mjs";
 import { effectivePdfProfile } from "./match-pdf-profile.mjs";
+import { renderFootballPdf } from "./match-football-pdf.mjs";
 
 const WIDTH = 842, HEIGHT = 595;
 const C = {
@@ -424,18 +425,6 @@ export function renderMatchPdfFull(model) {
 
 /** Compact two-page briefing. The complete legacy report stays available only
  * as an exported diagnostic renderer; the HTTP endpoint calls this one. */
-function compactMetric(p, x, y, width, label, value, detail = "") {
-  p.box(x, y, width, 64, C.panel);
-  p.box(x, y + 61, width, 3, C.blue);
-  p.text(x + 10, y + 43, 8.5, trim(label, 27).toUpperCase(), C.aqua, true);
-  const valueText = ascii(value ?? "Indisponible");
-  const fontSize = valueText.length > 30 ? 10 : valueText.length > 17 ? 13 : 21;
-  const parts = wrap(valueText, Math.max(12, Math.floor((width - 20) / (fontSize * 0.55))));
-  if (parts.length > 2) throw new MatchExportError(422, "Le libellé d'un KPI est trop long pour le briefing papier.");
-  parts.forEach((line, i) => p.text(x + 10, y + 18 - i * 12, fontSize, line, C.white, true));
-  if (detail && parts.length === 1) p.text(x + 10, y + 5, 7.4, trim(detail, Math.floor((width - 20) / 4.1)), C.muted);
-}
-
 /** Every printed chart is an operationally faithful *summary* of its on-screen
  * carousel source, never a reinterpreted percentage or a screenshot crop.
  * All vector primitives are confined to the same 784 x 116 pt page-one panel. */
@@ -617,24 +606,6 @@ function compactChart(p, m, chartId) {
   chartFrame(p, "ANALYSE INDISPONIBLE", "La sélection du graphique a changé. Recharge le MATCH.");
 }
 
-/** Size the text to the actual printable geometry, not an arbitrary line cap.
- * All six fields can use their documented input limits while staying on page 2.
- * Unknown excess still raises 422 with the exact section; never silently crop. */
-function shortBlock(p, { x, y, w, h, title, value }) {
-  p.box(x, y, w, h, C.panel);
-  p.box(x, y + h - 3, w, 3, C.blue);
-  p.text(x + 11, y + h - 17, 9.5, title.toUpperCase(), C.aqua, true);
-  const size = 8.7, lineHeight = 9.9;
-  const maxChars = Math.max(14, Math.floor((w - 24) / (size * 0.54)));
-  const lines = wrap(value || "Non renseigné", maxChars);
-  const firstBaseline = y + h - 28;
-  const capacity = Math.max(1, 1 + Math.floor((h - 35) / lineHeight));
-  if (lines.length > capacity) {
-    throw new MatchExportError(422,
-      `La rubrique « ${title} » contient ${lines.length} lignes (maximum ${capacity} sur 2 pages). Raccourcis uniquement cette synthèse dans « Personnaliser le PDF ».`);
-  }
-  lines.forEach((line, i) => p.text(x + 11, firstBaseline - i * lineHeight, size, line, C.text));
-}
 function effectiveBriefText(m) {
   const custom = m.pdfProfile.dailyBrief;
   const c = m.causerie ?? {};
@@ -667,64 +638,10 @@ function effectiveBriefText(m) {
     decisions: custom.decisions || combined([c.coach?.tactic, c.coach?.arbitration, c.coach?.review, c.mercato]),
   };
 }
-function compactScorePage(doc, m) {
-  const p = doc.add("01 / PERFORMANCE DU JOUR");
-  p.text(36, 486, 18, "COUP DE SIFFLET FINAL", C.white, true);
-  p.text(36, 468, 9,
-    `Zonage <= ${fmt(m.criteria.zonageMinutes)} min  |  CHG <= ${fmt(m.criteria.loadingSeconds)} s/poz  |  DECHG <= ${fmt(m.criteria.unloadingSeconds)} s/poz`,
-    C.muted);
-  const score = m.score;
-  p.card(29, 402, 385, 60, "Buts marqués", score?.status === "available" ? fmt(score.goalsFor) : "Indisponible", "", C.aqua);
-  p.card(428, 402, 385, 60, "Buts encaissés", score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible", "", C.red);
-  const rates = [
-    ["Passes réussies", score?.indicators?.passRate],
-    ["Tirs cadrés", score?.indicators?.loadingPercent],
-    ["Duels gagnés", score?.indicators?.unloadingPercent],
-    ["Possession", score?.indicators?.possessionPercent],
-  ];
-  rates.forEach(([label, val], i) =>
-    p.card(29 + i * 199, 337, 187, 58, label, percent(val), "",
-      Number.isFinite(val) && val <= m.criteria.scoreTargetPercent ? C.red : C.blue));
-  // Two rows: 2 x 2 when four are selected, 3 x 2 for five or six.
-  // The chart keeps its own fixed area and the font size is unchanged.
-  const allCards = indicatorCards(m);
-  const byId = new Map(m.visibleIndicators.map((id, index) => [id, allCards[index]]));
-  const selected = m.pdfProfile.indicatorIds.map(id => byId.get(id)).filter(Boolean);
-  if (!selected.length) p.text(41, 236, 10, "Aucun KPI complémentaire visible dans le MATCH.", C.muted);
-  const columns = selected.length <= 4 ? 2 : 3;
-  selected.forEach((card, i) => {
-    const row = Math.floor(i / columns);
-    const column = i % columns;
-    const x = columns === 2 ? 29 + column * 399
-      : 29 + column * 266 + (selected.length === 5 && row === 1 ? 133 : 0);
-    compactMetric(p, x, 265 - row * 69, columns === 2 ? 385 : 252, card.label, card.value, card.detail);
-  });
-  compactChart(p, m, m.pdfProfile.chartId);
-}
-function compactBriefPage(doc, m) {
-  const p = doc.add("02 / BRIEF DES SERVICES");
-  p.text(36, 477, 20, "BRIEF OPERATIONNEL DU JOUR", C.white, true);
-  p.text(777, 479, 8, trim([m.causerie?.team, m.causerie?.manager].filter(Boolean).join(" / "), 42), C.muted, false, "right");
-  const brief = effectiveBriefText(m);
-  // Keep the exact labels of BRIEF ÉQUIPE, not the old football metaphors.
-  shortBlock(p, { x: 29, y: 405, w: 784, h: 58, title: "Sécurité / vigilance", value: brief.safety, maxLines: 2 });
-  shortBlock(p, { x: 29, y: 273, w: 784, h: 126, title: "Service client", value: brief.attack, maxLines: 6 });
-  shortBlock(p, { x: 29, y: 149, w: 482, h: 118, title: "Expédition / Ramasse & Emballage", value: brief.midfield, maxLines: 5 });
-  shortBlock(p, { x: 523, y: 149, w: 290, h: 118, title: "SST", value: brief.defense, maxLines: 5 });
-  shortBlock(p, { x: 29, y: 43, w: 385, h: 100, title: "Priorités opérationnelles", value: brief.priorities, maxLines: 4 });
-  shortBlock(p, { x: 428, y: 43, w: 385, h: 100, title: "Décisions / arbitrages", value: brief.decisions, maxLines: 4 });
-  const a = m.causerie?.attachmentCounts ?? {};
-  if (Object.values(a).some(count => Number(count) > 0)) {
-    p.text(36, 34, 7.5,
-      `Captures sur le site : Service client ${a.attack ?? 0} / Expedition ${a.midfield ?? 0} / SST ${a.defense ?? 0}`, C.muted);
-  }
-}
 export function renderMatchPdf(model) {
   if (!model?.agency?.code || !model?.match?.date) throw new MatchExportError(400, "MATCH invalide.");
   const m = { ...model, pdfProfile: effectivePdfProfile(model.pdfProfile, model.visibleIndicators, model.match.date) };
-  const pdf = new Pdf(m);
-  compactScorePage(pdf, m);
-  compactBriefPage(pdf, m);
-  if (pdf.pages.length !== 2) throw new MatchExportError(500, "Nombre de pages inattendu.");
-  return pdf.render();
+  return renderFootballPdf(m, {
+    Pdf, indicatorCards, compactChart, effectiveBriefText, fmt, percent, MatchExportError,
+  });
 }
