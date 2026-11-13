@@ -88,11 +88,18 @@
 .reception-hour-plot { position: relative; height: 150px; background: repeating-linear-gradient(to top, #dce6f1 0 1px, transparent 1px 50%); border-bottom: 1px solid #aebed1; }
 .reception-hour-bars { display: grid; gap: 4px; height: 100%; }
 .reception-hour-button { position: relative; min-width: 0; width: 100%; height: 100%; border: 0; border-radius: 4px; padding: 0; color: var(--navy-900); background: transparent; cursor: pointer; font-family: inherit; }
-.reception-hour-bar { position: absolute; bottom: 0; left: 22%; right: 22%; height: var(--bar-height); background: #20856b; border-radius: 4px 4px 0 0; }
+.reception-hour-bar { position: absolute; bottom: 0; left: 22%; right: 22%; height: var(--bar-height); background: #20856b; border-radius: 4px 4px 0 0; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
+.reception-hour-bar-volume { display: block; color: #fff; font-size: 11px; font-weight: 900; line-height: 1.1; padding-bottom: 3px; white-space: nowrap; font-variant-numeric: tabular-nums; text-shadow: 0 1px 1px #0006; }
+/* On narrow screens, reserve the whole column width for the number of positions. */
+@media (max-width: 700px) {
+  .reception-hour-bar { left: 1px; right: 1px; }
+  .reception-hour-bar-volume { font-size: 9px; letter-spacing: -.03em; }
+}
+
 .reception-hour-button.is-over-target .reception-hour-bar { background: #ba4050; }
 .reception-hour-button.is-selected { background: #1d4e8910; box-shadow: inset 0 0 0 1px #1d4e89; }
-/* Keep the volume ABOVE both its bar AND the dashed target. Labels near
-   the threshold otherwise sit directly behind the objective marker. */
+/* Keep the mean DURATION above the bar and dashed target;
+   the number of distinct positions stays inside the colored column. */
 .reception-hour-value { position: absolute; bottom: max(calc(var(--bar-height) + 6px), calc(var(--target-height) + 10px)); left: 0; right: 0; z-index: 2; font-size: 12px; line-height: 1.2; font-weight: 800; white-space: nowrap; overflow: visible; pointer-events: none; font-variant-numeric: tabular-nums; text-align: center; }
 .reception-hour-button.is-unavailable .reception-hour-value { bottom: 4px; }
 .reception-hour-value-unit { font-weight: 700; font-size: .8em; }
@@ -144,6 +151,7 @@
   .reception-hour-bars { gap: 2px; }
   .reception-hour-chart { grid-template-columns: 30px minmax(0, 1fr); gap: 4px; }
   .reception-hour-value, .reception-hour-label { font-size: 11px; }
+  .reception-hour-bar-volume { font-size: 9px; }
   .reception-hour-value-unit { display: none; }
   .reception-hour-unit { display: none; }
   .reception-hourly-analysis .analysis-provenance { overflow-wrap: anywhere; }
@@ -213,7 +221,10 @@
   .reception-hour-button:nth-child(even) .reception-hour-label { top: calc(100% + 20px); }
 }
 @media (max-width: 360px) {
-  .reception-hour-value { font-size: 8px; letter-spacing: -.055em; }
+  /* Preserve legible duration and position labels instead of squeezing each hour. */
+  .reception-hour-chart { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+  .reception-hour-plot { min-width: 360px; }
+  .reception-hour-value { font-size: 9px; letter-spacing: -.035em; }
   .operational-charts-carousel .loading-quality-card[aria-label="Qualité des chargements"] .loading-quality-pie,
   .operational-charts-carousel .centers-quality-card .loading-quality-pie { max-width: 100%; }
   .operational-charts-carousel .loading-quality-card[aria-label="Qualité des chargements"] .loading-quality-heading { flex-wrap: wrap; }

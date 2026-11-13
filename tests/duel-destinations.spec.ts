@@ -4,7 +4,7 @@ import type { Snapshot } from "../src/types";
 
 test.use({ reducedMotion: "reduce" });
 
-test("Duels perdus : destination descriptive, valeur absente et tableau responsive", async ({ page }, info) => {
+test("Duels perdus : uniquement voyage/heure/positions/temps/résultat et tableau responsive", async ({ page }, info) => {
   test.setTimeout(120_000);
   const snapshot: Snapshot = JSON.parse(readFileSync("data/agencies/058/latest.json", "utf8"));
   const duels = snapshot.unloadingDuelQuality!.lostDuels;
@@ -31,10 +31,10 @@ test("Duels perdus : destination descriptive, valeur absente et tableau responsi
       const details = page.locator(".reception-quality-card .duel-quality-details");
       if (!await details.evaluate(el => el.hasAttribute("open"))) await details.locator("summary").click();
       const table = details.getByRole("table", { name: "Duels perdus" });
-      await expect(table.locator(".is-head > span")).toHaveText(["Voyage","Destination","Agence","Heure","Nb poz","Temps/poz","Résultat","Action"]);
-      await expect(table.locator(".duel-destination").first()).toHaveText(duels[0].destination!);
-      await expect(table.locator(".duel-destination").first()).toHaveAttribute("title", duels[0].destination!);
-      await expect(table.locator(".duel-destination").nth(1)).toHaveText("—");
+      await expect(table.locator(".is-head > span")).toHaveText(["Voyage","Heure","Nb poz","Temps/poz","Résultat"]);
+      await expect(table.locator(".duel-destination")).toHaveCount(0);
+      await expect(table.locator(".duel-quality-table-row:not(.is-head)").first().locator("span")).toHaveCount(5);
+      await expect(table).not.toContainText(duels[0].destination!);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
       expect(await table.locator(".duel-quality-table-row").evaluateAll(rows => rows.every(row => {
         const cells = [...row.children].map(cell => cell.getBoundingClientRect());

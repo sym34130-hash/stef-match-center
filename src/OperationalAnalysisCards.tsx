@@ -16,6 +16,10 @@ function nightLabel(night: OperatingNight | null | undefined) {
   return `${date.formatRange(new Date(night.start), new Date(night.end))} · ${clock(night.start).replace(":", "h")}–${clock(night.end).replace(":", "h")}`;
 }
 const duration = (seconds: number | null | undefined) => seconds == null ? "Indisponible" : formatKpiDuration(seconds);
+const compactDuration = (seconds: number) => {
+  const rounded = Math.max(0, Math.round(seconds));
+  return rounded < 60 ? `${rounded}s` : `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, "0")}`;
+};
 // Keep historical snapshots intact while presenting their legacy warning neutrally.
 const warningLabel = (warning: string) => warning.replace(/^(\d+) opération\(s\) d'autres nuits exclues des nouvelles analyses\.$/, "$1 opération(s) appartenant à d'autres périodes d'exploitation exclues du diagnostic.");
 
@@ -31,7 +35,7 @@ export function ReceptionHourlyChart({ snapshot }: { snapshot: Snapshot }) {
       <div><h3>Temps de réception par créneau</h3><p>Moyenne des voyages réceptionnés éligibles commencés dans l'heure</p></div>
       {analysis && <span className="analysis-target">Cible {duration(analysis.targetSeconds)}/position</span>}
     </header>
-    <p className="analysis-provenance">{nightLabel(analysis?.night)} · Même périmètre que les duels gagnés (15 positions minimum, hors activité AQ). Hauteur : moyenne en secondes/position · Chiffres : positions distinctes.</p>
+    <p className="analysis-provenance">{nightLabel(analysis?.night)} · Même périmètre que les duels gagnés (15 positions minimum, hors activité AQ). Hauteur : moyenne en secondes/position · Au-dessus : temps moyen/position · Dans les barres : positions distinctes.</p>
     {!available ? <p className="analysis-empty" role="status">Analyse indisponible : aucune réception exploitable sur la période retenue.</p> : <>
       <div className="reception-hour-chart" role="group" aria-label="Histogramme des temps moyens, en secondes par position">
         <div className="reception-hour-axis" aria-hidden="true"><span>{ceiling} s</span><span>{ceiling / 2} s</span><span>0 s</span></div>
@@ -44,8 +48,10 @@ export function ReceptionHourlyChart({ snapshot }: { snapshot: Snapshot }) {
               aria-pressed={selected?.start === slot.start} aria-controls="reception-hour-detail"
               aria-label={`${clock(slot.start)}–${clock(slot.end)} : ${slot.state === "disponible" ? `${count(slot.distinctPositions)} position${slot.distinctPositions === 1 ? "" : "s"} distincte${slot.distinctPositions === 1 ? "" : "s"}` : "positions indisponibles"}, moyenne ${duration(slot.meanSecondsPerPosition)}, ${slot.travelCount} voyage${slot.travelCount === 1 ? "" : "s"}`}
               onClick={() => setSelectedStart(slot.start)}>
-              <span className="reception-hour-bar" aria-hidden="true" />
-              <span className="reception-hour-value" aria-hidden="true">{slot.state !== "disponible" || slot.meanSecondsPerPosition == null ? "—" : <>{count(slot.distinctPositions)}<span className="reception-hour-value-unit"> pos.</span></>}</span>
+              <span className="reception-hour-bar" aria-hidden="true">
+                {slot.state === "disponible" && slot.meanSecondsPerPosition != null && <span className="reception-hour-bar-volume">{count(slot.distinctPositions)}</span>}
+              </span>
+              <span className="reception-hour-value" aria-hidden="true">{slot.state !== "disponible" || slot.meanSecondsPerPosition == null ? "—" : compactDuration(slot.meanSecondsPerPosition)}</span>
               <span className="reception-hour-label">{slot.label.replace(/h$/, "")}<span className="reception-hour-unit">h</span></span>
             </button>)}
           </div>

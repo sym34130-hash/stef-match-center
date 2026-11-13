@@ -28,7 +28,7 @@ const headers = ["Operateur", "Date Heure de debut d operation", "Type operation
   "Filtre heure", "Poste", "Poz non zonees", "DZ", "Duels gagnes", "Heure OP"];
 const rows = [];
 // Two qualifying trips. Second trip has 16 DECHG operations but only 15
-// distinct positions: the plot must display POSITIONS, not operations.
+// distinct positions: the plot must display POSITION COUNTS inside bars, not operations.
 for (let i = 0; i < 15; i++) {
   rows.push(["Test", `2026-09-17T22:${String(i).padStart(2,"0")}:00+02:00`,
     "DECHG", `A-${i}`, "A", "01K", "EX", "", "", "", "", 10/1440, 1, 22]);
@@ -93,21 +93,50 @@ try {
     for (const slot of slots) {
       const b=graph.getByRole("button",{name:new RegExp("^"+slot.label.slice(0,2)+":00–")});
       const value=b.locator(".reception-hour-value");
-      assert.equal((await value.innerText()).trim(),slot.distinctPositions+(viewport.width<=700 ? "" : " pos."));
-      assert.equal(await value.isVisible(),true,viewport.width+"px: count must remain visible");
+      const rounded=Math.max(0,Math.round(slot.meanSecondsPerPosition));
+      const expectedDuration=rounded<60 ? rounded+"s"
+        : Math.floor(rounded/60)+":"+String(rounded%60).padStart(2,"0");
+      assert.equal((await value.innerText()).trim(),expectedDuration,
+        "Above each bar must be mean duration per position, not the position count");
+      assert.equal(await value.isVisible(),true,viewport.width+"px: mean duration must remain visible");
       const labelRect=await value.boundingBox();
-      assert.ok(labelRect,"Count label must have measurable bounds");
+      assert.ok(labelRect,"Mean duration label must have measurable bounds");
       assert.ok(labelRect.y+labelRect.height <= targetRect.y-5,
-        viewport.width+"px: "+slot.label+" count must be ABOVE dashed objective, got "+
+        viewport.width+"px: "+slot.label+" mean duration must be ABOVE dashed objective, got "+
         JSON.stringify({labelRect,targetRect,mean:slot.meanSecondsPerPosition,target:60}));
       assert.ok(labelRect.x>=chartPlot.x-3 && labelRect.x+labelRect.width<=chartPlot.x+chartPlot.width+3,
-        viewport.width+"px: position count must not extend outside graph");
-      assert.ok(await value.evaluate(el=>el.scrollWidth<=el.clientWidth+1),
-        viewport.width+"px: position count must not be cut off");
+        viewport.width+"px: mean duration must not extend outside graph");
+      const renderedTime = await value.evaluate(el => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const textRect = range.getBoundingClientRect();
+        const plotRect = el.closest(".reception-hour-plot").getBoundingClientRect();
+        const style = getComputedStyle(el);
+        return {
+          left: textRect.left, right: textRect.right, width: textRect.width,
+          plotLeft: plotRect.left, plotRight: plotRect.right,
+          overflow: style.overflowX,
+        };
+      });
+      assert.equal(renderedTime.overflow, "visible",
+        viewport.width+"px: average duration must not be masked by its slot");
+      assert.ok(renderedTime.width>0
+        && renderedTime.left>=renderedTime.plotLeft-2
+        && renderedTime.right<=renderedTime.plotRight+2,
+        viewport.width+"px: mean duration rendered text must fit inside graph: "+
+        JSON.stringify(renderedTime));
+      const volume=b.locator(".reception-hour-bar-volume");
+      assert.equal((await volume.innerText()).trim(),String(slot.distinctPositions),
+        "Inside each bar must be the count of distinct positions");
+      const volumeRect=await volume.boundingBox();
+      const barRect=await b.locator(".reception-hour-bar").boundingBox();
+      assert.ok(volumeRect && barRect,"Position count and bar bounds must be available");
+      assert.ok(volumeRect.x>=barRect.x-1 && volumeRect.x+volumeRect.width<=barRect.x+barRect.width+1,
+        viewport.width+"px: position count must remain inside its bar horizontally");
+      assert.ok(volumeRect.y>=barRect.y-1 && volumeRect.y+volumeRect.height<=barRect.y+barRect.height+1,
+        viewport.width+"px: position count must remain inside its bar vertically");
       assert.equal((await b.getAttribute("aria-label")).includes("moyenne"),true);
       assert.equal((await b.getAttribute("aria-label")).includes(formatKpiDuration(slot.meanSecondsPerPosition)),true);
-      assert.equal(await value.evaluate(el=>getComputedStyle(el).overflowX),"visible",
-        "Reception position labels must not be text-clipped");
     }
     const target=graph.getByRole("button",{name:/23:00–00:00/});
     await target.click();
@@ -117,7 +146,7 @@ try {
     assert.match(await detail.innerText(),/Moyenne/);
     assert.match(await detail.innerText(),/Objectif/);
     assert.deepEqual(errors,[]);
-    console.log(`Reception volume labels at ${viewport.width}px: positions visible, mean retained`);
+    console.log(`Reception volume labels at ${viewport.width}px: mean above, positions inside bar`);
     await page.close();
   }
 } finally {

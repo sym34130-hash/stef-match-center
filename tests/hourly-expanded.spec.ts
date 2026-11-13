@@ -45,8 +45,7 @@ test("graphique agrandi : modal, créneau, voyages, focus et géométrie conserv
         await page.getByRole("button", {name:"Mode célébration",exact:true}).click();
       }
       await navigation.getByRole("button", {name:"Aller à Statistiques du match",exact:true}).click();
-      // This suite exercises the DECHG arrivals in sub-view 2/2.
-      await page.getByRole("button", {name:/2\/2 Tous les déchargements/}).click();
+      // The only hourly view now displays DECHG arrivals.
       const normalTrigger = normal.getByRole("button", {name:"8 voyages arrivés à 01h",exact:true});
       await normalTrigger.scrollIntoViewIfNeeded();
       await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));

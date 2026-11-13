@@ -93,7 +93,7 @@ test("Lot 2 : camemberts lisibles, notamment 1180x640, sans élargir la toléran
       await nav.getByRole("button", { name: "Aller à Coup de sifflet final", exact: true }).click();
       if (mode === "celebration") await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
       await nav.getByRole("button", { name: "Aller à Statistiques du match", exact: true }).click();
-      for (const label of ["% duels gagnés", "% tirs cadrés", "% centres réussis"]) {
+      for (const label of ["% duels gagnés", "% tirs cadrés"]) {
         await page.getByRole("tab", { name: `Afficher ${label}`, exact: true }).click();
         await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
         const geometry = await page.locator(".operational-chart-slide.is-active").evaluate(root => {
