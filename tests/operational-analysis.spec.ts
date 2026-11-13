@@ -86,14 +86,14 @@ test("jour/nuit : dates, libellés et anciens avertissements dans les deux modes
   }
 });
 
-test("analyses : cinq slides, rendu normal/Célébration, responsive et détails clavier", async ({ page }, info) => {
+test("analyses : quatre slides, rendu normal/Célébration, responsive et détails clavier", async ({ page }, info) => {
   test.setTimeout(240_000);
   const snapshot = fixture(); const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   await page.route("**/api/agencies/01K/snapshot**", route => route.fulfill({ json: { snapshot } }));
   await login(page);
   const sizes = info.project.name === "desktop" ? [[1366, 768], [1440, 900], [1536, 864], [1600, 900], [1920, 1080], [2560, 1440], [1024, 768], [768, 1024], [390, 844], [320, 740], [320, 700]] : [[info.project.use.viewport!.width, info.project.use.viewport!.height]];
-  const labels = ["% passes réussies par heure", "% duels gagnés", "% tirs cadrés", "% centres réussis", "Diagnostic opérationnel"];
+  const labels = ["% déchargements dans le délai", "% duels gagnés", "% tirs cadrés", "Diagnostic opérationnel"];
   for (const [width, height] of sizes) {
     await page.setViewportSize({ width, height });
     for (const mode of ["normal", "celebration"]) {
@@ -102,10 +102,10 @@ test("analyses : cinq slides, rendu normal/Célébration, responsive et détails
         await page.getByRole("button", { name: "Mode célébration", exact: true }).click();
       }
       await stats(page);
-      await expect(page.locator(".operational-chart-slide")).toHaveCount(5);
+      await expect(page.locator(".operational-chart-slide")).toHaveCount(4);
       for (let index = 0; index < labels.length; index++) {
         await tab(page, labels[index]).click();
-        await expect(page.locator(".operational-charts-carousel-counter")).toHaveText(`${index + 1} / 5`);
+        await expect(page.locator(".operational-charts-carousel-counter")).toHaveText(`${index + 1} / 4`);
         const card = page.locator(".operational-chart-slide.is-active");
         expect(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1), `${width}x${height} ${mode} slide ${index + 1}`).toBe(true);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
@@ -117,15 +117,19 @@ test("analyses : cinq slides, rendu normal/Célébration, responsive et détails
           for (const [slotIndex, slot] of analysis.items.entries()) {
             const button = graph.getByRole("button").nth(slotIndex);
             const value = button.locator(".reception-hour-value");
-            const expected = slot.state === "disponible" && slot.meanSecondsPerPosition != null
-              ? slot.distinctPositions.toLocaleString("fr-FR") : "—";
-            await expect(value).toHaveText(slot.state === "disponible" && slot.meanSecondsPerPosition != null
-              ? `${expected} pos.` : "—");
+            const measured = slot.state === "disponible" && slot.meanSecondsPerPosition != null;
+            const secs = measured ? Math.max(0, Math.round(slot.meanSecondsPerPosition!)) : null;
+            const expectedDuration = secs === null ? "—" : secs < 60
+              ? `${secs}s` : `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+            await expect(value).toHaveText(expectedDuration);
+            const inside = button.locator(".reception-hour-bar-volume");
+            if (measured) await expect(inside).toHaveText(slot.distinctPositions.toLocaleString("fr-FR"));
+            else await expect(inside).toHaveCount(0);
             if (slot.state === "disponible") {
               await expect(button).toHaveAttribute("aria-label", new RegExp(`${slot.distinctPositions} position`));
             }
-            // Even narrow screens display the compact count, with the exact
-            // number remaining accessible through button and selected details.
+            // Even narrow screens display the mean duration above the bar,
+            // with the exact count inside and in the selected details.
             if (slot.state === "disponible" && (width === 390 || width === 320)) {
               await expect(value).toBeVisible();
             }
@@ -143,7 +147,7 @@ test("analyses : cinq slides, rendu normal/Célébration, responsive et détails
           });
           expect(collisions, `${width}x${height} hour labels`).toEqual([]);
         }
-        if (index === 4) {
+        if (index === 3) {
           const diagnostic = card.locator(".operational-diagnostic-card");
           const bounds = await diagnostic.boundingBox();
           const viewportBounds = await carousel(page).boundingBox();
@@ -211,7 +215,7 @@ test("analyses : cinq slides, rendu normal/Célébration, responsive et détails
         if (width === 1440 || width === 390 || width === 320 || (info.project.name === "desktop" && width === 1366)) {
           await card.locator(":scope > *").evaluate(el => { el.scrollTop = 0; });
           await card.screenshot({ path: info.outputPath(`${width}x${height}-${mode}-operational-${index + 1}.png`) });
-          if (width === 390 && index === 4) await page.screenshot({ path: info.outputPath(`${width}x${height}-${mode}-page.png`), fullPage: true });
+          if (width === 390 && index === 3) await page.screenshot({ path: info.outputPath(`${width}x${height}-${mode}-page.png`), fullPage: true });
         }
       }
       await carousel(page).focus(); await page.keyboard.press("Home"); await expect(tab(page, labels[0])).toHaveAttribute("aria-selected", "true");
