@@ -13,6 +13,10 @@ const C = {
   text: [0.94, 0.97, 1], muted: [0.78, 0.86, 0.92],
   aqua: [0.47, 0.94, 0.83], blue: [0.69, 0.86, 1],
   gold: [1, 0.82, 0.48], red: [1, 0.52, 0.49],
+  // Separate print surfaces create an editorial tactical-board contrast.
+  paper: [0.925, 0.958, 0.975], paperWarm: [0.995, 0.962, 0.895],
+  navyInk: [0.09, 0.20, 0.31], slateInk: [0.30, 0.40, 0.48],
+  pitchLine: [0.25, 0.39, 0.49],
 };
 const rgb = value => value.map(number => number.toFixed(3)).join(" ");
 const trim = (value, limit = 160) => String(value ?? "").replace(/[\r\n\t]/g, " ").trim().slice(0, limit);
@@ -66,12 +70,20 @@ class Page {
   constructor(title, m, number) {
     this.title = title; this.ops = []; this.images = []; this.number = number;
     this.box(0, 0, WIDTH, HEIGHT, C.bg);
+    // Stadium-inspired top rail and floodlight ticks: vector-only.
     this.box(0, HEIGHT - 8, WIDTH, 8, C.aqua);
+    this.box(0, HEIGHT - 14, 273, 6, C.panel2);
+    this.box(273, HEIGHT - 14, 296, 6, C.gold);
+    this.box(569, HEIGHT - 14, 273, 6, C.panel2);
+    for (let i = 0; i < 16; i++) {
+      this.box(35 + i * 48, 577, 21, 1, C.pitchLine);
+    }
     this.text(29, 552, 17, "STEF MATCH CENTER", C.white, true);
     this.text(29, 528, 10, title, C.aqua, true);
     this.text(813, 552, 12, `${m.agency.name} [${m.agency.code}]`, C.white, true, "right");
     this.text(813, 531, 10, `${m.league.label} / ${m.match.date} / ${m.match.timeRangeLabel}`, C.muted, false, "right");
-    this.box(29, 509, 784, 1, C.panel2);
+    this.box(29, 509, 784, 1.4, C.panel2);
+    this.box(29, 509, 160, 2.5, C.gold);
     this.box(29, 30, 784, 1, C.panel2);
     // The signed-in agency and the source agencies are different concepts.
     // Show provenance on both printed pages without changing access scope.
@@ -83,6 +95,21 @@ class Page {
     this.text(812, 17, 8, String(number), C.muted, false, "right");
   }
   box(x, y, w, h, fill) { this.ops.push(`${rgb(fill)} rg ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f\n`); }
+  line(x1, y1, x2, y2, color = C.pitchLine, width = 0.8, dash = null) {
+    const stroke = dash?.length ? "[" + dash.join(" ") + "] 0 d" : "[] 0 d";
+    this.ops.push(`q ${rgb(color)} RG ${width} w ${stroke} ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S Q\n`);
+  }
+  outline(x, y, w, h, color = C.pitchLine, width = 0.8) {
+    this.ops.push(`q ${rgb(color)} RG ${width} w ${x.toFixed(2)} ${y.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re S Q\n`);
+  }
+  circle(x, y, r, color = C.pitchLine, width = 0.8) {
+    const k = r * 0.5522847498;
+    this.ops.push(`q ${rgb(color)} RG ${width} w ${(x+r).toFixed(2)} ${y.toFixed(2)} m `
+      + `${(x+r).toFixed(2)} ${(y+k).toFixed(2)} ${(x+k).toFixed(2)} ${(y+r).toFixed(2)} ${x.toFixed(2)} ${(y+r).toFixed(2)} c `
+      + `${(x-k).toFixed(2)} ${(y+r).toFixed(2)} ${(x-r).toFixed(2)} ${(y+k).toFixed(2)} ${(x-r).toFixed(2)} ${y.toFixed(2)} c `
+      + `${(x-r).toFixed(2)} ${(y-k).toFixed(2)} ${(x-k).toFixed(2)} ${(y-r).toFixed(2)} ${x.toFixed(2)} ${(y-r).toFixed(2)} c `
+      + `${(x+k).toFixed(2)} ${(y-r).toFixed(2)} ${(x+r).toFixed(2)} ${(y-k).toFixed(2)} ${(x+r).toFixed(2)} ${y.toFixed(2)} c S Q\n`);
+  }
   text(x, y, size, content, color = C.text, bold = false, align = "left") {
     const str = ascii(content);
     const estimated = str.length * size * (bold ? 0.55 : 0.50);
@@ -92,6 +119,7 @@ class Page {
   card(x, y, w, h, label, value, detail = "", accent = C.aqua) {
     this.box(x, y, w, h, C.panel);
     this.box(x, y + h - 3, w, 3, accent);
+    this.box(x, y, 3, h - 3, C.panel2);
     const labelText = ascii(label).toUpperCase();
     const labelSize = clamp((w - 25) / Math.max(1, labelText.length * 0.56), 7.5, 10);
     const compact = h <= 75;
@@ -536,12 +564,17 @@ function compactChart(p, m, chartId) {
       const tickX = x + hour / spanHours * w;
       p.text(tickX, 76, 7, String((axisStart + hour) % 24).padStart(2, "0") + "h", C.muted);
     }
+    // Preserve both exact source labels in the printed recap, including
+    // historical/synthetic snapshots whose numeric hour field is inconsistent.
+    const first = rows[0], last = rows[rows.length - 1];
+    p.text(x, 62, 8, trim(String(first.label ?? first.hour ?? "Début"), 20) + " : " + percent(first.rate), C.text);
+    p.text(x + w, 62, 8, trim(String(last.label ?? last.hour ?? "Fin"), 20) + " : " + percent(last.rate), C.text, false, "right");
     const empty = [];
     const observed = new Set(offsets);
     for (let hour = 0; hour <= lastTick; hour++) {
       if (!observed.has(hour)) empty.push(hour);
     }
-    if (empty.length) p.text(x + w, 60, 7.5, empty.length + " créneau(x) sans donnée", C.muted, false, "right");
+    if (empty.length) p.text(x + w / 2, 61, 7.3, empty.length + " h sans donnée", C.muted, false, "center");
     p.text(42, 49, 8.4, "Tous dechargements eligibles ; périmètre distinct du KPI officiel toutes opérations.", C.muted);
     return;
   }
@@ -661,11 +694,18 @@ function compactChart(p, m, chartId) {
 /** Size the text to the actual printable geometry, not an arbitrary line cap.
  * All six fields can use their documented input limits while staying on page 2.
  * Unknown excess still raises 422 with the exact section; never silently crop. */
-function shortBlock(p, { x, y, w, h, title, value }) {
-  p.box(x, y, w, h, C.panel);
-  p.box(x, y + h - 3, w, 3, C.blue);
-  p.box(x, y, 3, h - 3, C.panel2);
-  p.text(x + 11, y + h - 17, 9.5, title.toUpperCase(), C.aqua, true);
+function shortBlock(p, { x, y, w, h, title, value, accent = C.aqua, marker = "" }) {
+  // V3 tactile editorial surface: light tactical panels over a navy pitch.
+  // Padding and available line capacity match the historical brief exactly.
+  const fill = title === "Sécurité / vigilance" ? C.paperWarm : C.paper;
+  p.box(x, y, w, h, fill);
+  p.box(x, y + h - 3, w, 3, accent);
+  p.box(x, y, 4, h - 3, accent);
+  p.text(x + 11, y + h - 17, 9.5, title.toUpperCase(), C.navyInk, true);
+  if (marker) {
+    // Section identifiers are informational, not extra brief content.
+    p.text(x + w - 12, y + h - 17, 7.6, marker, C.slateInk, true, "right");
+  }
   const size = 8.7, lineHeight = 9.9;
   const maxChars = Math.max(14, Math.floor((w - 24) / (size * 0.54)));
   const lines = wrap(value || "Non renseigné", maxChars);
@@ -675,8 +715,9 @@ function shortBlock(p, { x, y, w, h, title, value }) {
     throw new MatchExportError(422,
       `La rubrique « ${title} » contient ${lines.length} lignes (maximum ${capacity} sur 2 pages). Raccourcis uniquement cette synthèse dans « Personnaliser le PDF ».`);
   }
-  lines.forEach((line, i) => p.text(x + 11, firstBaseline - i * lineHeight, size, line, C.text));
+  lines.forEach((line, i) => p.text(x + 11, firstBaseline - i * lineHeight, size, line, C.navyInk));
 }
+
 function effectiveBriefText(m) {
   const custom = m.pdfProfile.dailyBrief;
   const c = m.causerie ?? {};
@@ -717,14 +758,24 @@ function compactScorePage(doc, m) {
     `Zonage <= ${fmt(m.criteria.zonageMinutes)} min  |  CHG <= ${fmt(m.criteria.loadingSeconds)} s/poz  |  DECHG <= ${fmt(m.criteria.unloadingSeconds)} s/poz`,
     C.muted);
   const score = m.score;
-  // V3 score hero: one contiguous broadcast scoreboard, not two unrelated cards.
-  p.box(29, 402, 784, 60, C.panel);
-  p.box(29, 459, 784, 3, C.gold);
-  p.box(419, 410, 1.5, 41, C.panel2);
-  p.text(226, 444, 9.2, "BUTS MARQUÉS", C.aqua, true, "center");
-  p.text(616, 444, 9.2, "BUTS ENCAISSÉS", C.red, true, "center");
-  p.text(226, 411, 26, score?.status === "available" ? fmt(score.goalsFor) : "Indisponible", C.white, true, "center");
-  p.text(616, 411, 26, score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible", C.white, true, "center");
+  // Full-width match scoreboard: gold top rail, subtle pitch geometry,
+  // oversized result numbers, and two contrasting performance territories.
+  p.box(29, 400, 784, 66, C.panel);
+  p.box(29, 463, 784, 3, C.gold);
+  p.box(29, 400, 16, 63, C.panel2);
+  p.box(797, 400, 16, 63, C.panel2);
+  // Stadium / pitch center circle: deliberately subtle to keep the score dominant.
+  p.circle(421, 433, 19, C.pitchLine, 1.2);
+  p.line(421, 411, 421, 455, C.pitchLine, 0.8);
+  p.outline(374, 410, 94, 46, C.pitchLine, 0.65);
+  p.text(229, 444, 9.5, "BUTS MARQUÉS", C.aqua, true, "center");
+  p.text(613, 444, 9.5, "BUTS ENCAISSÉS", C.red, true, "center");
+  const scored = score?.status === "available" ? fmt(score.goalsFor) : "Indisponible";
+  const conceded = score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible";
+  const scoreFont = value => value.length > 8 ? 15 : 34;
+  p.text(229, 409, scoreFont(scored), scored, C.white, true, "center");
+  p.text(613, 409, scoreFont(conceded), conceded, C.white, true, "center");
+  p.text(421, 423, 16, "-", C.gold, true, "center");
   const rates = [
     ["Passes réussies", score?.indicators?.passRate],
     ["Tirs cadrés", score?.indicators?.loadingPercent],
@@ -754,15 +805,16 @@ function compactBriefPage(doc, m) {
   const p = doc.add("02 / BRIEF DES SERVICES");
   p.text(36, 477, 20, "BRIEF OPERATIONNEL DU JOUR", C.white, true);
   p.box(29, 469, 784, 2, C.gold);
+  p.text(36, 487, 8.7, "LE PLAN DE JEU  /  SÉCURISER L'EXÉCUTION", C.gold, true);
   p.text(777, 479, 8, trim([m.causerie?.team, m.causerie?.manager].filter(Boolean).join(" / "), 42), C.muted, false, "right");
   const brief = effectiveBriefText(m);
   // Keep the exact labels of BRIEF ÉQUIPE, not the old football metaphors.
-  shortBlock(p, { x: 29, y: 405, w: 784, h: 58, title: "Sécurité / vigilance", value: brief.safety, maxLines: 2 });
-  shortBlock(p, { x: 29, y: 273, w: 784, h: 126, title: "Service client", value: brief.attack, maxLines: 6 });
-  shortBlock(p, { x: 29, y: 149, w: 482, h: 118, title: "Expédition / Ramasse & Emballage", value: brief.midfield, maxLines: 5 });
-  shortBlock(p, { x: 523, y: 149, w: 290, h: 118, title: "SST", value: brief.defense, maxLines: 5 });
-  shortBlock(p, { x: 29, y: 43, w: 385, h: 100, title: "Priorités opérationnelles", value: brief.priorities, maxLines: 4 });
-  shortBlock(p, { x: 428, y: 43, w: 385, h: 100, title: "Décisions / arbitrages", value: brief.decisions, maxLines: 4 });
+  shortBlock(p, { x: 29, y: 405, w: 784, h: 58, title: "Sécurité / vigilance", value: brief.safety, accent: C.gold, marker: "00 / VIGILANCE" });
+  shortBlock(p, { x: 29, y: 273, w: 784, h: 126, title: "Service client", value: brief.attack, accent: C.blue, marker: "01 / PROMESSE CLIENT" });
+  shortBlock(p, { x: 29, y: 149, w: 482, h: 118, title: "Expédition / Ramasse & Emballage", value: brief.midfield, accent: C.aqua, marker: "02 / FLUX" });
+  shortBlock(p, { x: 523, y: 149, w: 290, h: 118, title: "SST", value: brief.defense, accent: C.red, marker: "03 / PROTECTION" });
+  shortBlock(p, { x: 29, y: 43, w: 385, h: 100, title: "Priorités opérationnelles", value: brief.priorities, accent: C.gold, marker: "04 / PRIORITÉS" });
+  shortBlock(p, { x: 428, y: 43, w: 385, h: 100, title: "Décisions / arbitrages", value: brief.decisions, accent: C.aqua, marker: "05 / DÉCISIONS" });
   const a = m.causerie?.attachmentCounts ?? {};
   if (Object.values(a).some(count => Number(count) > 0)) {
     p.text(36, 34, 7.5,
