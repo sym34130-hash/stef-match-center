@@ -774,11 +774,11 @@ function compactScorePage(doc, m) {
   p.circle(421, 433, 19, C.pitchLine, 1.2);
   p.line(421, 411, 421, 455, C.pitchLine, 0.8);
   p.outline(374, 410, 94, 46, C.pitchLine, 0.65);
-  p.text(229, 444, 9.5, "BUTS MARQUÉS", C.aqua, true, "center");
-  p.text(613, 444, 9.5, "BUTS ENCAISSÉS", C.red, true, "center");
+  p.text(229, 448, 9.5, "BUTS MARQUÉS", C.aqua, true, "center");
+  p.text(613, 448, 9.5, "BUTS ENCAISSÉS", C.red, true, "center");
   const scored = score?.status === "available" ? fmt(score.goalsFor) : "Indisponible";
   const conceded = score?.status === "available" ? fmt(score.goalsAgainst) : "Indisponible";
-  const scoreFont = value => value.length > 8 ? 15 : 34;
+  const scoreFont = value => value.length > 8 ? 15 : 31;
   p.text(229, 409, scoreFont(scored), scored, C.white, true, "center");
   p.text(613, 409, scoreFont(conceded), conceded, C.white, true, "center");
   p.text(421, 423, 16, "-", C.gold, true, "center");
