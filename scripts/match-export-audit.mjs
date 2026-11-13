@@ -56,9 +56,11 @@ for (const fixture of fixtures) {
       arrivalPunctuality: 96, departurePunctuality: 94,
       destinationPunctuality: 92, temperatureReturn: 97 },
       distribution: { tonnage: 7.2 }, expedition: { tonnage: 14.4 } },
-    hourlyPerformance: Array.from({ length: 24 }, (_, i) => {
+    // Realistic 13:00–22:30 period: numeric hours must agree with labels.
+    hourlyPerformance: Array.from({ length: 10 }, (_, i) => {
+      const hour = (13 + i) % 24;
       const won = 10 + i, total = 25 + i;
-      return { label: String((13 + i) % 24).padStart(2, "0") + "h", hour: i,
+      return { label: String(hour).padStart(2, "0") + "h", hour,
         won, total, rate: Math.round(won / total * 1000) / 10 };
     }),
     unloadingHourlyAnalysis: { state: "disponible", targetSeconds: league.criteria.unloadingSeconds,
