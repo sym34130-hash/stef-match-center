@@ -37,8 +37,7 @@ test("les voyages horaires restent lisibles et compatibles avec les anciens snap
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
   const navigation = page.getByRole("navigation", { name: "Navigation de la feuille de match" });
   await navigation.getByRole("button", { name: "Aller à Statistiques du match", exact: true }).click();
-  // Travel-arrival annotations belong to view 2/2, not the overall KPI view.
-  await page.getByRole("button", { name: /2\/2 Tous les déchargements/ }).click();
+  // Travel-arrival annotations remain on the unloading-only hourly chart.
   const chart = page.locator(".performance-chart");
   const expected = hours.filter((hour) => hour.arrivingTravels != null).map((hour) => `${hour.arrivingTravels} ${hour.arrivingTravels === 1 ? "voyage arrivé" : "voyages arrivés"}`);
   let maxLayoutDelta = 0;
