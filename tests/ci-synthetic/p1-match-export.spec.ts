@@ -339,20 +339,20 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   for (const width of [320, 390, 768, 1024, 1536]) {
     await page.setViewportSize({ width, height: width < 400 ? 740 : 864 });
     const geometry = await ranking.evaluate((root) => {
-      const rect = (element) => element.getBoundingClientRect();
-      const textRect = (element) => {
+      const rect = (element: Element) => element.getBoundingClientRect();
+      const textRect = (element: Element) => {
         const range = document.createRange();
         range.selectNodeContents(element);
         return range.getBoundingClientRect();
       };
-      const overlap = (a, b) => Math.min(a.right,b.right)-Math.max(a.left,b.left)>1
+      const overlap = (a: DOMRect, b: DOMRect) => Math.min(a.right,b.right)-Math.max(a.left,b.left)>1
         && Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1;
       const bounds = rect(root);
       const rows = Array.from(root.querySelectorAll(".diagnostic-top5 > li"));
       const measured = rows.map(row => {
         const box = rect(row);
-        const code = textRect(row.querySelector(".diagnostic-trip-main strong"));
-        const count = textRect(row.querySelector(".diagnostic-trip-main > span"));
+        const code = textRect(row.querySelector(".diagnostic-trip-main strong")!);
+        const count = textRect(row.querySelector(".diagnostic-trip-main > span")!);
         const button = row.querySelector(".diagnostic-detail-button");
         const arrow = button ? rect(button) : null;
         return {
@@ -365,7 +365,7 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
       });
       return {
         measured,
-        headerEndsBeforeRows: rect(root.querySelector("h4")).bottom <= measured[0].top,
+        headerEndsBeforeRows: rect(root.querySelector("h4")!).bottom <= measured[0].top,
         noInterRowOverlap: measured.every((item,index) => !index || item.top >= measured[index-1].bottom-1),
         noPageOverflow: document.documentElement.scrollWidth <= window.innerWidth+1,
       };
