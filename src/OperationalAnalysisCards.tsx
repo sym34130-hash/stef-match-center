@@ -87,46 +87,87 @@ export function OperationalDiagnosticCard({ snapshot }: { snapshot: Snapshot }) 
   const hasLoading = summary?.loading.state === "disponible";
   const priority = hasZonage ? z.top5[0] : null;
   const detailStats = detail?.travelCode ? z?.travels.find(trip => trip.travelCode === detail.travelCode) : z;
-  return <section className="operational-diagnostic-card" aria-label="Diagnostic opérationnel">
+  return <section className="operational-diagnostic-card diagnostic-simple" aria-label="Diagnostic opérationnel">
     <header className="analysis-heading diagnostic-heading">
-      <div><p className="analysis-eyebrow">Période d'exploitation retenue</p><h3>Diagnostic opérationnel</h3></div>
-      <span className="analysis-night">{nightLabel(z?.night ?? summary?.night)}</span>
+      <div>
+        <h3>Diagnostic opérationnel</h3>
+        <p className="analysis-night">Période analysée : {nightLabel(z?.night ?? summary?.night)}</p>
+      </div>
     </header>
-    <dl className="diagnostic-metrics">
-      <div className="diagnostic-confirmed"><dt>Positions hors délai</dt><dd>{hasZonage ? count(z.latePositions) : "—"}</dd><small>Sur {hasZonage ? count(z.qualifiablePositions) : "—"} vérifiables · {percent(z?.anomalyRate)}</small></div>
-      <div><dt>Délais non vérifiables</dt><dd>{z ? count(z.unqualifiablePositions) : "—"}</dd><small>Sur {z ? count(z.receivedPositions) : "—"} positions réceptionnées</small></div>
-    </dl>
-    <section className="diagnostic-investigation" aria-label="Priorité du brief">
-      {priority ? <p>Premier voyage à examiner : <strong>{priority.travelCode} — {count(priority.latePositions)} retards</strong></p> : <p>{hasZonage ? "Aucun dépassement de zonage identifié dans le périmètre qualifiable." : "Données insuffisantes pour établir un constat sur la période retenue."}</p>}
-    </section>
-    <div className="diagnostic-secondary">
-      <span className="diagnostic-coverage">{percent(z?.coverageRate)} des positions vérifiables</span>
-      <span><b>{hasReception ? `${count(summary!.unloading.offTargetTravels)}/${count(summary!.unloading.eligibleTravels)}` : "—"}</b> réceptions hors cible — période analysée</span>
-      <span><b>{hasLoading ? `${count(summary!.loading.offTargetTravels)}/${count(summary!.loading.eligibleTravels)}` : "—"}</b> chargements hors cible — TCD historique</span>
+    <div className="diagnostic-essential" role="group" aria-label="Bilan des retards">
+      <strong className="diagnostic-big-number">{hasZonage ? count(z.latePositions) : "—"}</strong>
+      <div className="diagnostic-essential-copy">
+        <span>positions en retard</span>
+        <small>{hasZonage ? `sur ${count(z.qualifiablePositions)} positions vérifiables` : "Données insuffisantes pour compter les retards"}</small>
+      </div>
     </div>
-    <section className="diagnostic-ranking" aria-label="FLOP zonage TOP 5">
-      <div className="diagnostic-ranking-heading"><h4>FLOP Zonage - TOP 5</h4></div>
-      <div className="diagnostic-legend" aria-label="Légende des positions"><span><i className="diagnostic-segment-late" />En retard</span><span><i className="diagnostic-segment-ontime" />Dans le délai</span><span><i className="diagnostic-segment-unknown" />Délai inconnu</span></div>
-      {!hasZonage ? <p className="analysis-empty" role="status">Analyse indisponible : aucune réception qualifiable sur la période retenue.</p> : !z.top5.length ? <p className="analysis-empty">Aucun voyage hors délai parmi les positions qualifiables.</p> : <ol className="diagnostic-top5">
-        {z.top5.map(trip => <li key={trip.travelCode}>
-          <div className="diagnostic-trip-heading"><div className="diagnostic-trip-main"><strong>{trip.travelCode}</strong><span aria-label={`${trip.latePositions} positions hors délai sur ${trip.receivedPositions} reçues`}><b>{trip.latePositions} retards</b> / {trip.receivedPositions} reçues</span></div>
-            {z.details.some(entry => entry.travelCode === trip.travelCode) && <button type="button" className="diagnostic-detail-button" aria-label={`Voir les positions du voyage ${trip.travelCode}`} title={`Voir les positions du voyage ${trip.travelCode}`} onClick={event => setDetail({ travelCode: trip.travelCode, trigger: event.currentTarget })}><ChevronRight size={18} /></button>}
-          </div>
-          {trip.receivedPositions > 0 && [trip.latePositions, trip.onTimePositions, trip.unqualifiablePositions].every(value => Number.isInteger(value) && value >= 0) && trip.latePositions + trip.onTimePositions + trip.unqualifiablePositions === trip.receivedPositions
-            ? <div className="diagnostic-bar-track" role="img" aria-label={`${trip.travelCode} : ${trip.latePositions} en retard, ${trip.onTimePositions} dans le délai, ${trip.unqualifiablePositions} délai inconnu, sur ${trip.receivedPositions} reçues`}>
-              <span className="diagnostic-segment-late" style={{ width: `${trip.latePositions / trip.receivedPositions * 100}%` }} />
-              <span className="diagnostic-segment-ontime" style={{ width: `${trip.onTimePositions / trip.receivedPositions * 100}%` }} />
-              <span className="diagnostic-segment-unknown" style={{ width: `${trip.unqualifiablePositions / trip.receivedPositions * 100}%` }} />
-            </div> : <p className="analysis-provenance">Répartition indisponible</p>}
-        </li>)}
-      </ol>}
+    <section className="diagnostic-priority" aria-label="Priorité du brief">
+      {priority ? <>
+        <span className="diagnostic-priority-label">À contrôler en premier</span>
+        <div className="diagnostic-priority-line">
+          <strong>{priority.travelCode}</strong>
+          <span>{count(priority.latePositions)} positions en retard</span>
+        </div>
+        {z?.details.some(entry => entry.travelCode === priority.travelCode) && (
+          <button type="button" className="diagnostic-priority-action"
+            aria-label={`Voir les positions du voyage ${priority.travelCode}`}
+            onClick={event => setDetail({ travelCode: priority.travelCode, trigger: event.currentTarget })}>
+            Voir les positions <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        )}
+      </> : <div className="diagnostic-priority-empty">
+        <strong>{hasZonage ? "Aucun voyage en retard" : "Analyse indisponible"}</strong>
+        <span>{hasZonage ? "Aucun retard confirmé sur les positions vérifiables." : "Aucune réception vérifiable pour cette période."}</span>
+      </div>}
     </section>
-    <div className="diagnostic-footer">
-      <p className="diagnostic-coverage-note"><Info size={15} aria-hidden="true" /><span>Gris = délai impossible à vérifier. Ces positions ne sont pas comptées comme des retards.</span></p>
-      <details className="diagnostic-method"><summary>Comment lire le FLOP ?</summary><p>Les voyages sont classés du plus grand au plus petit nombre de retards. Chaque barre montre les positions en retard, dans le délai ou dont le délai est inconnu.</p><p>Zonage : cible {z ? `${z.targetMinutes} min` : "—"}.</p></details>
-      {!!z?.details.length && <button className="secondary-button compact" type="button" onClick={event => setDetail({ travelCode: null, trigger: event.currentTarget })}><ListFilter size={16} />Voir les positions à examiner</button>}
-      {!!summary?.warnings.length && <details className="diagnostic-warnings"><summary>Qualité des données · {summary.warnings.length} avertissements</summary><ul>{summary.warnings.map(warning => <li key={warning}>{warningLabel(warning)}</li>)}</ul></details>}
-    </div>
+    {hasZonage && z.unqualifiablePositions > 0 && (
+      <p className="diagnostic-unknown">
+        <Info size={17} aria-hidden="true" />
+        <span><b>{count(z.unqualifiablePositions)} positions à vérifier</b><small>Délai inconnu : elles ne sont pas comptées comme des retards.</small></span>
+      </p>
+    )}
+    <details className="diagnostic-more">
+      <summary>Voir les détails</summary>
+      <div className="diagnostic-more-content">
+        {hasZonage && z.top5.length > 0 && <section className="diagnostic-ranking" aria-label="Voyages à examiner">
+          <h4>Voyages avec le plus de retards</h4>
+          <ol className="diagnostic-top5">
+            {z.top5.map(trip => <li key={trip.travelCode}>
+              <div className="diagnostic-trip-main">
+                <strong>{trip.travelCode}</strong>
+                <span>{count(trip.latePositions)} positions en retard</span>
+              </div>
+              {z.details.some(entry => entry.travelCode === trip.travelCode) && (
+                <button type="button" className="diagnostic-detail-button"
+                  aria-label={`Consulter les positions du voyage ${trip.travelCode}`}
+                  onClick={event => setDetail({ travelCode: trip.travelCode, trigger: event.currentTarget })}>
+                  <ChevronRight size={18} aria-hidden="true" />
+                </button>
+              )}
+            </li>)}
+          </ol>
+        </section>}
+        <div className="diagnostic-secondary">
+          <span><b>{hasZonage ? `${count(z.latePositions)}/${count(z.qualifiablePositions)}` : "—"}</b> positions en retard / vérifiables</span>
+          <span><b>{hasReception ? `${count(summary!.unloading.offTargetTravels)}/${count(summary!.unloading.eligibleTravels)}` : "—"}</b> réceptions hors cible — période analysée</span>
+          <span><b>{hasLoading ? `${count(summary!.loading.offTargetTravels)}/${count(summary!.loading.eligibleTravels)}` : "—"}</b> chargements hors cible — TCD historique</span>
+        </div>
+        {!!z?.details.length && <button className="secondary-button compact" type="button"
+          onClick={event => setDetail({ travelCode: null, trigger: event.currentTarget })}>
+          <ListFilter size={16} aria-hidden="true" /> Voir les positions à examiner
+        </button>}
+        <details className="diagnostic-method">
+          <summary>Comprendre les chiffres</summary>
+          <p>Un retard est compté seulement lorsque le délai entre réception et zonage est vérifiable et dépasse l'objectif. Les délais inconnus ne sont pas des retards.</p>
+          <p>Objectif de zonage : {z ? `${z.targetMinutes} min` : "—"}.</p>
+          <p>Les voyages sont classés par nombre de positions en retard, pas par pourcentage. Les autres indicateurs conservent leurs propres critères de calcul.</p>
+        </details>
+        {!!summary?.warnings.length && <details className="diagnostic-warnings">
+          <summary>Problèmes de données · {summary.warnings.length}</summary>
+          <ul>{summary.warnings.map(warning => <li key={warning}>{warningLabel(warning)}</li>)}</ul>
+        </details>}
+      </div>
+    </details>
     {detail && createPortal(<dialog ref={dialogRef} className="operational-zonage-dialog" aria-label={detail.travelCode ? `Positions à examiner · ${detail.travelCode}` : "Positions à examiner"} onCancel={event => { event.preventDefault(); closeDetail(); }} onClick={event => { if (event.target === event.currentTarget) closeDetail(); }}>
       <header><div><h3>Positions à examiner{detail.travelCode ? ` · ${detail.travelCode}` : ""}</h3><p>{entries.length} positions · {nightLabel(z?.night)}</p></div><button className="icon-button" type="button" title="Fermer" aria-label="Fermer les positions à examiner" onClick={closeDetail}><X size={20} /></button></header>
       {detailStats && <dl className="diagnostic-detail-stats">
