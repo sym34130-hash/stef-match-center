@@ -221,7 +221,10 @@
   .reception-hour-button:nth-child(even) .reception-hour-label { top: calc(100% + 20px); }
 }
 @media (max-width: 360px) {
-  .reception-hour-value { font-size: 8px; letter-spacing: -.055em; }
+  /* Preserve legible duration and position labels instead of squeezing each hour. */
+  .reception-hour-chart { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+  .reception-hour-plot { min-width: 360px; }
+  .reception-hour-value { font-size: 9px; letter-spacing: -.035em; }
   .operational-charts-carousel .loading-quality-card[aria-label="Qualité des chargements"] .loading-quality-pie,
   .operational-charts-carousel .centers-quality-card .loading-quality-pie { max-width: 100%; }
   .operational-charts-carousel .loading-quality-card[aria-label="Qualité des chargements"] .loading-quality-heading { flex-wrap: wrap; }
