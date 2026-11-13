@@ -324,13 +324,22 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
 
   // Regression: the expanded ranking must never print two texts on top of
   // each other, including unusually long journey codes on narrow screens.
-  const shortTrip = chartSnapshot.zonageDiagnostic.top5[0];
+  const shortTrip = chartSnapshot.zonageDiagnostic!.top5[0];
+  const rankingCases = [
+    { ...shortTrip, travelCode: "VOYAGE-AVEC-UN-CODE-EXCEPTIONNELLEMENT-LONG", latePositions: 3 },
+    { ...shortTrip, travelCode: "CI-TRIP-2", latePositions: 2 },
+    ...[3,4,5].map((n) => ({ ...shortTrip, travelCode: `CI-TRIP-${n}`, latePositions: 1 })),
+  ];
   chartSnapshot.zonageDiagnostic = {
     ...chartSnapshot.zonageDiagnostic,
-    top5: [
-      { ...shortTrip, travelCode: "VOYAGE-AVEC-UN-CODE-EXCEPTIONNELLEMENT-LONG", latePositions: 3 },
-      ...[2, 3, 4, 5].map((n) => ({ ...shortTrip, travelCode: `CI-TRIP-${n}`, latePositions: Math.max(1, 6 - n) })),
-    ],
+    latePositions: 8, onTimePositions: 2, qualifiablePositions: 10,
+    receivedPositions: 12, unqualifiablePositions: 2,
+    top5: rankingCases,
+    // Each row must display its real drill-down button in the geometry check.
+    details: rankingCases.flatMap(trip => Array.from({ length: trip.latePositions }, (_, i) => ({
+      travelCode: trip.travelCode, position: `RANK-${trip.travelCode}-${i}`,
+      classification: "hors_delai", delaySeconds: 2100,
+    }))),
   };
   await openDiagnostic();
   await diagnostic.locator(".diagnostic-more > summary").click();
@@ -338,6 +347,7 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(ranking.locator(".diagnostic-top5 > li")).toHaveCount(5);
   for (const width of [320, 390, 768, 1024, 1536]) {
     await page.setViewportSize({ width, height: width < 400 ? 740 : 864 });
+    await expect(ranking.locator(".diagnostic-detail-button")).toHaveCount(5);
     const geometry = await ranking.evaluate((root) => {
       const rect = (element: Element) => element.getBoundingClientRect();
       const textRect = (element: Element) => {
