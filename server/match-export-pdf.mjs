@@ -569,9 +569,10 @@ function compactChart(p, m, chartId) {
     // plotted as source-exact points on elapsed CLOCK hours, not as an averaged
     // or smoothed series. Consecutive hours connect with solid segments; gaps
     // connect only with dashed guides and are never fabricated observations.
-    // Full 0–100 % vertical scale. The former 48 pt plot compressed an 88.9% point
-    // next to the 100% line and invited an incorrect visual reading.
-    const x=78,baseline=75,w=699,h=69,slotWidth=w/spanHours;
+    // Fixed linear 0–100% scale. The 90% guide is deliberately visible so
+    // near-100 values cannot be mistaken for 100%. Vertical measurements use
+    // the actual rate, independently of where the numeric label is painted.
+    const x=78,baseline=70,w=699,h=74,slotWidth=w/spanHours;
     const observed=new Set(measured.map(point=>point.offset));
     const lastTick=Math.floor(spanHours);
     let blankHours=0;
@@ -584,11 +585,17 @@ function compactChart(p, m, chartId) {
       p.line(x+hour*slotWidth,baseline,
         x+hour*slotWidth,baseline+h,C.muted,.35,[2,3]);
     }
-    for(const value of [0,20,40,60,80,100]){
+    for(const value of [0,20,40,60,80,90,100]){
       const yy=baseline+value/100*h;
-      p.box(x,yy,w,.45,C.panel2);
-      if(value%40===0||value===100)
-        p.text(42,yy-2.5,7.1,String(value)+"%",C.muted);
+      if(value===90){
+        // Accurate high-performance reference: 88.9% must be BELOW this
+        // line, clearly separated from the gold 100% reference.
+        p.line(x,yy,x+w,yy,C.muted,.7,[2,3]);
+      }else p.box(x,yy,w,value===100?.9:.45,
+        value===100?C.gold:C.panel2);
+      if([0,40,80,90,100].includes(value))
+        p.text(42,yy-2.5,value===90?6.7:7.1,
+          String(value)+"%",value===100?C.gold:C.muted);
     }
     const points=measured.map(({row,offset})=>({
       row,offset,x:x+offset*slotWidth,y:baseline+row.rate*h/100
@@ -631,11 +638,19 @@ function compactChart(p, m, chartId) {
       p.dot(point.x,point.y,2.75,C.white);
       p.dot(point.x,point.y,1.65,C.aqua);
       if(index%labelEvery===0||index===points.length-1){
-        // Data labels follow measured points, rather than a uniform baseline.
-        // Extreme rates still fit inside the 146pt chart frame.
-        const percentY=point.y>=baseline+h-8?point.y-10:point.y+5.5;
-        p.text(point.x,percentY,7.2,percent(point.row.rate),
-          C.white,true,"center");
+        // Label and measured dot have the SAME vertical reference: a tiny
+        // dark plate to the right (or left at chart edge) is connected to the
+        // point by a horizontal hairline. No artificial ±10pt displacement.
+        const shown=percent(point.row.rate);
+        const labelWidth=shown.length*4.15+9;
+        const labelLeft=point.x+labelWidth+10>x+w
+          ?point.x-labelWidth-9:point.x+9;
+        p.line(point.x,point.y,
+          labelLeft>point.x?labelLeft:labelLeft+labelWidth,
+          point.y,C.muted,.55);
+        p.box(labelLeft,point.y-5.3,labelWidth,10.7,C.bg);
+        p.box(labelLeft,point.y-5.3,1.7,10.7,C.aqua);
+        p.text(labelLeft+4.3,point.y-2.6,7.0,shown,C.white,true);
         // At A4 print scale, displaying each N/D pair adjacent to the point
         // collides with nearby rates. The website retains all per-hour counts;
         // this PDF shows the exact measured rate and a source-weighted total.
@@ -643,17 +658,17 @@ function compactChart(p, m, chartId) {
     });
     const every=Math.max(1,Math.ceil((lastTick+1)/11));
     for(let hour=0;hour<=lastTick;hour+=every){
-      p.text(x+hour*slotWidth,62,6.9,
+      p.text(x+hour*slotWidth,55,6.9,
         String((firstHour+hour)%24).padStart(2,"0")+"h",C.muted);
     }
     if(periodEnd!==null&&periodEnd%60!==0){
       const endLabel=String(Math.floor(periodEnd/60)).padStart(2,"0")+"h"
         +String(periodEnd%60).padStart(2,"0");
-      p.text(x+w,62,7.4,endLabel,C.gold,true,"right");
+      p.text(x+w,55,7.4,endLabel,C.gold,true,"right");
       p.line(x+w,baseline,x+w,baseline+h,C.gold,.65);
     }
     const first=measured[0].row,last=measured[measured.length-1].row;
-    p.text(42,49,8,
+    p.text(42,44,7.6,
       "Créneaux mesurés : "+fmt(measured.length)
       +"  |  Sans données : "+fmt(blankHours)
       +"  |  "+trim(String(first.label??first.hour??""),8)
