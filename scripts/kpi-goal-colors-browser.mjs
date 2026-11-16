@@ -81,6 +81,32 @@ try {
           indicators:values,goalsFor:scored,goalsAgainst:4-scored},
       };
       await page.route("**/api/agencies/01K/snapshot**",route=>route.fulfill({json:{snapshot}}));
+      // The real score is now server-authoritative. As this visual regression
+      // deliberately mocks the snapshot response without importing an Excel,
+      // it must mock the matching score response for the exact same fixture.
+      // Never let this test compare two different MATCH sources.
+      await page.route("**/api/agencies/01K/score-rules?*",route=>{
+        const query=new URL(route.request().url()).searchParams;
+        if(query.get("preview")!=="1")return route.continue();
+        const keys=["passRate","loadingPercent","unloadingPercent","possessionPercent"];
+        const labels=["Passes réussies","Tirs cadrés","Duels gagnés","Possession"];
+        const indicators=keys.map((id,i)=>({
+          id,label:labels[i],targetPercent:league.target,value:values[id],
+          reached:values[id]>league.target,goalsFor:1,goalsAgainst:1,
+          awardedGoals:values[id]>league.target?1:0,
+          concededGoals:values[id]<=league.target?1:0,reason:null,
+        }));
+        return route.fulfill({json:{
+          leagueId:league.id,scoreRulesRevision:null,customized:false,changedAt:null,
+          preview:{status:"available",goalsFor:scored,goalsAgainst:4-scored,
+            indicators,missingIndicators:[],
+            referenceScore:{status:"available",goalsFor:scored,goalsAgainst:4-scored},
+            matchDate:snapshot.match.date,importedAt:snapshot.importedAt,
+            criteria:snapshot.performanceCriteria,
+          },
+        }});
+      });
+
       await page.goto(baseURL);
       await page.getByLabel("Code agence").selectOption("01K");
       await page.getByLabel("Code d'accès").fill(accessCode);
