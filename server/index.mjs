@@ -196,15 +196,17 @@ app.get("/api/agencies/:agencyCode/score-rules", requireAgency, async (req, res)
       const snapshot=await withAgencyLock(req.agency.code, () =>
         readLatestSnapshot(req.agency.code, config.criteria));
       preview=snapshot
-        ? evaluateScoreRules(snapshot, state.profile, config.criteria.scoreTargetPercent)
+        ? { ...evaluateScoreRules(snapshot, state.profile, config.criteria.scoreTargetPercent),
+          matchDate:snapshot.match.date, importedAt:snapshot.importedAt,
+          criteria:config.criteria }
         : { status:"no_match", message:"Importe un MATCH pour prévisualiser le score." };
     } else if (req.query.preview !== undefined) {
       throw new ScoreRulesError(400, "Option de prévisualisation invalide.");
     }
     res.set("Cache-Control","no-store, max-age=0").json({
       leagueId, catalog:SCORE_KPI_CATALOG, profile:state.profile,
-      scoreRulesRevision:state.scoreRulesRevision, preview,
-      defaultProfile:defaultScoreRules(),
+      scoreRulesRevision:state.scoreRulesRevision, changedAt:state.changedAt,
+      customized:state.changedAt!==null, preview, defaultProfile:defaultScoreRules(),
     });
   } catch(error) {
     if (error instanceof ScoreRulesError || error instanceof MatchExportError)
@@ -273,12 +275,15 @@ app.get("/api/agencies/:agencyCode/sync-state", requireAgency, async (req, res) 
     const causeriePath = matchDate
       ? path.join(agencyDir, "causeries", `${sanitizeSegment(matchDate)}.json`)
       : null;
-    const [snapshotRevision, leagueConfigRevision, causerieRevision] = await Promise.all([
+    const [snapshotRevision, leagueConfigRevision, causerieRevision, scoreRulesRevision] = await Promise.all([
       readFileRevision(path.join(agencyDir, "latest.json")),
       readFileRevision(path.join(agencyDir, "league-configs.json")),
       causeriePath ? readFileRevision(causeriePath) : null,
+      readFileRevision(path.join(agencyDir, "score-rules.json")),
     ]);
-    res.set("Cache-Control", "no-store, max-age=0").json({ snapshotRevision, leagueConfigRevision, causerieRevision });
+    res.set("Cache-Control", "no-store, max-age=0").json({
+      snapshotRevision, leagueConfigRevision, causerieRevision, scoreRulesRevision,
+    });
   } catch (error) {
     respondInternalError(res, `sync-state:${req.agency.code}`, error);
   }
@@ -437,12 +442,38 @@ app.get("/api/agencies/:agencyCode/export/match.pdf", requireAgency, async (req,
       if (req.query.causerieRevision !== (causerieState.causerieRevision ?? "")) {
         throw new MatchExportError(409, "Le brief enregistré a changé. Actualise avant l\u0027export.");
       }
-      return matchExportModel({
+      const scoreState=await readScoreRulesState(req.agency.code,leagueId);
+      if ((req.query.scoreRulesRevision ?? "") !== (scoreState.scoreRulesRevision ?? "")) {
+        throw new MatchExportError(409,
+          "Le barème du score a changé. Actualise la feuille de match avant l'export.");
+      }
+      // Keep every PDF KPI and graph tied to the canonical operational snapshot.
+      // Only the scoreline is personalised, using the same server scoring engine.
+      const finalModel=matchExportModel({
         agency: req.agency, snapshot, league: config, causerie: causerieState.plan, safety,
         pdfProfile: pdfProfileState.profile,
         expectedMatchDate: matchDate, expectedImportedAt: importedAt,
         manualInjuries: rawInjuries === undefined ? null : Number(rawInjuries),
       });
+      const scored=evaluateScoreRules(snapshot,scoreState.profile,config.criteria.scoreTargetPercent);
+      return {
+        ...finalModel,
+        score:{
+          ...finalModel.score, status:scored.status, goalsFor:scored.goalsFor,
+          goalsAgainst:scored.goalsAgainst,
+        },
+        scoreCustomization:{
+          customized:scoreState.changedAt!==null,
+          changedAt:scoreState.changedAt,
+          scoreRulesRevision:scoreState.scoreRulesRevision,
+          indicators:scored.indicators,
+          missingIndicators:scored.missingIndicators,
+          referenceScore:scored.referenceScore,
+          possibleGoalsFor:scored.possibleGoalsFor,
+          possibleGoalsAgainst:scored.possibleGoalsAgainst,
+          matchDate:snapshot.match.date, importedAt:snapshot.importedAt,
+        },
+      };
     });
     const pdf = renderMatchPdf(model);
     res.set({
