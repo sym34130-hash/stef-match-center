@@ -940,6 +940,13 @@ function compactScorePage(doc, m) {
   const allCards=indicatorCards(m);
   const byId=new Map(m.visibleIndicators.map((id,index)=>[id,allCards[index]]));
   const selected=m.pdfProfile.indicatorIds.map(id=>byId.get(id)).filter(Boolean);
+  // Recover the official 106J total when either printed tonnage indicator
+  // is present. It is sourced from the report, never rounded then summed.
+  // This also preserves the established Lot E V6 content contract.
+  const printedTonnage=selected.some(card=>/^Tonnage /i.test(card.label));
+  if(printedTonnage && Number.isFinite(m.dailyIndicators?.total?.tonnage)){
+    p.text(806,277,7.7,"Total "+fmtTonnage(m.dailyIndicators.total.tonnage)+" t",C.gold,true,"right");
+  }
   if(!selected.length)p.text(41,235,10,"Aucun KPI complémentaire visible dans le MATCH.",C.muted);
   selected.forEach((card,i)=>{
     const row=Math.floor(i/3),col=i%3;
