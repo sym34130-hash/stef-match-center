@@ -120,6 +120,36 @@ test("PDF V7: website-faithful hourly curve, exact volumes, gaps and inconsisten
   rejected(()=>renderMatchPdf(invalid),409);
 });
 
+test("PDF V10: 88.9% point and label align at their exact linear position below 90% and 100%", async () => {
+  const model=build("058",{snapshot:{hourlyPerformance:[
+    { label:"13h", hour:13, won:8, total:9, rate:88.9 },
+    { label:"14h", hour:14, won:9, total:9, rate:100 },
+  ]},pdfProfile:{ indicatorIds:["positions","arrival","injuries","performance"],
+    chartId:"passes-hourly" }});
+  const rendered=renderMatchPdf(model);
+  const content=rendered.toString("latin1");
+  const percentLabelY=(label)=>{
+    const match=content.match(new RegExp(
+      "1 0 0 1 [0-9]+\\.[0-9]+ ([0-9]+\\.[0-9]+) Tm \\("+label+"\\) Tj ET"));
+    assert.ok(match, "missing graph percentage label "+label);
+    return Number(match[1]);
+  };
+  const measured88=70+88.9/100*74;
+  const measured100=70+74;
+  const printed88=percentLabelY("88,9 %");
+  const printed100=percentLabelY("100 %");
+  assert.ok(Math.abs(printed88-(measured88-2.6))<0.035,
+    "88.9% label must share the point's Y coordinate, not be lifted toward 100%");
+  assert.ok(Math.abs(printed100-(measured100-2.6))<0.035);
+  assert.ok(printed88<printed100 && printed88>70+0.8*74,
+    "True 88.9% point must sit between the 80% and 100% guides");
+  assert.match(content, /\[2 3\] 0 d/, "90% reference guide must be dashed");
+  const parsed=await pdfParse(rendered);
+  assert.equal(parsed.numpages,2);
+  assert.match(parsed.text, /88,9 %/);
+  assert.match(parsed.text, /100 %/);
+});
+
 test("Lot E: valid league is selected with agency-specific stored criteria", () => {
   assert.equal(league.label, "LIGUE 1");
   assert.equal(matchExportLeague("or", config).criteria.scoreTargetPercent, 60);
