@@ -61,6 +61,28 @@ try {
     page.on("pageerror", err => errors.push(err.message));
     await page.route("**/api/agencies/01K/snapshot**",
       route => route.fulfill({ json: { snapshot: built.snapshot } }));
+    // Layout-only fixture: this browser has no server-side imported workbook.
+    // Mock the authoritative score for the same in-memory snapshot, otherwise
+    // its PDF button correctly remains unavailable due to a source mismatch.
+    await page.route("**/api/agencies/01K/score-rules?*",route=>{
+      const query=new URL(route.request().url()).searchParams;
+      if(query.get("preview")!=="1")return route.continue();
+      return route.fulfill({json:{
+        leagueId:"argent",scoreRulesRevision:null,customized:false,changedAt:null,
+        preview:{status:"unavailable",goalsFor:null,goalsAgainst:null,
+          indicators:[
+            {id:"passRate",label:"Passes réussies",reached:null},
+            {id:"loadingPercent",label:"Tirs cadrés",reached:null},
+            {id:"unloadingPercent",label:"Duels gagnés",reached:null},
+            {id:"possessionPercent",label:"Possession",reached:null},
+          ],
+          missingIndicators:[],referenceScore:{status:"unavailable",goalsFor:null,goalsAgainst:null},
+          matchDate:built.snapshot.match.date,importedAt:built.snapshot.importedAt,
+          criteria:built.snapshot.performanceCriteria,
+        },
+      }});
+    });
+
     await page.goto(url);
     await page.getByLabel("Code agence").selectOption("01K");
     await page.getByLabel("Code d'accès").fill("SAFETY-CAROUSEL-TEST");
@@ -73,6 +95,10 @@ try {
       const control = document.querySelector(".match-indicators-customization > button");
       return Boolean(control && !control.disabled);
     }, { timeout: 15000 });
+    await page.waitForFunction(()=>{
+      const panel=document.querySelector(".football-score-panel");
+      return Boolean(panel && !panel.textContent?.includes("Synchronisation du score en cours"));
+    },{timeout:15000});
 
     // Lot E: a discoverable download button must work without hiding
     // the carrousel navigation or stealing another agency's access code.
