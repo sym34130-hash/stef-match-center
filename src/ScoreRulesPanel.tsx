@@ -27,13 +27,14 @@ type State = {
 };
 
 export function ScoreRulesPanel({
-  agencyCode, accessCode, canEdit, leagueId, leagueTargetPercent,
+  agencyCode, accessCode, canEdit, leagueId, leagueTargetPercent, onSaved,
 }: {
   agencyCode: string;
   accessCode: string;
   canEdit: boolean;
   leagueId: string;
   leagueTargetPercent: number;
+  onSaved?: () => void;
 }) {
   const [state,setState]=useState<State | null>(null);
   const [draft,setDraft]=useState<ScoreProfile | null>(null);
@@ -128,7 +129,9 @@ export function ScoreRulesPanel({
         scoreRulesRevision:result.scoreRulesRevision as string,preview:null};
       setState(next);
       setDraft(structuredClone(next.profile));
-      setNotice("Règles enregistrées pour cette agence et cette ligue.");
+      onSaved?.();
+      setPreview(null);
+      setNotice("Règles enregistrées pour cette agence et cette ligue. Les autres écrans sont actualisés.");
     }catch(caught){
       setError(caught instanceof Error?caught.message:"Enregistrement impossible.");
     }finally{setBusy(false);}
