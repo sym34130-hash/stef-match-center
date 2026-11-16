@@ -5186,7 +5186,13 @@ type FootballScore = {
   goalsAgainst: number;
   targetPercent: number;
   reachedIndicators: number;
+  indicatorCount: number;
+  indicatorDetails: Array<{ id: string; label: string; reached: boolean | null }>;
+  customized: boolean;
+  referenceScore: WeightedScorePreview["referenceScore"] | null;
   available: boolean;
+  loading: boolean;
+  missingLabels: string[];
 };
 
 type OperationalScoreIndicators = NonNullable<Snapshot["operationalScore"]>["indicators"];
@@ -5202,25 +5208,31 @@ function operationalScoreIndicators(snapshot: Snapshot): OperationalScoreIndicat
   };
 }
 
-function buildFootballScore(snapshot: Snapshot, targetPercent: number): FootballScore {
-  const indicators = operationalScoreIndicators(snapshot);
-  const values = [indicators.passRate, indicators.loadingPercent, indicators.unloadingPercent, indicators.possessionPercent];
-  const canonical = snapshot.operationalScore;
-  const hasCanonicalScore = Boolean(canonical && canonical.indicators && Object.hasOwn(canonical.indicators, "possessionPercent"));
-  const available = hasCanonicalScore
-    ? canonical?.status === "available" && values.every((value) => Number.isFinite(value)) && Number.isFinite(canonical.goalsFor) && Number.isFinite(canonical.goalsAgainst)
-    : values.every((value) => Number.isFinite(value));
-  const reachedIndicators = available
-    ? hasCanonicalScore
-      ? Number(canonical?.goalsFor)
-      : values.filter((value) => (value as number) > targetPercent).length
-    : 0;
+function buildFootballScore(snapshot: Snapshot, targetPercent: number, liveScore: ActiveScoreState | null): FootballScore {
+  const scored=liveScore?.preview;
+  const available=scored?.status==="available"
+    && Number.isInteger(scored.goalsFor)
+    && Number.isInteger(scored.goalsAgainst);
+  const details=scored?.indicators.map(item=>({
+    id:item.id,label:item.label,reached:item.reached,
+  }))??[
+    {id:"passRate",label:"Passes réussies",reached:null},
+    {id:"loadingPercent",label:"Tirs cadrés",reached:null},
+    {id:"unloadingPercent",label:"Duels gagnés",reached:null},
+    {id:"possessionPercent",label:"Possession",reached:null},
+  ];
   return {
-    goalsFor: reachedIndicators,
-    goalsAgainst: available ? (hasCanonicalScore ? Number(canonical?.goalsAgainst) : values.length - reachedIndicators) : 0,
-    targetPercent: hasCanonicalScore && Number.isFinite(canonical?.targetPercent) ? Number(canonical?.targetPercent) : targetPercent,
-    reachedIndicators,
+    goalsFor:available?Number(scored?.goalsFor):0,
+    goalsAgainst:available?Number(scored?.goalsAgainst):0,
+    targetPercent,
+    reachedIndicators:details.filter(item=>item.reached===true).length,
+    indicatorCount:details.length,
+    indicatorDetails:details,
+    customized:Boolean(liveScore?.customized),
+    referenceScore:scored?.referenceScore??(snapshot.operationalScore??null),
     available,
+    loading:!liveScore,
+    missingLabels:scored?.missingIndicators.map(item=>item.label)??[],
   };
 }
 
@@ -5237,14 +5249,18 @@ function matchCeremonyOutcome(footballScore: FootballScore): {
       tone: "rework",
       title: "Match à compléter",
       verdict: "SCORE INCOMPLET",
-      message: "Score opérationnel indisponible : les 4 indicateurs doivent être renseignés pour établir le résultat.",
+      message: footballScore.loading
+        ? "Synchronisation du score avec le barème enregistré en cours."
+        : "Score opérationnel incomplet : "+(footballScore.missingLabels.join(", ") || "données manquantes")+" ; aucun but fictif comptabilisé.",
       collectiveTitle: "Performance à compléter",
       celebration: false,
     };
   }
 
   const scoreLabel = `${footballScore.goalsFor} - ${footballScore.goalsAgainst}`;
-  const scoreDetail = `${footballScore.reachedIndicators} indicateur(s) sur 4 dépassent l'objectif de ${formatNumber(footballScore.targetPercent)}%`;
+  const scoreDetail = `${footballScore.reachedIndicators} indicateur(s) sur ${footballScore.indicatorCount} dépassent leur objectif`+
+    (footballScore.customized?" (barème personnalisé)":
+      " de "+formatNumber(footballScore.targetPercent)+"%");
 
   if (footballScore.goalsFor > footballScore.goalsAgainst) {
     return {
@@ -5279,50 +5295,51 @@ function matchCeremonyOutcome(footballScore: FootballScore): {
 }
 
 function FootballScoreDisplay({ footballScore }: { footballScore: FootballScore }) {
-  const scoreLabel = footballScore.available ? `${footballScore.goalsFor} - ${footballScore.goalsAgainst}` : "— - —";
-  const scoreDescription = footballScore.available
-    ? `${footballScore.reachedIndicators} indicateur(s) dépassent l'objectif sur 4 · seuil ${formatNumber(footballScore.targetPercent)}%`
-    : "Score à compléter · les 4 indicateurs doivent être disponibles";
-
+  const scoreLabel=footballScore.available
+    ? footballScore.goalsFor+" - "+footballScore.goalsAgainst : "— - —";
+  const detail=footballScore.available
+    ? footballScore.reachedIndicators+" KPI atteints / "+footballScore.indicatorCount
+      +" · "+(footballScore.customized?"barème pondéré":"objectif "+footballScore.targetPercent+"%")
+    :footballScore.loading?"Synchronisation du score en cours."
+      :"Score incomplet · "+(footballScore.missingLabels.join(", ")||"données manquantes");
   return (
-    <div
-      className={`football-score-panel${footballScore.available ? "" : " is-unavailable"}`}
-      aria-label={`Score opérationnel : ${scoreLabel}`}
-    >
+    <div className={`football-score-panel${footballScore.available?"":" is-unavailable"}`}
+      aria-label={`Score opérationnel : ${scoreLabel}`}>
       <div className="football-score-heading">
-        <span>Score opérationnel</span>
-        <small>4 indicateurs</small>
+        <span>{footballScore.customized?"Score personnalisé":"Score opérationnel"}</span>
+        <small>{footballScore.indicatorCount} indicateurs</small>
       </div>
       <div className="football-score-line">
         <div className="football-score-side football-score-side-for">
-          <span>Indicateurs atteints</span>
-          <strong>{footballScore.available ? footballScore.goalsFor : "—"}</strong>
-          <small>but(s) marqué(s)</small>
+          <span>Buts marqués</span>
+          <strong>{footballScore.available?footballScore.goalsFor:"—"}</strong>
+          <small>objectifs atteints (pondérés)</small>
         </div>
         <span className="football-score-separator" aria-hidden="true">-</span>
         <div className="football-score-side football-score-side-against">
-          <span>Indicateurs sous l'objectif</span>
-          <strong>{footballScore.available ? footballScore.goalsAgainst : "—"}</strong>
-          <small>but(s) encaissé(s)</small>
+          <span>Buts encaissés</span>
+          <strong>{footballScore.available?footballScore.goalsAgainst:"—"}</strong>
+          <small>objectifs non atteints (pondérés)</small>
         </div>
       </div>
-      <p>{scoreDescription}</p>
-      <div className="football-score-meter" aria-label={`Barème : ${footballScore.available ? `${footballScore.goalsFor} indicateur(s) atteint(s) sur 4` : "indisponible"}`}>
-        {Array.from({ length: 4 }, (_, index) => (
-          <span
-            className={footballScore.available ? (index < footballScore.goalsFor ? "is-reached" : "is-below") : "is-unavailable"}
-            key={`score-segment-${index}`}
-            aria-hidden="true"
-          />
+      <p>{detail}</p>
+      <div className="football-score-meter" aria-label={`Barème : ${footballScore.available
+        ?footballScore.reachedIndicators+" indicateur(s) atteints sur "+footballScore.indicatorCount
+        :"indisponible"}`}>
+        {footballScore.indicatorDetails.map(item=>(
+          <span key={item.id} className={!footballScore.available?"is-unavailable"
+            :item.reached===true?"is-reached":"is-below"} aria-hidden="true" />
         ))}
       </div>
       <div className="football-score-integrated" aria-label="KPI intégrés au score">
         <span>Intègre :</span>
-        <b>% passes réussies</b>
-        <b>% tirs cadrés</b>
-        <b>% duels gagnés</b>
-        <b>% possession</b>
+        {footballScore.indicatorDetails.map(item=><b key={item.id}>{item.label}</b>)}
       </div>
+      {footballScore.customized && footballScore.referenceScore?.status==="available" && (
+        <p className="football-score-reference">
+          Référence inter-agences (4 KPI) : {footballScore.referenceScore.goalsFor} - {footballScore.referenceScore.goalsAgainst}
+        </p>
+      )}
     </div>
   );
 }
