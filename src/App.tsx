@@ -1546,14 +1546,23 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
   const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
   const loadingTarget = formatKpiDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
   const unloadingTarget = formatKpiDuration(snapshot.performanceCriteria?.unloadingSeconds ?? leagueConfig.unloadingSeconds);
-  const scoreIndicators = operationalScoreIndicators(snapshot);
-  const footballScore = buildFootballScore(snapshot, snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent, liveScore);
-  const concededKpi = (id: string) => footballScore.available
-    && liveScore?.preview.indicators.some(item=>item.id===id && item.reached===false);
-  const concededKpiWarning = (id: string) => {
-    const rule=liveScore?.preview.indicators.find(item=>item.id===id);
-    return <em className="match-score-goal-warning">But encaissé · objectif &gt; {formatPercent(rule?.targetPercent)} · {rule?.concededGoals ?? 1} but(s)</em>;
+  const footballScore = buildFootballScore(snapshot,
+    snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent, liveScore);
+  // One source of truth: only configured scoring KPIs occupy the scoreboard.
+  // Keep all available values even when another selected KPI is missing.
+  const scoreCards=liveScore?.preview.indicators??[];
+  const scoreToCarouselId:Record<string,string>={
+    arrivalPunctuality:"arrival",
+    departurePunctuality:"departure",
+    destinationPunctuality:"destination",
+    temperatureReturn:"temperature",
   };
+  // A card returns to the carousel when its KPI is deselected, provided the
+  // user's independently saved carousel selection permits that card.
+  const scoreCarouselIds=new Set(scoreCards
+    .map(rule=>scoreToCarouselId[rule.id]).filter((id):id is string=>Boolean(id)));
+  const carouselVisibleIds=normalizeBriefIndicators(briefIndicatorIds)
+    .filter(id=>!scoreCarouselIds.has(id));
   const thresholdReached = footballScore.available && footballScore.goalsFor > footballScore.goalsAgainst;
   const outcome = matchCeremonyOutcome(footballScore);
   const teamMotivation = teamMotivationMessage(footballScore);
@@ -2164,31 +2173,33 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
           <div className="match-scoreboard">
             <span>STEF MATCH CENTER</span>
             <strong>{outcome.verdict}</strong>
-            <div className="match-score-bubbles" aria-label="Scores du match">
-              <div className={`match-score-bubble pass-score-bubble ${Number.isFinite(scoreIndicators.passRate) ? "" : "is-data-unavailable"} ${concededKpi("passRate") ? "is-goal-conceded" : ""}`}>
-                <span>% passes réussies</span>
-                <strong>{formatPercent(scoreIndicators.passRate)}</strong>
-                {concededKpi("passRate") && concededKpiWarning("passRate")}
-                <small>Objectif zonage : {snapshot.performanceCriteria?.zonageMinutes ?? leagueConfig.zonageMinutes} min ou moins</small>
-              </div>
-              <div className={`match-score-bubble loading-score-bubble ${Number.isFinite(scoreIndicators.loadingPercent) ? "" : "is-data-unavailable"} ${concededKpi("loadingPercent") ? "is-goal-conceded" : ""}`}>
-                <span>% tirs cadrés</span>
-                <strong>{formatPercent(scoreIndicators.loadingPercent)}</strong>
-                {concededKpi("loadingPercent") && concededKpiWarning("loadingPercent")}
-                <small>Voyages chargés en {loadingTarget} ou moins par position</small>
-              </div>
-              <div className={`match-score-bubble reception-score-bubble ${Number.isFinite(scoreIndicators.unloadingPercent) ? "" : "is-data-unavailable"} ${concededKpi("unloadingPercent") ? "is-goal-conceded" : ""}`}>
-                <span>% duels gagnés</span>
-                <strong>{formatPercent(scoreIndicators.unloadingPercent)}</strong>
-                {concededKpi("unloadingPercent") && concededKpiWarning("unloadingPercent")}
-                <small>Voyages réceptionnés en {unloadingTarget} ou moins par position</small>
-              </div>
-              <div className={`match-score-bubble possession-score-bubble ${Number.isFinite(scoreIndicators.possessionPercent) ? "" : "is-data-unavailable"} ${concededKpi("possessionPercent") ? "is-goal-conceded" : ""}`}>
-                <span>% possession</span>
-                <strong>{formatPercent(scoreIndicators.possessionPercent)}</strong>
-                {concededKpi("possessionPercent") && concededKpiWarning("possessionPercent")}
-                <small>Positions zonées</small>
-              </div>
+            <div className="match-score-bubbles" aria-label="Indicateurs participant au score">
+              {scoreCards.map(rule=>{
+                const classById:Record<string,string>={
+                  passRate:"pass-score-bubble",
+                  loadingPercent:"loading-score-bubble",
+                  unloadingPercent:"reception-score-bubble",
+                  possessionPercent:"possession-score-bubble",
+                };
+                const conceded=rule.reached===false;
+                return (
+                  <div key={rule.id} data-score-kpi={rule.id}
+                    className={`match-score-bubble ${classById[rule.id]??"custom-score-bubble"} ${rule.value===null?"is-data-unavailable":""} ${conceded?"is-goal-conceded":""}`}>
+                    <span>{rule.label}</span>
+                    <strong>{formatPercent(rule.value)}</strong>
+                    {conceded&&<em className="match-score-goal-warning">
+                      But encaissé · {rule.concededGoals} but(s)
+                    </em>}
+                    <small>Objectif &gt; {formatPercent(rule.targetPercent)}</small>
+                    <small>{rule.reached===null?"Valeur indisponible":
+                      rule.reached?"+"+rule.awardedGoals+" but(s) marqué(s)":
+                        rule.concededGoals+" but(s) encaissé(s)"}</small>
+                  </div>
+                );
+              })}
+              {!liveScore&&<p role="status" className="match-score-loading">
+                Chargement des indicateurs du score…
+              </p>}
             </div>
           </div>
 
@@ -2205,7 +2216,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
             staffDetail={formatRealStaffDetail(snapshot, kpiCopy.expectedPlayersValue)}
             mercato={mercatoText}
             mercatoProfiles={mercatoProfiles}
-            visibleIndicatorIds={briefIndicatorIds}
+            visibleIndicatorIds={carouselVisibleIds}
             session={session}
             indicatorCustomization={!celebrationMode && session.agency.canImport ? {
               expanded: indicatorSettingsOpen,
