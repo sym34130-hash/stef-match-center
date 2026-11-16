@@ -52,6 +52,25 @@ function rejected(callback, status) {
   assert.throws(callback, e => e instanceof MatchExportError && e.status === status);
 }
 
+test("PDF V5: the two-page immersive football identity retains live business data", async () => {
+  const model = build("058", { pdfProfile: {
+    indicatorIds: ["positions", "arrival", "injuries", "performance"],
+    chartId: "operational-diagnostic",
+  } });
+  const buffer = renderMatchPdf(model);
+  const parsed = await pdfParse(buffer);
+  assert.equal(parsed.numpages, 2, "the immersive artwork must not add pages");
+  for (const marker of [
+    "FIN DU MATCH", "SUR LE TERRAIN", "BALLON DE MATCH",
+    "RÉSULTAT FINAL", "BUTS MARQUÉS", "BUTS ENCAISSÉS",
+    "LE PLAN DE JEU", "LECTURE TACTIQUE DU MATCH", "STAFF",
+    "SÉCURITÉ / VIGILANCE", "SERVICE CLIENT", "DÉCISIONS / ARBITRAGES",
+  ]) assert.ok(parsed.text.includes(marker), "Missing immersive or operational label: " + marker);
+  assert.match(parsed.text, /Sources : Excel \[058\]/);
+  assert.match(parsed.text, /3/); // scored goals from source snapshot, not artwork
+  assert.ok(buffer.length < 3_000_000, "vector graphics should stay lightweight");
+});
+
 test("Lot E: valid league is selected with agency-specific stored criteria", () => {
   assert.equal(league.label, "LIGUE 1");
   assert.equal(matchExportLeague("or", config).criteria.scoreTargetPercent, 60);
