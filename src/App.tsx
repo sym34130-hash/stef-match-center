@@ -5208,19 +5208,6 @@ type FootballScore = {
   missingLabels: string[];
 };
 
-type OperationalScoreIndicators = NonNullable<Snapshot["operationalScore"]>["indicators"];
-
-function operationalScoreIndicators(snapshot: Snapshot): OperationalScoreIndicators {
-  const canonical = snapshot.operationalScore?.indicators;
-  if (canonical && Object.hasOwn(canonical, "possessionPercent")) return canonical;
-  return {
-    passRate: snapshot.summary.passRate ?? null,
-    loadingPercent: snapshot.loadingQuality?.targetedPercent ?? null,
-    unloadingPercent: snapshot.unloadingQuality?.targetedPercent ?? null,
-    possessionPercent: snapshot.summary.possessionPercent ?? null,
-  };
-}
-
 function buildFootballScore(snapshot: Snapshot, targetPercent: number, liveScore: ActiveScoreState | null): FootballScore {
   const scored=liveScore?.preview;
   const available=scored?.status==="available"
