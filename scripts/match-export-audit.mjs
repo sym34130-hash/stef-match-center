@@ -143,7 +143,7 @@ for (const fixture of fixtures) {
       checks.push(["first hourly period", snapshot.hourlyPerformance[0].label]);
       checks.push(["actual selected period end", "22h30"]);
       checks.push(["distinct observed low point", "15h"]);
-      checks.push(["observed numerator and denominator", "3/8"]);
+      checks.push(["source-weighted operation counts", "Total volumes : 79/114"]);
       checks.push(["observed low rate", "37,5 %"]);
     } else if (chartId === "reception-time") {
       checks.push(["reception target", "Cible : " + league.criteria.unloadingSeconds + " s/poz"]);
