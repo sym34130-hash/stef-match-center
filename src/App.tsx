@@ -173,6 +173,7 @@ type WeightedScoreIndicator = {
   value: number | null; reached: boolean | null;
   goalsFor: number; goalsAgainst: number;
   awardedGoals: number; concededGoals: number;
+  source: "Excel" | "106J"; sourceDate: string | null;
   reason: string | null;
 };
 type WeightedScorePreview = {
@@ -1546,13 +1547,22 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
   const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
   const loadingTarget = formatKpiDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
   const unloadingTarget = formatKpiDuration(snapshot.performanceCriteria?.unloadingSeconds ?? leagueConfig.unloadingSeconds);
-  const scoreIndicators = operationalScoreIndicators(snapshot);
   const footballScore = buildFootballScore(snapshot, snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent, liveScore);
-  const concededKpi = (id: string) => footballScore.available
-    && liveScore?.preview.indicators.some(item=>item.id===id && item.reached===false);
-  const concededKpiWarning = (id: string) => {
-    const rule=liveScore?.preview.indicators.find(item=>item.id===id);
-    return <em className="match-score-goal-warning">But encaissé · objectif &gt; {formatPercent(rule?.targetPercent)} · {rule?.concededGoals ?? 1} but(s)</em>;
+  // The live server profile is the SINGLE source of truth for score bubbles.
+  // Show selected 106J indicators in the score; others remain in the carousel.
+  const scoringIndicators = liveScore?.preview.indicators ?? [];
+  const bubbleMetadata: Record<string, { style: string; detail: string }> = {
+    passRate: { style: "pass-score-bubble",
+      detail: `Objectif zonage : ${snapshot.performanceCriteria?.zonageMinutes ?? leagueConfig.zonageMinutes} min ou moins` },
+    loadingPercent: { style: "loading-score-bubble",
+      detail: `Voyages chargés en ${loadingTarget} ou moins par position` },
+    unloadingPercent: { style: "reception-score-bubble",
+      detail: `Voyages réceptionnés en ${unloadingTarget} ou moins par position` },
+    possessionPercent: { style: "possession-score-bubble", detail: "Positions zonées" },
+    arrivalPunctuality: { style: "arrival-score-bubble", detail: "Ponctualité arrivage (106J)" },
+    departurePunctuality: { style: "departure-score-bubble", detail: "Ponctualité départ (106J)" },
+    destinationPunctuality: { style: "destination-score-bubble", detail: "Ponctualité destination (106J)" },
+    temperatureReturn: { style: "temperature-score-bubble", detail: "Température retour ramasse (106J)" },
   };
   const thresholdReached = footballScore.available && footballScore.goalsFor > footballScore.goalsAgainst;
   const outcome = matchCeremonyOutcome(footballScore);
@@ -2164,31 +2174,32 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
           <div className="match-scoreboard">
             <span>STEF MATCH CENTER</span>
             <strong>{outcome.verdict}</strong>
-            <div className="match-score-bubbles" aria-label="Scores du match">
-              <div className={`match-score-bubble pass-score-bubble ${Number.isFinite(scoreIndicators.passRate) ? "" : "is-data-unavailable"} ${concededKpi("passRate") ? "is-goal-conceded" : ""}`}>
-                <span>% passes réussies</span>
-                <strong>{formatPercent(scoreIndicators.passRate)}</strong>
-                {concededKpi("passRate") && concededKpiWarning("passRate")}
-                <small>Objectif zonage : {snapshot.performanceCriteria?.zonageMinutes ?? leagueConfig.zonageMinutes} min ou moins</small>
-              </div>
-              <div className={`match-score-bubble loading-score-bubble ${Number.isFinite(scoreIndicators.loadingPercent) ? "" : "is-data-unavailable"} ${concededKpi("loadingPercent") ? "is-goal-conceded" : ""}`}>
-                <span>% tirs cadrés</span>
-                <strong>{formatPercent(scoreIndicators.loadingPercent)}</strong>
-                {concededKpi("loadingPercent") && concededKpiWarning("loadingPercent")}
-                <small>Voyages chargés en {loadingTarget} ou moins par position</small>
-              </div>
-              <div className={`match-score-bubble reception-score-bubble ${Number.isFinite(scoreIndicators.unloadingPercent) ? "" : "is-data-unavailable"} ${concededKpi("unloadingPercent") ? "is-goal-conceded" : ""}`}>
-                <span>% duels gagnés</span>
-                <strong>{formatPercent(scoreIndicators.unloadingPercent)}</strong>
-                {concededKpi("unloadingPercent") && concededKpiWarning("unloadingPercent")}
-                <small>Voyages réceptionnés en {unloadingTarget} ou moins par position</small>
-              </div>
-              <div className={`match-score-bubble possession-score-bubble ${Number.isFinite(scoreIndicators.possessionPercent) ? "" : "is-data-unavailable"} ${concededKpi("possessionPercent") ? "is-goal-conceded" : ""}`}>
-                <span>% possession</span>
-                <strong>{formatPercent(scoreIndicators.possessionPercent)}</strong>
-                {concededKpi("possessionPercent") && concededKpiWarning("possessionPercent")}
-                <small>Positions zonées</small>
-              </div>
+            <div className="match-score-bubbles" aria-label="Scores du match"
+              data-score-count={scoringIndicators.length}>
+              {liveScore ? scoringIndicators.map(rule => {
+                const metadata=bubbleMetadata[rule.id];
+                const conceded=footballScore.available && rule.reached===false;
+                const sourceDate=rule.sourceDate ?? (rule.source==="106J"
+                  ?snapshot.dailyIndicators?.referenceDate:null);
+                return (
+                  <div key={rule.id} data-score-indicator={rule.id}
+                    className={`match-score-bubble ${metadata?.style??"additional-score-bubble"} ${Number.isFinite(rule.value)?"":"is-data-unavailable"} ${conceded?"is-goal-conceded":""}`}>
+                    <span>% {rule.label.toLowerCase()}</span>
+                    <strong>{formatPercent(rule.value)}</strong>
+                    {conceded && <em className="match-score-goal-warning">
+                      But encaissé · objectif &gt; {formatPercent(rule.targetPercent)} · {rule.concededGoals} but(s)
+                    </em>}
+                    <small>{metadata?.detail??"Indicateur sélectionné"} · objectif &gt; {formatPercent(rule.targetPercent)}
+                      {rule.source==="106J" && sourceDate ? ` · 106J du ${sourceDate}` : ""}
+                    </small>
+                    {rule.reached===null && <small className="score-bubble-data-note">
+                      {rule.reason??"Donnée absente de l'import"}
+                    </small>}
+                  </div>
+                );
+              }) : <p className="match-score-loading" role="status">
+                {scoreLoadError || "Chargement des indicateurs du score…"}
+              </p>}
             </div>
           </div>
 
@@ -2206,6 +2217,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
             mercato={mercatoText}
             mercatoProfiles={mercatoProfiles}
             visibleIndicatorIds={briefIndicatorIds}
+            selectedScoreIndicatorIds={liveScore?.preview.indicators.map(item=>item.id)}
             session={session}
             indicatorCustomization={!celebrationMode && session.agency.canImport ? {
               expanded: indicatorSettingsOpen,
@@ -5196,19 +5208,6 @@ type FootballScore = {
   loading: boolean;
   missingLabels: string[];
 };
-
-type OperationalScoreIndicators = NonNullable<Snapshot["operationalScore"]>["indicators"];
-
-function operationalScoreIndicators(snapshot: Snapshot): OperationalScoreIndicators {
-  const canonical = snapshot.operationalScore?.indicators;
-  if (canonical && Object.hasOwn(canonical, "possessionPercent")) return canonical;
-  return {
-    passRate: snapshot.summary.passRate ?? null,
-    loadingPercent: snapshot.loadingQuality?.targetedPercent ?? null,
-    unloadingPercent: snapshot.unloadingQuality?.targetedPercent ?? null,
-    possessionPercent: snapshot.summary.possessionPercent ?? null,
-  };
-}
 
 function buildFootballScore(snapshot: Snapshot, targetPercent: number, liveScore: ActiveScoreState | null): FootballScore {
   const scored=liveScore?.preview;
