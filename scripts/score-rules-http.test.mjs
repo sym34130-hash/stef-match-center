@@ -70,6 +70,7 @@ test("score rules HTTP: secured per agency/league, revisioned, immutable on reje
     })).status,400);
     assert.equal((await put("060","argent",profiles(),null)).status,403);
     assert.equal((await put("058","argent",{version:1,indicators:[]},null)).status,400);
+    assert.equal((await put("058","argent",{...profiles(),indicators:profiles().indicators.slice(0,1)},null)).status,400);
     assert.deepEqual(await fs.readdir(dataDir),[],"Invalid rules must not write any agency file");
 
     const p=profiles();
@@ -95,11 +96,11 @@ test("score rules HTTP: secured per agency/league, revisioned, immutable on reje
       "Optimistic lock protects the complete per-agency file");
 
     const savedLdc=await put("058","or",{
-      ...profiles(),indicators:profiles().indicators.slice(0,3),
+      ...profiles(),indicators:profiles().indicators.slice(0,2),
     },data.scoreRulesRevision);
     assert.equal(savedLdc.status,200);
     const result=await savedLdc.json();
-    assert.equal(result.profile.indicators.length,3);
+    assert.equal(result.profile.indicators.length,2);
     assert.equal((await (await get("058")).json()).profile.indicators[0].goalsFor,3,
       "Saving a second league cannot replace the first");
 
@@ -116,7 +117,7 @@ test("score rules HTTP: secured per agency/league, revisioned, immutable on reje
       "Every accepted score change must append a historical rule version");
     assert.equal(persisted.leagues.argent.history[0].profile.indicators[0].goalsFor,3,
       "An earlier approved score definition must remain available after later changes");
-    assert.equal(persisted.leagues.or.history[0].profile.indicators.length,3);
+    assert.equal(persisted.leagues.or.history[0].profile.indicators.length,2);
     assert.equal((await get("060")).status,200,"Read-only agency may inspect the rules");
   } finally {
     if(server.exitCode===null&&server.signalCode===null){
