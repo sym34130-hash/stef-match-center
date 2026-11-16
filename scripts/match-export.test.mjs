@@ -143,7 +143,8 @@ test("PDF V10: 88.9% point and label align at their exact linear position below 
   assert.ok(Math.abs(printed100-(measured100-2.6))<0.035);
   assert.ok(printed88<printed100 && printed88>70+0.8*74,
     "True 88.9% point must sit between the 80% and 100% guides");
-  assert.match(content, /\[2 3\] 0 d/, "90% reference guide must be dashed");
+  assert.ok(content.includes("42.00 134.40 Tm (90%) Tj ET"),
+    "90% is a regular linear tick in the complete 0–100% scale");
   const parsed=await pdfParse(rendered);
   assert.equal(parsed.numpages,2);
   assert.match(parsed.text, /88,9 %/);
