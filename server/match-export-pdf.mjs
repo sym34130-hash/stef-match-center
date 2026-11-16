@@ -1037,21 +1037,26 @@ function compactScorePage(doc, m) {
   const longestLabel=Math.max(1,...labelTexts.map(value=>value.length));
   const longestValue=Math.max(1,...valueTexts.map(value=>value.length));
   const labelSize=clamp((cellWidth-28)/(longestLabel*.56),7.0,8.3);
-  const valueSize=clamp((cellWidth-28)/(longestValue*.58),9,18);
+  const valueSize=clamp((cellWidth-28)/(longestValue*.58),9,16);
+  // Precisely equal row heights of 34.5pt inside the 257–188pt print strip.
+  // Equal horizontal widths AND vertical spacing fix the uneven visual rhythm.
+  const gridTop=257,rowHeight=34.5;
+  line(48,gridTop,794,gridTop,S.edge,.35);
   selected.forEach((card,i)=>{
     const row=Math.floor(i/columns),col=i%columns;
     const inRow=Math.min(columns,selected.length-row*columns);
     const offset=(columns-inRow)/2;
     const left=29+(col+offset)*cellWidth;
     const center=left+cellWidth/2;
-    const labelY=row===0?246:210;
-    const valueY=row===0?228:193.5;
-    // Dividers exist only BETWEEN equal-width cards, not on empty margins.
-    if(col>0)line(left,labelY-24,left,labelY+7,S.edge,.45);
+    const rowTop=gridTop-row*rowHeight;
+    const labelY=rowTop-8;
+    const valueY=rowTop-27;
+    // Identical divider dimensions in both rows, even with five indicators.
+    if(col>0)line(left,rowTop-rowHeight+3,left,rowTop-3,S.edge,.45);
     p.text(center,labelY,labelSize,labelTexts[i],C.muted,true,"center");
     p.text(center,valueY,valueSize,valueTexts[i],C.white,true,"center");
   });
-  if(selected.length>3)line(48,217,794,217,S.edge,.35);
+  if(selected.length>3)line(48,gridTop-rowHeight,794,gridTop-rowHeight,S.edge,.35);
   compactChart(p,m,m.pdfProfile.chartId);
 }
 
