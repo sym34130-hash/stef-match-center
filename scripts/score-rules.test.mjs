@@ -128,7 +128,7 @@ test("matrix: 4 leagues, all 2–6 KPI cardinalities and weighted percentage rul
   };
   const source=snapshot([70,88,80,49],dailyIndicators);
   for(const [league,threshold] of Object.entries({
-    bronze:40,argent:50,or:65,platine:80,
+    bronze:45,argent:50,or:60,platine:70,
   })){
     for(let count=2;count<=6;count++){
       for(let start=0;start<ids.length;start++){
