@@ -1015,6 +1015,7 @@ function compactScorePage(doc, m) {
       ["POSSESSION",score?.indicators?.possessionPercent,m.criteria.scoreTargetPercent,1,1],
     ]);
   const width=784/rates.length;
+  const compactMissing=rates.length>=5 && rates.some(([,value])=>!Number.isFinite(value));
   p.box(29,286,784,45,S.deep);
   p.box(29,328,784,3.4,C.gold);
   rates.forEach(([label,value,target,goalsFor,goalsAgainst],i)=>{
@@ -1024,18 +1025,33 @@ function compactScorePage(doc, m) {
     const labelText=ascii(label);
     const labelSize=clamp((width-28)/Math.max(1,labelText.length*.56),6.1,8.2);
     p.text(xl+17,314,labelSize,labelText,C.muted,true);
-    p.text(xl+17,291,clamp((width-27)/5.4,14,23),percent(value),C.white,true);
+    // Reserve a separate horizontal area for the target and goal weights.
+    // A missing value must never spill into the next column at five/six KPI;
+    // the abbreviated form is explained in the source/threshold note below.
+    const valueText=Number.isFinite(value)?percent(value)
+      :rates.length>=5?"N/D":"Indisponible";
+    const targetText="> "+fmt(target)+"%";
+    const weightsText="+"+fmt(goalsFor)+" / -"+fmt(goalsAgainst);
+    const reserved=m.scoreCustomization?.customized
+      ?Math.max(targetText.length*6.2*.50,weightsText.length*6.0*.50)+9
+      :0;
+    const valueSpace=width-17-7-reserved;
+    const baseSize=clamp((width-27)/5.4,14,23);
+    const valueSize=Math.min(baseSize,valueSpace/Math.max(1,valueText.length*.55));
+    if(valueSize<9)throw new MatchExportError(422,
+      "Taux trop long pour le bandeau du score PDF.");
+    p.text(xl+17,291,valueSize,valueText,C.white,true);
     if(m.scoreCustomization?.customized){
-      p.text(xl+width-7,292,6.2,"> "+fmt(target)+"%",C.gold,false,"right");
-      p.text(xl+width-7,302,6.0,
-        "+"+fmt(goalsFor)+" / -"+fmt(goalsAgainst),C.aqua,false,"right");
+      p.text(xl+width-7,292,6.2,targetText,C.gold,false,"right");
+      p.text(xl+width-7,302,6.0,weightsText,C.aqua,false,"right");
     }
   });
 
   p.text(35,278,7.6,
     "Zonage <= "+fmt(m.criteria.zonageMinutes)+" min  |  CHG <= "+
     fmt(m.criteria.loadingSeconds)+" s/poz  |  DECHG <= "+
-    fmt(m.criteria.unloadingSeconds)+" s/poz",C.muted);
+    fmt(m.criteria.unloadingSeconds)+" s/poz"+
+    (compactMissing?"  |  N/D : indisponible":""),C.muted);
 
   // Match-statistics sheet: typographic tape rather than six dashboard tiles.
   p.text(34,265,10.3,"LE MATCH EN CHIFFRES",C.gold,true);
