@@ -2189,13 +2189,13 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
                     className={`match-score-bubble ${classById[rule.id]??"custom-score-bubble"} ${rule.value===null?"is-data-unavailable":""} ${conceded?"is-goal-conceded":""}`}>
                     <span>{rule.label}</span>
                     <strong>{rule.value===null?"Indisponible":formatPercent(rule.value)}</strong>
-                    {conceded&&<em className="match-score-goal-warning">
+                    {conceded?<em className="match-score-goal-warning">
                       But encaissé · objectif &gt; {formatPercent(rule.targetPercent)} · {rule.concededGoals} but(s)
-                    </em>}
-                    <small>Objectif &gt; {formatPercent(rule.targetPercent)}</small>
-                    <small>{rule.reached===null?"Valeur indisponible":
-                      rule.reached?"+"+rule.awardedGoals+" but(s) marqué(s)":
-                        rule.concededGoals+" but(s) encaissé(s)"}</small>
+                    </em>:<small className="match-score-kpi-result">
+                      {rule.reached===null
+                        ?"Objectif > "+formatPercent(rule.targetPercent)+" · Valeur indisponible"
+                        :"Objectif > "+formatPercent(rule.targetPercent)+" · +"+rule.awardedGoals+" but(s)"}
+                    </small>}
                   </div>
                 );
               })}
