@@ -40,7 +40,7 @@ test("weights, independent targets, strict > equality and order are preserved",(
   assert.deepEqual([result.referenceScore.goalsFor,result.referenceScore.goalsAgainst],[3,1]);
 });
 
-test("valid 3–6 KPI rules can use punctuality when the 106J matches the match date",()=>{
+test("valid 2–6 KPI rules can use punctuality when available",()=>{
   const d={referenceDate:"11 septembre 2026",punctuality:{
     arrivalPunctuality:93,departurePunctuality:50,destinationPunctuality:79,
     temperatureReturn:100,
@@ -55,16 +55,41 @@ test("valid 3–6 KPI rules can use punctuality when the 106J matches the match 
   assert.equal(result.indicators[2].source,"106J");
 });
 
-test("106J dates different from the MATCH are excluded, never counted as conceded goals",()=>{
+test("106J data can score when Excel and report dates differ, while source date remains traceable",()=>{
   const otherDay={referenceDate:"10 septembre 2026",punctuality:{arrivalPunctuality:25}};
   const model=only([custom(),custom({id:"loadingPercent"}),custom({id:"arrivalPunctuality"})]);
   const score=evaluateScoreRules(snapshot(undefined,otherDay),model,50);
-  assert.equal(score.status,"unavailable");
-  assert.equal(score.goalsFor,null);
-  assert.equal(score.goalsAgainst,null);
-  assert.equal(score.missingIndicators[0].id,"arrivalPunctuality");
-  assert.match(score.missingIndicators[0].reason,/date du MATCH/);
+  assert.equal(score.status,"available");
+  assert.deepEqual([score.goalsFor,score.goalsAgainst],[2,1]);
+  assert.equal(score.missingIndicators.length,0);
+  assert.equal(score.indicators[2].value,25);
+  assert.equal(score.indicators[2].source,"106J");
+  assert.equal(score.indicators[2].sourceDate,"10 septembre 2026");
   assert.deepEqual([score.referenceScore.goalsFor,score.referenceScore.goalsAgainst],[3,1]);
+});
+
+test("two KPIs are the new minimum and still produce valid weighted goals",()=>{
+  const two=only([custom({id:"passRate",goalsFor:3}),
+    custom({id:"arrivalPunctuality",targetPercent:60,goalsAgainst:2})]);
+  assert.deepEqual(normalizeScoreRules(two),two);
+  const d={referenceDate:"10 septembre 2026",punctuality:{arrivalPunctuality:55}};
+  const scored=evaluateScoreRules(snapshot(undefined,d),two,50);
+  assert.equal(scored.status,"available");
+  assert.deepEqual([scored.goalsFor,scored.goalsAgainst],[3,2]);
+  assert.deepEqual(scored.indicators.map(item=>item.id),["passRate","arrivalPunctuality"]);
+  assert.equal(scored.possibleGoalsFor,4);
+  assert.equal(scored.possibleGoalsAgainst,3);
+});
+
+test("date difference is not a substitute for genuinely missing source metrics",()=>{
+  const d={referenceDate:"10 septembre 2026",punctuality:{}};
+  const scored=evaluateScoreRules(snapshot(undefined,d),
+    only([custom({id:"passRate"}),custom({id:"arrivalPunctuality"})]),50);
+  assert.equal(scored.status,"unavailable");
+  assert.equal(scored.goalsFor,null);
+  assert.equal(scored.goalsAgainst,null);
+  assert.equal(scored.missingIndicators[0].id,"arrivalPunctuality");
+  assert.match(scored.missingIndicators[0].reason,/indisponible/);
 });
 
 test("missing or out-of-range source values never become losses or fake 0%",()=>{
@@ -83,7 +108,7 @@ test("missing or out-of-range source values never become losses or fake 0%",()=>
 test("rules reject unknown fields, repeats, fractional weights, missing target, incorrect count",()=>{
   const base=defaultScoreRules();
   const invalid=[
-    only(base.indicators.slice(0,2)),
+    only(base.indicators.slice(0,1)),
     only([...base.indicators,...base.indicators.slice(0,3)]),
     only([...base.indicators.slice(0,3),custom({id:"unexpected"})]),
     only([...base.indicators.slice(0,3),custom({id:"passRate"})]),
