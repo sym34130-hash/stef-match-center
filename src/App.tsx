@@ -166,6 +166,27 @@ type AgencySyncState = {
   snapshotRevision: string | null;
   leagueConfigRevision: string | null;
   causerieRevision: string | null;
+  scoreRulesRevision: string | null;
+};
+
+type WeightedScoreIndicator = {
+  id: string; label: string; targetPercent: number;
+  value: number | null; reached: boolean | null;
+  goalsFor: number; goalsAgainst: number;
+  awardedGoals: number; concededGoals: number;
+  reason: string | null;
+};
+type WeightedScorePreview = {
+  status: "available" | "unavailable" | "no_match";
+  goalsFor: number | null; goalsAgainst: number | null;
+  indicators: WeightedScoreIndicator[];
+  missingIndicators: Array<{id: string; label: string; reason: string}>;
+  referenceScore: { status: "available" | "unavailable"; goalsFor: number | null; goalsAgainst: number | null };
+  matchDate: string; importedAt: string; criteria: PerformanceCriteria;
+};
+type ActiveScoreState = {
+  agencyCode: string; leagueId: LeagueId; scoreRulesRevision: string | null;
+  customized: boolean; changedAt: string | null; preview: WeightedScorePreview;
 };
 
 class ApiError extends Error {
@@ -336,6 +357,9 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [snapshotViewRevision, setSnapshotViewRevision] = useState(0);
   const [causerieRevision, setCauserieRevision] = useState<string | null>(null);
+  const [activeScoreState,setActiveScoreState] = useState<ActiveScoreState | null>(null);
+  const [scoreRefreshVersion,setScoreRefreshVersion] = useState(0);
+  const [scoreLoadError,setScoreLoadError] = useState("");
   const [screen, setScreen] = useState<Screen>("kickoff");
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [playerReturnScreen, setPlayerReturnScreen] = useState<Screen>("composition");
@@ -459,7 +483,9 @@ export default function App() {
         const configsChanged = !previous || previous.leagueConfigRevision !== nextSyncState.leagueConfigRevision;
         const snapshotChanged = !previous || previous.snapshotRevision !== nextSyncState.snapshotRevision;
         const causerieChanged = !previous || previous.causerieRevision !== nextSyncState.causerieRevision;
-        if (!configsChanged && !snapshotChanged && !causerieChanged) return;
+        const scoreRulesChanged = !previous || previous.scoreRulesRevision !== nextSyncState.scoreRulesRevision;
+        if (!configsChanged && !snapshotChanged && !causerieChanged && !scoreRulesChanged) return;
+        if (scoreRulesChanged) setScoreRefreshVersion(version=>version+1);
 
         let nextConfigs = leagueConfigsRef.current;
         if (configsChanged) {
@@ -509,6 +535,54 @@ export default function App() {
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [session, activeLeague, screen, publishSnapshot, loadLeagueConfigs]);
+
+  // The server alone evaluates the score for a specific agency, league and
+  // import. Identity and criteria checks prevent cross-MATCH score displays.
+  useEffect(() => {
+    setActiveScoreState(null);
+    setScoreLoadError("");
+    if (!session || !snapshot) return;
+    let disposed=false;
+    const load=async()=>{
+      try {
+        const response=await fetch(
+          "/api/agencies/"+encodeURIComponent(session.agency.code)+
+          "/score-rules?leagueId="+encodeURIComponent(activeLeague)+"&preview=1",
+          {headers:{"x-access-code":session.accessCode},cache:"no-store"});
+        const payload=await response.json();
+        if(!response.ok)throw new Error(payload.message??"Impossible de lire le score.");
+        const scored=payload.preview as WeightedScorePreview;
+        if(!scored || scored.status==="no_match" ||
+          scored.matchDate!==snapshot.match.date ||
+          scored.importedAt!==snapshot.importedAt ||
+          !["available","unavailable"].includes(scored.status) ||
+          ["zonageMinutes","loadingSeconds","unloadingSeconds","scoreTargetPercent"]
+            .some(key=>(scored.criteria as unknown as Record<string,number>)?.[key]
+              !==(snapshot.performanceCriteria as unknown as Record<string,number>)?.[key])){
+          throw new Error("Le résultat du score ne correspond plus au MATCH affiché. Actualise.");
+        }
+        if(disposed)return;
+        setActiveScoreState({
+          agencyCode:session.agency.code,leagueId:activeLeague,
+          customized:Boolean(payload.customized),
+          changedAt:payload.changedAt??null,
+          scoreRulesRevision:payload.scoreRulesRevision??null,
+          preview:scored,
+        });
+      } catch(error) {
+        if(disposed)return;
+        setScoreLoadError(error instanceof Error?error.message:"Score indisponible.");
+      }
+    };
+    void load();
+    return ()=>{disposed=true};
+  },[session?.agency.code,session?.accessCode,activeLeague,
+    snapshot?.match.date,snapshot?.importedAt,
+    snapshot?.performanceCriteria?.zonageMinutes,
+    snapshot?.performanceCriteria?.loadingSeconds,
+    snapshot?.performanceCriteria?.unloadingSeconds,
+    snapshot?.performanceCriteria?.scoreTargetPercent,
+    snapshotViewRevision,scoreRefreshVersion]);
 
   async function handleLogin(agencyCode: string, accessCode: string) {
     const requestId = ++snapshotRequestRef.current;
@@ -630,6 +704,15 @@ export default function App() {
 
   const playerScreen = screen === "player";
   const activeLeagueConfig = configForLeague(leagueConfigs, activeLeague);
+  const currentScore = snapshot && activeScoreState
+    && activeScoreState.agencyCode === session.agency.code
+    && activeScoreState.leagueId === activeLeague
+    && activeScoreState.preview.matchDate === snapshot.match.date
+    && activeScoreState.preview.importedAt === snapshot.importedAt
+    && ["zonageMinutes","loadingSeconds","unloadingSeconds","scoreTargetPercent"]
+      .every(key=>(activeScoreState.preview.criteria as unknown as Record<string,number>)[key]
+        ===(snapshot.performanceCriteria as unknown as Record<string,number>)?.[key])
+    ? activeScoreState : null;
 
   return (
     <div className={`app-shell league-${activeLeagueConfig.id}`}>
@@ -721,6 +804,8 @@ export default function App() {
                 session={session}
                 causerieRevision={causerieRevision}
                 activeLeague={activeLeague}
+                liveScore={currentScore}
+                scoreLoadError={scoreLoadError}
                 onPlayer={openPlayer}
                 onCoach={() => setScreen("coach")}
                 onComposition={() => setScreen("composition")}
@@ -768,16 +853,16 @@ export default function App() {
               />
             )}
             {screen === "coach" && snapshot && (
-              <Coach snapshot={snapshot} session={session} leagueConfig={activeLeagueConfig} onPlayer={openPlayer} onComposition={() => setScreen("composition")} />
+              <Coach snapshot={snapshot} session={session} leagueConfig={activeLeagueConfig} liveScore={currentScore} onPlayer={openPlayer} onComposition={() => setScreen("composition")} />
             )}
-            {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} causerieRevision={causerieRevision} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
+            {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} liveScore={currentScore} causerieRevision={causerieRevision} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
             {screen === "guide" && <GuideView snapshot={snapshot} leagueConfigs={leagueConfigs} onNavigate={setScreen} />}
             {screen === "admin" && <AdministratorView agencyCode={session.agency.code} accessCode={session.accessCode} canEdit={session.agency.canImport} activeLeague={activeLeague} leagueConfigs={leagueConfigs} leagueConfigRevision={leagueConfigRevision} onLeagueConfigsChange={queueLeagueConfigSave} onLeagueConfigsReload={async () => {
               const state = await fetchSharedLeagueConfigs(session);
               setLeagueConfigs(state.configs);
               setLeagueConfigRevision(state.leagueConfigRevision);
               return state;
-            }} onActiveLeagueChange={applyLeague} />}
+            }} onActiveLeagueChange={applyLeague} onScoreRulesSaved={()=>setScoreRefreshVersion(v=>v+1)} />}
             {screen === "import" && (
               <ImportView
                 session={session}
@@ -835,15 +920,17 @@ async function fetchAgencySyncState(session: Session, matchDate?: string): Promi
   });
   const payload = await response.json();
   if (!response.ok) throw new ApiError(response.status, payload.message ?? "L'état de synchronisation n'a pas pu être chargé.");
-  const { snapshotRevision, leagueConfigRevision, causerieRevision = null } = payload as AgencySyncState;
+  const { snapshotRevision, leagueConfigRevision, causerieRevision = null,
+    scoreRulesRevision = null } = payload as AgencySyncState;
   if (
     (snapshotRevision !== null && typeof snapshotRevision !== "string") ||
     (leagueConfigRevision !== null && typeof leagueConfigRevision !== "string") ||
-    (causerieRevision !== null && typeof causerieRevision !== "string")
+    (causerieRevision !== null && typeof causerieRevision !== "string") ||
+    (scoreRulesRevision !== null && typeof scoreRulesRevision !== "string")
   ) {
     throw new Error("L'état de synchronisation reçu est invalide.");
   }
-  return { snapshotRevision, leagueConfigRevision, causerieRevision };
+  return { snapshotRevision, leagueConfigRevision, causerieRevision, scoreRulesRevision };
 }
 
 type SharedLeagueConfigState = { configs: LeagueConfig[]; leagueConfigRevision: string | null };
