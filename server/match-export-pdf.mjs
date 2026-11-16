@@ -607,7 +607,7 @@ function compactChart(p, m, chartId) {
       +"  |  Sans données : "+fmt(blankHours)
       +"  |  "+trim(String(first.label??first.hour??""),8)
       +" à "+trim(String(last.label??last.hour??""),8)
-      +"  |  Volumes sous les barres : réussites / opérations",C.muted);
+      +"  |  Volumes sous les barres : réussites / opérations"\n      +"  |  périmètre distinct du KPI officiel",C.muted);
     return;
   }
   if (chartId === "reception-time") {
@@ -825,26 +825,7 @@ function footballBall(p, cx, cy, radius) {
   }
   p.circle(cx,cy,radius,seam,.8);
 }
-function touchlineDugout(p,x,y,w,h) {
-  const roof=[0.15,0.31,0.36], shade=[0.046,0.125,0.16],
-    highlights=[0.58,0.78,0.79];
-  // Technical bench and substitutes, behind the tactical markers.
-  footballPoly(p,[[x,y+4],[x+w,y+4],[x+w-10,y+h],[x+15,y+h]],roof);
-  footballPoly(p,[[x+7,y+8],[x+w-7,y+8],[x+w-17,y+h-5],[x+20,y+h-5]],shade);
-  p.line(x+4,y+3,x+w-4,y+3,highlights,1.1);
-  p.line(x+15,y+h,x+w-10,y+h,highlights,1);
-  for(let i=0;i<4;i++){
-    const bx=x+27+i*(w-55)/3;
-    p.dot(bx,y+16,4,[0.72,0.80,0.79]);
-    footballPoly(p,[[bx-6,y+11],[bx+6,y+11],[bx+8,y+5],[bx-8,y+5]],
-      i%2?C.blue:C.aqua);
-    p.line(bx-2,y+5,bx-5,y+1,shade,1);
-    p.line(bx+2,y+5,bx+6,y+1,shade,1);
-  }
-  p.box(x+17,y+3,w-34,2.2,highlights);
-}
-
-// Page 1 / stadium match-score broadcast and page 2 / tactical dugout.
+// Page 1 / stadium match-score broadcast and page 2 / operational briefing.
 function compactScorePage(doc, m) {
   const p = doc.add("01 / RÉSULTAT DU MATCH");
   const S = {
