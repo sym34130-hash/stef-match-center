@@ -727,7 +727,10 @@ test("PDF scoring ribbon: 2–6 weighted KPI, percentages, missing source and ta
       id,targetPercent:i%2?65:null,goalsFor:1+i%3,goalsAgainst:1+(i+1)%3,
     }))};
     const scored=evaluateScoreRules(actualSnapshot,profile,league.criteria.scoreTargetPercent);
-    const model=build("058");
+    const model=build("058",{pdfProfile:{
+      indicatorIds:["performance","injuries","accident-free-days","arrival"],
+      chartId:"passes-hourly",
+    }});
     model.score={...model.score,status:scored.status,
       goalsFor:scored.goalsFor,goalsAgainst:scored.goalsAgainst};
     model.scoreCustomization={...scored,customized:true,
@@ -737,6 +740,12 @@ test("PDF scoring ribbon: 2–6 weighted KPI, percentages, missing source and ta
     assert.equal(parsed.numpages,2,"Two-page limit with "+count+" scored KPI");
     assert.match(parsed.text,/SCORE PERSONNALISÉ/);
     const raw=pdf.toString("latin1");
+    // A selected 106J punctuality leaves the supplemental indicator ribbon
+    // exactly as it leaves the on-screen carousel. It appears only once,
+    // inside the football score, rather than being printed in both places.
+    const supplementalArrival=(raw.match(/Tm \(PONCTUALITE ARRIVAGE\) Tj ET/g)||[]).length;
+    assert.equal(supplementalArrival,count>=5?0:1,
+      count+" KPI: promoted 106J rate must not be duplicated in the PDF");
     const commands=[...raw.matchAll(/\/F([12]) ([0-9.]+) Tf 1 0 0 1 ([0-9.]+) ([0-9.]+) Tm \(([^)]*)\) Tj ET/g)]
       .map(match=>({
         bold:match[1]==="2",size:Number(match[2]),
