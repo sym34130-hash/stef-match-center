@@ -448,3 +448,61 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(diagnostic.locator(".diagnostic-unknown")).toContainText("7 positions à vérifier");
   await expect(diagnostic.locator(".diagnostic-unknown")).toContainText("ne sont pas comptées comme des retards");
 });
+
+
+test("Score à 2 KPI : transfert des vignettes 106J vers les bulles et retour au carrousel", async ({page,request},info) => {
+  const agency=({desktop:"058",tablet:"059",mobile:"060"} as Record<string,string>)[info.project.name];
+  const headers={"x-access-code":`CI-ONLY-${agency}`};
+  const url=`${base}/api/agencies/${agency}`;
+  const imported=await request.post(url+"/import",{
+    headers,multipart:{file:{name:"SCORING_TWO_"+agency+".xlsx",
+      mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer:workbook(agency)}},
+  });
+  expect(imported.status(),await imported.text()).toBe(200);
+  await page.goto("/");
+  await page.getByLabel("Code agence").selectOption(agency);
+  await page.getByLabel("Code d'accès").fill("CI-ONLY-"+agency);
+  await page.getByRole("button",{name:"Accéder au match"}).click();
+  await page.getByRole("button",{name:/Administrateur/}).click();
+  await expect(page.getByRole("heading",{name:"Personnaliser le score du MATCH"})).toBeVisible();
+  await expect(page.getByText("4 KPI sélectionnés")).toBeVisible();
+  await page.getByLabel("Activer Ponctualité arrivage").check();
+  for(const label of ["Tirs cadrés","Duels gagnés","Possession"]){
+    await page.getByLabel("Activer "+label).uncheck();
+  }
+  await expect(page.getByText("2 KPI sélectionnés")).toBeVisible();
+  await page.getByRole("button",{name:"Enregistrer le barème"}).click();
+  await expect(page.getByText(/Règles enregistrées pour cette agence et cette ligue/)).toBeVisible();
+  const configured=await request.get(url+"/score-rules?leagueId=argent",{headers});
+  expect(configured.status()).toBe(200);
+  const chosen=(await configured.json()).profile.indicators.map((i:{id:string})=>i.id);
+  expect(chosen).toEqual(["passRate","arrivalPunctuality"]);
+  const otherLeague=await request.get(url+"/score-rules?leagueId=or",{headers});
+  expect(otherLeague.status()).toBe(200);
+  expect((await otherLeague.json()).profile.indicators).toHaveLength(4);
+  const wrongAgency=await request.get(base+"/api/agencies/"+(agency==="058"?"059":"058")+
+    "/score-rules?leagueId=argent",{headers});
+  expect(wrongAgency.status()).toBe(401);
+
+  await page.getByRole("button",{name:"02 Feuille de match",exact:true}).click();
+  const scoreboard=page.locator(".match-scoreboard .match-score-bubbles");
+  await expect(scoreboard.locator(".match-score-bubble")).toHaveCount(2);
+  await expect(scoreboard.locator("[data-score-kpi=passRate]")).toHaveCount(1);
+  await expect(scoreboard.locator("[data-score-kpi=arrivalPunctuality]")).toContainText("Ponctualité arrivage");
+  // No 106J was imported here: an unavailable source must remain visible as
+  // unavailable, never silently become a zero and a conceded goal.
+  await expect(scoreboard.locator("[data-score-kpi=arrivalPunctuality]")).toContainText("Indisponible");
+  await expect(page.locator(".match-indicators-track [data-indicator=arrival]")).toHaveCount(0);
+  await expect(page.locator(".match-indicators-track [data-indicator=departure]")).toHaveCount(1);
+  await page.getByRole("button",{name:/Administrateur/}).click();
+  await page.getByLabel("Activer Tirs cadrés").check();
+  await page.getByLabel("Activer Ponctualité arrivage").uncheck();
+  await expect(page.getByText("2 KPI sélectionnés")).toBeVisible();
+  await page.getByRole("button",{name:"Enregistrer le barème"}).click();
+  await expect(page.getByText(/Règles enregistrées pour cette agence et cette ligue/)).toBeVisible();
+  await page.getByRole("button",{name:"02 Feuille de match",exact:true}).click();
+  await expect(scoreboard.locator(".match-score-bubble")).toHaveCount(2);
+  await expect(scoreboard.locator("[data-score-kpi=arrivalPunctuality]")).toHaveCount(0);
+  await expect(page.locator(".match-indicators-track [data-indicator=arrival]")).toHaveCount(1);
+});
