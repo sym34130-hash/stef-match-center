@@ -2,8 +2,17 @@
 // A4 landscape, dark sport scoreboard theme aligned with the Match Center.
 // No server-side browser or external service; no files written to disk.
 import { MatchExportError } from "./match-export-model.mjs";
+import { readFileSync } from "node:fs";
 import { effectivePdfProfile } from "./match-pdf-profile.mjs";
 
+// V9: original, royalty-free graphite action scenes, bundled with the server.
+// Asset reads happen once at import; no runtime network dependency.
+// The JPEGs are pre-blended with the light paper background to preserve copy.
+const pencilScenes = Object.freeze({
+  service: readFileSync(new URL("./assets/pdf-pencil-service.jpg", import.meta.url)),
+  sst: readFileSync(new URL("./assets/pdf-pencil-sst.jpg", import.meta.url)),
+  priorities: readFileSync(new URL("./assets/pdf-pencil-priorites.jpg", import.meta.url)),
+});
 const WIDTH = 842, HEIGHT = 595;
 const C = {
   // V3: mid-navy broadcast palette. Lighter differentiated surfaces improve
@@ -560,7 +569,9 @@ function compactChart(p, m, chartId) {
     // plotted as source-exact points on elapsed CLOCK hours, not as an averaged
     // or smoothed series. Consecutive hours connect with solid segments; gaps
     // connect only with dashed guides and are never fabricated observations.
-    const x=78,baseline=85,w=699,h=48,slotWidth=w/spanHours;
+    // Full 0–100 % vertical scale. The former 48 pt plot compressed an 88.9% point
+    // next to the 100% line and invited an incorrect visual reading.
+    const x=78,baseline=75,w=699,h=69,slotWidth=w/spanHours;
     const observed=new Set(measured.map(point=>point.offset));
     const lastTick=Math.floor(spanHours);
     let blankHours=0;
@@ -632,13 +643,13 @@ function compactChart(p, m, chartId) {
     });
     const every=Math.max(1,Math.ceil((lastTick+1)/11));
     for(let hour=0;hour<=lastTick;hour+=every){
-      p.text(x+hour*slotWidth,73,6.9,
+      p.text(x+hour*slotWidth,62,6.9,
         String((firstHour+hour)%24).padStart(2,"0")+"h",C.muted);
     }
     if(periodEnd!==null&&periodEnd%60!==0){
       const endLabel=String(Math.floor(periodEnd/60)).padStart(2,"0")+"h"
         +String(periodEnd%60).padStart(2,"0");
-      p.text(x+w,73,7.4,endLabel,C.gold,true,"right");
+      p.text(x+w,62,7.4,endLabel,C.gold,true,"right");
       p.line(x+w,baseline,x+w,baseline+h,C.gold,.65);
     }
     const first=measured[0].row,last=measured[measured.length-1].row;
@@ -1138,9 +1149,12 @@ function compactBriefPage(doc, m) {
   p.box(421, 44, 1, 99, C.panel2);
   // Only three of six zones receive subtle football pencil sketches.
   // Paint them BEFORE the section labels and contents so text remains on top.
-  pencilGoalWatermark(p);       // SERVICE CLIENT
-  pencilSstWatermark(p);        // SST
-  pencilPrioritiesWatermark(p); // PRIORITÉS OPÉRATIONNELLES
+  if(!p.image(433,278,362,106,pencilScenes.service))
+    throw new MatchExportError(500,"Dessin de match Service client indisponible.");
+  if(!p.image(532,155,272,100,pencilScenes.sst))
+    throw new MatchExportError(500,"Dessin du gardien SST indisponible.");
+  if(!p.image(140,48,266,88,pencilScenes.priorities))
+    throw new MatchExportError(500,"Dessin des priorités indisponible.");
   // Safety first is a broadcast warning rail, not a free-form card.
   shortBlock(p, { x: 29, y: 402, w: 784, h: 59,
     title: "Sécurité / vigilance", value: brief.safety,
