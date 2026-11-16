@@ -52,6 +52,105 @@ function rejected(callback, status) {
   assert.throws(callback, e => e instanceof MatchExportError && e.status === status);
 }
 
+test("PDF V5: the two-page immersive football identity retains live business data", async () => {
+  const model = build("058", { pdfProfile: {
+    indicatorIds: ["positions", "arrival", "injuries", "performance"],
+    chartId: "operational-diagnostic",
+  } });
+  const buffer = renderMatchPdf(model);
+  const parsed = await pdfParse(buffer);
+  assert.equal(parsed.numpages, 2, "the immersive artwork must not add pages");
+  for (const marker of [
+    "FIN DU MATCH", "SUR LE TERRAIN", "BALLON DE MATCH",
+    "RÉSULTAT FINAL", "BUTS MARQUÉS", "BUTS ENCAISSÉS",
+    "LE PLAN DE JEU",
+    "SÉCURITÉ / VIGILANCE", "SERVICE CLIENT", "DÉCISIONS / ARBITRAGES",
+  ]) assert.ok(parsed.text.includes(marker), "Missing immersive or operational label: " + marker);
+  assert.match(parsed.text, /Sources : Excel \[058\]/);
+  assert.doesNotMatch(parsed.text, /LECTURE TACTIQUE DU MATCH|STAFF/,
+    "The decorative football board must no longer displace the brief");
+  const raw=buffer.toString("latin1");
+  for(const val of [65,88,80,49]){
+    const whiteMetric=new RegExp("1\\.000 1\\.000 1\\.000 rg BT /F2 23 Tf[^\\n]*\\("+val+" %\\) Tj ET");
+    assert.match(raw,whiteMetric,"Official KPI "+val+"% must remain white, never red");
+  }
+  assert.match(parsed.text, /3/); // scored goals from source snapshot, not artwork
+  assert.ok(buffer.length < 3_000_000, "Three embedded pencil JPEGs must remain lightweight");
+});
+
+
+test("PDF V7: website-faithful hourly curve, exact volumes, gaps and inconsistent ratios", async () => {
+  const selected=[
+    {label:"13h",hour:13,won:3,total:5,rate:60},
+    {label:"15h",hour:15,won:1,total:5,rate:20},
+    {label:"16h",hour:16,won:4,total:4,rate:100},
+  ];
+  const model=build("058",{snapshot:{hourlyPerformance:selected},
+    pdfProfile:{indicatorIds:["positions","arrival","injuries","performance"],
+      chartId:"passes-hourly"}});
+  const rendered=renderMatchPdf(model);
+  const pdf=await pdfParse(rendered);
+  assert.equal(pdf.numpages,2);
+  // The PDF must carry the same continuous and dashed line primitives as the
+  // website; the older discrete-bar renderer must not return.
+  const graphics=rendered.toString("latin1");
+  assert.match(graphics,/\[3 3\] 0 d/,"gaps must be dashed");
+  assert.match(graphics,/\/ChartFill gs/,"consecutive runs must have a softly filled area");
+  assert.match(graphics,/\/WarmBeam gs/,"stadium light beams must be warm/translucent");
+  assert.equal((graphics.match(/\/Subtype \/Image/g)??[]).length,3,
+    "Exactly three original graphite action illustrations are embedded");
+  assert.match(graphics,/\/Filter \/DCTDecode/,
+    "Illustrations are light JPEGs; no network request is needed");
+  assert.ok(pdf.text.includes("DÉCHARGEMENTS DANS LE DÉLAI"),
+    "The printed title must match the actual chart shown on the website");
+  // Granular operation counts remain in the website; the printed A4 preserves
+  // source rates and aggregate numerator/denominator without label collisions.
+  assert.doesNotMatch(pdf.text,/3\/5|1\/5|4\/4/,
+    "Per-hour N/D values must not clutter the paper chart");
+  assert.match(pdf.text,/Total volumes : 8\/14/,
+    "The exact weighted source volume must remain auditable");
+  for(const marker of ["13h","15h","16h","60 %","20 %","100 %",
+    "Total volumes : 8/14","Sans données : 1","Détail horaire sur le site"]){
+    assert.ok(pdf.text.includes(marker),"Hourly observed value missing: "+marker);
+  }
+  const invalid=build("058",{snapshot:{hourlyPerformance:[
+    {label:"13h",hour:13,won:3,total:5,rate:71},
+  ]},pdfProfile:{indicatorIds:["positions","arrival","injuries","performance"],
+    chartId:"passes-hourly"}});
+  rejected(()=>renderMatchPdf(invalid),409);
+});
+
+test("PDF V10: 88.9% point and label align at their exact linear position below 90% and 100%", async () => {
+  const model=build("058",{snapshot:{hourlyPerformance:[
+    { label:"13h", hour:13, won:8, total:9, rate:88.9 },
+    { label:"14h", hour:14, won:9, total:9, rate:100 },
+  ]},pdfProfile:{ indicatorIds:["positions","arrival","injuries","performance"],
+    chartId:"passes-hourly" }});
+  const rendered=renderMatchPdf(model);
+  const content=rendered.toString("latin1");
+  const percentLabelY=(label)=>{
+    const match=content.match(new RegExp(
+      "1 0 0 1 [0-9]+\\.[0-9]+ ([0-9]+\\.[0-9]+) Tm \\("+label+"\\) Tj ET"));
+    assert.ok(match, "missing graph percentage label "+label);
+    return Number(match[1]);
+  };
+  const measured88=70+88.9/100*74;
+  const measured100=70+74;
+  const printed88=percentLabelY("88,9 %");
+  const printed100=percentLabelY("100 %");
+  assert.ok(Math.abs(printed88-(measured88-2.6))<0.035,
+    "88.9% label must share the point's Y coordinate, not be lifted toward 100%");
+  assert.ok(Math.abs(printed100-(measured100-2.6))<0.035);
+  assert.ok(printed88<printed100 && printed88>70+0.8*74,
+    "True 88.9% point must sit between the 80% and 100% guides");
+  assert.ok(content.includes("42.00 134.40 Tm (90%) Tj ET"),
+    "90% is a regular linear tick in the complete 0–100% scale");
+  const parsed=await pdfParse(rendered);
+  assert.equal(parsed.numpages,2);
+  assert.match(parsed.text, /88,9 %/);
+  assert.match(parsed.text, /100 %/);
+});
+
 test("Lot E: valid league is selected with agency-specific stored criteria", () => {
   assert.equal(league.label, "LIGUE 1");
   assert.equal(matchExportLeague("or", config).criteria.scoreTargetPercent, 60);
@@ -174,6 +273,37 @@ test("Lot E V2: an excessive brief must fail instead of silently spilling or bei
   assert.equal((renderMatchPdf(model).toString("latin1").match(/\/Type \/Page \/Parent/g) ?? []).length, 2);
 });
 
+test("PDF V11: all eleven Y-axis graduations are equally spaced from 0 to 100 percent", async () => {
+  const model=build("058",{pdfProfile:{ indicatorIds:["positions","arrival","injuries","performance"],
+    chartId:"passes-hourly"}});
+  const graphics=renderMatchPdf(model).toString("latin1");
+  for(let value=0;value<=100;value+=10){
+    const y=(70+value/100*74-2.2).toFixed(2);
+    assert.ok(graphics.includes("42.00 "+y+" Tm ("+value+"%) Tj ET"),
+      "Expected evenly spaced "+value+"% graduation at "+y);
+  }
+});
+test("PDF V11: five match-in-figures cells remain the same width in both rows", async () => {
+  const ids=["performance","injuries","accident-free-days","positions","arrival"];
+  const model=build("058",{causerie:{visibleIndicators:ids,visibleIndicatorsVersion:2,
+    attack:["Message service client"],midfield:[],defense:[]},
+    pdfProfile:{indicatorIds:ids,chartId:"passes-hourly"}});
+  const pdf=renderMatchPdf(model);
+  const graphics=pdf.toString("latin1");
+  const parsed=await pdfParse(pdf);
+  assert.equal(parsed.numpages,2);
+  // 3 columns: top separators at x=290.33 and 551.67.
+  // Bottom pair uses the same 261.33pt width, centered around x=421.
+  // Both bands have exactly 34.5pt height.
+  for(const expected of ["290.33","551.67"]){
+    assert.ok(graphics.includes(expected+" 225.50 m "+expected+" 254.00 l"),
+      "Top cards must use uniform three-column geometry at "+expected);
+  }
+  assert.ok(graphics.includes("421.00 191.00 m 421.00 219.50 l"),
+    "Bottom pair must be centered with unchanged 261.33pt cell widths");
+  assert.ok(graphics.includes("48.00 222.50 m 794.00 222.50 l"),
+    "Equal-height row divider must sit halfway between 257pt and 188pt");
+});
 test("Lot E V3: 4, 5 or 6 complementary KPIs do not overlap the chart or create a third page", async () => {
   const ids = ["performance", "injuries", "accident-free-days", "positions", "arrival", "departure"];
   for (const count of [4, 5, 6]) {

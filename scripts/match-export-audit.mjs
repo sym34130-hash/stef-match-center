@@ -56,13 +56,18 @@ for (const fixture of fixtures) {
       arrivalPunctuality: 96, departurePunctuality: 94,
       destinationPunctuality: 92, temperatureReturn: 97 },
       distribution: { tonnage: 7.2 }, expedition: { tonnage: 14.4 } },
-    hourlyPerformance: Array.from({ length: 24 }, (_, i) => {
-      const won = 10 + i, total = 25 + i;
-      return { label: String((13 + i) % 24).padStart(2, "0") + "h", hour: i,
+    // Deliberately non-monotone SYNTHETIC source counts. The PDF must show
+    // exact observed hourly rates and N/D, not a smoothed illustrative trend.
+    hourlyPerformance: Array.from({ length: 10 }, (_, i) => {
+      const hour = (13 + i) % 24;
+      const examples = [[8,11],[16,18],[3,8],[14,19],[4,5],
+        [1,4],[18,22],[0,5],[9,10],[6,12]];
+      const [won,total]=examples[i];
+      return { label: String(hour).padStart(2, "0") + "h", hour,
         won, total, rate: Math.round(won / total * 1000) / 10 };
     }),
     unloadingHourlyAnalysis: { state: "disponible", targetSeconds: league.criteria.unloadingSeconds,
-      items: Array.from({ length: 23 }, (_, i) => ({
+      items: Array.from({ length: 10 }, (_, i) => ({
         start: new Date(Date.UTC(2026, 10, 10, 12 + i)).toISOString(),
         label: String((13 + i) % 24).padStart(2, "0") + "h",
         meanSecondsPerPosition: 22+i*3, distinctPositions: 10+i, state: "disponible" })) },
@@ -120,7 +125,8 @@ for (const fixture of fixtures) {
       "operational-diagnostic": "Cible zonage",
     }[chartId];
     assert.ok(pdfText.includes(expectedText), chartId + ": missing target/source " + expectedText);
-    assert.doesNotMatch(pdfText, /\/Subtype \/Image/, "No screenshots in two-page summary");
+    assert.equal((pdfText.match(/\/Subtype \/Image/g) ?? []).length, 3,
+      "The only images are the three fixed graphite illustrations, never agency screenshots");
     const parsed = await pdfParse(pdf);
     assert.equal(parsed.numpages, 2);
     const extracted = parsed.text.replace(/[\u202f\u00a0]/g, " ");
@@ -136,9 +142,13 @@ for (const fixture of fixtures) {
       const rate = Math.round(won / all * 1000) / 10;
       checks.push(["weighted hourly pass rate", "Total : " + fmtCertified(rate) + " %"]);
       checks.push(["first hourly period", snapshot.hourlyPerformance[0].label]);
+      checks.push(["actual selected period end", "22h30"]);
+      checks.push(["distinct observed low point", "15h"]);
+      checks.push(["source-weighted operation counts", "Total volumes : 79/114"]);
+      checks.push(["observed low rate", "37,5 %"]);
     } else if (chartId === "reception-time") {
       checks.push(["reception target", "Cible : " + league.criteria.unloadingSeconds + " s/poz"]);
-      checks.push(["positions per slot", "Positions/créneau : 10 a 32"]);
+      checks.push(["positions per slot", "Positions/créneau : 10 a 19"]);
     } else if (chartId === "loading") {
       checks.push(["loading target", "Temps par position <= " + league.criteria.loadingSeconds + " s/poz"]);
       checks.push(["loading volume", "85 / 100"]);
