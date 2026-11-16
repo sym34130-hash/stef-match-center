@@ -169,6 +169,9 @@ test("106J parsing: percentages and independent source dates are preserved end-t
   const pdf=parse106jText(sourceText,"106J-synthetique.pdf");
   assert.equal(pdf.referenceDate,"10 septembre 2026");
   assert.equal(pdf.agencyCode,"058");
+  assert.equal(evaluateScoreRules(snapshot(undefined,pdf),only([
+    custom({id:"passRate"}),custom({id:"arrivalPunctuality"}),
+  ]),50).indicators[1].sourceAgency,"058");
   assert.deepEqual(pdf.punctuality,{
     arrivalPunctuality:88.9,departurePunctuality:49.9,
     destinationPunctuality:100,temperatureReturn:0,
