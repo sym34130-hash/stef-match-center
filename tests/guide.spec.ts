@@ -9,7 +9,7 @@ const agencies = [
   { code: "05R", name: "Toulouse" }, { code: "04P", name: "Bordeaux" },
   { code: "R3A", name: "Lyon" }, { code: "04H", name: "Brive" },
 ];
-const sections = ["Démarrer", "Préparer Excel", "Importer et actualiser", "Lire les écrans", "Analyser les anomalies", "Modifier le plan", "Administrateur", "Points d’attention"];
+const sections = ["Démarrer", "Préparer Excel", "Importer et actualiser", "Lire les écrans", "Analyser les anomalies", "Modifier le plan", "Administrateur", "Personnaliser le score", "Exporter le PDF", "Points d’attention"];
 const configs = [
   { id: "bronze", zonageMinutes: 45, loadingSeconds: 195, unloadingSeconds: 75, scoreTargetPercent: 45 },
   { id: "argent", zonageMinutes: 27, loadingSeconds: 142, unloadingSeconds: 52, scoreTargetPercent: 50 },
@@ -48,7 +48,7 @@ async function login(page: Page, code: string) {
   await openGuide(page);
 }
 
-test("Guide V2 : huit rubriques, progression et six agences avec/sans Excel", async ({ page }, info) => {
+test("Guide V4 : dix rubriques, progression et six agences avec/sans Excel", async ({ page }, info) => {
   test.setTimeout(180_000);
   let current = { agency: agencies[0], imported: false };
   await mockGuide(page, () => current);
@@ -59,7 +59,7 @@ test("Guide V2 : huit rubriques, progression et six agences avec/sans Excel", as
     current = { agency, imported };
     await login(page, agency.code);
     const guide = page.locator(".guide-page"), progress = guide.getByRole("progressbar");
-    await expect(guide.locator(".guide-nav-item")).toHaveCount(8);
+    await expect(guide.locator(".guide-nav-item")).toHaveCount(sections.length);
     await expect(guide.locator(".guide-hero-status strong")).toHaveText(imported ? "Match disponible" : "Excel à importer");
     await expect(guide).not.toContainText("GUIDE-TEST-ONLY");
     await expect(guide).not.toContainText(/STEF-(058|01K|05R|04P|R3A|04H)/);
@@ -70,9 +70,9 @@ test("Guide V2 : huit rubriques, progression et six agences avec/sans Excel", as
     for (let index = 0; index < sections.length; index++) {
       await expect(item(page, index)).toHaveAttribute("aria-current", "step");
       await expect(progress).toHaveAttribute("aria-valuenow", String(index + 1));
-      await expect(progress).toHaveAttribute("aria-valuemax", "8");
+      await expect(progress).toHaveAttribute("aria-valuemax", String(sections.length));
       await expect(guide.locator(".guide-panel-heading .eyebrow")).toContainText(`${String(index + 1).padStart(2, "0")} · ${sections[index]}`);
-      expect(await guide.locator(".guide-progress-track > span").evaluate(el => parseFloat((el as HTMLElement).style.width))).toBe((index + 1) / 8 * 100);
+      expect(await guide.locator(".guide-progress-track > span").evaluate(el => parseFloat((el as HTMLElement).style.width))).toBe((index + 1) / sections.length * 100);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${agency.code} ${imported} ${sections[index]}`).toBe(true);
       const box = await guide.locator(".guide-panel").boundingBox();
       expect(box!.x).toBeGreaterThanOrEqual(0);
@@ -96,7 +96,7 @@ test("Guide V2 : huit rubriques, progression et six agences avec/sans Excel", as
         await expect(guide).toContainText("N’additionnez jamais positions et voyages");
         await guide.locator(".guide-panel").screenshot({ path: info.outputPath("guide-anomalies.png") });
       }
-      if (index < 7) await guide.getByRole("button", { name: "Étape suivante", exact: true }).click();
+      if (index < sections.length - 1) await guide.getByRole("button", { name: "Étape suivante", exact: true }).click();
     }
     await expect(guide.getByRole("button", { name: "Étape suivante", exact: true })).toBeDisabled();
     await expect(guide).toContainText("Après une mise à jour ou un redémarrage du site, les données enregistrées peuvent disparaître.");
@@ -105,7 +105,7 @@ test("Guide V2 : huit rubriques, progression et six agences avec/sans Excel", as
     await expect(guide.locator(".guide-league-card.silver")).toContainText("27 min");
     await guide.getByRole("button", { name: "Retour au début", exact: true }).click();
     await expect(item(page, 0)).toHaveAttribute("aria-current", "step");
-    for (let index = 7; index >= 0; index--) { await item(page, index).click(); await expect(progress).toHaveAttribute("aria-valuenow", String(index + 1)); }
+    for (let index = sections.length - 1; index >= 0; index--) { await item(page, index).click(); await expect(progress).toHaveAttribute("aria-valuenow", String(index + 1)); }
   }
   if (info.project.name === "desktop") for (const [width, height] of [[320, 700], [390, 844], [768, 1024], [1366, 768], [1440, 900], [1920, 1080]]) {
     await page.setViewportSize({ width, height });
@@ -132,7 +132,7 @@ test("Guide V2 : huit rubriques, progression et six agences avec/sans Excel", as
   expect(errors).toEqual([]); expect(writes).toEqual([]);
 });
 
-test("Guide V2 : liens réels, périmètres et consignes fidèles", async ({ page }) => {
+test("Guide V4 : liens réels, score et export fidèles à la production", async ({ page }) => {
   test.setTimeout(120_000);
   let imported = true;
   await mockGuide(page, () => ({ agency: agencies[0], imported }));
@@ -146,8 +146,19 @@ test("Guide V2 : liens réels, périmètres et consignes fidèles", async ({ pag
     await item(page, 3).click();
     await expect(page.locator("ol.guide-reading-list li")).toHaveCount(5);
     await expect(page.locator("ol.guide-reading-list li").nth(3)).toContainText("ponctualité destination du PDF 106J");
+    await item(page, 7).click();
+    await expect(page.locator(".guide-page")).toContainText("Choisir 2 à 6 KPI");
+    await expect(page.locator(".guide-page")).toContainText("strictement supérieur");
+    await expect(page.locator(".guide-page")).toContainText("score de référence");
+    await expect(page.locator(".guide-page")).toContainText("Célébration activée");
+    await item(page, 8).click();
+    await expect(page.locator(".guide-page")).toContainText("deux pages A4 paysage");
+    await expect(page.locator(".guide-page")).toContainText("Une valeur 106J ne s’imprime pas deux fois");
+    await expect(page.locator(".guide-page")).toContainText("N/D");
+    await item(page, 9).click();
+    await expect(page.locator(".guide-page")).toContainText("KPI sélectionné absent des bulles");
     await item(page, 5).click();
-    for (const label of ["SAV", "EXPÉDITION / RAMASSE & EMBALLAGE", "SST", "Priorité terrain", "Zone à surveiller", "Équilibre d'équipe", "Conflit de sauvegarde"]) await expect(page.locator(".guide-page")).toContainText(label);
+    for (const label of ["Service client", "EXPÉDITION / RAMASSE & EMBALLAGE", "SST", "Priorité terrain", "Zone à surveiller", "Équilibre d'équipe", "Conflit de sauvegarde"]) await expect(page.locator(".guide-page")).toContainText(label);
     const links = [
       { section: 0, label: "Ouvrir l’import", target: ".import-page" },
       { section: 3, label: "Ouvrir la Feuille de match", target: available ? ".match-page" : ".no-data-view" },
@@ -155,6 +166,9 @@ test("Guide V2 : liens réels, périmètres et consignes fidèles", async ({ pag
       { section: 3, label: "Ouvrir Coach", target: available ? ".coach-page" : ".no-data-view" },
       { section: 3, label: "Ouvrir le brief équipe", target: available ? ".tv-mode" : ".no-data-view" },
       { section: 6, label: "Ouvrir Administrateur", target: ".administrator-page" },
+      { section: 7, label: "Personnaliser le score", target: ".administrator-page" },
+      { section: 7, label: "Vérifier le MATCH", target: available ? ".match-page" : ".no-data-view" },
+      { section: 8, label: "Préparer le PDF", target: available ? ".match-page" : ".no-data-view" },
     ];
     for (const link of links) {
       await item(page, link.section).click();
