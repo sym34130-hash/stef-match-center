@@ -460,6 +460,7 @@ test("Score à 2 KPI : transfert des vignettes 106J vers les bulles et retour au
       buffer:workbook(agency)}},
   });
   expect(imported.status(),await imported.text()).toBe(200);
+  const {snapshot}=await imported.json();
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption(agency);
   await page.getByLabel("Code d'accès").fill("CI-ONLY-"+agency);
