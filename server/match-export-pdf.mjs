@@ -607,7 +607,8 @@ function compactChart(p, m, chartId) {
       +"  |  Sans données : "+fmt(blankHours)
       +"  |  "+trim(String(first.label??first.hour??""),8)
       +" à "+trim(String(last.label??last.hour??""),8)
-      +"  |  Volumes sous les barres : réussites / opérations"\n      +"  |  périmètre distinct du KPI officiel",C.muted);
+      +"  |  Volumes sous les barres : réussites / opérations"
+      +"  |  périmètre distinct du KPI officiel",C.muted);
     return;
   }
   if (chartId === "reception-time") {
