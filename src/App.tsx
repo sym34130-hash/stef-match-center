@@ -575,13 +575,7 @@ export default function App() {
     };
     void load();
     return ()=>{disposed=true};
-  },[session?.agency.code,session?.accessCode,activeLeague,
-    snapshot?.match.date,snapshot?.importedAt,
-    snapshot?.performanceCriteria?.zonageMinutes,
-    snapshot?.performanceCriteria?.loadingSeconds,
-    snapshot?.performanceCriteria?.unloadingSeconds,
-    snapshot?.performanceCriteria?.scoreTargetPercent,
-    snapshotViewRevision,scoreRefreshVersion]);
+  },[session,snapshot,activeLeague,scoreRefreshVersion]);
 
   async function handleLogin(agencyCode: string, accessCode: string) {
     const requestId = ++snapshotRequestRef.current;
