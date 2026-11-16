@@ -67,9 +67,12 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   useEffect(() => {
     const viewport = viewportRef.current;
     const track = trackRef.current;
-    if (!viewport || !track) return;
-    const slides = Array.from(track.children) as HTMLElement[];
     const totalCount = cards.length + (hasMercato ? 1 : 0);
+    // A single visible 106J card can legitimately be promoted to the
+    // scoreboard; handle the resulting empty carousel without zero-width
+    // scroll geometry or phantom 0/0 navigation.
+    if (!viewport || !track || totalCount === 0) return;
+    const slides = Array.from(track.children) as HTMLElement[];
     const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
     let frame = 0;
     let settleTimer = 0;
@@ -249,7 +252,7 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
       <header className="match-indicators-heading">
         <h2 className="match-indicators-title"><Activity size={17} /> Le collectif en chiffres</h2>
         <div className="match-indicators-navigation">
-          <span aria-live="polite" aria-atomic="true">{navigationLabel} / {itemCount}</span>
+          <span aria-live="polite" aria-atomic="true">{itemCount===0?"Aucune vignette":navigationLabel+" / "+itemCount}</span>
           <button type="button" disabled={visibleFirst === 0} aria-label="Indicateurs précédents" title="Indicateurs précédents" onClick={() => goRef.current(visibleFirst - 1)}><ChevronLeft size={19} /></button>
           <button type="button" disabled={atLastIndicator} aria-label="Indicateurs suivants" title="Indicateurs suivants" onClick={() => goRef.current(visibleFirst + 1)}><ChevronRight size={19} /></button>
         </div>
@@ -277,6 +280,10 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
         onPointerLeave={() => { if (!drag.current?.moved) drag.current = null; }}
         >
         <div className="match-indicators-track" ref={trackRef}>
+          {itemCount===0 && <p className="match-indicators-empty" role="status">
+            Toutes les vignettes sélectionnées ont été intégrées au score.
+            Modifie le barème dans Administrateur pour les retrouver ici.
+          </p>}
           {hasMercato && (
             <div className="match-indicator-slide mercato-indicator-slide" data-indicator="mercato" data-featured={visibleFirst === 0 ? "" : undefined} role="group" aria-roledescription="diapositive" aria-label={`Mercato, 1 sur ${itemCount}`}>
               <MercatoCarouselSection mercato={mercato} profiles={mercatoProfiles} />
