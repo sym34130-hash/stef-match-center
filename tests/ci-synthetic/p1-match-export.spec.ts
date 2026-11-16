@@ -505,4 +505,66 @@ test("Score à 2 KPI : transfert des vignettes 106J vers les bulles et retour au
   await expect(scoreboard.locator(".match-score-bubble")).toHaveCount(2);
   await expect(scoreboard.locator("[data-score-kpi=arrivalPunctuality]")).toHaveCount(0);
   await expect(page.locator(".match-indicators-track [data-indicator=arrival]")).toHaveCount(1);
+
+  // Boundary: if the independently saved carousel contains only one card
+  // and that card joins the score, render a stable empty state (not 0/0,
+  // zero-width scroll geometry or a phantom indicator).
+  await page.getByRole("button",{name:/Administrateur/}).click();
+  await page.getByLabel("Activer Ponctualité arrivage").check();
+  await page.getByLabel("Activer Tirs cadrés").uncheck();
+  await page.getByRole("button",{name:"Enregistrer le barème"}).click();
+  await expect(page.getByText(/Règles enregistrées pour cette agence et cette ligue/)).toBeVisible();
+  const brief=await request.get(url+"/causerie?matchDate="+encodeURIComponent(snapshot.match.date),{headers});
+  expect(brief.status()).toBe(200);
+  const existing=await brief.json();
+  const saved=await request.post(url+"/causerie",{
+    headers,data:{expectedRevision:existing.causerieRevision,matchDate:snapshot.match.date,
+      plan:{briefLayoutVersion:2,visibleIndicatorsVersion:2,visibleIndicators:["arrival"],
+        team:"TEST SOURCES",manager:"TEST",attack:["Rigueur des flux"],
+        midfield:["Coordination des équipes"],defense:["Sécurité"],
+        coach:{tactic:"Tenir les objectifs",priority:"Sécuriser les quais",
+          arbitration:"Corriger les écarts"},
+        attachments:{attack:[],midfield:[],defense:[]}}},
+  });
+  expect(saved.status(),await saved.text()).toBe(200);
+  await page.reload();
+  await page.getByRole("button",{name:"02 Feuille de match",exact:true}).click();
+  await expect(page.locator(".match-indicators-empty")).toContainText(
+    "Toutes les vignettes sélectionnées ont été intégrées au score");
+  await expect(page.locator(".match-indicators-track .match-indicator-slide")).toHaveCount(0);
+  await expect(page.locator(".match-indicators-navigation")).toContainText("Aucune vignette");
+  await expect(page.locator(".match-score-bubbles .match-score-bubble")).toHaveCount(2);
+
+  // Six KPI plus long labels exercise the responsive grid and source cards.
+  await page.getByRole("button",{name:/Administrateur/}).click();
+  for(const label of ["Tirs cadrés","Duels gagnés","Possession","Ponctualité départ"]){
+    await page.getByLabel("Activer "+label).check();
+  }
+  await expect(page.getByText("6 KPI sélectionnés")).toBeVisible();
+  await page.getByRole("button",{name:"Enregistrer le barème"}).click();
+  await expect(page.getByText(/Règles enregistrées pour cette agence et cette ligue/)).toBeVisible();
+  await page.getByRole("button",{name:"02 Feuille de match",exact:true}).click();
+  await expect(scoreboard.locator(".match-score-bubble")).toHaveCount(6);
+  await expect(scoreboard).toHaveClass(/score-count-6/);
+  await expect(scoreboard.locator("[data-score-kpi=departurePunctuality]")).toContainText("Ponctualité départ");
+  for(const width of [390,768,1536,2560]){
+    await page.setViewportSize({width,height:width>=1536?864:840});
+    const geometry=await scoreboard.evaluate(root=>{
+      const rect=(e:Element)=>e.getBoundingClientRect();
+      const outer=rect(root), cards=Array.from(root.querySelectorAll(".match-score-bubble")).map(rect);
+      const collisions=cards.some((a,i)=>cards.some((b,j)=>j>i &&
+        Math.min(a.right,b.right)-Math.max(a.left,b.left)>2 &&
+        Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>2));
+      return {count:cards.length,
+        fits:cards.every(c=>c.left>=outer.left-2&&c.right<=outer.right+2),
+        collisions};
+    });
+    expect(geometry.count).toBe(6);
+    expect(geometry.fits,"KPI grid horizontal overflow at "+width+"px").toBe(true);
+    expect(geometry.collisions,"KPI cards overlap at "+width+"px").toBe(false);
+  }
+  await page.getByRole("button",{name:"Mode célébration"}).click();
+  await expect(scoreboard.locator(".match-score-bubble")).toHaveCount(6);
+  await expect(scoreboard.locator("[data-score-kpi=arrivalPunctuality]")).toHaveCount(1);
+  await expect(scoreboard.locator("[data-score-kpi=departurePunctuality]")).toHaveCount(1);
 });
