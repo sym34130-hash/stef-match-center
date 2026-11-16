@@ -603,4 +603,28 @@ test("Score à 2 KPI : transfert des vignettes 106J vers les bulles et retour au
   await expect(scoreboard.locator(".match-score-bubble")).toHaveCount(6);
   await expect(scoreboard.locator("[data-score-kpi=arrivalPunctuality]")).toHaveCount(1);
   await expect(scoreboard.locator("[data-score-kpi=departurePunctuality]")).toHaveCount(1);
+  for(const [width,height] of [[390,840],[1536,864],[2560,1440]]){
+    await page.setViewportSize({width,height});
+    const frame=await scoreboard.evaluate(root=>{
+      const outer=root.getBoundingClientRect();
+      const cards=Array.from(root.querySelectorAll(".match-score-bubble"));
+      const boxes=cards.map(el=>el.getBoundingClientRect());
+      return {
+        widthFits:boxes.every(box=>box.left>=outer.left-2&&box.right<=outer.right+2),
+        bodyFits:cards.every(el=>{
+          const bounds=el.getBoundingClientRect();
+          return Array.from(el.children).every(child=>{
+            const pos=child.getBoundingClientRect();
+            return pos.top>=bounds.top-4&&pos.bottom<=bounds.bottom+4;
+          });
+        }),
+        collisions:boxes.some((a,i)=>boxes.some((b,j)=>j>i
+          &&Math.min(a.right,b.right)-Math.max(a.left,b.left)>2
+          &&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>2)),
+      };
+    });
+    expect(frame.widthFits,"Celebration KPI horizontal overflow at "+width).toBe(true);
+    expect(frame.bodyFits,"Celebration KPI contents clipped at "+width).toBe(true);
+    expect(frame.collisions,"Celebration KPI cards overlap at "+width).toBe(false);
+  }
 });
