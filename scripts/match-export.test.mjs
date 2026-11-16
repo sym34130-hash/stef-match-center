@@ -293,12 +293,15 @@ test("PDF V11: five match-in-figures cells remain the same width in both rows", 
   assert.equal(parsed.numpages,2);
   // 3 columns: top separators at x=290.33 and 551.67.
   // Bottom pair uses the same 261.33pt width, centered around x=421.
+  // Both bands have exactly 34.5pt height.
   for(const expected of ["290.33","551.67"]){
-    assert.ok(graphics.includes(expected+" 222.00 m "+expected+" 253.00 l"),
+    assert.ok(graphics.includes(expected+" 225.50 m "+expected+" 254.00 l"),
       "Top cards must use uniform three-column geometry at "+expected);
   }
-  assert.ok(graphics.includes("421.00 186.00 m 421.00 217.00 l"),
+  assert.ok(graphics.includes("421.00 191.00 m 421.00 219.50 l"),
     "Bottom pair must be centered with unchanged 261.33pt cell widths");
+  assert.ok(graphics.includes("48.00 222.50 m 794.00 222.50 l"),
+    "Equal-height row divider must sit halfway between 257pt and 188pt");
 });
 test("Lot E V3: 4, 5 or 6 complementary KPIs do not overlap the chart or create a third page", async () => {
   const ids = ["performance", "injuries", "accident-free-days", "positions", "arrival", "departure"];
