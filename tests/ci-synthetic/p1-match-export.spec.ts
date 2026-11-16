@@ -134,7 +134,7 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   const customScore=(await scoredResponse.json()).preview;
   expect(customScore.referenceScore).toBeTruthy();
   const customPdf=await pdfWithRevision();
-  expect(customPdf.status(),await customPdf.clone().text()).toBe(200);
+  expect(customPdf.status(),await customPdf.text()).toBe(200);
   const parsedCustomPdf=await pdfParse(await customPdf.body());
   expect(parsedCustomPdf.numpages).toBe(2);
   expect(parsedCustomPdf.text).toContain("SCORE PERSONNALISÉ");
