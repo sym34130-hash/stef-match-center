@@ -1,7 +1,6 @@
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 import { createPortal } from "react-dom";
 import { ceremonyPolyvalents } from "./ceremony-selection";
-import { formatKpiDuration } from "./kpi-duration";
 import { qualificationReasons } from "./qualification-reasons";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, BRIEF_INDICATOR_SELECTION_VERSION, migrateBriefLayout, normalizeBriefIndicators } from "../server/brief-layout.mjs";
 import {
