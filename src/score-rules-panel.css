@@ -70,3 +70,24 @@
   .score-rules-actions button{width:100%}
   .score-rules-item{padding:12px}
 }
+
+/* Score provenance is a secondary line: no competing scoreboard tiles. */
+.football-score-reference {
+  margin: 9px 0 0;
+  color: #b9d5da;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.tv-custom-score {
+  display: inline-block;
+  border: 1px solid rgba(116, 219, 214, .28);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 8px 0 0;
+  background: rgba(7, 30, 43, .72);
+  color: #d2e7e9;
+  font-size: clamp(12px, 1.2vw, 15px);
+  line-height: 1.45;
+}
+.tv-custom-score strong { color: #fff; font-size: 1.2em; }
+.tv-custom-score span { color: #a9ccce; font-size: .9em; }
