@@ -56,10 +56,13 @@ for (const fixture of fixtures) {
       arrivalPunctuality: 96, departurePunctuality: 94,
       destinationPunctuality: 92, temperatureReturn: 97 },
       distribution: { tonnage: 7.2 }, expedition: { tonnage: 14.4 } },
-    // Realistic 13:00–22:30 period: numeric hours must agree with labels.
+    // Deliberately non-monotone SYNTHETIC source counts. The PDF must show
+    // exact observed hourly rates and N/D, not a smoothed illustrative trend.
     hourlyPerformance: Array.from({ length: 10 }, (_, i) => {
       const hour = (13 + i) % 24;
-      const won = 10 + i, total = 25 + i;
+      const examples = [[8,11],[16,18],[3,8],[14,19],[4,5],
+        [1,4],[18,22],[0,5],[9,10],[6,12]];
+      const [won,total]=examples[i];
       return { label: String(hour).padStart(2, "0") + "h", hour,
         won, total, rate: Math.round(won / total * 1000) / 10 };
     }),
@@ -139,6 +142,9 @@ for (const fixture of fixtures) {
       checks.push(["weighted hourly pass rate", "Total : " + fmtCertified(rate) + " %"]);
       checks.push(["first hourly period", snapshot.hourlyPerformance[0].label]);
       checks.push(["actual selected period end", "22h30"]);
+      checks.push(["distinct observed low point", "15h"]);
+      checks.push(["observed numerator and denominator", "3/8"]);
+      checks.push(["observed low rate", "37,5 %"]);
     } else if (chartId === "reception-time") {
       checks.push(["reception target", "Cible : " + league.criteria.unloadingSeconds + " s/poz"]);
       checks.push(["positions per slot", "Positions/créneau : 10 a 19"]);
