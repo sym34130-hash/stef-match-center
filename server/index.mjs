@@ -213,6 +213,26 @@ app.get("/api/agencies/:agencyCode/score-rules", requireAgency, async (req, res)
   }
 });
 
+// Server-authoritative draft simulation. It never persists rules or alters
+// reference data. The administrator can verify a proposed result before saving.
+app.post("/api/agencies/:agencyCode/score-rules/preview", requireAgency, async (req, res) => {
+  try {
+    const leagueId=assertScoreLeagueId(req.body?.leagueId);
+    const profile=normalizeScoreRules(req.body?.profile);
+    const config=matchExportLeague(leagueId,await readLeagueConfigs(req.agency.code));
+    const snapshot=await withAgencyLock(req.agency.code,()=>readLatestSnapshot(req.agency.code,config.criteria));
+    const preview=snapshot
+      ? evaluateScoreRules(snapshot,profile,config.criteria.scoreTargetPercent)
+      : {status:"no_match",message:"Importe un MATCH pour prévisualiser ce barème."};
+    res.set("Cache-Control","no-store, max-age=0")
+      .json({leagueId,preview});
+  } catch(error) {
+    if(error instanceof ScoreRulesError || error instanceof MatchExportError)
+      res.status(error.status).json({message:error.message});
+    else respondInternalError(res,"score-rules:preview:"+req.agency.code,error);
+  }
+});
+
 app.put("/api/agencies/:agencyCode/score-rules", requireAgency, async (req, res) => {
   if (!req.agency.canImport) {
     res.status(403).json({ message:"Ce code d'accès ne permet pas de modifier les règles du score." });
