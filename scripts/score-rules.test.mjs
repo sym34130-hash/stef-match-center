@@ -111,3 +111,79 @@ test("rules reject unknown fields, repeats, fractional weights, missing target, 
   assert.ok(!SCORE_KPI_CATALOG.some(item=>item.id==="accidentFreeDays"),
     "Accident-free days are a count, not a rate eligible for the percent rule");
 });
+
+
+test("matrix: 4 leagues, all 2–6 KPI cardinalities and weighted percentage rules",()=>{
+  const ids=SCORE_KPI_CATALOG.map(item=>item.id);
+  const readings={
+    passRate:70,loadingPercent:88,unloadingPercent:80,possessionPercent:49,
+    arrivalPunctuality:93,departurePunctuality:50,destinationPunctuality:79,temperatureReturn:100,
+  };
+  const dailyIndicators={
+    referenceDate:"10 septembre 2026", agencyCode:"058",
+    punctuality:{
+      arrivalPunctuality:93,departurePunctuality:50,
+      destinationPunctuality:79,temperatureReturn:100,
+    },
+  };
+  const source=snapshot([70,88,80,49],dailyIndicators);
+  for(const [league,threshold] of Object.entries({
+    bronze:40,argent:50,or:65,platine:80,
+  })){
+    for(let count=2;count<=6;count++){
+      for(let start=0;start<ids.length;start++){
+        const selected=Array.from({length:count},(_,i)=>ids[(start+i)%ids.length]);
+        const rules=only(selected.map((id,i)=>({
+          id,targetPercent:i%2?null:threshold,
+          goalsFor:1+(i%3),goalsAgainst:1+((i+1)%3),
+        })));
+        const before=structuredClone(source);
+        const result=evaluateScoreRules(source,rules,threshold);
+        const expectedFor=rules.indicators.reduce((acc,rule)=>
+          acc+(readings[rule.id]>threshold?rule.goalsFor:0),0);
+        const expectedAgainst=rules.indicators.reduce((acc,rule)=>
+          acc+(readings[rule.id]<=threshold?rule.goalsAgainst:0),0);
+        assert.deepEqual([result.status,result.goalsFor,result.goalsAgainst],
+          ["available",expectedFor,expectedAgainst],
+          league+" / "+count+" KPI / window "+start);
+        assert.equal(result.indicators.length,count);
+        assert.deepEqual(result.indicators.map(item=>item.value),
+          selected.map(id=>readings[id]));
+        assert.deepEqual(result.referenceScore,{status:"available",goalsFor:3,goalsAgainst:1});
+        assert.deepEqual(source,before,"Evaluation may not mutate imported source values");
+      }
+    }
+  }
+});
+
+test("106J parsing: percentages and independent source dates are preserved end-to-end",async()=>{
+  const {parse106jText}=await import("../server/pdf-106j.mjs");
+  const sourceText=[
+    "Site : AGEN [058]",
+    "Date de référence de calcul : 10 septembre 2026",
+    "taux de ponctualité arrivage % 88,9 % 1 % 95 %",
+    "taux de ponctualité départ % 49,9 % 1 % 92 %",
+    "taux de ponctualité destination % 100 % 1 % 98 %",
+    "taux de prise de température retour ramasse % 0 % 1 % 95 %",
+  ].join("\n");
+  const pdf=parse106jText(sourceText,"106J-synthetique.pdf");
+  assert.equal(pdf.referenceDate,"10 septembre 2026");
+  assert.equal(pdf.agencyCode,"058");
+  assert.deepEqual(pdf.punctuality,{
+    arrivalPunctuality:88.9,departurePunctuality:49.9,
+    destinationPunctuality:100,temperatureReturn:0,
+  });
+  const data=snapshot(undefined,pdf);
+  const rules=only([
+    custom({id:"arrivalPunctuality",targetPercent:88,goalsFor:3}),
+    custom({id:"departurePunctuality",targetPercent:50,goalsAgainst:2}),
+    custom({id:"destinationPunctuality",targetPercent:100,goalsAgainst:1}),
+    custom({id:"temperatureReturn",targetPercent:50,goalsAgainst:3}),
+  ]);
+  const result=evaluateScoreRules(data,rules,50);
+  assert.equal(result.status,"available");
+  assert.deepEqual([result.goalsFor,result.goalsAgainst],[3,6]);
+  assert.deepEqual(result.indicators.map(r=>r.reached),[true,false,false,false]);
+  assert.deepEqual(result.indicators.map(r=>r.value),[88.9,49.9,100,0]);
+  assert.ok(result.indicators.every(r=>r.sourceDate==="10 septembre 2026"));
+});
