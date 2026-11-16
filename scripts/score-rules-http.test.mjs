@@ -111,6 +111,12 @@ test("score rules HTTP: secured per agency/league, revisioned, immutable on reje
       "Concurrent writes must have one winner and one conflict");
     const persisted=JSON.parse(await fs.readFile(path.join(dataDir,"058","score-rules.json"),"utf8"));
     assert.deepEqual(Object.keys(persisted.leagues).sort(),["argent","or"]);
+    const revisions=Object.values(persisted.leagues).map(entry=>entry.history.length);
+    assert.equal(revisions.reduce((total,n)=>total+n,0),3,
+      "Every accepted score change must append a historical rule version");
+    assert.equal(persisted.leagues.argent.history[0].profile.indicators[0].goalsFor,3,
+      "An earlier approved score definition must remain available after later changes");
+    assert.equal(persisted.leagues.or.history[0].profile.indicators.length,3);
     assert.equal((await get("060")).status,200,"Read-only agency may inspect the rules");
   } finally {
     if(server.exitCode===null&&server.signalCode===null){
