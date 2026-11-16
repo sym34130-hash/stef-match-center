@@ -13,6 +13,7 @@ import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_IN
 import { isValidCalendarDate } from "./calendar-date.mjs";
 import { calculateAccidentFreeDays } from "./accident-free-days.mjs";
 import { MatchExportError, matchExportLeague, matchExportModel } from "./match-export-model.mjs";
+import { SCORE_RULES_VERSION, SCORE_KPI_CATALOG, ScoreRulesError, assertScoreLeagueId, defaultScoreRules, normalizeScoreRules, evaluateScoreRules } from "./score-rules.mjs";
 import { renderMatchPdf } from "./match-export-pdf.mjs";
 import { defaultPdfProfile, normalizePdfProfile } from "./match-pdf-profile.mjs";
 import { RECEPTION_EXCLUSION_VERSION, normalizeReceptionCode, normalizeReceptionExclusions, receptionClientKey } from "./reception-exclusions.mjs";
@@ -178,6 +179,70 @@ app.get("/api/agencies/:agencyCode/league-configs", requireAgency, async (req, r
     res.set("Cache-Control", "no-store, max-age=0").json(state);
   } catch (error) {
     respondInternalError(res, `league-configs:${req.agency.code}`, error);
+  }
+});
+
+
+// Lot A: source-backed personalised football scoring rules. No existing KPI,
+// snapshot, or PDF value is rewritten here; the standard score stays intact.
+app.get("/api/agencies/:agencyCode/score-rules", requireAgency, async (req, res) => {
+  try {
+    const leagueId=assertScoreLeagueId(req.query.leagueId);
+    const state=await withAgencyLock(req.agency.code, () =>
+      readScoreRulesState(req.agency.code, leagueId));
+    let preview=null;
+    if (req.query.preview === "1") {
+      const config=matchExportLeague(leagueId, await readLeagueConfigs(req.agency.code));
+      const snapshot=await withAgencyLock(req.agency.code, () =>
+        readLatestSnapshot(req.agency.code, config.criteria));
+      preview=snapshot
+        ? evaluateScoreRules(snapshot, state.profile, config.criteria.scoreTargetPercent)
+        : { status:"no_match", message:"Importe un MATCH pour prévisualiser le score." };
+    } else if (req.query.preview !== undefined) {
+      throw new ScoreRulesError(400, "Option de prévisualisation invalide.");
+    }
+    res.set("Cache-Control","no-store, max-age=0").json({
+      leagueId, catalog:SCORE_KPI_CATALOG, profile:state.profile,
+      scoreRulesRevision:state.scoreRulesRevision, preview,
+      defaultProfile:defaultScoreRules(),
+    });
+  } catch(error) {
+    if (error instanceof ScoreRulesError || error instanceof MatchExportError)
+      res.status(error.status).json({message:error.message});
+    else respondInternalError(res, "score-rules:get:"+req.agency.code, error);
+  }
+});
+
+app.put("/api/agencies/:agencyCode/score-rules", requireAgency, async (req, res) => {
+  if (!req.agency.canImport) {
+    res.status(403).json({ message:"Ce code d'accès ne permet pas de modifier les règles du score." });
+    return;
+  }
+  try {
+    const leagueId=assertScoreLeagueId(req.body?.leagueId);
+    const profile=normalizeScoreRules(req.body?.profile);
+    if (!Object.hasOwn(req.body ?? {}, "expectedRevision")
+      || (req.body.expectedRevision !== null && typeof req.body.expectedRevision !== "string"))
+      throw new ScoreRulesError(428, "Recharge les règles avant de les enregistrer.");
+    const saved=await withAgencyLock(req.agency.code, async () => {
+      const current=await readScoreRulesState(req.agency.code,leagueId);
+      if (req.body.expectedRevision !== current.scoreRulesRevision)
+        throw new ScoreRulesError(409,
+          "Les règles du score ont été modifiées. Recharge avant d'enregistrer.");
+      const agencyDir=path.join(dataDir,sanitizeSegment(req.agency.code));
+      const file=path.join(agencyDir,"score-rules.json");
+      const all=await readStoredScoreRules(req.agency.code);
+      all.leagues[leagueId]={profile,changedAt:new Date().toISOString()};
+      await fs.mkdir(agencyDir,{recursive:true});
+      await writeJsonAtomic(file,all);
+      return readScoreRulesState(req.agency.code,leagueId);
+    });
+    res.set("Cache-Control","no-store, max-age=0")
+      .json({leagueId,...saved,message:"Règles enregistrées pour cette agence et cette ligue."});
+  } catch(error) {
+    if (error instanceof ScoreRulesError)
+      res.status(error.status).json({message:error.message});
+    else respondInternalError(res,"score-rules:put:"+req.agency.code,error);
   }
 });
 
@@ -1203,6 +1268,39 @@ function normalizeLeagueConfigs(value) {
       scoreTargetPercent: Math.min(100, Math.max(1, Math.round(scoreTargetPercent))),
     };
   });
+}
+
+// A single agency file contains independent profiles for each league.
+// The complete file has a revision, so parallel updates cannot lose a league.
+async function readStoredScoreRules(agencyCode) {
+  const file=path.join(dataDir,sanitizeSegment(agencyCode),"score-rules.json");
+  try {
+    const raw=JSON.parse(await fs.readFile(file,"utf8"));
+    if (!raw || raw.version!==SCORE_RULES_VERSION
+      || !raw.leagues || typeof raw.leagues!=="object" || Array.isArray(raw.leagues))
+      throw new ScoreRulesError(409,"Configuration du score incompatible. Intervention requise.");
+    const leagues={};
+    for (const [leagueId,entry] of Object.entries(raw.leagues)) {
+      assertScoreLeagueId(leagueId);
+      if (!entry || !Number.isFinite(Date.parse(entry.changedAt)))
+        throw new ScoreRulesError(409,"Historique des règles du score invalide.");
+      leagues[leagueId]={profile:normalizeScoreRules(entry.profile),changedAt:entry.changedAt};
+    }
+    return {version:SCORE_RULES_VERSION,leagues};
+  } catch(error) {
+    if (error?.code==="ENOENT") return {version:SCORE_RULES_VERSION,leagues:{}};
+    if (error instanceof ScoreRulesError) throw error;
+    if (error instanceof SyntaxError) throw new ScoreRulesError(409,
+      "Le fichier des règles du score est illisible, aucune valeur n'a été remplacée.");
+    throw error;
+  }
+}
+async function readScoreRulesState(agencyCode,leagueId) {
+  const all=await readStoredScoreRules(agencyCode);
+  const file=path.join(dataDir,sanitizeSegment(agencyCode),"score-rules.json");
+  return {profile:all.leagues[leagueId]?.profile??defaultScoreRules(),
+    changedAt:all.leagues[leagueId]?.changedAt??null,
+    scoreRulesRevision:await readFileRevision(file)};
 }
 
 async function readLeagueConfigs(agencyCode) {
