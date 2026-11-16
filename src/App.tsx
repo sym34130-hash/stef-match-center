@@ -172,6 +172,7 @@ type WeightedScoreIndicator = {
   value: number | null; reached: boolean | null;
   goalsFor: number; goalsAgainst: number;
   awardedGoals: number; concededGoals: number;
+  source: "Excel" | "106J"; sourceDate: string | null; sourceAgency: string | null;
   reason: string | null;
 };
 type WeightedScorePreview = {
@@ -2186,6 +2187,10 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
                 const conceded=rule.reached===false;
                 return (
                   <div key={rule.id} data-score-kpi={rule.id}
+                    title={rule.source==="106J"
+                      ?"Rapport 106J"+(rule.sourceDate?" du "+rule.sourceDate:" (date non précisée)")
+                        +(rule.sourceAgency?" · site source "+rule.sourceAgency:"")
+                      :"KPI calculé depuis le fichier Excel du MATCH"}
                     className={`match-score-bubble ${classById[rule.id]??"custom-score-bubble"} ${rule.value===null?"is-data-unavailable":""} ${conceded?"is-goal-conceded":""}`}>
                     <span>{rule.label}</span>
                     <strong>{rule.value===null?"Indisponible":formatPercent(rule.value)}</strong>
