@@ -272,6 +272,34 @@ test("Lot E V2: an excessive brief must fail instead of silently spilling or bei
   assert.equal((renderMatchPdf(model).toString("latin1").match(/\/Type \/Page \/Parent/g) ?? []).length, 2);
 });
 
+test("PDF V11: all eleven Y-axis graduations are equally spaced from 0 to 100 percent", async () => {
+  const model=build("058",{pdfProfile:{ indicatorIds:["positions","arrival","injuries","performance"],
+    chartId:"passes-hourly"}});
+  const graphics=renderMatchPdf(model).toString("latin1");
+  for(let value=0;value<=100;value+=10){
+    const y=(70+value/100*74-2.2).toFixed(2);
+    assert.ok(graphics.includes("42.00 "+y+" Tm ("+value+"%) Tj ET"),
+      "Expected evenly spaced "+value+"% graduation at "+y);
+  }
+});
+test("PDF V11: five match-in-figures cells remain the same width in both rows", async () => {
+  const ids=["performance","injuries","accident-free-days","positions","arrival"];
+  const model=build("058",{causerie:{visibleIndicators:ids,visibleIndicatorsVersion:2,
+    attack:["Message service client"],midfield:[],defense:[]},
+    pdfProfile:{indicatorIds:ids,chartId:"passes-hourly"}});
+  const pdf=renderMatchPdf(model);
+  const graphics=pdf.toString("latin1");
+  const parsed=await pdfParse(pdf);
+  assert.equal(parsed.numpages,2);
+  // 3 columns: top separators at x=290.33 and 551.67.
+  // Bottom pair uses the same 261.33pt width, centered around x=421.
+  for(const expected of ["290.33","551.67"]){
+    assert.ok(graphics.includes(expected+" 222.00 m "+expected+" 253.00 l"),
+      "Top cards must use uniform three-column geometry at "+expected);
+  }
+  assert.ok(graphics.includes("421.00 186.00 m 421.00 217.00 l"),
+    "Bottom pair must be centered with unchanged 261.33pt cell widths");
+});
 test("Lot E V3: 4, 5 or 6 complementary KPIs do not overlap the chart or create a third page", async () => {
   const ids = ["performance", "injuries", "accident-free-days", "positions", "arrival", "departure"];
   for (const count of [4, 5, 6]) {
