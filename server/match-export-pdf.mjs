@@ -208,7 +208,7 @@ class Pdf {
       const xobjects = imageIds.length
         ? `/XObject << ${imageIds.map((id, i) => `/Im${i} ${id} 0 R`).join(" ")} >>`
         : "";
-      objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${WIDTH} ${HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> ${xobjects} >> /Contents ${contentsId} 0 R >>`);
+      objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${WIDTH} ${HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /ExtGState << /WarmBeam << /Type /ExtGState /ca 0.13 /CA 0.13 >> /WarmHalo << /Type /ExtGState /ca 0.075 /CA 0.075 >> /ChartFill << /Type /ExtGState /ca 0.22 /CA 0.22 >> ${xobjects} >> /Contents ${contentsId} 0 R >>`);
       pageIds.push(id);
     }
     objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
@@ -556,11 +556,14 @@ function compactChart(p, m, chartId) {
         "Le graphique contient des données hors de la plage du MATCH.");
     const spanHours=selectedSpan>0?Math.max(1,selectedSpan)
       :Math.max(1,...measured.map(point=>point.offset+1));
+    // Match the operational website's visual grammar: rate observations are
+    // plotted as source-exact points on elapsed CLOCK hours, not as an averaged
+    // or smoothed series. Consecutive hours connect with solid segments; gaps
+    // connect only with dashed guides and are never fabricated observations.
     const x=78,baseline=85,w=699,h=48,slotWidth=w/spanHours;
     const observed=new Set(measured.map(point=>point.offset));
     const lastTick=Math.floor(spanHours);
     let blankHours=0;
-    // Neutral hour bands visibly separate missing observations from 0%.
     for(let hour=0;hour<Math.ceil(spanHours);hour++){
       if(observed.has(hour))continue;
       const length=Math.min(1,spanHours-hour);
@@ -570,31 +573,68 @@ function compactChart(p, m, chartId) {
       p.line(x+hour*slotWidth,baseline,
         x+hour*slotWidth,baseline+h,C.muted,.35,[2,3]);
     }
-    for(const value of [0,50,100]){
+    for(const value of [0,20,40,60,80,100]){
       const yy=baseline+value/100*h;
-      p.box(x,yy,w,.5,C.panel2);
-      p.text(42,yy-2.5,7.4,String(value)+"%",C.muted);
+      p.box(x,yy,w,.45,C.panel2);
+      if(value%40===0||value===100)
+        p.text(42,yy-2.5,7.1,String(value)+"%",C.muted);
     }
-    const labelStep=Math.max(1,Math.ceil(measured.length/11));
-    measured.forEach(({row,offset},i)=>{
-      const available=Math.min(1,spanHours-offset);
-      if(available<=0)return;
-      const center=x+(offset+available/2)*slotWidth;
-      const width=Math.min(43,slotWidth*available*.61);
-      const barH=row.rate/100*h;
-      p.box(center-width/2,baseline,width,Math.max(.6,barH),C.aqua);
-      p.box(center-width/2,baseline+Math.max(.6,barH)-1,width,1,C.white);
-      if(i%labelStep===0||i===measured.length-1){
-        p.text(center,139,7.5,percent(row.rate),C.white,true,"center");
-        const amount=Number.isFinite(row.won)&&Number.isFinite(row.total)
-          ?fmt(row.won)+"/"+fmt(row.total):"vol. N/D";
-        p.text(center,60.5,7.1,amount,C.muted,false,"center");
+    const points=measured.map(({row,offset})=>({
+      row,offset,x:x+offset*slotWidth,y:baseline+row.rate*h/100
+    }));
+    const filledArea=run=>{
+      if(run.length<2)return;
+      const polygon=[[run[0].x,baseline],
+        ...run.map(point=>[point.x,point.y]),[run[run.length-1].x,baseline]];
+      p.ops.push("q /ChartFill gs "+rgb(C.aqua)+" rg "
+        +polygon.map(([a,b],i)=>a.toFixed(2)+" "+b.toFixed(2)
+          +(i?" l ":" m ")).join("")+"h f Q\n");
+    };
+    let segmentStart=0;
+    for(let index=1;index<=points.length;index++){
+      if(index<points.length&&points[index].offset-points[index-1].offset<=1)
+        continue;
+      filledArea(points.slice(segmentStart,index));
+      segmentStart=index;
+    }
+    const lastMeasured=points[points.length-1];
+    const lastFullHour=Math.ceil(spanHours)-1;
+    const hasTrailingGap=lastMeasured&&lastMeasured.offset<lastFullHour;
+    if(hasTrailingGap){
+      // Like the website, shade from the last plotted dot to period end.
+      const left=lastMeasured.x+1;
+      const tailW=Math.max(0,x+w-left);
+      if(tailW>0)p.box(left,baseline,tailW,h,[.18,.255,.31]);
+      if(tailW>84)p.text(left+tailW/2,baseline+22,8,
+        "Sans données",C.muted,true,"center");
+    }
+    for(let index=1;index<points.length;index++){
+      const prior=points[index-1],curr=points[index];
+      const gap=curr.offset-prior.offset>1;
+      p.line(prior.x,prior.y,curr.x,curr.y,
+        gap?C.muted:C.aqua,gap?.95:2.2,gap?[3,3]:null);
+    }
+    const maxLabels=10;
+    const labelEvery=Math.max(1,Math.ceil(points.length/maxLabels));
+    points.forEach((point,index)=>{
+      p.dot(point.x,point.y,2.75,C.white);
+      p.dot(point.x,point.y,1.65,C.aqua);
+      if(index%labelEvery===0||index===points.length-1){
+        // Data labels follow measured points, rather than a uniform baseline.
+        // Extreme rates still fit inside the 146pt chart frame.
+        const percentY=point.y>=baseline+h-8?point.y-10:point.y+5.5;
+        p.text(point.x,percentY,7.2,percent(point.row.rate),
+          C.white,true,"center");
+        const amount=Number.isFinite(point.row.won)&&Number.isFinite(point.row.total)
+          ?fmt(point.row.won)+"/"+fmt(point.row.total):"vol. N/D";
+        p.text(point.x,60,7.0,amount,C.muted,false,"center");
       }
     });
     const every=Math.max(1,Math.ceil((lastTick+1)/11));
-    for(let hour=0;hour<=lastTick;hour+=every)
-      p.text(x+hour*slotWidth,73,7,
+    for(let hour=0;hour<=lastTick;hour+=every){
+      p.text(x+hour*slotWidth,73,6.9,
         String((firstHour+hour)%24).padStart(2,"0")+"h",C.muted);
+    }
     if(periodEnd!==null&&periodEnd%60!==0){
       const endLabel=String(Math.floor(periodEnd/60)).padStart(2,"0")+"h"
         +String(periodEnd%60).padStart(2,"0");
@@ -607,7 +647,7 @@ function compactChart(p, m, chartId) {
       +"  |  Sans données : "+fmt(blankHours)
       +"  |  "+trim(String(first.label??first.hour??""),8)
       +" à "+trim(String(last.label??last.hour??""),8)
-      +"  |  Volumes sous les barres : réussites / opérations"
+      +"  |  Volumes sous la courbe : réussites / opérations"
       +"  |  périmètre distinct du KPI officiel",C.muted);
     return;
   }
@@ -871,10 +911,19 @@ function compactScorePage(doc, m) {
     const xx=37+i*35;
     line(xx,450,xx+13,437,S.steel,.55);
   }
+  // Real warm stadium floodlights (alpha compositing, not grey opaque polygons).
+  // A faint wide halo and a narrow amber core reproduce beams through haze.
+  const translucentBeam=(coords,graphicState)=>p.ops.push(
+    "q /"+graphicState+" gs "+rgb(C.gold)+" rg "+
+    coords.map(([xx,yy],i)=>xx.toFixed(2)+" "+yy.toFixed(2)+(i?" l ":" m ")).join("")
+    +"h f Q\n");
   for(const fx of [80,200,642,762]){
-    poly([[fx-7,452],[fx+7,452],[fx+102,365],[fx-102,365]],mix(S.sky,S.steel,.40));
-    p.box(fx-19,449,38,2.2,mix(C.white,C.blue,.38));
-    for(let l=0;l<5;l++)p.box(fx-14+l*7,451.5,3,1.4,C.blue);
+    translucentBeam([[fx-6,454],[fx+6,454],[fx+127,356],[fx-127,356]],"WarmHalo");
+    translucentBeam([[fx-4,452],[fx+4,452],[fx+73,359],[fx-73,359]],"WarmBeam");
+    // Illuminated housing / warm lamps; kept behind the central score panel.
+    p.box(fx-23,448,46,3,[0.52,0.39,0.19]);
+    p.box(fx-20,451,40,2.3,C.gold);
+    for(let l=0;l<7;l++)p.box(fx-16+l*5,453.3,2.3,2.3,[1.0,0.93,0.65]);
   }
   poly([[29,362],[813,362],[792,334],[50,334]],S.pitch);
   for(let i=0;i<14;i++){
