@@ -18,11 +18,6 @@ export const DEFAULT_SCORE_INDICATOR_IDS = Object.freeze([
 ]);
 const KNOWN = new Map(SCORE_KPI_CATALOG.map(item => [item.id, item]));
 const LEAGUES = new Set(["bronze", "argent", "or", "platine"]);
-const MONTHS_FR = ["janvier", "fevrier", "mars", "avril", "mai", "juin",
-  "juillet", "aout", "septembre", "octobre", "novembre", "decembre"];
-const plain = value => String(value ?? "").normalize("NFD")
-  .replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-
 export class ScoreRulesError extends Error {
   constructor(status, message) {
     super(message);
@@ -50,8 +45,8 @@ export function normalizeScoreRules(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)
     || input.version !== SCORE_RULES_VERSION
     || !Array.isArray(input.indicators)
-    || input.indicators.length < 3 || input.indicators.length > 6)
-    throw new ScoreRulesError(400, "Sélectionne entre 3 et 6 KPI valides pour le score.");
+    || input.indicators.length < 2 || input.indicators.length > 6)
+    throw new ScoreRulesError(400, "Sélectionne entre 2 et 6 KPI valides pour le score.");
   const seen = new Set();
   const indicators = input.indicators.map(item => {
     if (!item || typeof item !== "object" || Array.isArray(item)
@@ -88,17 +83,12 @@ function observedValue(snapshot, id) {
       source:"Excel", sourceDate:snapshot?.match?.date ?? null, reason:null };
   }
   const indicators=snapshot?.dailyIndicators;
-  const sourceDate=indicators?.referenceDate ?? null;
-  const parsedDate=operationalDay(sourceDate);
-  const matchDate=operationalDay(snapshot?.match?.date);
-  // Dates may legitimately differ for display-only 106J data. They cannot
-  // quietly become scoring data for a different operational day.
-  if (!parsedDate || !matchDate || parsedDate !== matchDate) {
-    return { value:null, source:"106J", sourceDate,
-      reason:"Le 106J ne correspond pas à la date du MATCH." };
-  }
+  // A 106J may legitimately describe another day than the operational Excel.
+  // The importing agency explicitly selects its 106J: date is provenance,
+  // never an automatic reason to concede or block its valid measurements.
+  // Agency isolation stays enforced by the authenticated snapshot endpoint.
   return { value:indicators?.punctuality?.[id] ?? null,
-    source:"106J", sourceDate, reason:null };
+    source:"106J", sourceDate:indicators?.referenceDate ?? null, reason:null };
 }
 
 export function evaluateScoreRules(snapshot, rules, leagueTargetPercent) {
