@@ -63,12 +63,42 @@ test("PDF V5: the two-page immersive football identity retains live business dat
   for (const marker of [
     "FIN DU MATCH", "SUR LE TERRAIN", "BALLON DE MATCH",
     "RÉSULTAT FINAL", "BUTS MARQUÉS", "BUTS ENCAISSÉS",
-    "LE PLAN DE JEU", "LECTURE TACTIQUE DU MATCH", "STAFF",
+    "LE PLAN DE JEU",
     "SÉCURITÉ / VIGILANCE", "SERVICE CLIENT", "DÉCISIONS / ARBITRAGES",
   ]) assert.ok(parsed.text.includes(marker), "Missing immersive or operational label: " + marker);
   assert.match(parsed.text, /Sources : Excel \[058\]/);
+  assert.doesNotMatch(parsed.text, /LECTURE TACTIQUE DU MATCH|STAFF/,
+    "The decorative football board must no longer displace the brief");
+  const raw=buffer.toString("latin1");
+  for(const val of [65,88,80,49]){
+    const whiteMetric=new RegExp("1\\.000 1\\.000 1\\.000 rg BT /F2 23 Tf[^\\n]*\\("+val+" %\\) Tj ET");
+    assert.match(raw,whiteMetric,"Official KPI "+val+"% must remain white, never red");
+  }
   assert.match(parsed.text, /3/); // scored goals from source snapshot, not artwork
   assert.ok(buffer.length < 3_000_000, "vector graphics should stay lightweight");
+});
+
+
+test("PDF V6: source-exact discrete hourly volumes, gaps and inconsistent ratios", async () => {
+  const selected=[
+    {label:"13h",hour:13,won:3,total:5,rate:60},
+    {label:"15h",hour:15,won:1,total:5,rate:20},
+    {label:"16h",hour:16,won:4,total:4,rate:100},
+  ];
+  const model=build("058",{snapshot:{hourlyPerformance:selected},
+    pdfProfile:{indicatorIds:["positions","arrival","injuries","performance"],
+      chartId:"passes-hourly"}});
+  const pdf=await pdfParse(renderMatchPdf(model));
+  assert.equal(pdf.numpages,2);
+  for(const marker of ["13h","15h","16h","60 %","20 %","100 %",
+    "3/5","1/5","4/4","Sans données : 1","Volumes sous les barres"]){
+    assert.ok(pdf.text.includes(marker),"Hourly observed value missing: "+marker);
+  }
+  const invalid=build("058",{snapshot:{hourlyPerformance:[
+    {label:"13h",hour:13,won:3,total:5,rate:71},
+  ]},pdfProfile:{indicatorIds:["positions","arrival","injuries","performance"],
+    chartId:"passes-hourly"}});
+  rejected(()=>renderMatchPdf(invalid),409);
 });
 
 test("Lot E: valid league is selected with agency-specific stored criteria", () => {
