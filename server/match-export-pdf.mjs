@@ -208,7 +208,7 @@ class Pdf {
       const xobjects = imageIds.length
         ? `/XObject << ${imageIds.map((id, i) => `/Im${i} ${id} 0 R`).join(" ")} >>`
         : "";
-      objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${WIDTH} ${HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /ExtGState << /WarmBeam << /Type /ExtGState /ca 0.13 /CA 0.13 >> /WarmHalo << /Type /ExtGState /ca 0.075 /CA 0.075 >> /ChartFill << /Type /ExtGState /ca 0.22 /CA 0.22 >> >> ${xobjects} >> /Contents ${contentsId} 0 R >>`);
+      objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${WIDTH} ${HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /ExtGState << /WarmBeam << /Type /ExtGState /ca 0.24 /CA 0.24 >> /WarmHalo << /Type /ExtGState /ca 0.11 /CA 0.11 >> /ChartFill << /Type /ExtGState /ca 0.22 /CA 0.22 >> >> ${xobjects} >> /Contents ${contentsId} 0 R >>`);
       pageIds.push(id);
     }
     objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
