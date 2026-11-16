@@ -112,6 +112,19 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await page.getByLabel("Code agence").selectOption(agency);
   await page.getByLabel("Code d'accès").fill(`CI-ONLY-${agency}`);
   await page.getByRole("button", { name: "Accéder au match" }).click();
+  // Lot B: the same admin editor is available on all three viewport sizes.
+  await page.getByRole("button",{name:/Administrateur/}).click();
+  await expect(page.getByRole("heading",{name:"Personnaliser le score du MATCH"})).toBeVisible();
+  await expect(page.getByText("4 KPI sélectionnés")).toBeVisible();
+  await page.getByRole("button",{name:"Prévisualiser le score"}).click();
+  await expect(page.getByRole("heading",{name:"Simulation sur le dernier MATCH de cette agence"})).toBeVisible();
+  await page.getByLabel("Buts marqués Passes réussies").selectOption("2");
+  await page.getByRole("button",{name:"Enregistrer le barème"}).click();
+  await expect(page.getByText("Règles enregistrées pour cette agence et cette ligue.")).toBeVisible();
+  const savedScoreRules=await request.get(agencyUrl+"/score-rules?leagueId=argent",{headers});
+  expect(savedScoreRules.status()).toBe(200);
+  expect((await savedScoreRules.json()).profile.indicators[0].goalsFor).toBe(2);
+  await page.getByRole("button",{name:"02 Feuille de match",exact:true}).click();
   await expect(page.getByRole("button", { name: "02 Feuille de match", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
   await expect(page.getByRole("button", { name: "Personnaliser l'export PDF", exact: true })).toBeVisible();
