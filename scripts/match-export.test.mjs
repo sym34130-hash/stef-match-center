@@ -97,8 +97,18 @@ test("PDF V7: website-faithful hourly curve, exact volumes, gaps and inconsisten
   assert.match(graphics,/\[3 3\] 0 d/,"gaps must be dashed");
   assert.match(graphics,/\/ChartFill gs/,"consecutive runs must have a softly filled area");
   assert.match(graphics,/\/WarmBeam gs/,"stadium light beams must be warm/translucent");
+  assert.equal((graphics.match(/\/PencilSketch gs/g)??[]).length,3,
+    "Exactly three pencil-style football vignettes, not a watermark on every brief");
+  assert.match(graphics,/\/PencilSketch << \/Type \/ExtGState \/ca 0\.18/,
+    "Pencil drawings must be translucent");
+  assert.ok(pdf.text.includes("DÉCHARGEMENTS DANS LE DÉLAI"),
+    "The printed title must match the actual chart shown on the website");
+  const firstVolume=graphics.match(/([0-9]+\.[0-9]+) ([0-9]+\.[0-9]+) Tm \(3\/5\) Tj ET/);
+  assert.ok(firstVolume,"The chart must retain exact hourly numerator/denominator");
+  assert.ok(Number(firstVolume[2])>85,
+    "Hourly volume belongs near the measured curve point, not below the clock axis");
   for(const marker of ["13h","15h","16h","60 %","20 %","100 %",
-    "3/5","1/5","4/4","Sans données : 1","Volumes sous la courbe"]){
+    "3/5","1/5","4/4","Sans données : 1","Volumes près des points"]){
     assert.ok(pdf.text.includes(marker),"Hourly observed value missing: "+marker);
   }
   const invalid=build("058",{snapshot:{hourlyPerformance:[
