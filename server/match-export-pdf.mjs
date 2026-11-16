@@ -585,17 +585,14 @@ function compactChart(p, m, chartId) {
       p.line(x+hour*slotWidth,baseline,
         x+hour*slotWidth,baseline+h,C.muted,.35,[2,3]);
     }
-    for(const value of [0,20,40,60,80,90,100]){
+    // Full, evenly spaced percentage graduations: 0, 10 ... 100%.
+    // Each tick is geometrically tied to the same Y-scale as measured dots.
+    for(let value=0;value<=100;value+=10){
       const yy=baseline+value/100*h;
-      if(value===90){
-        // Accurate high-performance reference: 88.9% must be BELOW this
-        // line, clearly separated from the gold 100% reference.
-        p.line(x,yy,x+w,yy,C.muted,.7,[2,3]);
-      }else p.box(x,yy,w,value===100?.9:.45,
+      p.box(x,yy,w,value===100?.9:.36,
         value===100?C.gold:C.panel2);
-      if([0,40,80,90,100].includes(value))
-        p.text(42,yy-2.5,value===90?6.7:7.1,
-          String(value)+"%",value===100?C.gold:C.muted);
+      p.text(42,yy-2.2,5.7,String(value)+"%",
+        value===100?C.gold:C.muted);
     }
     const points=measured.map(({row,offset})=>({
       row,offset,x:x+offset*slotWidth,y:baseline+row.rate*h/100
@@ -1030,24 +1027,29 @@ function compactScorePage(doc, m) {
     p.text(806,277,7.7,"Total "+fmtTonnage(m.dailyIndicators.total.tonnage)+" t",C.gold,true,"right");
   }
   if(!selected.length)p.text(41,235,10,"Aucun KPI complémentaire visible dans le MATCH.",C.muted);
-  // A genuinely centred editorial score sheet. Symmetrical 2x2 if only
-  // four indicators are chosen; 3+2 / 3+3 for five or six respectively.
+  // Identical card widths for all selected indicators. With five values,
+  // the last two occupy the SAME width as the first three and are centered
+  // as a pair; they no longer stretch into larger cells on the second row.
   const columns=selected.length===4?2:3;
+  const cellWidth=784/columns;
+  const labelTexts=selected.map(card=>trim(card.label,38).toUpperCase());
+  const valueTexts=selected.map(card=>ascii(card.value??"Indisponible"));
+  const longestLabel=Math.max(1,...labelTexts.map(value=>value.length));
+  const longestValue=Math.max(1,...valueTexts.map(value=>value.length));
+  const labelSize=clamp((cellWidth-28)/(longestLabel*.56),7.0,8.3);
+  const valueSize=clamp((cellWidth-28)/(longestValue*.58),9,18);
   selected.forEach((card,i)=>{
-    const row=Math.floor(i/columns), col=i%columns;
+    const row=Math.floor(i/columns),col=i%columns;
     const inRow=Math.min(columns,selected.length-row*columns);
-    const center=29+784*(col+.5)/inRow;
+    const offset=(columns-inRow)/2;
+    const left=29+(col+offset)*cellWidth;
+    const center=left+cellWidth/2;
     const labelY=row===0?246:210;
     const valueY=row===0?228:193.5;
-    const label=trim(card.label,38).toUpperCase();
-    const labelSize=clamp(210/Math.max(1,label.length*.56),7.0,8.3);
-    const value=ascii(card.value??"Indisponible");
-    const valueSize=clamp(224/Math.max(1,value.length*.58),9,18);
-    // Vertical dividers never cut through the actual text rows.
-    if(col>0)line(29+784*col/inRow,labelY-24,
-      29+784*col/inRow,labelY+7,S.edge,.45);
-    p.text(center,labelY,labelSize,label,C.muted,true,"center");
-    p.text(center,valueY,valueSize,value,C.white,true,"center");
+    // Dividers exist only BETWEEN equal-width cards, not on empty margins.
+    if(col>0)line(left,labelY-24,left,labelY+7,S.edge,.45);
+    p.text(center,labelY,labelSize,labelTexts[i],C.muted,true,"center");
+    p.text(center,valueY,valueSize,valueTexts[i],C.white,true,"center");
   });
   if(selected.length>3)line(48,217,794,217,S.edge,.35);
   compactChart(p,m,m.pdfProfile.chartId);
