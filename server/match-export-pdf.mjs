@@ -1058,7 +1058,18 @@ function compactScorePage(doc, m) {
   line(258,268,813,268,S.edge,.65);
   const allCards=indicatorCards(m);
   const byId=new Map(m.visibleIndicators.map((id,index)=>[id,allCards[index]]));
-  const selected=m.pdfProfile.indicatorIds.map(id=>byId.get(id)).filter(Boolean);
+  // A 106J indicator promoted to the football score is no longer a carousel
+  // card on the website. Preserve that rule in the printed supplemental KPI
+  // ribbon, even if the PDF profile was saved before the score was changed.
+  const scoreToCarouselId={
+    arrivalPunctuality:"arrival",departurePunctuality:"departure",
+    destinationPunctuality:"destination",temperatureReturn:"temperature",
+  };
+  const scoredCarouselIds=new Set(
+    (m.scoreCustomization?.indicators??[])
+      .map(item=>scoreToCarouselId[item.id]).filter(Boolean));
+  const selected=m.pdfProfile.indicatorIds
+    .filter(id=>!scoredCarouselIds.has(id)).map(id=>byId.get(id)).filter(Boolean);
   // Recover the official 106J total when either printed tonnage indicator
   // is present. It is sourced from the report, never rounded then summed.
   // This also preserves the established Lot E V6 content contract.
