@@ -75,7 +75,7 @@ test("PDF V5: the two-page immersive football identity retains live business dat
     assert.match(raw,whiteMetric,"Official KPI "+val+"% must remain white, never red");
   }
   assert.match(parsed.text, /3/); // scored goals from source snapshot, not artwork
-  assert.ok(buffer.length < 3_000_000, "vector graphics should stay lightweight");
+  assert.ok(buffer.length < 3_000_000, "Three embedded pencil JPEGs must remain lightweight");
 });
 
 
@@ -97,10 +97,10 @@ test("PDF V7: website-faithful hourly curve, exact volumes, gaps and inconsisten
   assert.match(graphics,/\[3 3\] 0 d/,"gaps must be dashed");
   assert.match(graphics,/\/ChartFill gs/,"consecutive runs must have a softly filled area");
   assert.match(graphics,/\/WarmBeam gs/,"stadium light beams must be warm/translucent");
-  assert.equal((graphics.match(/\/PencilSketch gs/g)??[]).length,3,
-    "Exactly three pencil-style football vignettes, not a watermark on every brief");
-  assert.match(graphics,/\/PencilSketch << \/Type \/ExtGState \/ca 0\.18/,
-    "Pencil drawings must be translucent");
+  assert.equal((graphics.match(/\/Subtype \/Image/g)??[]).length,3,
+    "Exactly three original graphite action illustrations are embedded");
+  assert.match(graphics,/\/Filter \/DCTDecode/,
+    "Illustrations are light JPEGs; no network request is needed");
   assert.ok(pdf.text.includes("DÉCHARGEMENTS DANS LE DÉLAI"),
     "The printed title must match the actual chart shown on the website");
   // Granular operation counts remain in the website; the printed A4 preserves
