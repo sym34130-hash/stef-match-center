@@ -34,6 +34,8 @@ jobs:
           node --test \
             scripts/match-export.test.mjs \
             scripts/match-export-http.test.mjs \
+            scripts/score-rules.test.mjs \
+            scripts/score-rules-http.test.mjs \
             scripts/lot1-api.test.mjs \
             scripts/auth-attempts.test.mjs \
             scripts/calendar-validation.test.mjs \
