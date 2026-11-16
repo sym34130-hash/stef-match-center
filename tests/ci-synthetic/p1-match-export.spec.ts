@@ -556,13 +556,22 @@ test("Score à 2 KPI : transfert des vignettes 106J vers les bulles et retour au
       const collisions=cards.some((a,i)=>cards.some((b,j)=>j>i &&
         Math.min(a.right,b.right)-Math.max(a.left,b.left)>2 &&
         Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>2));
+      const contentFits=Array.from(root.querySelectorAll(".match-score-bubble"))
+        .every(tile=>{
+          const bounds=rect(tile);
+          return Array.from(tile.children).every(child=>{
+            const box=rect(child);
+            return box.top>=bounds.top-4 && box.bottom<=bounds.bottom+4;
+          });
+        });
       return {count:cards.length,
         fits:cards.every(c=>c.left>=outer.left-2&&c.right<=outer.right+2),
-        collisions};
+        contentFits,collisions};
     });
     expect(geometry.count).toBe(6);
     expect(geometry.fits,"KPI grid horizontal overflow at "+width+"px").toBe(true);
     expect(geometry.collisions,"KPI cards overlap at "+width+"px").toBe(false);
+    expect(geometry.contentFits,"Text/percentages clip inside KPI cards at "+width+"px").toBe(true);
   }
   await page.getByRole("button",{name:"Mode célébration"}).click();
   await expect(scoreboard.locator(".match-score-bubble")).toHaveCount(6);
