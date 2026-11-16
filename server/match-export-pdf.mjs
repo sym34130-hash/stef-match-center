@@ -625,12 +625,9 @@ function compactChart(p, m, chartId) {
         const percentY=point.y>=baseline+h-8?point.y-10:point.y+5.5;
         p.text(point.x,percentY,7.2,percent(point.row.rate),
           C.white,true,"center");
-        const amount=Number.isFinite(point.row.won)&&Number.isFinite(point.row.total)
-          ?fmt(point.row.won)+"/"+fmt(point.row.total):"vol. N/D";
-        // Keep the clock axis clean: the N/D pair sits next to the measured
-        // point, just like the on-screen performance graph, not below the hour.
-        const volumeY=point.y<baseline+16?point.y+17:point.y-12;
-        p.text(point.x,volumeY,6.4,amount,C.muted,false,"center");
+        // At A4 print scale, displaying each N/D pair adjacent to the point
+        // collides with nearby rates. The website retains all per-hour counts;
+        // this PDF shows the exact measured rate and a source-weighted total.
       }
     });
     const every=Math.max(1,Math.ceil((lastTick+1)/11));
@@ -650,8 +647,8 @@ function compactChart(p, m, chartId) {
       +"  |  Sans données : "+fmt(blankHours)
       +"  |  "+trim(String(first.label??first.hour??""),8)
       +" à "+trim(String(last.label??last.hour??""),8)
-      +"  |  Volumes près des points : réussites / opérations"
-      +"  |  périmètre distinct du KPI officiel",C.muted);
+      +"  |  Total volumes : "+(total>0?fmt(won)+"/"+fmt(total):"N/D")
+      +"  |  Détail horaire sur le site ; périmètre distinct du KPI officiel",C.muted);
     return;
   }
   if (chartId === "reception-time") {
