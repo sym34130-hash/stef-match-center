@@ -217,7 +217,7 @@ class Pdf {
       const xobjects = imageIds.length
         ? `/XObject << ${imageIds.map((id, i) => `/Im${i} ${id} 0 R`).join(" ")} >>`
         : "";
-      objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${WIDTH} ${HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /ExtGState << /WarmBeam << /Type /ExtGState /ca 0.24 /CA 0.24 >> /WarmHalo << /Type /ExtGState /ca 0.11 /CA 0.11 >> /ChartFill << /Type /ExtGState /ca 0.22 /CA 0.22 >> /PencilSketch << /Type /ExtGState /ca 0.18 /CA 0.18 >> /PencilGhost << /Type /ExtGState /ca 0.075 /CA 0.075 >> >> ${xobjects} >> /Contents ${contentsId} 0 R >>`);
+      objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${WIDTH} ${HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> /ExtGState << /WarmBeam << /Type /ExtGState /ca 0.24 /CA 0.24 >> /WarmHalo << /Type /ExtGState /ca 0.11 /CA 0.11 >> /ChartFill << /Type /ExtGState /ca 0.22 /CA 0.22 >> >> ${xobjects} >> /Contents ${contentsId} 0 R >>`);
       pageIds.push(id);
     }
     objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
@@ -1039,95 +1039,8 @@ function compactScorePage(doc, m) {
 }
 
 
-// Pencil-style football vignettes. Exactly three independent watermarks live
-// behind Service client, SST and Priorités opérationnelles. They illustrate
-// those spaces; they are NOT operational observations or tactical instructions.
-// Thin graphite double strokes + 18% PDF alpha resemble a hand pencil sketch
-// while leaving even long briefs fully legible.
-const graphite = [0.16, 0.22, 0.28];
-function pencilPolyline(p, points, width=0.85) {
-  for(let i=1;i<points.length;i++)
-    p.line(points[i-1][0],points[i-1][1],points[i][0],points[i][1],
-      graphite,width);
-}
-function pencilHatch(p, x,y,count=5,space=5,height=13) {
-  for(let i=0;i<count;i++)
-    p.line(x+i*space,y,x+i*space+8,y+height,graphite,.47);
-}
-function pencilGoalWatermark(p) {
-  p.ops.push("q /PencilSketch gs\n");
-  // Perspective football goal, netting, ball and a loose approach line.
-  pencilPolyline(p,[[701,303],[701,359],[769,359],[769,303]],1.75);
-  pencilPolyline(p,[[701,359],[720,372],[787,372],[769,359]],1);
-  pencilPolyline(p,[[769,303],[787,318],[787,372]],.9);
-  pencilPolyline(p,[[701,303],[720,318],[787,318]],.8);
-  for(let x=715;x<=763;x+=12){
-    pencilPolyline(p,[[x,304],[x,358],[x+17,371]],.6);
-  }
-  for(let y=318;y<=350;y+=11)
-    pencilPolyline(p,[[701,y],[770,y],[787,y+8]],.6);
-  p.circle(686,301,12.4,graphite,1.4);
-  p.circle(686,301,5.3,graphite,.65);
-  for(let i=0;i<5;i++){
-    const a=-Math.PI/2+i*2*Math.PI/5;
-    p.line(686+Math.cos(a)*5,301+Math.sin(a)*5,
-      686+Math.cos(a)*11,301+Math.sin(a)*11,graphite,.75);
-  }
-  p.line(649,288,659,291,graphite,.85,[3,3]);
-  p.line(663,293,674,297,graphite,.85,[3,3]);
-  p.ops.push("Q\n");
-  p.ops.push("q /PencilGhost gs\n");
-  pencilPolyline(p,[[703,302],[703,360],[771,361],[771,303]],.7);
-  pencilHatch(p,727,292,9,6,6);
-  p.ops.push("Q\n");
-}
-function pencilSstWatermark(p) {
-  p.ops.push("q /PencilSketch gs\n");
-  // Keeper's protective shield enclosing a football. No status semantics.
-  pencilPolyline(p,[[758,244],[786,235],[785,207],[774,183],
-    [758,175],[742,183],[730,207],[731,235],[758,244]],1.65);
-  pencilPolyline(p,[[757,237],[779,231],[779,207],[769,189],
-    [758,183],[747,190],[737,208],[737,230],[757,237]],.7);
-  p.circle(758,210,15.4,graphite,1.35);
-  p.circle(758,210,6,graphite,.8);
-  for(let i=0;i<5;i++){
-    const a=-Math.PI/2+i*2*Math.PI/5;
-    pencilPolyline(p,[[758+Math.cos(a)*6,210+Math.sin(a)*6],
-      [758+Math.cos(a)*14,210+Math.sin(a)*14]],.9);
-  }
-  pencilHatch(p,737,180,4,5,9);
-  p.ops.push("Q\n");
-  p.ops.push("q /PencilGhost gs\n");
-  pencilPolyline(p,[[761,247],[789,237],[788,205],[776,180],[760,173]],.8);
-  p.ops.push("Q\n");
-}
-function pencilPrioritiesWatermark(p) {
-  p.ops.push("q /PencilSketch gs\n");
-  // Kicking boot + moving ball: dynamic football action, not a fake tactic.
-  pencilPolyline(p,[[314,101],[325,118],[352,119],[363,103],
-    [373,96],[384,93],[384,86],[366,83],[350,89],
-    [334,87],[328,95],[314,101]],1.6);
-  pencilPolyline(p,[[351,89],[354,98],[360,102],[367,104]],1.0);
-  for(let i=0;i<5;i++)
-    p.line(334+i*6,103,339+i*6,108,graphite,.8);
-  pencilPolyline(p,[[327,86],[342,85],[350,88]],.65);
-  for(const px of [351,363,373])
-    pencilPolyline(p,[[px,82],[px-2,78]],.8);
-  p.circle(393,106,13.3,graphite,1.4);
-  p.circle(393,106,5.5,graphite,.8);
-  for(let i=0;i<5;i++){
-    const a=-Math.PI/2+i*Math.PI*2/5;
-    p.line(393+Math.cos(a)*5.5,106+Math.sin(a)*5.5,
-      393+Math.cos(a)*12,106+Math.sin(a)*12,graphite,.7);
-  }
-  pencilPolyline(p,[[383,63],[375,65],[366,65]],.6);
-  pencilPolyline(p,[[377,58],[367,59]],.45);
-  p.ops.push("Q\n");
-  p.ops.push("q /PencilGhost gs\n");
-  pencilPolyline(p,[[316,100],[327,120],[354,121],[366,104]],.75);
-  pencilHatch(p,339,76,5,5,6);
-  p.ops.push("Q\n");
-}
+// V9: photo-real graphite illustrations are bundled as compact JPEGs.
+// No external downloads, no decorative tactical data, three zones only.
 
 function compactBriefPage(doc, m) {
   const p = doc.add("02 / DÉBRIEF TACTIQUE");
