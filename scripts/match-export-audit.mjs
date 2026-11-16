@@ -125,7 +125,8 @@ for (const fixture of fixtures) {
       "operational-diagnostic": "Cible zonage",
     }[chartId];
     assert.ok(pdfText.includes(expectedText), chartId + ": missing target/source " + expectedText);
-    assert.doesNotMatch(pdfText, /\/Subtype \/Image/, "No screenshots in two-page summary");
+    assert.equal((pdfText.match(/\/Subtype \/Image/g) ?? []).length, 3,
+      "The only images are the three fixed graphite illustrations, never agency screenshots");
     const parsed = await pdfParse(pdf);
     assert.equal(parsed.numpages, 2);
     const extracted = parsed.text.replace(/[\u202f\u00a0]/g, " ");
