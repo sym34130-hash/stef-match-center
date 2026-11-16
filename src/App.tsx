@@ -2185,7 +2185,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
                     <span>{rule.label}</span>
                     <strong>{formatPercent(rule.value)}</strong>
                     {conceded&&<em className="match-score-goal-warning">
-                      But encaissé · {rule.concededGoals} but(s)
+                      But encaissé · objectif &gt; {formatPercent(rule.targetPercent)} · {rule.concededGoals} but(s)
                     </em>}
                     <small>Objectif &gt; {formatPercent(rule.targetPercent)}</small>
                     <small>{rule.reached===null?"Valeur indisponible":
