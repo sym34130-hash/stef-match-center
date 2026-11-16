@@ -39,3 +39,42 @@
     border: 1px solid Highlight;
   }
 }
+
+
+/* The active match score now contains 2–6 selected KPIs, rather than four
+   hard-coded tiles. Keep compact pairs visually balanced and preserve
+   room for the extra two metrics in Celebration mode. */
+.app-shell .match-scoreboard .match-score-bubbles.score-count-2,
+.app-shell .match-scoreboard .match-score-bubbles.score-count-4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.app-shell .match-scoreboard .match-score-bubbles.score-count-3,
+.app-shell .match-scoreboard .match-score-bubbles.score-count-5,
+.app-shell .match-scoreboard .match-score-bubbles.score-count-6 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.app-shell .match-scoreboard .match-score-bubbles .match-score-bubble {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.app-shell .match-scoreboard .match-score-loading {
+  color: #c8dde9;
+  font-size: 13px;
+  text-align: center;
+}
+@media (max-width: 900px) {
+  .app-shell .match-scoreboard .match-score-bubbles.score-count-3,
+  .app-shell .match-scoreboard .match-score-bubbles.score-count-5,
+  .app-shell .match-scoreboard .match-score-bubbles.score-count-6 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 620px) {
+  .app-shell .match-scoreboard .match-score-bubbles.score-count-2,
+  .app-shell .match-scoreboard .match-score-bubbles.score-count-3,
+  .app-shell .match-scoreboard .match-score-bubbles.score-count-4,
+  .app-shell .match-scoreboard .match-score-bubbles.score-count-5,
+  .app-shell .match-scoreboard .match-score-bubbles.score-count-6 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

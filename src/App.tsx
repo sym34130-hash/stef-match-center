@@ -1,7 +1,6 @@
 import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode, type TouchEvent as ReactTouchEvent } from "react";
 import { createPortal } from "react-dom";
 import { ceremonyPolyvalents } from "./ceremony-selection";
-import { formatKpiDuration } from "./kpi-duration";
 import { qualificationReasons } from "./qualification-reasons";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, BRIEF_INDICATOR_SELECTION_VERSION, migrateBriefLayout, normalizeBriefIndicators } from "../server/brief-layout.mjs";
 import {
@@ -173,6 +172,7 @@ type WeightedScoreIndicator = {
   value: number | null; reached: boolean | null;
   goalsFor: number; goalsAgainst: number;
   awardedGoals: number; concededGoals: number;
+  source: "Excel" | "106J"; sourceDate: string | null; sourceAgency: string | null;
   reason: string | null;
 };
 type WeightedScorePreview = {
@@ -1544,16 +1544,23 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
   const pdfMinimumIndicators = Math.min(4, pdfAvailableIndicatorIds.length);
 
   const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
-  const loadingTarget = formatKpiDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
-  const unloadingTarget = formatKpiDuration(snapshot.performanceCriteria?.unloadingSeconds ?? leagueConfig.unloadingSeconds);
-  const scoreIndicators = operationalScoreIndicators(snapshot);
-  const footballScore = buildFootballScore(snapshot, snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent, liveScore);
-  const concededKpi = (id: string) => footballScore.available
-    && liveScore?.preview.indicators.some(item=>item.id===id && item.reached===false);
-  const concededKpiWarning = (id: string) => {
-    const rule=liveScore?.preview.indicators.find(item=>item.id===id);
-    return <em className="match-score-goal-warning">But encaissé · objectif &gt; {formatPercent(rule?.targetPercent)} · {rule?.concededGoals ?? 1} but(s)</em>;
+  const footballScore = buildFootballScore(snapshot,
+    snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent, liveScore);
+  // One source of truth: only configured scoring KPIs occupy the scoreboard.
+  // Keep all available values even when another selected KPI is missing.
+  const scoreCards=liveScore?.preview.indicators??[];
+  const scoreToCarouselId:Record<string,string>={
+    arrivalPunctuality:"arrival",
+    departurePunctuality:"departure",
+    destinationPunctuality:"destination",
+    temperatureReturn:"temperature",
   };
+  // A card returns to the carousel when its KPI is deselected, provided the
+  // user's independently saved carousel selection permits that card.
+  const scoreCarouselIds=new Set(scoreCards
+    .map(rule=>scoreToCarouselId[rule.id]).filter((id):id is string=>Boolean(id)));
+  const carouselVisibleIds=normalizeBriefIndicators(briefIndicatorIds)
+    .filter(id=>!scoreCarouselIds.has(id));
   const thresholdReached = footballScore.available && footballScore.goalsFor > footballScore.goalsAgainst;
   const outcome = matchCeremonyOutcome(footballScore);
   const teamMotivation = teamMotivationMessage(footballScore);
@@ -1914,7 +1921,9 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
             <div className="match-indicator-settings">
               {indicatorSettingsOpen && (
                 <div id="match-indicator-settings-panel" className="match-indicator-settings-panel" role="group" aria-label="Personnalisation des dix cartes du carrousel">
-                  <p>Choisis les cartes à afficher dans « Le collectif en chiffres ». Les quatre KPI du score restent inchangés.</p>
+                  <p>Choisis les cartes à conserver dans « Le collectif en chiffres ».
+                    Les indicateurs utilisés dans le score passent automatiquement dans les bulles du MATCH ;
+                    leur préférence est conservée ici pour un éventuel retour au carrousel.</p>
                   <div className="match-indicator-settings-options">
                     {BRIEF_INDICATOR_OPTIONS.map(([id, label]) => (
                       <label key={id}>
@@ -1927,6 +1936,9 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
                           ))}
                         />
                         <span>{label}</span>
+                        {scoreCarouselIds.has(id) && <small className="match-indicator-score-transfer">
+                          Dans le score · masqué du carrousel
+                        </small>}
                       </label>
                     ))}
                   </div>
@@ -2164,31 +2176,37 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
           <div className="match-scoreboard">
             <span>STEF MATCH CENTER</span>
             <strong>{outcome.verdict}</strong>
-            <div className="match-score-bubbles" aria-label="Scores du match">
-              <div className={`match-score-bubble pass-score-bubble ${Number.isFinite(scoreIndicators.passRate) ? "" : "is-data-unavailable"} ${concededKpi("passRate") ? "is-goal-conceded" : ""}`}>
-                <span>% passes réussies</span>
-                <strong>{formatPercent(scoreIndicators.passRate)}</strong>
-                {concededKpi("passRate") && concededKpiWarning("passRate")}
-                <small>Objectif zonage : {snapshot.performanceCriteria?.zonageMinutes ?? leagueConfig.zonageMinutes} min ou moins</small>
-              </div>
-              <div className={`match-score-bubble loading-score-bubble ${Number.isFinite(scoreIndicators.loadingPercent) ? "" : "is-data-unavailable"} ${concededKpi("loadingPercent") ? "is-goal-conceded" : ""}`}>
-                <span>% tirs cadrés</span>
-                <strong>{formatPercent(scoreIndicators.loadingPercent)}</strong>
-                {concededKpi("loadingPercent") && concededKpiWarning("loadingPercent")}
-                <small>Voyages chargés en {loadingTarget} ou moins par position</small>
-              </div>
-              <div className={`match-score-bubble reception-score-bubble ${Number.isFinite(scoreIndicators.unloadingPercent) ? "" : "is-data-unavailable"} ${concededKpi("unloadingPercent") ? "is-goal-conceded" : ""}`}>
-                <span>% duels gagnés</span>
-                <strong>{formatPercent(scoreIndicators.unloadingPercent)}</strong>
-                {concededKpi("unloadingPercent") && concededKpiWarning("unloadingPercent")}
-                <small>Voyages réceptionnés en {unloadingTarget} ou moins par position</small>
-              </div>
-              <div className={`match-score-bubble possession-score-bubble ${Number.isFinite(scoreIndicators.possessionPercent) ? "" : "is-data-unavailable"} ${concededKpi("possessionPercent") ? "is-goal-conceded" : ""}`}>
-                <span>% possession</span>
-                <strong>{formatPercent(scoreIndicators.possessionPercent)}</strong>
-                {concededKpi("possessionPercent") && concededKpiWarning("possessionPercent")}
-                <small>Positions zonées</small>
-              </div>
+            <div className={`match-score-bubbles score-count-${scoreCards.length}`} aria-label="Indicateurs participant au score">
+              {scoreCards.map(rule=>{
+                const classById:Record<string,string>={
+                  passRate:"pass-score-bubble",
+                  loadingPercent:"loading-score-bubble",
+                  unloadingPercent:"reception-score-bubble",
+                  possessionPercent:"possession-score-bubble",
+                };
+                const conceded=rule.reached===false;
+                return (
+                  <div key={rule.id} data-score-kpi={rule.id}
+                    title={rule.source==="106J"
+                      ?"Rapport 106J"+(rule.sourceDate?" du "+rule.sourceDate:" (date non précisée)")
+                        +(rule.sourceAgency?" · site source "+rule.sourceAgency:"")
+                      :"KPI calculé depuis le fichier Excel du MATCH"}
+                    className={`match-score-bubble ${classById[rule.id]??"custom-score-bubble"} ${rule.value===null?"is-data-unavailable":""} ${conceded?"is-goal-conceded":""}`}>
+                    <span>{rule.label}</span>
+                    <strong>{rule.value===null?"Indisponible":formatPercent(rule.value)}</strong>
+                    {conceded?<em className="match-score-goal-warning">
+                      But encaissé · objectif &gt; {formatPercent(rule.targetPercent)} · {rule.concededGoals} but(s)
+                    </em>:<small className="match-score-kpi-result">
+                      {rule.reached===null
+                        ?"Objectif > "+formatPercent(rule.targetPercent)+" · Valeur indisponible"
+                        :"Objectif > "+formatPercent(rule.targetPercent)+" · +"+rule.awardedGoals+" but(s)"}
+                    </small>}
+                  </div>
+                );
+              })}
+              {!liveScore&&<p role="status" className="match-score-loading">
+                Chargement des indicateurs du score…
+              </p>}
             </div>
           </div>
 
@@ -2205,7 +2223,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
             staffDetail={formatRealStaffDetail(snapshot, kpiCopy.expectedPlayersValue)}
             mercato={mercatoText}
             mercatoProfiles={mercatoProfiles}
-            visibleIndicatorIds={briefIndicatorIds}
+            visibleIndicatorIds={carouselVisibleIds}
             session={session}
             indicatorCustomization={!celebrationMode && session.agency.canImport ? {
               expanded: indicatorSettingsOpen,
@@ -5196,19 +5214,6 @@ type FootballScore = {
   loading: boolean;
   missingLabels: string[];
 };
-
-type OperationalScoreIndicators = NonNullable<Snapshot["operationalScore"]>["indicators"];
-
-function operationalScoreIndicators(snapshot: Snapshot): OperationalScoreIndicators {
-  const canonical = snapshot.operationalScore?.indicators;
-  if (canonical && Object.hasOwn(canonical, "possessionPercent")) return canonical;
-  return {
-    passRate: snapshot.summary.passRate ?? null,
-    loadingPercent: snapshot.loadingQuality?.targetedPercent ?? null,
-    unloadingPercent: snapshot.unloadingQuality?.targetedPercent ?? null,
-    possessionPercent: snapshot.summary.possessionPercent ?? null,
-  };
-}
 
 function buildFootballScore(snapshot: Snapshot, targetPercent: number, liveScore: ActiveScoreState | null): FootballScore {
   const scored=liveScore?.preview;

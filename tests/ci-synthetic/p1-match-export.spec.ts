@@ -139,6 +139,32 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   expect(parsedCustomPdf.numpages).toBe(2);
   expect(parsedCustomPdf.text).toContain("SCORE PERSONNALISÉ");
   expect(parsedCustomPdf.text).toContain("RÉFÉRENCE");
+  // Regression: six selected KPI (including genuinely missing 106J rates)
+  // must remain a valid two-page, source-attributed PDF. Missing data must
+  // not become fake conceded goals or break the page layout.
+  const sixProfile={version:1,indicators:[
+    "passRate","loadingPercent","unloadingPercent","possessionPercent",
+    "arrivalPunctuality","temperatureReturn",
+  ].map(id=>({id,targetPercent:null,goalsFor:2,goalsAgainst:1}))};
+  const sixSaved=await request.put(agencyUrl+"/score-rules",{
+    headers,data:{leagueId:"argent",profile:sixProfile,expectedRevision:scoreRulesRevision},
+  });
+  expect(sixSaved.status(),await sixSaved.text()).toBe(200);
+  scoreRulesRevision=(await sixSaved.json()).scoreRulesRevision;
+  const sixPreview=await request.get(agencyUrl+"/score-rules?leagueId=argent&preview=1",{headers});
+  expect(sixPreview.status()).toBe(200);
+  const sixScore=(await sixPreview.json()).preview;
+  expect(sixScore.indicators).toHaveLength(6);
+  expect(sixScore.status).toBe("unavailable");
+  expect(sixScore.missingIndicators.map((m:{id:string})=>m.id).sort())
+    .toEqual(["arrivalPunctuality","temperatureReturn"]);
+  const sixPdf=await pdfWithRevision();
+  expect(sixPdf.status(),await sixPdf.text()).toBe(200);
+  const parsedSix=await pdfParse(await sixPdf.body());
+  expect(parsedSix.numpages).toBe(2);
+  expect(parsedSix.text).toContain("SCORE PERSONNALISÉ");
+  expect(parsedSix.text).toContain("PONCTUALITÉ ARRIVAGE");
+  expect(parsedSix.text).toContain("TEMPÉRATURE RETOUR RAMASSE");
   // A stale score-rule revision may not produce a contradictory scoreline.
   const previousRevision=scoreRulesRevision;
   scoreRulesRevision="stale-revision";
@@ -447,4 +473,169 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await expect(diagnostic.locator(".diagnostic-priority")).toContainText("Analyse indisponible");
   await expect(diagnostic.locator(".diagnostic-unknown")).toContainText("7 positions à vérifier");
   await expect(diagnostic.locator(".diagnostic-unknown")).toContainText("ne sont pas comptées comme des retards");
+});
+
+
+test("Score à 2 KPI : transfert des vignettes 106J vers les bulles et retour au carrousel", async ({page,request},info) => {
+  const agency=({desktop:"058",tablet:"059",mobile:"060"} as Record<string,string>)[info.project.name];
+  const headers={"x-access-code":`CI-ONLY-${agency}`};
+  const url=`${base}/api/agencies/${agency}`;
+  const imported=await request.post(url+"/import",{
+    headers,multipart:{file:{name:"SCORING_TWO_"+agency+".xlsx",
+      mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer:workbook(agency)}},
+  });
+  expect(imported.status(),await imported.text()).toBe(200);
+  const {snapshot}=await imported.json();
+  // This project also executes the six-KPI PDF recipe above for the same
+  // synthetic agency. Reset test fixtures explicitly instead of depending
+  // on Playwright test order, worker reuse or a mutable previous profile.
+  const priorRules=await request.get(url+"/score-rules?leagueId=argent",{headers});
+  expect(priorRules.status()).toBe(200);
+  const existingRules=await priorRules.json();
+  const baseline=await request.put(url+"/score-rules",{
+    headers,data:{leagueId:"argent",profile:existingRules.defaultProfile,
+      expectedRevision:existingRules.scoreRulesRevision},
+  });
+  expect(baseline.status(),await baseline.text()).toBe(200);
+  await page.goto("/");
+  await page.getByLabel("Code agence").selectOption(agency);
+  await page.getByLabel("Code d'accès").fill("CI-ONLY-"+agency);
+  await page.getByRole("button",{name:"Accéder au match"}).click();
+  await page.getByRole("button",{name:/Administrateur/}).click();
+  await expect(page.getByRole("heading",{name:"Personnaliser le score du MATCH"})).toBeVisible();
+  await expect(page.getByText("4 KPI sélectionnés")).toBeVisible();
+  await page.getByLabel("Activer Ponctualité arrivage").check();
+  for(const label of ["Tirs cadrés","Duels gagnés","Possession"]){
+    await page.getByLabel("Activer "+label).uncheck();
+  }
+  await expect(page.getByText("2 KPI sélectionnés")).toBeVisible();
+  await page.getByRole("button",{name:"Enregistrer le barème"}).click();
+  await expect(page.getByText(/Règles enregistrées pour cette agence et cette ligue/)).toBeVisible();
+  const configured=await request.get(url+"/score-rules?leagueId=argent",{headers});
+  expect(configured.status()).toBe(200);
+  const chosen=(await configured.json()).profile.indicators.map((i:{id:string})=>i.id);
+  expect(chosen).toEqual(["passRate","arrivalPunctuality"]);
+  const otherLeague=await request.get(url+"/score-rules?leagueId=or",{headers});
+  expect(otherLeague.status()).toBe(200);
+  expect((await otherLeague.json()).profile.indicators).toHaveLength(4);
+  const wrongAgency=await request.get(base+"/api/agencies/"+(agency==="058"?"059":"058")+
+    "/score-rules?leagueId=argent",{headers});
+  expect(wrongAgency.status()).toBe(401);
+
+  await page.getByRole("button",{name:"02 Feuille de match",exact:true}).click();
+  const scoreboard=page.locator(".match-scoreboard .match-score-bubbles");
+  await expect(scoreboard.locator(".match-score-bubble")).toHaveCount(2);
+  await expect(scoreboard.locator("[data-score-kpi=passRate]")).toHaveCount(1);
+  await expect(scoreboard.locator("[data-score-kpi=arrivalPunctuality]")).toContainText("Ponctualité arrivage");
+  // No 106J was imported here: an unavailable source must remain visible as
+  // unavailable, never silently become a zero and a conceded goal.
+  await expect(scoreboard.locator("[data-score-kpi=arrivalPunctuality]")).toContainText("Indisponible");
+  await expect(page.locator(".match-indicators-track [data-indicator=arrival]")).toHaveCount(0);
+  await expect(page.locator(".match-indicators-track [data-indicator=departure]")).toHaveCount(1);
+  await page.getByRole("button",{name:/Administrateur/}).click();
+  await page.getByLabel("Activer Tirs cadrés").check();
+  await page.getByLabel("Activer Ponctualité arrivage").uncheck();
+  await expect(page.getByText("2 KPI sélectionnés")).toBeVisible();
+  await page.getByRole("button",{name:"Enregistrer le barème"}).click();
+  await expect(page.getByText(/Règles enregistrées pour cette agence et cette ligue/)).toBeVisible();
+  await page.getByRole("button",{name:"02 Feuille de match",exact:true}).click();
+  await expect(scoreboard.locator(".match-score-bubble")).toHaveCount(2);
+  await expect(scoreboard.locator("[data-score-kpi=arrivalPunctuality]")).toHaveCount(0);
+  await expect(page.locator(".match-indicators-track [data-indicator=arrival]")).toHaveCount(1);
+
+  // Boundary: if the independently saved carousel contains only one card
+  // and that card joins the score, render a stable empty state (not 0/0,
+  // zero-width scroll geometry or a phantom indicator).
+  await page.getByRole("button",{name:/Administrateur/}).click();
+  await page.getByLabel("Activer Ponctualité arrivage").check();
+  await page.getByLabel("Activer Tirs cadrés").uncheck();
+  await page.getByRole("button",{name:"Enregistrer le barème"}).click();
+  await expect(page.getByText(/Règles enregistrées pour cette agence et cette ligue/)).toBeVisible();
+  const brief=await request.get(url+"/causerie?matchDate="+encodeURIComponent(snapshot.match.date),{headers});
+  expect(brief.status()).toBe(200);
+  const existing=await brief.json();
+  const saved=await request.post(url+"/causerie",{
+    headers,data:{expectedRevision:existing.causerieRevision,matchDate:snapshot.match.date,
+      plan:{briefLayoutVersion:2,visibleIndicatorsVersion:2,visibleIndicators:["arrival"],
+        team:"TEST SOURCES",manager:"TEST",attack:["Rigueur des flux"],
+        midfield:["Coordination des équipes"],defense:["Sécurité"],
+        coach:{tactic:"Tenir les objectifs",priority:"Sécuriser les quais",
+          arbitration:"Corriger les écarts"},
+        attachments:{attack:[],midfield:[],defense:[]}}},
+  });
+  expect(saved.status(),await saved.text()).toBe(200);
+  await page.reload();
+  await page.getByRole("button",{name:"02 Feuille de match",exact:true}).click();
+  await expect(page.locator(".match-indicators-empty")).toContainText(
+    "Toutes les vignettes sélectionnées ont été intégrées au score");
+  await expect(page.locator(".match-indicators-track .match-indicator-slide")).toHaveCount(0);
+  await expect(page.locator(".match-indicators-navigation")).toContainText("Aucune vignette");
+  await expect(page.locator(".match-score-bubbles .match-score-bubble")).toHaveCount(2);
+
+  // Six KPI plus long labels exercise the responsive grid and source cards.
+  await page.getByRole("button",{name:/Administrateur/}).click();
+  for(const label of ["Tirs cadrés","Duels gagnés","Possession","Ponctualité départ"]){
+    await page.getByLabel("Activer "+label).check();
+  }
+  await expect(page.getByText("6 KPI sélectionnés")).toBeVisible();
+  await page.getByRole("button",{name:"Enregistrer le barème"}).click();
+  await expect(page.getByText(/Règles enregistrées pour cette agence et cette ligue/)).toBeVisible();
+  await page.getByRole("button",{name:"02 Feuille de match",exact:true}).click();
+  await expect(scoreboard.locator(".match-score-bubble")).toHaveCount(6);
+  await expect(scoreboard).toHaveClass(/score-count-6/);
+  await expect(scoreboard.locator("[data-score-kpi=departurePunctuality]")).toContainText("Ponctualité départ");
+  for(const width of [390,768,1536,2560]){
+    await page.setViewportSize({width,height:width>=1536?864:840});
+    const geometry=await scoreboard.evaluate(root=>{
+      const rect=(e:Element)=>e.getBoundingClientRect();
+      const outer=rect(root), cards=Array.from(root.querySelectorAll(".match-score-bubble")).map(rect);
+      const collisions=cards.some((a,i)=>cards.some((b,j)=>j>i &&
+        Math.min(a.right,b.right)-Math.max(a.left,b.left)>2 &&
+        Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>2));
+      const contentFits=Array.from(root.querySelectorAll(".match-score-bubble"))
+        .every(tile=>{
+          const bounds=rect(tile);
+          return Array.from(tile.children).every(child=>{
+            const box=rect(child);
+            return box.top>=bounds.top-4 && box.bottom<=bounds.bottom+4;
+          });
+        });
+      return {count:cards.length,
+        fits:cards.every(c=>c.left>=outer.left-2&&c.right<=outer.right+2),
+        contentFits,collisions};
+    });
+    expect(geometry.count).toBe(6);
+    expect(geometry.fits,"KPI grid horizontal overflow at "+width+"px").toBe(true);
+    expect(geometry.collisions,"KPI cards overlap at "+width+"px").toBe(false);
+    expect(geometry.contentFits,"Text/percentages clip inside KPI cards at "+width+"px").toBe(true);
+  }
+  await page.getByRole("button",{name:"Mode célébration"}).click();
+  await expect(scoreboard.locator(".match-score-bubble")).toHaveCount(6);
+  await expect(scoreboard.locator("[data-score-kpi=arrivalPunctuality]")).toHaveCount(1);
+  await expect(scoreboard.locator("[data-score-kpi=departurePunctuality]")).toHaveCount(1);
+  for(const [width,height] of [[390,840],[1536,864],[2560,1440]]){
+    await page.setViewportSize({width,height});
+    const frame=await scoreboard.evaluate(root=>{
+      const outer=root.getBoundingClientRect();
+      const cards=Array.from(root.querySelectorAll(".match-score-bubble"));
+      const boxes=cards.map(el=>el.getBoundingClientRect());
+      return {
+        widthFits:boxes.every(box=>box.left>=outer.left-2&&box.right<=outer.right+2),
+        bodyFits:cards.every(el=>{
+          const bounds=el.getBoundingClientRect();
+          return Array.from(el.children).every(child=>{
+            const pos=child.getBoundingClientRect();
+            return pos.top>=bounds.top-4&&pos.bottom<=bounds.bottom+4;
+          });
+        }),
+        collisions:boxes.some((a,i)=>boxes.some((b,j)=>j>i
+          &&Math.min(a.right,b.right)-Math.max(a.left,b.left)>2
+          &&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>2)),
+      };
+    });
+    expect(frame.widthFits,"Celebration KPI horizontal overflow at "+width).toBe(true);
+    expect(frame.bodyFits,"Celebration KPI contents clipped at "+width).toBe(true);
+    expect(frame.collisions,"Celebration KPI cards overlap at "+width).toBe(false);
+  }
 });

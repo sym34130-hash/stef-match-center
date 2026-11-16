@@ -188,21 +188,25 @@ app.get("/api/agencies/:agencyCode/league-configs", requireAgency, async (req, r
 app.get("/api/agencies/:agencyCode/score-rules", requireAgency, async (req, res) => {
   try {
     const leagueId=assertScoreLeagueId(req.query.leagueId);
-    const state=await withAgencyLock(req.agency.code, () =>
-      readScoreRulesState(req.agency.code, leagueId));
-    let preview=null;
-    if (req.query.preview === "1") {
-      const config=matchExportLeague(leagueId, await readLeagueConfigs(req.agency.code));
-      const snapshot=await withAgencyLock(req.agency.code, () =>
-        readLatestSnapshot(req.agency.code, config.criteria));
-      preview=snapshot
-        ? { ...evaluateScoreRules(snapshot, state.profile, config.criteria.scoreTargetPercent),
-          matchDate:snapshot.match.date, importedAt:snapshot.importedAt,
-          criteria:config.criteria }
-        : { status:"no_match", message:"Importe un MATCH pour prévisualiser le score." };
-    } else if (req.query.preview !== undefined) {
-      throw new ScoreRulesError(400, "Option de prévisualisation invalide.");
-    }
+    // Read the selected barème, criteria and imported MATCH atomically.
+    // Otherwise a concurrent admin edit can pair obsolete rules with a newer
+    // snapshot before the client sees the revised scoreRulesRevision.
+    const {state,preview}=await withAgencyLock(req.agency.code, async () => {
+      const state=await readScoreRulesState(req.agency.code,leagueId);
+      let preview=null;
+      if (req.query.preview === "1") {
+        const config=matchExportLeague(leagueId, await readLeagueConfigs(req.agency.code));
+        const snapshot=await readLatestSnapshot(req.agency.code,config.criteria);
+        preview=snapshot
+          ? { ...evaluateScoreRules(snapshot,state.profile,config.criteria.scoreTargetPercent),
+            matchDate:snapshot.match.date, importedAt:snapshot.importedAt,
+            criteria:config.criteria }
+          : { status:"no_match", message:"Importe un MATCH pour prévisualiser le score." };
+      } else if (req.query.preview !== undefined) {
+        throw new ScoreRulesError(400,"Option de prévisualisation invalide.");
+      }
+      return {state,preview};
+    });
     res.set("Cache-Control","no-store, max-age=0").json({
       leagueId, catalog:SCORE_KPI_CATALOG, profile:state.profile,
       scoreRulesRevision:state.scoreRulesRevision, changedAt:state.changedAt,
@@ -221,11 +225,13 @@ app.post("/api/agencies/:agencyCode/score-rules/preview", requireAgency, async (
   try {
     const leagueId=assertScoreLeagueId(req.body?.leagueId);
     const profile=normalizeScoreRules(req.body?.profile);
-    const config=matchExportLeague(leagueId,await readLeagueConfigs(req.agency.code));
-    const snapshot=await withAgencyLock(req.agency.code,()=>readLatestSnapshot(req.agency.code,config.criteria));
-    const preview=snapshot
-      ? evaluateScoreRules(snapshot,profile,config.criteria.scoreTargetPercent)
-      : {status:"no_match",message:"Importe un MATCH pour prévisualiser ce barème."};
+    const preview=await withAgencyLock(req.agency.code, async () => {
+      const config=matchExportLeague(leagueId,await readLeagueConfigs(req.agency.code));
+      const snapshot=await readLatestSnapshot(req.agency.code,config.criteria);
+      return snapshot
+        ? evaluateScoreRules(snapshot,profile,config.criteria.scoreTargetPercent)
+        : {status:"no_match",message:"Importe un MATCH pour prévisualiser ce barème."};
+    });
     res.set("Cache-Control","no-store, max-age=0")
       .json({leagueId,preview});
   } catch(error) {

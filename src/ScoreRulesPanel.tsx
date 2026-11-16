@@ -79,8 +79,8 @@ export function ScoreRulesPanel({
   function toggle(id:string){
     if(!draft || !canEdit || busy)return;
     const includes=draft.indicators.some(rule=>rule.id===id);
-    if(includes&&draft.indicators.length<=3){
-      setError("Conserve au moins 3 indicateurs pour le score.");
+    if(includes&&draft.indicators.length<=2){
+      setError("Conserve au moins 2 indicateurs pour le score.");
       return;
     }
     if(!includes&&draft.indicators.length>=6){
@@ -143,7 +143,7 @@ export function ScoreRulesPanel({
         <div>
           <span className="score-rules-kicker">BUREAU DU COACH · BARÈME</span>
           <h3 id="score-rules-heading">Personnaliser le score du MATCH</h3>
-          <p>Choisis 3 à 6 indicateurs, leur objectif et leurs buts. Les KPI calculés restent inchangés.</p>
+          <p>Choisis 2 à 6 indicateurs, leur objectif et leurs buts. Les KPI calculés restent inchangés.</p>
         </div>
         <span className="score-rules-pill">{activeCount} KPI sélectionnés</span>
       </header>
@@ -205,7 +205,7 @@ export function ScoreRulesPanel({
             })}
           </div>
           <p className="score-rules-warning">
-            Les indicateurs 106J ne participent au score que si leur date correspond au MATCH.
+            Les indicateurs 106J sont calculés à partir du dernier PDF rattaché à ce MATCH, même si sa date diffère. Les valeurs absentes restent indisponibles.
             Le score de référence à 4 KPI reste disponible pour les comparaisons entre agences.
           </p>
           <div className="score-rules-actions">
