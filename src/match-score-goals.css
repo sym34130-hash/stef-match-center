@@ -39,3 +39,41 @@
     border: 1px solid Highlight;
   }
 }
+
+
+/* Scoring cards are now a variable 2–6 KPI set, not four fixed tiles.
+   Keep the league's existing visual identity and the old four-card geometry. */
+.app-shell .match-score-bubbles .match-score-loading {
+  grid-column: 1 / -1;
+  align-self: center;
+  justify-self: center;
+  margin: 0;
+  padding: 18px;
+  font-size: 13px;
+  color: #d0e7ef;
+  text-align: center;
+}
+.app-shell .match-score-bubbles .match-score-bubble {
+  overflow-wrap: anywhere;
+}
+.app-shell .match-score-bubbles .score-bubble-data-note {
+  font-size: 10px !important;
+  color: #f7e5cc;
+}
+.app-shell .match-score-bubble.arrival-score-bubble { --kpi-accent: #91d4ec; }
+.app-shell .match-score-bubble.departure-score-bubble { --kpi-accent: #c1bcf3; }
+.app-shell .match-score-bubble.destination-score-bubble { --kpi-accent: #a0dfc3; }
+.app-shell .match-score-bubble.temperature-score-bubble { --kpi-accent: #e7c0da; }
+@media (min-width: 1350px) {
+  .app-shell .match-scoreboard .match-score-bubbles[data-score-count="5"],
+  .app-shell .match-scoreboard .match-score-bubbles[data-score-count="6"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: minmax(162px, auto);
+    gap: 10px;
+  }
+}
+@media (max-width: 900px) and (min-width: 621px) {
+  .app-shell .match-scoreboard .match-score-bubbles[data-score-count="2"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
