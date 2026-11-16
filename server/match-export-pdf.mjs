@@ -549,7 +549,13 @@ function compactChart(p, m, chartId) {
       ?((periodEnd-periodStart+1440)%1440||1440):null;
     const selectedSpan=selectedMinutes==null?0
       :(periodStart%60+selectedMinutes)/60;
-    const spanHours=Math.max(1,selectedSpan,...measured.map(p=>p.offset+1));
+    // The last requested hour can be partial (e.g. 22:00–22:30).
+    // Never silently extend it to 23:00 just to fit a full column.
+    if(selectedSpan>0&&measured.some(point=>point.offset>=selectedSpan))
+      throw new MatchExportError(409,
+        "Le graphique contient des données hors de la plage du MATCH.");
+    const spanHours=selectedSpan>0?Math.max(1,selectedSpan)
+      :Math.max(1,...measured.map(point=>point.offset+1));
     const x=78,baseline=85,w=699,h=48,slotWidth=w/spanHours;
     const observed=new Set(measured.map(point=>point.offset));
     const lastTick=Math.floor(spanHours);
