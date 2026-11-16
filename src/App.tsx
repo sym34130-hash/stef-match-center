@@ -2,7 +2,6 @@ import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState, t
 import { createPortal } from "react-dom";
 import { ceremonyPolyvalents } from "./ceremony-selection";
 import { formatKpiDuration } from "./kpi-duration";
-import { isKpiGoalConceded } from "./kpi-goal-status";
 import { qualificationReasons } from "./qualification-reasons";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, BRIEF_INDICATOR_SELECTION_VERSION, migrateBriefLayout, normalizeBriefIndicators } from "../server/brief-layout.mjs";
 import {
@@ -1762,6 +1761,9 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
       if (!indicatorSettingsReady) {
         throw new Error("Le brief équipe est en cours de chargement. Réessaie après actualisation.");
       }
+      if (!liveScore) {
+        throw new Error(scoreLoadError || "Le score est en cours de synchronisation. Actualise le MATCH avant l'export.");
+      }
       // Never infer persistence from the browser's cached Causerie object.
       // The server's dated brief and its revision are authoritative.
       const plan = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan : null;
@@ -1799,6 +1801,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
         importedAt: snapshot.importedAt,
         causerieRevision: currentRevision,
         pdfProfileRevision: updated?.profileRevision ?? pdfProfileRevision ?? "",
+        scoreRulesRevision: liveScore.scoreRulesRevision ?? "",
         zonageMinutes: String(snapshot.performanceCriteria?.zonageMinutes ?? ""),
         loadingSeconds: String(snapshot.performanceCriteria?.loadingSeconds ?? ""),
         unloadingSeconds: String(snapshot.performanceCriteria?.unloadingSeconds ?? ""),
@@ -2158,6 +2161,9 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
         <div className="match-result-stage">
           <div className="match-result-visual">
             <FootballScoreDisplay footballScore={footballScore} />
+            {scoreLoadError && <p role="alert" className="form-error">
+              Synchronisation du score : {scoreLoadError}
+            </p>}
             <YellowCardsPanel snapshot={snapshot} redCards={redCards} />
           </div>
 
@@ -3734,8 +3740,10 @@ function Coach({
             </div>
             <div className="coach-score-context">
               <div>
-                <small>Score opérationnel</small>
+                <small>{footballScore.customized?"Score personnalisé":"Score opérationnel"}</small>
                 <b>{footballScore.available ? `${footballScore.goalsFor} - ${footballScore.goalsAgainst}` : "— - —"}</b>
+                {footballScore.customized && footballScore.referenceScore?.status==="available" &&
+                  <small>Référence : {footballScore.referenceScore.goalsFor} - {footballScore.referenceScore.goalsAgainst}</small>}
               </div>
               <div>
                 <small>Objectif ligue</small>
