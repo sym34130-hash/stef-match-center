@@ -1006,18 +1006,18 @@ function compactScorePage(doc, m) {
   // fixed set of four KPIs. The default profile keeps the same V11 geometry.
   const rates=(m.scoreCustomization?.indicators?.length
     ?m.scoreCustomization.indicators.map(item=>[
-      item.label.toUpperCase(),item.value,item.targetPercent,
+      item.label.toUpperCase(),item.value,item.targetPercent,item.goalsFor,item.goalsAgainst,
     ])
     :[
-      ["PASSES RÉUSSIES",score?.indicators?.passRate,m.criteria.scoreTargetPercent],
-      ["TIRS CADRÉS",score?.indicators?.loadingPercent,m.criteria.scoreTargetPercent],
-      ["DUELS GAGNÉS",score?.indicators?.unloadingPercent,m.criteria.scoreTargetPercent],
-      ["POSSESSION",score?.indicators?.possessionPercent,m.criteria.scoreTargetPercent],
+      ["PASSES RÉUSSIES",score?.indicators?.passRate,m.criteria.scoreTargetPercent,1,1],
+      ["TIRS CADRÉS",score?.indicators?.loadingPercent,m.criteria.scoreTargetPercent,1,1],
+      ["DUELS GAGNÉS",score?.indicators?.unloadingPercent,m.criteria.scoreTargetPercent,1,1],
+      ["POSSESSION",score?.indicators?.possessionPercent,m.criteria.scoreTargetPercent,1,1],
     ]);
   const width=784/rates.length;
   p.box(29,286,784,45,S.deep);
   p.box(29,328,784,3.4,C.gold);
-  rates.forEach(([label,value,target],i)=>{
+  rates.forEach(([label,value,target,goalsFor,goalsAgainst],i)=>{
     const xl=29+i*width;
     if(i>0)line(xl,292,xl,325,S.edge,.7);
     p.box(xl+9,292,3,29,C.aqua);
@@ -1027,6 +1027,8 @@ function compactScorePage(doc, m) {
     p.text(xl+17,291,clamp((width-27)/5.4,14,23),percent(value),C.white,true);
     if(m.scoreCustomization?.customized){
       p.text(xl+width-7,292,6.2,"> "+fmt(target)+"%",C.gold,false,"right");
+      p.text(xl+width-7,302,6.0,
+        "+"+fmt(goalsFor)+" / -"+fmt(goalsAgainst),C.aqua,false,"right");
     }
   });
 
