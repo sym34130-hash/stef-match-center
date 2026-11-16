@@ -4824,7 +4824,8 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                 <li><b>Choisissez la plage horaire.</b><span>Renseignez le début et la fin, puis cliquez sur <strong>Appliquer</strong>. Une fin plus tôt que le début traverse minuit. Contrôlez toujours les dates affichées par l’analyse : certaines sources gardent leur propre périmètre.</span></li>
               </ol>
               <p>L’import Excel et PDF nécessite les droits d’import. Avec un accès de consultation, demandez à la personne autorisée de charger les fichiers.</p>
-              <div className="guide-callout info"><EyeOff size={20} /><span><strong>Exclure un voyage :</strong> dans Feuille de match → Statistiques du match → Lecture opérationnelle, ouvrez <strong>Voir les duels perdus</strong> ou le détail des tirs hors cible, puis utilisez l’icône œil barré. Retrouvez le voyage dans <strong>Voyages exclus de l'analyse</strong> et cliquez sur <strong>Réintégrer</strong> pour le rétablir. Le périmètre est recalculé sans modifier l’Excel. Ces actions nécessitent les droits d’import.</span></div>
+              <div className="guide-callout info"><FileCheck2 size={20} /><span><strong>Deux sources, deux dates possibles :</strong> le 106J peut alimenter le score personnalisé même si sa date diffère de l’Excel. Vérifiez la provenance affichée ; un taux manquant reste indisponible, sans but encaissé fictif.</span></div>
+              <div className="guide-callout info"><EyeOff size={20} /><span><strong>Exclure un voyage atypique :</strong> dans Feuille de match → Statistiques du match → Lecture opérationnelle, ouvrez le détail des <strong>Duels gagnés</strong> (réception) ou des <strong>Tirs cadrés</strong> (chargement). Utilisez l’œil barré et renseignez le <strong>motif obligatoire</strong>. Seul l’indicateur concerné est recalculé. Retrouvez ensuite le voyage dans <strong>Voyages exclus de l'analyse</strong> pour le <strong>Réintégrer</strong>. L’Excel n’est pas modifié ; ces actions nécessitent les droits d’import.</span></div>
               <div className="guide-actions"><button className="primary-button" type="button" onClick={() => onNavigate("import")}><Upload size={17} /> Aller à Import</button></div>
             </GuidePanel>
           )}
@@ -4846,7 +4847,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
               </ul></section>
               <section className="guide-topic"><h4>Feuille de match : trois carrousels à ne pas confondre</h4>
                 <p>Le carrousel principal comporte quatre sections : Coup de sifflet final, Cérémonie des performances, Statistiques du match et Brief équipe. Utilisez les flèches ou les repères de navigation.</p>
-                <p><strong>Le collectif en chiffres</strong> est un carrousel distinct : ses cartes présentent les volumes Excel, les données PDF journalières et les compléments manuels selon leur source affichée.</p>
+                <p><strong>Le collectif en chiffres</strong> est un carrousel distinct : ses cartes présentent les volumes Excel, les données PDF journalières et les compléments manuels selon leur source affichée. Une ponctualité 106J sélectionnée pour le score quitte le carrousel et rejoint les <strong>bulles sous Célébration activée</strong>. Elle revient après désélection si sa préférence d’affichage le permet ; la commande <strong>Personnaliser les indicateurs</strong> conserve cette préférence.</p>
                 <p><strong>Lecture opérationnelle</strong>, dans Statistiques du match, comporte quatre slides :</p>
                 <ol className="guide-reading-list">
                   <li><strong>Déchargements par heure.</strong> Comparez les taux horaires. Les voyages arrivés indiquent les codes dont la première opération connue se situe dans l’heure ; cliquez pour les consulter. Agrandir ouvre le graphique sans déplacer la carte ; X ou Échap le ferme.</li>
@@ -4890,7 +4891,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
               </details>
               <details className="guide-topic guide-disclosure"><summary>Réception et chargement : des périmètres différents</summary>
                 <p>Le compteur des réceptions hors cible porte sur les voyages de la période d’exploitation analysée. Le compteur des chargements hors cible utilise le TCD historique du classeur et n’est pas nécessairement limité à cette période.</p>
-                <p>Ne mélangez pas ces deux périmètres. N’additionnez jamais positions et voyages pour obtenir un total global d’anomalies. Les quatre KPI officiels du score restent distincts de ces analyses.</p>
+                <p>Ne mélangez pas ces deux périmètres. N’additionnez jamais positions et voyages pour obtenir un total global d’anomalies. Les quatre KPI de référence restent calculés séparément du barème personnalisé à 2–6 KPI.</p>
               </details>
               <div className="guide-actions"><button className="primary-button" type="button" onClick={() => onNavigate("match")}><LayoutDashboard size={17} /> Ouvrir la Feuille de match</button><button className="secondary-button" type="button" onClick={() => onNavigate("coach")}><Dumbbell size={17} /> Préparer les priorités dans Coach</button></div>
             </GuidePanel>
@@ -4916,13 +4917,13 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
 
           {section === "admin" && (
             <GuidePanel eyebrow="07 · Administrateur" title="Régler les ligues et leurs standards" icon={Settings2}>
-              <p>L’onglet Administrateur sert à choisir un niveau de référence et à ajuster ses conditions de performance : la cible de zonage, les temps maximum de chargement et de réception, ainsi que l’objectif en pourcentage de chaque indicateur du score.</p>
+              <p>L’onglet Administrateur sert à choisir une ligue et à ajuster ses cibles de zonage, de chargement et de réception. Il permet également de personnaliser les KPI, objectifs et pondérations du score de cette ligue.</p>
               <div className="guide-action-list">
                 <GuideAction icon={Trophy} title="Choisir une ligue" tone="blue" detail="Activez LIGUE 2, LIGUE 1, LDC (Ligue des champions) ou CDM (Coupe du monde). Le niveau sélectionné devient la référence affichée dans le centre de pilotage." />
                 <GuideAction icon={Target} title="Régler le zonage" tone="green" detail="Modifiez la cible en minutes directement dans le panneau de la ligue. Une valeur plus basse correspond à un standard plus exigeant." />
                 <GuideAction icon={Clock3} title="Régler le chargement" tone="orange" detail="Modifiez le temps maximum par position au format HH:MM:SS. Une durée plus courte rend la cible plus exigeante." />
               <GuideAction icon={Clock3} title="Régler le temps de réception" tone="blue" detail="Modifiez le temps maximum par position au format HH:MM:SS. Ce seuil sert à qualifier les voyages de réception selon le périmètre de chaque indicateur." />
-              <GuideAction icon={CheckCircle2} title="Régler l'objectif du score" tone="green" detail="Chaque indicateur qui dépasse strictement cet objectif marque un but ; chaque indicateur qui l'atteint ou reste en dessous encaisse un but. Vérifiez le pourcentage actuellement réglé pour la ligue." />
+              <GuideAction icon={CheckCircle2} title="Régler l'objectif du score" tone="green" detail="L’objectif de la ligue sert de cible par défaut au score. Chaque KPI sélectionné peut conserver ce seuil ou avoir sa propre cible ; il rapporte ou coûte de 1 à 3 buts." />
               </div>
               <h3>Paramètres actuels des quatre ligues</h3>
               <div className="guide-league-grid" aria-label="Référentiel visuel des ligues">
@@ -4936,21 +4937,23 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                   </article>
                 ))}
               </div>
-              <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Avant validation :</strong> les seuils sont partagés pour chaque agence, tandis que la ligue active est mémorisée sur ce poste. Les scores du match sont recalculés avec les seuils de la ligue active ; le score opérationnel repose sur quatre indicateurs.</span></div>
+              <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Avant validation :</strong> les cibles de ligue et le barème du score sont enregistrés séparément par agence ; le barème est également propre à chaque ligue. La ligue active est mémorisée sur ce poste. Un changement de configuration peut modifier le résultat du MATCH actif, mais ne modifie jamais le score de référence à quatre KPI ni les données sources.</span></div>
               <p><strong>Changer de ligue peut modifier les résultats du diagnostic, puisque les objectifs changent.</strong> Après recalcul, le classement, le nombre de retards et les proportions des barres peuvent évoluer. Cela ne modifie jamais le fichier Excel importé.</p>
               <p>Les paramètres sont enregistrés par agence sur le serveur, avec une copie sur ce navigateur. Leur modification nécessite les droits d’import. En cas d’erreur d’enregistrement, vérifiez le message affiché avant de considérer les nouvelles cibles comme partagées.</p>
-              <div className="guide-callout info"><Settings2 size={20} /><span><strong>Bon réflexe :</strong> vérifiez la ligue active, comparez les conditions avec le niveau attendu, puis contrôlez le résultat sur plusieurs imports avant toute diffusion officielle.</span></div>
+              <div className="guide-callout info"><Settings2 size={20} /><span><strong>Bon réflexe :</strong> choisissez la ligue, vérifiez les quatre seuils, puis ouvrez <strong>Personnaliser le score du MATCH</strong>. Simulez, enregistrez et contrôlez les bulles et le PDF avant diffusion. La rubrique suivante détaille ces étapes.</span></div>
               <div className="guide-actions"><button className="primary-button" type="button" onClick={() => onNavigate("admin")}><Settings2 size={17} /> Ouvrir Administrateur</button></div>
             </GuidePanel>
           )}
 
           {section === "help" && (
-            <GuidePanel eyebrow="08 · Points d’attention" title="Les vérifications à faire avant de partager le résultat" icon={CircleHelp}>
+            <GuidePanel eyebrow="10 · Points d’attention" title="Les vérifications à faire avant de partager le résultat" icon={CircleHelp}>
               <div className="guide-checklist">
                 <GuideCheck title="Le bon fichier a été importé" detail="Vérifiez le nom du fichier et la date de dernière donnée affichée après l’import." />
                 <GuideCheck title="La plage horaire est la bonne" detail="Le badge Plage active doit correspondre au créneau que vous voulez analyser." />
                 <GuideCheck title="Les contrôles sont compris" detail="Les lignes critiques, dates non lisibles et doublons potentiels sont des signaux de qualité à vérifier dans Excel." />
                 <GuideCheck title="Les valeurs sont cohérentes" detail="Comparez opérations, positions, joueurs et duels avec la base Excel source avant une diffusion officielle." />
+                <GuideCheck title="Le score reprend la bonne configuration" detail="Contrôlez la ligue, les 2 à 6 KPI retenus, les objectifs et pondérations. Distinguez le score personnalisé du score de référence." />
+                <GuideCheck title="Le PDF correspond au MATCH" detail="Vérifiez le nombre de pages, le score, les sources Excel/106J et les consignes réellement enregistrées avant diffusion." />
                 <GuideCheck title="Le résultat est validé humainement" detail="Le site aide à décider ; il ne remplace pas la vérification terrain ni la validation du responsable." />
               </div>
               <h3>Si quelque chose ne fonctionne pas</h3>
@@ -4960,14 +4963,17 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
                 <GuideTrouble title="Aucun match après Actualiser" detail="Actualiser ne lit pas votre ordinateur. Retournez dans Import et réimportez le dernier fichier Excel complet." />
                 <GuideTrouble title="Onglet Données absent" detail="Utilisez le classeur complet contenant Données et sa ligne d’en-têtes. Ne renommez pas une feuille sans vérifier son contenu." />
                 <GuideTrouble title="Mauvaise plage horaire" detail="Après avoir appliqué la plage horaire, vérifiez la date d’exploitation et le créneau affichés. Une plage dont l’heure de fin est antérieure à l’heure de début traverse minuit." />
-                <GuideTrouble title="Indicateur indisponible" detail="Lisez les sources manquantes dans Import. Ne remplacez pas une absence de résultat par zéro ; un classeur incomplet peut empêcher le calcul du score." />
+                <GuideTrouble title="Indicateur indisponible" detail="Vérifiez la valeur issue de l’Excel ou du 106J associé. Une donnée manquante rend le score incomplet ; elle ne compte ni comme 0 % ni comme un but encaissé." />
+                <GuideTrouble title="KPI sélectionné absent des bulles" detail="Vérifiez la ligue choisie, l’enregistrement du barème dans Administrateur et l’actualisation du MATCH. La simulation seule ne modifie pas le score." />
+                <GuideTrouble title="Une vignette 106J a disparu" detail="Elle a peut-être été intégrée au score. Consultez les bulles sous Célébration activée, ou retirez-la du barème pour la retrouver dans le carrousel si elle y était autorisée." />
+                <GuideTrouble title="Export PDF refusé" detail="Actualisez le MATCH et vérifiez les versions du score, du brief et du profil PDF. Enregistrez toute synthèse papier requise avant de télécharger." />
                 <GuideTrouble title="Positions non qualifiables" detail="Ouvrez le détail du diagnostic. Vérifiez la réception et le zonage dans Excel : un délai inconnu n’est pas un retard confirmé." />
                 <GuideTrouble title="Voyage exclu par erreur" detail="Dans Lecture opérationnelle, ouvrez Voyages exclus de l'analyse et utilisez Réintégrer sur le code concerné, si vos droits le permettent." />
                 <GuideTrouble title="PDF 106J non importé" detail="Importez d'abord l'Excel, puis un rapport SIE.106J. Une autre date ou agence ne bloque pas l'import : la provenance des chiffres PDF reste affichée." />
                 <GuideTrouble title="Résultat différent après une ligue" detail="Vérifiez les objectifs actifs. Un changement de cible peut modifier les retards et les résultats sans changer les opérations du fichier source." />
                 <GuideTrouble title="Consignes non confirmées" detail="Vérifiez le message d’enregistrement. Sauvegarde locale uniquement ne garantit pas le partage ; un conflit exige de relire la version serveur avant de ressaisir." />
               </div>
-              <div className="guide-limit-card"><strong>Aucune donnée après un redémarrage · Render Free</strong><p>Après une mise à jour ou un redémarrage du site, les données enregistrées peuvent disparaître. Si nécessaire, réimportez votre Excel et votre PDF, puis vérifiez les consignes et les paramètres.</p><p>L’hébergement actuel ne garantit pas de stockage persistant. Aucune sauvegarde ni restauration automatique n’est promise ; conservez les fichiers sources et les consignes importantes en dehors du site.</p></div>
+              <div className="guide-limit-card"><strong>Aucune donnée après un redémarrage · Render Free</strong><p>Après une mise à jour ou un redémarrage du site, les imports, les barèmes personnalisés et les consignes du serveur peuvent disparaître. Réimportez votre Excel et votre PDF 106J, puis revérifiez le score, les ligues, le brief et le profil PDF.</p><p>L’hébergement actuel ne garantit pas de stockage persistant. Aucune sauvegarde ni restauration automatique n’est promise ; conservez les fichiers sources et les consignes importantes en dehors du site.</p></div>
               <div className="guide-callout info"><CircleHelp size={20} /><span>En cas de blocage, revenez à la règle de base : conserver l’original Excel, préparer une copie avec l’onglet <strong>Données</strong> actualisé, puis refaire un import complet.</span></div>
             </GuidePanel>
           )}
