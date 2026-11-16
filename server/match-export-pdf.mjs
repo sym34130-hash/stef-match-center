@@ -974,6 +974,19 @@ function compactScorePage(doc, m) {
   p.text(421,383,27,"-",C.gold,true,"center");
   p.text(329,362,8.5,"BUTS MARQUÉS",C.aqua,true,"center");
   p.text(512,362,8.5,"BUTS ENCAISSÉS",C.white,true,"center");
+  // The source and active barème must be explicit when the result is weighted;
+  // leave the validated V11 default presentation unchanged.
+  if(m.scoreCustomization?.customized){
+    const active=m.scoreCustomization.indicators.length;
+    const reference=m.scoreCustomization.referenceScore;
+    const refLabel=reference?.status==="available"
+      ? " | RÉFÉRENCE "+fmt(reference.goalsFor)+"-"+fmt(reference.goalsAgainst)
+      : " | RÉFÉRENCE INDISPONIBLE";
+    p.box(300,338,242,14,S.deep);
+    p.text(421,342,7.5,
+      "SCORE PERSONNALISÉ · "+fmt(active)+" KPI"+refLabel,
+      C.white,true,"center");
+  }
 
   // A real striker, identifiable football and sideline graphics replace
   // the former generic crest badges. Both live outside the score and axes.
@@ -989,23 +1002,34 @@ function compactScorePage(doc, m) {
   p.line(648,352,794,352,S.edge,.5);
   p.box(X,Y,W,2,C.gold);
 
-  // Broadcast lower third: four official metrics as one continuous ribbon.
-  const rates=[
-    ["PASSES RÉUSSIES",score?.indicators?.passRate],
-    ["TIRS CADRÉS",score?.indicators?.loadingPercent],
-    ["DUELS GAGNÉS",score?.indicators?.unloadingPercent],
-    ["POSSESSION",score?.indicators?.possessionPercent],
-  ];
+  // The lower third shows the actual scoring selection, not an unrelated
+  // fixed set of four KPIs. The default profile keeps the same V11 geometry.
+  const rates=(m.scoreCustomization?.indicators?.length
+    ?m.scoreCustomization.indicators.map(item=>[
+      item.label.toUpperCase(),item.value,item.targetPercent,item.goalsFor,item.goalsAgainst,
+    ])
+    :[
+      ["PASSES RÉUSSIES",score?.indicators?.passRate,m.criteria.scoreTargetPercent,1,1],
+      ["TIRS CADRÉS",score?.indicators?.loadingPercent,m.criteria.scoreTargetPercent,1,1],
+      ["DUELS GAGNÉS",score?.indicators?.unloadingPercent,m.criteria.scoreTargetPercent,1,1],
+      ["POSSESSION",score?.indicators?.possessionPercent,m.criteria.scoreTargetPercent,1,1],
+    ]);
+  const width=784/rates.length;
   p.box(29,286,784,45,S.deep);
   p.box(29,328,784,3.4,C.gold);
-  rates.forEach(([label,value],i)=>{
-    const xl=29+i*196;
-    // Consistent scorebug hierarchy: no KPI is painted red. Under/over target
-    // is carried by the official goals-for / goals-against count, not colour.
+  rates.forEach(([label,value,target,goalsFor,goalsAgainst],i)=>{
+    const xl=29+i*width;
     if(i>0)line(xl,292,xl,325,S.edge,.7);
-    p.box(xl+11,292,3,29,C.aqua);
-    p.text(xl+20,314,8.2,label,C.muted,true);
-    p.text(xl+20,291,23,percent(value),C.white,true);
+    p.box(xl+9,292,3,29,C.aqua);
+    const labelText=ascii(label);
+    const labelSize=clamp((width-28)/Math.max(1,labelText.length*.56),6.1,8.2);
+    p.text(xl+17,314,labelSize,labelText,C.muted,true);
+    p.text(xl+17,291,clamp((width-27)/5.4,14,23),percent(value),C.white,true);
+    if(m.scoreCustomization?.customized){
+      p.text(xl+width-7,292,6.2,"> "+fmt(target)+"%",C.gold,false,"right");
+      p.text(xl+width-7,302,6.0,
+        "+"+fmt(goalsFor)+" / -"+fmt(goalsAgainst),C.aqua,false,"right");
+    }
   });
 
   p.text(35,278,7.6,

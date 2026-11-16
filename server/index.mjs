@@ -13,6 +13,7 @@ import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_IN
 import { isValidCalendarDate } from "./calendar-date.mjs";
 import { calculateAccidentFreeDays } from "./accident-free-days.mjs";
 import { MatchExportError, matchExportLeague, matchExportModel } from "./match-export-model.mjs";
+import { SCORE_RULES_VERSION, SCORE_KPI_CATALOG, ScoreRulesError, assertScoreLeagueId, defaultScoreRules, normalizeScoreRules, evaluateScoreRules } from "./score-rules.mjs";
 import { renderMatchPdf } from "./match-export-pdf.mjs";
 import { defaultPdfProfile, normalizePdfProfile } from "./match-pdf-profile.mjs";
 import { RECEPTION_EXCLUSION_VERSION, normalizeReceptionCode, normalizeReceptionExclusions, receptionClientKey } from "./reception-exclusions.mjs";
@@ -181,6 +182,100 @@ app.get("/api/agencies/:agencyCode/league-configs", requireAgency, async (req, r
   }
 });
 
+
+// Lot A: source-backed personalised football scoring rules. No existing KPI,
+// snapshot, or PDF value is rewritten here; the standard score stays intact.
+app.get("/api/agencies/:agencyCode/score-rules", requireAgency, async (req, res) => {
+  try {
+    const leagueId=assertScoreLeagueId(req.query.leagueId);
+    const state=await withAgencyLock(req.agency.code, () =>
+      readScoreRulesState(req.agency.code, leagueId));
+    let preview=null;
+    if (req.query.preview === "1") {
+      const config=matchExportLeague(leagueId, await readLeagueConfigs(req.agency.code));
+      const snapshot=await withAgencyLock(req.agency.code, () =>
+        readLatestSnapshot(req.agency.code, config.criteria));
+      preview=snapshot
+        ? { ...evaluateScoreRules(snapshot, state.profile, config.criteria.scoreTargetPercent),
+          matchDate:snapshot.match.date, importedAt:snapshot.importedAt,
+          criteria:config.criteria }
+        : { status:"no_match", message:"Importe un MATCH pour prévisualiser le score." };
+    } else if (req.query.preview !== undefined) {
+      throw new ScoreRulesError(400, "Option de prévisualisation invalide.");
+    }
+    res.set("Cache-Control","no-store, max-age=0").json({
+      leagueId, catalog:SCORE_KPI_CATALOG, profile:state.profile,
+      scoreRulesRevision:state.scoreRulesRevision, changedAt:state.changedAt,
+      customized:state.changedAt!==null, preview, defaultProfile:defaultScoreRules(),
+    });
+  } catch(error) {
+    if (error instanceof ScoreRulesError || error instanceof MatchExportError)
+      res.status(error.status).json({message:error.message});
+    else respondInternalError(res, "score-rules:get:"+req.agency.code, error);
+  }
+});
+
+// Server-authoritative draft simulation. It never persists rules or alters
+// reference data. The administrator can verify a proposed result before saving.
+app.post("/api/agencies/:agencyCode/score-rules/preview", requireAgency, async (req, res) => {
+  try {
+    const leagueId=assertScoreLeagueId(req.body?.leagueId);
+    const profile=normalizeScoreRules(req.body?.profile);
+    const config=matchExportLeague(leagueId,await readLeagueConfigs(req.agency.code));
+    const snapshot=await withAgencyLock(req.agency.code,()=>readLatestSnapshot(req.agency.code,config.criteria));
+    const preview=snapshot
+      ? evaluateScoreRules(snapshot,profile,config.criteria.scoreTargetPercent)
+      : {status:"no_match",message:"Importe un MATCH pour prévisualiser ce barème."};
+    res.set("Cache-Control","no-store, max-age=0")
+      .json({leagueId,preview});
+  } catch(error) {
+    if(error instanceof ScoreRulesError || error instanceof MatchExportError)
+      res.status(error.status).json({message:error.message});
+    else respondInternalError(res,"score-rules:preview:"+req.agency.code,error);
+  }
+});
+
+app.put("/api/agencies/:agencyCode/score-rules", requireAgency, async (req, res) => {
+  if (!req.agency.canImport) {
+    res.status(403).json({ message:"Ce code d'accès ne permet pas de modifier les règles du score." });
+    return;
+  }
+  try {
+    const leagueId=assertScoreLeagueId(req.body?.leagueId);
+    const profile=normalizeScoreRules(req.body?.profile);
+    if (!Object.hasOwn(req.body ?? {}, "expectedRevision")
+      || (req.body.expectedRevision !== null && typeof req.body.expectedRevision !== "string"))
+      throw new ScoreRulesError(428, "Recharge les règles avant de les enregistrer.");
+    const saved=await withAgencyLock(req.agency.code, async () => {
+      const current=await readScoreRulesState(req.agency.code,leagueId);
+      if (req.body.expectedRevision !== current.scoreRulesRevision)
+        throw new ScoreRulesError(409,
+          "Les règles du score ont été modifiées. Recharge avant d'enregistrer.");
+      const agencyDir=path.join(dataDir,sanitizeSegment(req.agency.code));
+      const file=path.join(agencyDir,"score-rules.json");
+      const all=await readStoredScoreRules(req.agency.code);
+      const changedAt=new Date().toISOString();
+      const previous=all.leagues[leagueId];
+      const history=previous?.history??[];
+      all.leagues[leagueId]={
+        profile,changedAt,
+        // Preserve every prior version for later reconciliation of historical
+        // reports. Never overwrite an old barème entry.
+        history:[...history,{changedAt,profile}],
+      };
+      await fs.mkdir(agencyDir,{recursive:true});
+      await writeJsonAtomic(file,all);
+      return readScoreRulesState(req.agency.code,leagueId);
+    });
+    res.set("Cache-Control","no-store, max-age=0")
+      .json({leagueId,...saved,message:"Règles enregistrées pour cette agence et cette ligue."});
+  } catch(error) {
+    if (error instanceof ScoreRulesError)
+      res.status(error.status).json({message:error.message});
+    else respondInternalError(res,"score-rules:put:"+req.agency.code,error);
+  }
+});
+
 app.get("/api/agencies/:agencyCode/sync-state", requireAgency, async (req, res) => {
   try {
     const agencyDir = path.join(dataDir, sanitizeSegment(req.agency.code));
@@ -188,12 +283,15 @@ app.get("/api/agencies/:agencyCode/sync-state", requireAgency, async (req, res) 
     const causeriePath = matchDate
       ? path.join(agencyDir, "causeries", `${sanitizeSegment(matchDate)}.json`)
       : null;
-    const [snapshotRevision, leagueConfigRevision, causerieRevision] = await Promise.all([
+    const [snapshotRevision, leagueConfigRevision, causerieRevision, scoreRulesRevision] = await Promise.all([
       readFileRevision(path.join(agencyDir, "latest.json")),
       readFileRevision(path.join(agencyDir, "league-configs.json")),
       causeriePath ? readFileRevision(causeriePath) : null,
+      readFileRevision(path.join(agencyDir, "score-rules.json")),
     ]);
-    res.set("Cache-Control", "no-store, max-age=0").json({ snapshotRevision, leagueConfigRevision, causerieRevision });
+    res.set("Cache-Control", "no-store, max-age=0").json({
+      snapshotRevision, leagueConfigRevision, causerieRevision, scoreRulesRevision,
+    });
   } catch (error) {
     respondInternalError(res, `sync-state:${req.agency.code}`, error);
   }
@@ -352,12 +450,38 @@ app.get("/api/agencies/:agencyCode/export/match.pdf", requireAgency, async (req,
       if (req.query.causerieRevision !== (causerieState.causerieRevision ?? "")) {
         throw new MatchExportError(409, "Le brief enregistré a changé. Actualise avant l\u0027export.");
       }
-      return matchExportModel({
+      const scoreState=await readScoreRulesState(req.agency.code,leagueId);
+      if ((req.query.scoreRulesRevision ?? "") !== (scoreState.scoreRulesRevision ?? "")) {
+        throw new MatchExportError(409,
+          "Le barème du score a changé. Actualise la feuille de match avant l'export.");
+      }
+      // Keep every PDF KPI and graph tied to the canonical operational snapshot.
+      // Only the scoreline is personalised, using the same server scoring engine.
+      const finalModel=matchExportModel({
         agency: req.agency, snapshot, league: config, causerie: causerieState.plan, safety,
         pdfProfile: pdfProfileState.profile,
         expectedMatchDate: matchDate, expectedImportedAt: importedAt,
         manualInjuries: rawInjuries === undefined ? null : Number(rawInjuries),
       });
+      const scored=evaluateScoreRules(snapshot,scoreState.profile,config.criteria.scoreTargetPercent);
+      return {
+        ...finalModel,
+        score:{
+          ...finalModel.score, status:scored.status, goalsFor:scored.goalsFor,
+          goalsAgainst:scored.goalsAgainst,
+        },
+        scoreCustomization:{
+          customized:scoreState.changedAt!==null,
+          changedAt:scoreState.changedAt,
+          scoreRulesRevision:scoreState.scoreRulesRevision,
+          indicators:scored.indicators,
+          missingIndicators:scored.missingIndicators,
+          referenceScore:scored.referenceScore,
+          possibleGoalsFor:scored.possibleGoalsFor,
+          possibleGoalsAgainst:scored.possibleGoalsAgainst,
+          matchDate:snapshot.match.date, importedAt:snapshot.importedAt,
+        },
+      };
     });
     const pdf = renderMatchPdf(model);
     res.set({
@@ -1203,6 +1327,55 @@ function normalizeLeagueConfigs(value) {
       scoreTargetPercent: Math.min(100, Math.max(1, Math.round(scoreTargetPercent))),
     };
   });
+}
+
+// A single agency file contains independent profiles for each league.
+// The complete file has a revision, so parallel updates cannot lose a league.
+async function readStoredScoreRules(agencyCode) {
+  const file=path.join(dataDir,sanitizeSegment(agencyCode),"score-rules.json");
+  try {
+    const raw=JSON.parse(await fs.readFile(file,"utf8"));
+    if (!raw || raw.version!==SCORE_RULES_VERSION
+      || !raw.leagues || typeof raw.leagues!=="object" || Array.isArray(raw.leagues))
+      throw new ScoreRulesError(409,"Configuration du score incompatible. Intervention requise.");
+    const leagues={};
+    for (const [leagueId,entry] of Object.entries(raw.leagues)) {
+      assertScoreLeagueId(leagueId);
+      if (!entry || !Number.isFinite(Date.parse(entry.changedAt)))
+        throw new ScoreRulesError(409,"Historique des règles du score invalide.");
+      const profile=normalizeScoreRules(entry.profile);
+      const recorded=entry.history===undefined
+        ?[{changedAt:entry.changedAt,profile}]
+        :entry.history;
+      if(!Array.isArray(recorded)||recorded.length<1)
+        throw new ScoreRulesError(409,"Historique des règles du score incomplet.");
+      const history=recorded.map(version=>{
+        if(!version || !Number.isFinite(Date.parse(version.changedAt)))
+          throw new ScoreRulesError(409,"Date de version du score invalide.");
+        return {changedAt:version.changedAt,profile:normalizeScoreRules(version.profile)};
+      });
+      const last=history[history.length-1];
+      if(last.changedAt!==entry.changedAt ||
+        JSON.stringify(last.profile)!==JSON.stringify(profile))
+        throw new ScoreRulesError(409,"Dernière version du score incohérente.");
+      leagues[leagueId]={profile,changedAt:entry.changedAt,history};
+    }
+    return {version:SCORE_RULES_VERSION,leagues};
+  } catch(error) {
+    if (error?.code==="ENOENT") return {version:SCORE_RULES_VERSION,leagues:{}};
+    if (error instanceof ScoreRulesError) throw error;
+    if (error instanceof SyntaxError) throw new ScoreRulesError(409,
+      "Le fichier des règles du score est illisible, aucune valeur n'a été remplacée.");
+    throw error;
+  }
+}
+async function readScoreRulesState(agencyCode,leagueId) {
+  const all=await readStoredScoreRules(agencyCode);
+  const file=path.join(dataDir,sanitizeSegment(agencyCode),"score-rules.json");
+  return {profile:all.leagues[leagueId]?.profile??defaultScoreRules(),
+    changedAt:all.leagues[leagueId]?.changedAt??null,
+    historyCount:all.leagues[leagueId]?.history?.length??0,
+    scoreRulesRevision:await readFileRevision(file)};
 }
 
 async function readLeagueConfigs(agencyCode) {

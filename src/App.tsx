@@ -2,7 +2,6 @@ import { FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState, t
 import { createPortal } from "react-dom";
 import { ceremonyPolyvalents } from "./ceremony-selection";
 import { formatKpiDuration } from "./kpi-duration";
-import { isKpiGoalConceded } from "./kpi-goal-status";
 import { qualificationReasons } from "./qualification-reasons";
 import { BRIEF_LAYOUT_VERSION, BRIEF_TEXT_LIMITS, BRIEF_CAPTURE_LIMITS, BRIEF_INDICATOR_IDS, BRIEF_INDICATOR_SELECTION_VERSION, migrateBriefLayout, normalizeBriefIndicators } from "../server/brief-layout.mjs";
 import {
@@ -51,6 +50,7 @@ import type { Agency, Highlight, Player, Snapshot } from "./types";
 import { MatchIndicatorsCarousel } from "./MatchIndicatorsCarousel";
 import { ReceptionScopeControls, type ReceptionExclusionChange, type LoadingExclusionChange } from "./ReceptionScopeControls";
 import { KickoffMusicControl } from "./KickoffMusicControl";
+import { ScoreRulesPanel } from "./ScoreRulesPanel";
 import { OperationalDiagnosticCard, ReceptionHourlyChart } from "./OperationalAnalysisCards";
 import { parseMercatoEntrants, type MercatoProfile, type MercatoProfiles } from "./mercato";
 import "./match-export.css";
@@ -165,6 +165,27 @@ type AgencySyncState = {
   snapshotRevision: string | null;
   leagueConfigRevision: string | null;
   causerieRevision: string | null;
+  scoreRulesRevision: string | null;
+};
+
+type WeightedScoreIndicator = {
+  id: string; label: string; targetPercent: number;
+  value: number | null; reached: boolean | null;
+  goalsFor: number; goalsAgainst: number;
+  awardedGoals: number; concededGoals: number;
+  reason: string | null;
+};
+type WeightedScorePreview = {
+  status: "available" | "unavailable" | "no_match";
+  goalsFor: number | null; goalsAgainst: number | null;
+  indicators: WeightedScoreIndicator[];
+  missingIndicators: Array<{id: string; label: string; reason: string}>;
+  referenceScore: { status: "available" | "unavailable"; goalsFor: number | null; goalsAgainst: number | null };
+  matchDate: string; importedAt: string; criteria: PerformanceCriteria;
+};
+type ActiveScoreState = {
+  agencyCode: string; leagueId: LeagueId; scoreRulesRevision: string | null;
+  customized: boolean; changedAt: string | null; preview: WeightedScorePreview;
 };
 
 class ApiError extends Error {
@@ -335,6 +356,9 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [snapshotViewRevision, setSnapshotViewRevision] = useState(0);
   const [causerieRevision, setCauserieRevision] = useState<string | null>(null);
+  const [activeScoreState,setActiveScoreState] = useState<ActiveScoreState | null>(null);
+  const [scoreRefreshVersion,setScoreRefreshVersion] = useState(0);
+  const [scoreLoadError,setScoreLoadError] = useState("");
   const [screen, setScreen] = useState<Screen>("kickoff");
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
   const [playerReturnScreen, setPlayerReturnScreen] = useState<Screen>("composition");
@@ -458,7 +482,9 @@ export default function App() {
         const configsChanged = !previous || previous.leagueConfigRevision !== nextSyncState.leagueConfigRevision;
         const snapshotChanged = !previous || previous.snapshotRevision !== nextSyncState.snapshotRevision;
         const causerieChanged = !previous || previous.causerieRevision !== nextSyncState.causerieRevision;
-        if (!configsChanged && !snapshotChanged && !causerieChanged) return;
+        const scoreRulesChanged = !previous || previous.scoreRulesRevision !== nextSyncState.scoreRulesRevision;
+        if (!configsChanged && !snapshotChanged && !causerieChanged && !scoreRulesChanged) return;
+        if (scoreRulesChanged) setScoreRefreshVersion(version=>version+1);
 
         let nextConfigs = leagueConfigsRef.current;
         if (configsChanged) {
@@ -508,6 +534,48 @@ export default function App() {
       document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, [session, activeLeague, screen, publishSnapshot, loadLeagueConfigs]);
+
+  // The server alone evaluates the score for a specific agency, league and
+  // import. Identity and criteria checks prevent cross-MATCH score displays.
+  useEffect(() => {
+    setActiveScoreState(null);
+    setScoreLoadError("");
+    if (!session || !snapshot) return;
+    let disposed=false;
+    const load=async()=>{
+      try {
+        const response=await fetch(
+          "/api/agencies/"+encodeURIComponent(session.agency.code)+
+          "/score-rules?leagueId="+encodeURIComponent(activeLeague)+"&preview=1",
+          {headers:{"x-access-code":session.accessCode},cache:"no-store"});
+        const payload=await response.json();
+        if(!response.ok)throw new Error(payload.message??"Impossible de lire le score.");
+        const scored=payload.preview as WeightedScorePreview;
+        if(!scored || scored.status==="no_match" ||
+          scored.matchDate!==snapshot.match.date ||
+          scored.importedAt!==snapshot.importedAt ||
+          !["available","unavailable"].includes(scored.status) ||
+          ["zonageMinutes","loadingSeconds","unloadingSeconds","scoreTargetPercent"]
+            .some(key=>(scored.criteria as unknown as Record<string,number>)?.[key]
+              !==(snapshot.performanceCriteria as unknown as Record<string,number>)?.[key])){
+          throw new Error("Le résultat du score ne correspond plus au MATCH affiché. Actualise.");
+        }
+        if(disposed)return;
+        setActiveScoreState({
+          agencyCode:session.agency.code,leagueId:activeLeague,
+          customized:Boolean(payload.customized),
+          changedAt:payload.changedAt??null,
+          scoreRulesRevision:payload.scoreRulesRevision??null,
+          preview:scored,
+        });
+      } catch(error) {
+        if(disposed)return;
+        setScoreLoadError(error instanceof Error?error.message:"Score indisponible.");
+      }
+    };
+    void load();
+    return ()=>{disposed=true};
+  },[session,snapshot,activeLeague,scoreRefreshVersion]);
 
   async function handleLogin(agencyCode: string, accessCode: string) {
     const requestId = ++snapshotRequestRef.current;
@@ -629,6 +697,15 @@ export default function App() {
 
   const playerScreen = screen === "player";
   const activeLeagueConfig = configForLeague(leagueConfigs, activeLeague);
+  const currentScore = snapshot && activeScoreState
+    && activeScoreState.agencyCode === session.agency.code
+    && activeScoreState.leagueId === activeLeague
+    && activeScoreState.preview.matchDate === snapshot.match.date
+    && activeScoreState.preview.importedAt === snapshot.importedAt
+    && ["zonageMinutes","loadingSeconds","unloadingSeconds","scoreTargetPercent"]
+      .every(key=>(activeScoreState.preview.criteria as unknown as Record<string,number>)[key]
+        ===(snapshot.performanceCriteria as unknown as Record<string,number>)?.[key])
+    ? activeScoreState : null;
 
   return (
     <div className={`app-shell league-${activeLeagueConfig.id}`}>
@@ -720,6 +797,8 @@ export default function App() {
                 session={session}
                 causerieRevision={causerieRevision}
                 activeLeague={activeLeague}
+                liveScore={currentScore}
+                scoreLoadError={scoreLoadError}
                 onPlayer={openPlayer}
                 onCoach={() => setScreen("coach")}
                 onComposition={() => setScreen("composition")}
@@ -767,16 +846,16 @@ export default function App() {
               />
             )}
             {screen === "coach" && snapshot && (
-              <Coach snapshot={snapshot} session={session} leagueConfig={activeLeagueConfig} onPlayer={openPlayer} onComposition={() => setScreen("composition")} />
+              <Coach snapshot={snapshot} session={session} leagueConfig={activeLeagueConfig} liveScore={currentScore} onPlayer={openPlayer} onComposition={() => setScreen("composition")} />
             )}
-            {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} causerieRevision={causerieRevision} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
+            {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} liveScore={currentScore} causerieRevision={causerieRevision} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
             {screen === "guide" && <GuideView snapshot={snapshot} leagueConfigs={leagueConfigs} onNavigate={setScreen} />}
-            {screen === "admin" && <AdministratorView agencyCode={session.agency.code} activeLeague={activeLeague} leagueConfigs={leagueConfigs} leagueConfigRevision={leagueConfigRevision} onLeagueConfigsChange={queueLeagueConfigSave} onLeagueConfigsReload={async () => {
+            {screen === "admin" && <AdministratorView agencyCode={session.agency.code} accessCode={session.accessCode} canEdit={session.agency.canImport} activeLeague={activeLeague} leagueConfigs={leagueConfigs} leagueConfigRevision={leagueConfigRevision} onLeagueConfigsChange={queueLeagueConfigSave} onLeagueConfigsReload={async () => {
               const state = await fetchSharedLeagueConfigs(session);
               setLeagueConfigs(state.configs);
               setLeagueConfigRevision(state.leagueConfigRevision);
               return state;
-            }} onActiveLeagueChange={applyLeague} />}
+            }} onActiveLeagueChange={applyLeague} onScoreRulesSaved={()=>setScoreRefreshVersion(v=>v+1)} />}
             {screen === "import" && (
               <ImportView
                 session={session}
@@ -834,15 +913,17 @@ async function fetchAgencySyncState(session: Session, matchDate?: string): Promi
   });
   const payload = await response.json();
   if (!response.ok) throw new ApiError(response.status, payload.message ?? "L'état de synchronisation n'a pas pu être chargé.");
-  const { snapshotRevision, leagueConfigRevision, causerieRevision = null } = payload as AgencySyncState;
+  const { snapshotRevision, leagueConfigRevision, causerieRevision = null,
+    scoreRulesRevision = null } = payload as AgencySyncState;
   if (
     (snapshotRevision !== null && typeof snapshotRevision !== "string") ||
     (leagueConfigRevision !== null && typeof leagueConfigRevision !== "string") ||
-    (causerieRevision !== null && typeof causerieRevision !== "string")
+    (causerieRevision !== null && typeof causerieRevision !== "string") ||
+    (scoreRulesRevision !== null && typeof scoreRulesRevision !== "string")
   ) {
     throw new Error("L'état de synchronisation reçu est invalide.");
   }
-  return { snapshotRevision, leagueConfigRevision, causerieRevision };
+  return { snapshotRevision, leagueConfigRevision, causerieRevision, scoreRulesRevision };
 }
 
 type SharedLeagueConfigState = { configs: LeagueConfig[]; leagueConfigRevision: string | null };
@@ -1422,7 +1503,7 @@ function Kickoff({ snapshot, onGo, onTv }: { snapshot: Snapshot | null; onGo: ()
   );
 }
 
-function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlayer, onCoach, onComposition, onTravelExclusionChange, onReceptionExclusionChange, onLoadingExclusionChange }: { snapshot: Snapshot; session: Session; causerieRevision: string | null; activeLeague: LeagueId; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void; onTravelExclusionChange: (travelCode: string, excluded: boolean) => Promise<void>; onReceptionExclusionChange: ReceptionExclusionChange; onLoadingExclusionChange: LoadingExclusionChange }) {
+function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveScore, scoreLoadError, onPlayer, onCoach, onComposition, onTravelExclusionChange, onReceptionExclusionChange, onLoadingExclusionChange }: { snapshot: Snapshot; session: Session; causerieRevision: string | null; activeLeague: LeagueId; liveScore: ActiveScoreState | null; scoreLoadError: string; onPlayer: (player: Player) => void; onCoach: () => void; onComposition: () => void; onTravelExclusionChange: (travelCode: string, excluded: boolean) => Promise<void>; onReceptionExclusionChange: ReceptionExclusionChange; onLoadingExclusionChange: LoadingExclusionChange }) {
   const [celebrationMode, setCelebrationMode] = useState(false);
   const [thresholdPulse, setThresholdPulse] = useState(false);
   const [editingKpis, setEditingKpis] = useState(false);
@@ -1466,9 +1547,13 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
   const loadingTarget = formatKpiDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
   const unloadingTarget = formatKpiDuration(snapshot.performanceCriteria?.unloadingSeconds ?? leagueConfig.unloadingSeconds);
   const scoreIndicators = operationalScoreIndicators(snapshot);
-  const footballScore = buildFootballScore(snapshot, snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent);
-  const concededKpi = (value: number | null | undefined) => isKpiGoalConceded(value, footballScore.available, footballScore.targetPercent);
-  const concededKpiWarning = <em className="match-score-goal-warning">But encaissé · objectif &gt; {formatPercent(footballScore.targetPercent)}</em>;
+  const footballScore = buildFootballScore(snapshot, snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent, liveScore);
+  const concededKpi = (id: string) => footballScore.available
+    && liveScore?.preview.indicators.some(item=>item.id===id && item.reached===false);
+  const concededKpiWarning = (id: string) => {
+    const rule=liveScore?.preview.indicators.find(item=>item.id===id);
+    return <em className="match-score-goal-warning">But encaissé · objectif &gt; {formatPercent(rule?.targetPercent)} · {rule?.concededGoals ?? 1} but(s)</em>;
+  };
   const thresholdReached = footballScore.available && footballScore.goalsFor > footballScore.goalsAgainst;
   const outcome = matchCeremonyOutcome(footballScore);
   const teamMotivation = teamMotivationMessage(footballScore);
@@ -1670,6 +1755,9 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
       if (!indicatorSettingsReady) {
         throw new Error("Le brief équipe est en cours de chargement. Réessaie après actualisation.");
       }
+      if (!liveScore) {
+        throw new Error(scoreLoadError || "Le score est en cours de synchronisation. Actualise le MATCH avant l'export.");
+      }
       // Never infer persistence from the browser's cached Causerie object.
       // The server's dated brief and its revision are authoritative.
       const plan = mercatoPlan?.key === mercatoPlanKey ? mercatoPlan.plan : null;
@@ -1707,6 +1795,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         importedAt: snapshot.importedAt,
         causerieRevision: currentRevision,
         pdfProfileRevision: updated?.profileRevision ?? pdfProfileRevision ?? "",
+        scoreRulesRevision: liveScore.scoreRulesRevision ?? "",
         zonageMinutes: String(snapshot.performanceCriteria?.zonageMinutes ?? ""),
         loadingSeconds: String(snapshot.performanceCriteria?.loadingSeconds ?? ""),
         unloadingSeconds: String(snapshot.performanceCriteria?.unloadingSeconds ?? ""),
@@ -2066,6 +2155,9 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
         <div className="match-result-stage">
           <div className="match-result-visual">
             <FootballScoreDisplay footballScore={footballScore} />
+            {scoreLoadError && <p role="alert" className="form-error">
+              Synchronisation du score : {scoreLoadError}
+            </p>}
             <YellowCardsPanel snapshot={snapshot} redCards={redCards} />
           </div>
 
@@ -2073,28 +2165,28 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, onPlaye
             <span>STEF MATCH CENTER</span>
             <strong>{outcome.verdict}</strong>
             <div className="match-score-bubbles" aria-label="Scores du match">
-              <div className={`match-score-bubble pass-score-bubble ${Number.isFinite(scoreIndicators.passRate) ? "" : "is-data-unavailable"} ${concededKpi(scoreIndicators.passRate) ? "is-goal-conceded" : ""}`}>
+              <div className={`match-score-bubble pass-score-bubble ${Number.isFinite(scoreIndicators.passRate) ? "" : "is-data-unavailable"} ${concededKpi("passRate") ? "is-goal-conceded" : ""}`}>
                 <span>% passes réussies</span>
                 <strong>{formatPercent(scoreIndicators.passRate)}</strong>
-                {concededKpi(scoreIndicators.passRate) && concededKpiWarning}
+                {concededKpi("passRate") && concededKpiWarning("passRate")}
                 <small>Objectif zonage : {snapshot.performanceCriteria?.zonageMinutes ?? leagueConfig.zonageMinutes} min ou moins</small>
               </div>
-              <div className={`match-score-bubble loading-score-bubble ${Number.isFinite(scoreIndicators.loadingPercent) ? "" : "is-data-unavailable"} ${concededKpi(scoreIndicators.loadingPercent) ? "is-goal-conceded" : ""}`}>
+              <div className={`match-score-bubble loading-score-bubble ${Number.isFinite(scoreIndicators.loadingPercent) ? "" : "is-data-unavailable"} ${concededKpi("loadingPercent") ? "is-goal-conceded" : ""}`}>
                 <span>% tirs cadrés</span>
                 <strong>{formatPercent(scoreIndicators.loadingPercent)}</strong>
-                {concededKpi(scoreIndicators.loadingPercent) && concededKpiWarning}
+                {concededKpi("loadingPercent") && concededKpiWarning("loadingPercent")}
                 <small>Voyages chargés en {loadingTarget} ou moins par position</small>
               </div>
-              <div className={`match-score-bubble reception-score-bubble ${Number.isFinite(scoreIndicators.unloadingPercent) ? "" : "is-data-unavailable"} ${concededKpi(scoreIndicators.unloadingPercent) ? "is-goal-conceded" : ""}`}>
+              <div className={`match-score-bubble reception-score-bubble ${Number.isFinite(scoreIndicators.unloadingPercent) ? "" : "is-data-unavailable"} ${concededKpi("unloadingPercent") ? "is-goal-conceded" : ""}`}>
                 <span>% duels gagnés</span>
                 <strong>{formatPercent(scoreIndicators.unloadingPercent)}</strong>
-                {concededKpi(scoreIndicators.unloadingPercent) && concededKpiWarning}
+                {concededKpi("unloadingPercent") && concededKpiWarning("unloadingPercent")}
                 <small>Voyages réceptionnés en {unloadingTarget} ou moins par position</small>
               </div>
-              <div className={`match-score-bubble possession-score-bubble ${Number.isFinite(scoreIndicators.possessionPercent) ? "" : "is-data-unavailable"} ${concededKpi(scoreIndicators.possessionPercent) ? "is-goal-conceded" : ""}`}>
+              <div className={`match-score-bubble possession-score-bubble ${Number.isFinite(scoreIndicators.possessionPercent) ? "" : "is-data-unavailable"} ${concededKpi("possessionPercent") ? "is-goal-conceded" : ""}`}>
                 <span>% possession</span>
                 <strong>{formatPercent(scoreIndicators.possessionPercent)}</strong>
-                {concededKpi(scoreIndicators.possessionPercent) && concededKpiWarning}
+                {concededKpi("possessionPercent") && concededKpiWarning("possessionPercent")}
                 <small>Positions zonées</small>
               </div>
             </div>
@@ -3312,12 +3404,14 @@ function Coach({
   snapshot,
   session,
   leagueConfig,
+  liveScore,
   onPlayer,
   onComposition,
 }: {
   snapshot: Snapshot;
   session: Session;
   leagueConfig: LeagueConfig;
+  liveScore: ActiveScoreState | null;
   onPlayer: (player: Player) => void;
   onComposition: () => void;
 }) {
@@ -3340,7 +3434,7 @@ function Coach({
   const [mercatoProfileFeedback, setMercatoProfileFeedback] = useState<{ tone: "success" | "error"; detail: string } | null>(null);
   const actions = coachDecisionActions(snapshot);
   const targetPercent = snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent;
-  const footballScore = buildFootballScore(snapshot, targetPercent);
+  const footballScore = buildFootballScore(snapshot, targetPercent, liveScore);
   const yellowCards = snapshot.yellowCards ?? [];
   const yellowCardAudit = snapshot.yellowCardAudit;
   const redCardEntries = redCardsDraft.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
@@ -3640,8 +3734,10 @@ function Coach({
             </div>
             <div className="coach-score-context">
               <div>
-                <small>Score opérationnel</small>
+                <small>{footballScore.customized?"Score personnalisé":"Score opérationnel"}</small>
                 <b>{footballScore.available ? `${footballScore.goalsFor} - ${footballScore.goalsAgainst}` : "— - —"}</b>
+                {footballScore.customized && footballScore.referenceScore?.status==="available" &&
+                  <small>Référence : {footballScore.referenceScore.goalsFor} - {footballScore.referenceScore.goalsAgainst}</small>}
               </div>
               <div>
                 <small>Objectif ligue</small>
@@ -3915,7 +4011,8 @@ function PlayerSheet({ snapshot, player, onBack, onSelect }: { snapshot: Snapsho
   );
 }
 
-function TvMode({ snapshot, session, causerieRevision, onExit }: { snapshot: Snapshot; session: Session; causerieRevision: string | null; onExit: () => void }) {
+function TvMode({ snapshot, session, liveScore, causerieRevision, onExit }: { snapshot: Snapshot; session: Session; liveScore: ActiveScoreState | null; causerieRevision: string | null; onExit: () => void }) {
+  const footballScore=buildFootballScore(snapshot,snapshot.performanceCriteria?.scoreTargetPercent ?? 50,liveScore);
   const [focusMode, setFocusMode] = useState(false);
 
   useEffect(() => {
@@ -3953,6 +4050,13 @@ function TvMode({ snapshot, session, causerieRevision, onExit }: { snapshot: Sna
           <p>STEF MATCH CENTER</p>
           <h2>{snapshot.agency.name}</h2>
           <ActivePeriodBadge snapshot={snapshot} className="tv-period-badge" />
+          <p className="tv-custom-score" aria-label="Score du MATCH">
+            {footballScore.customized?"Score personnalisé":"Score de référence"} :
+            <strong> {footballScore.available
+              ? footballScore.goalsFor+" – "+footballScore.goalsAgainst : "— – —"}</strong>
+            {footballScore.customized&&footballScore.referenceScore?.status==="available"&&
+              <span> · Référence {footballScore.referenceScore.goalsFor} – {footballScore.referenceScore.goalsAgainst}</span>}
+          </p>
         </div>
         <div className="tv-header-actions">
           <button className="secondary-on-dark" type="button" onClick={onExit}>
@@ -4306,7 +4410,7 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
   );
 }
 
-function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLeagueConfigs, leagueConfigRevision, onLeagueConfigsChange, onLeagueConfigsReload, onActiveLeagueChange }: { agencyCode: string; activeLeague: LeagueId; leagueConfigs: LeagueConfig[]; leagueConfigRevision: string | null; onLeagueConfigsChange: (configs: LeagueConfig[], expectedRevision: string | null) => Promise<SharedLeagueConfigState>; onLeagueConfigsReload: () => Promise<SharedLeagueConfigState>; onActiveLeagueChange: (league: LeagueId, config?: LeagueConfig) => void }) {
+function AdministratorView({ agencyCode, accessCode, canEdit, activeLeague, leagueConfigs: initialLeagueConfigs, leagueConfigRevision, onLeagueConfigsChange, onLeagueConfigsReload, onActiveLeagueChange, onScoreRulesSaved }: { agencyCode: string; accessCode: string; canEdit: boolean; activeLeague: LeagueId; leagueConfigs: LeagueConfig[]; leagueConfigRevision: string | null; onLeagueConfigsChange: (configs: LeagueConfig[], expectedRevision: string | null) => Promise<SharedLeagueConfigState>; onLeagueConfigsReload: () => Promise<SharedLeagueConfigState>; onActiveLeagueChange: (league: LeagueId, config?: LeagueConfig) => void; onScoreRulesSaved: () => void }) {
   const leagueConfigStorageKey = `stef-match-league-configs-${agencyCode}`;
   const [leagueConfigs, setLeagueConfigs] = useState(initialLeagueConfigs);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
@@ -4455,6 +4559,9 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
           </div>
         </div>
       </div>
+
+      <ScoreRulesPanel agencyCode={agencyCode} accessCode={accessCode} canEdit={canEdit}
+        leagueId={selectedLeague.id} leagueTargetPercent={selectedLeague.scoreTargetPercent} onSaved={onScoreRulesSaved} />
 
       <section className="administrator-leagues" aria-labelledby="league-comparison-title">
         <div className="administrator-section-heading"><div><span className="eyebrow">Référentiel</span><h3 id="league-comparison-title">Comparer les niveaux</h3></div><span className="administrator-validation-state"><AlertTriangle size={16} /> À valider avant déploiement</span></div>
@@ -5081,7 +5188,13 @@ type FootballScore = {
   goalsAgainst: number;
   targetPercent: number;
   reachedIndicators: number;
+  indicatorCount: number;
+  indicatorDetails: Array<{ id: string; label: string; reached: boolean | null }>;
+  customized: boolean;
+  referenceScore: WeightedScorePreview["referenceScore"] | null;
   available: boolean;
+  loading: boolean;
+  missingLabels: string[];
 };
 
 type OperationalScoreIndicators = NonNullable<Snapshot["operationalScore"]>["indicators"];
@@ -5097,25 +5210,31 @@ function operationalScoreIndicators(snapshot: Snapshot): OperationalScoreIndicat
   };
 }
 
-function buildFootballScore(snapshot: Snapshot, targetPercent: number): FootballScore {
-  const indicators = operationalScoreIndicators(snapshot);
-  const values = [indicators.passRate, indicators.loadingPercent, indicators.unloadingPercent, indicators.possessionPercent];
-  const canonical = snapshot.operationalScore;
-  const hasCanonicalScore = Boolean(canonical && canonical.indicators && Object.hasOwn(canonical.indicators, "possessionPercent"));
-  const available = hasCanonicalScore
-    ? canonical?.status === "available" && values.every((value) => Number.isFinite(value)) && Number.isFinite(canonical.goalsFor) && Number.isFinite(canonical.goalsAgainst)
-    : values.every((value) => Number.isFinite(value));
-  const reachedIndicators = available
-    ? hasCanonicalScore
-      ? Number(canonical?.goalsFor)
-      : values.filter((value) => (value as number) > targetPercent).length
-    : 0;
+function buildFootballScore(snapshot: Snapshot, targetPercent: number, liveScore: ActiveScoreState | null): FootballScore {
+  const scored=liveScore?.preview;
+  const available=scored?.status==="available"
+    && Number.isInteger(scored.goalsFor)
+    && Number.isInteger(scored.goalsAgainst);
+  const details=scored?.indicators.map(item=>({
+    id:item.id,label:item.label,reached:item.reached,
+  }))??[
+    {id:"passRate",label:"Passes réussies",reached:null},
+    {id:"loadingPercent",label:"Tirs cadrés",reached:null},
+    {id:"unloadingPercent",label:"Duels gagnés",reached:null},
+    {id:"possessionPercent",label:"Possession",reached:null},
+  ];
   return {
-    goalsFor: reachedIndicators,
-    goalsAgainst: available ? (hasCanonicalScore ? Number(canonical?.goalsAgainst) : values.length - reachedIndicators) : 0,
-    targetPercent: hasCanonicalScore && Number.isFinite(canonical?.targetPercent) ? Number(canonical?.targetPercent) : targetPercent,
-    reachedIndicators,
+    goalsFor:available?Number(scored?.goalsFor):0,
+    goalsAgainst:available?Number(scored?.goalsAgainst):0,
+    targetPercent,
+    reachedIndicators:details.filter(item=>item.reached===true).length,
+    indicatorCount:details.length,
+    indicatorDetails:details,
+    customized:Boolean(liveScore?.customized),
+    referenceScore:scored?.referenceScore??(snapshot.operationalScore??null),
     available,
+    loading:!liveScore,
+    missingLabels:scored?.missingIndicators.map(item=>item.label)??[],
   };
 }
 
@@ -5132,14 +5251,18 @@ function matchCeremonyOutcome(footballScore: FootballScore): {
       tone: "rework",
       title: "Match à compléter",
       verdict: "SCORE INCOMPLET",
-      message: "Score opérationnel indisponible : les 4 indicateurs doivent être renseignés pour établir le résultat.",
+      message: footballScore.loading
+        ? "Synchronisation du score avec le barème enregistré en cours."
+        : "Score opérationnel incomplet : "+(footballScore.missingLabels.join(", ") || "données manquantes")+" ; aucun but fictif comptabilisé.",
       collectiveTitle: "Performance à compléter",
       celebration: false,
     };
   }
 
   const scoreLabel = `${footballScore.goalsFor} - ${footballScore.goalsAgainst}`;
-  const scoreDetail = `${footballScore.reachedIndicators} indicateur(s) sur 4 dépassent l'objectif de ${formatNumber(footballScore.targetPercent)}%`;
+  const scoreDetail = `${footballScore.reachedIndicators} indicateur(s) sur ${footballScore.indicatorCount} dépassent leur objectif`+
+    (footballScore.customized?" (barème personnalisé)":
+      " de "+formatNumber(footballScore.targetPercent)+"%");
 
   if (footballScore.goalsFor > footballScore.goalsAgainst) {
     return {
@@ -5174,50 +5297,51 @@ function matchCeremonyOutcome(footballScore: FootballScore): {
 }
 
 function FootballScoreDisplay({ footballScore }: { footballScore: FootballScore }) {
-  const scoreLabel = footballScore.available ? `${footballScore.goalsFor} - ${footballScore.goalsAgainst}` : "— - —";
-  const scoreDescription = footballScore.available
-    ? `${footballScore.reachedIndicators} indicateur(s) dépassent l'objectif sur 4 · seuil ${formatNumber(footballScore.targetPercent)}%`
-    : "Score à compléter · les 4 indicateurs doivent être disponibles";
-
+  const scoreLabel=footballScore.available
+    ? footballScore.goalsFor+" - "+footballScore.goalsAgainst : "— - —";
+  const detail=footballScore.available
+    ? footballScore.reachedIndicators+" KPI atteints / "+footballScore.indicatorCount
+      +" · "+(footballScore.customized?"barème pondéré":"objectif "+footballScore.targetPercent+"%")
+    :footballScore.loading?"Synchronisation du score en cours."
+      :"Score incomplet · "+(footballScore.missingLabels.join(", ")||"données manquantes");
   return (
-    <div
-      className={`football-score-panel${footballScore.available ? "" : " is-unavailable"}`}
-      aria-label={`Score opérationnel : ${scoreLabel}`}
-    >
+    <div className={`football-score-panel${footballScore.available?"":" is-unavailable"}`}
+      aria-label={`Score opérationnel : ${scoreLabel}`}>
       <div className="football-score-heading">
-        <span>Score opérationnel</span>
-        <small>4 indicateurs</small>
+        <span>{footballScore.customized?"Score personnalisé":"Score opérationnel"}</span>
+        <small>{footballScore.indicatorCount} indicateurs</small>
       </div>
       <div className="football-score-line">
         <div className="football-score-side football-score-side-for">
-          <span>Indicateurs atteints</span>
-          <strong>{footballScore.available ? footballScore.goalsFor : "—"}</strong>
-          <small>but(s) marqué(s)</small>
+          <span>Buts marqués</span>
+          <strong>{footballScore.available?footballScore.goalsFor:"—"}</strong>
+          <small>objectifs atteints (pondérés)</small>
         </div>
         <span className="football-score-separator" aria-hidden="true">-</span>
         <div className="football-score-side football-score-side-against">
-          <span>Indicateurs sous l'objectif</span>
-          <strong>{footballScore.available ? footballScore.goalsAgainst : "—"}</strong>
-          <small>but(s) encaissé(s)</small>
+          <span>Buts encaissés</span>
+          <strong>{footballScore.available?footballScore.goalsAgainst:"—"}</strong>
+          <small>objectifs non atteints (pondérés)</small>
         </div>
       </div>
-      <p>{scoreDescription}</p>
-      <div className="football-score-meter" aria-label={`Barème : ${footballScore.available ? `${footballScore.goalsFor} indicateur(s) atteint(s) sur 4` : "indisponible"}`}>
-        {Array.from({ length: 4 }, (_, index) => (
-          <span
-            className={footballScore.available ? (index < footballScore.goalsFor ? "is-reached" : "is-below") : "is-unavailable"}
-            key={`score-segment-${index}`}
-            aria-hidden="true"
-          />
+      <p>{detail}</p>
+      <div className="football-score-meter" aria-label={`Barème : ${footballScore.available
+        ?footballScore.reachedIndicators+" indicateur(s) atteints sur "+footballScore.indicatorCount
+        :"indisponible"}`}>
+        {footballScore.indicatorDetails.map(item=>(
+          <span key={item.id} className={!footballScore.available?"is-unavailable"
+            :item.reached===true?"is-reached":"is-below"} aria-hidden="true" />
         ))}
       </div>
       <div className="football-score-integrated" aria-label="KPI intégrés au score">
         <span>Intègre :</span>
-        <b>% passes réussies</b>
-        <b>% tirs cadrés</b>
-        <b>% duels gagnés</b>
-        <b>% possession</b>
+        {footballScore.indicatorDetails.map(item=><b key={item.id}>{item.label}</b>)}
       </div>
+      {footballScore.customized && footballScore.referenceScore?.status==="available" && (
+        <p className="football-score-reference">
+          Référence inter-agences (4 KPI) : {footballScore.referenceScore.goalsFor} - {footballScore.referenceScore.goalsAgainst}
+        </p>
+      )}
     </div>
   );
 }

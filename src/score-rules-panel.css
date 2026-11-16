@@ -1,0 +1,93 @@
+.score-rules-panel{
+  margin:28px 0;
+  padding:clamp(16px,2.8vw,30px);
+  border:1px solid rgba(104,193,201,.26);
+  border-radius:22px;
+  background:linear-gradient(145deg,rgba(13,36,56,.96),rgba(7,22,42,.98));
+  box-shadow:0 18px 40px rgba(0,0,0,.14);
+  color:#eaf3f7;
+}
+.score-rules-heading{
+  display:flex;align-items:start;justify-content:space-between;
+  gap:16px;margin-bottom:18px;flex-wrap:wrap;
+}
+.score-rules-heading h3{font-size:clamp(21px,2vw,28px);margin:6px 0 8px;color:#fff}
+.score-rules-heading p{color:#bbcdd7;margin:0;line-height:1.55;max-width:690px}
+.score-rules-kicker{color:#8fe1e3;font-size:11px;font-weight:800;letter-spacing:.16em}
+.score-rules-pill{
+  color:#09272b;background:#8ad6d5;border-radius:999px;
+  padding:8px 12px;font-size:12px;font-weight:800;
+}
+.score-rules-guide{
+  border-top:1px solid rgba(192,230,232,.18);border-bottom:1px solid rgba(192,230,232,.18);
+  padding:13px 0;display:flex;gap:18px 28px;flex-wrap:wrap;
+}
+.score-rules-guide p{margin:0;font-size:12px;color:#d7e2e7}
+.score-rules-guide strong{color:#fff}
+.score-rules-headline{
+  margin:17px 0 13px;display:flex;justify-content:space-between;gap:15px;
+  flex-wrap:wrap;font-size:12px;color:#c3d4dc;font-weight:650;
+}
+.score-rules-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.score-rules-item{
+  border:1px solid rgba(181,203,209,.20);border-radius:13px;
+  padding:14px;background:rgba(3,13,27,.35);min-width:0;
+}
+.score-rules-item.is-selected{
+  border-color:rgba(98,205,207,.6);
+  background:linear-gradient(145deg,rgba(34,88,99,.36),rgba(7,25,39,.6));
+}
+.score-rules-item-title{display:flex;align-items:center;gap:8px;color:#f5f9fa;font-weight:750;min-width:0}
+.score-rules-item-title input{width:18px;height:18px;flex:none;accent-color:#6cd5d1}
+.score-rules-item-title span{flex:1;min-width:0;overflow-wrap:anywhere}
+.score-rules-item-title small{color:#9cb4c0;font-size:10px;font-weight:600}
+.score-rules-fields{display:grid;grid-template-columns:minmax(0,1.6fr) repeat(2,minmax(0,.9fr));gap:10px;margin-top:14px}
+.score-rules-fields label{display:flex;flex-direction:column;gap:6px;font-size:11px;font-weight:700;color:#b7ccd5}
+.score-rules-fields select,.score-rules-fields input{
+  width:100%;min-width:0;padding:8px 9px;border-radius:8px;
+  color:#f4f8fa;background:#0c2639;border:1px solid rgba(164,209,215,.42);
+  font-size:12px;box-sizing:border-box;
+}
+.score-rules-fields select:disabled,.score-rules-fields input:disabled{opacity:.68}
+.score-rules-warning{margin:17px 0;color:#b8cbd4;font-size:12px;line-height:1.55}
+.score-rules-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end}
+.score-rules-actions button{max-width:100%;white-space:normal;text-align:center}
+.score-rules-preview{
+  margin-top:18px;padding:16px;border:1px solid rgba(104,193,201,.48);
+  border-radius:12px;background:rgba(9,32,42,.75)
+}
+.score-rules-preview h4{font-size:14px;color:#f8fbfb;margin:0 0 10px}
+.score-rules-preview p{font-size:12px;color:#c6d8dd;line-height:1.45;margin:7px 0}
+.score-rules-score{font-size:36px;font-variant-numeric:tabular-nums;color:#fff}
+.score-rules-error{margin:12px 0 0;padding:12px;border-radius:8px;background:rgba(117,21,32,.36);color:#ffdedf}
+.score-rules-success{margin:12px 0 0;padding:12px;border-radius:8px;background:rgba(16,77,72,.5);color:#c3f6e5}
+@media(max-width:820px){
+  .score-rules-grid{grid-template-columns:1fr}
+  .score-rules-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .score-rules-fields label:first-child{grid-column:1/-1}
+}
+@media(max-width:430px){
+  .score-rules-actions button{width:100%}
+  .score-rules-item{padding:12px}
+}
+
+/* Score provenance is a secondary line: no competing scoreboard tiles. */
+.football-score-reference {
+  margin: 9px 0 0;
+  color: #b9d5da;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.tv-custom-score {
+  display: inline-block;
+  border: 1px solid rgba(116, 219, 214, .28);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 8px 0 0;
+  background: rgba(7, 30, 43, .72);
+  color: #d2e7e9;
+  font-size: clamp(12px, 1.2vw, 15px);
+  line-height: 1.45;
+}
+.tv-custom-score strong { color: #fff; font-size: 1.2em; }
+.tv-custom-score span { color: #a9ccce; font-size: .9em; }

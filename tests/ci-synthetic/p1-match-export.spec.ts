@@ -63,11 +63,13 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   const profileGet = await request.get(`${agencyUrl}/export/profile`, { headers });
   expect(profileGet.status()).toBe(200);
   let profileState = await profileGet.json();
+  let scoreRulesRevision = "";
   const pdfWithRevision = async () => {
     const q = new URLSearchParams({
       leagueId: "argent", matchDate: snapshot.match.date, importedAt: snapshot.importedAt,
       causerieRevision: savedBriefState.causerieRevision ?? "",
       pdfProfileRevision: profileState.profileRevision ?? "",
+      scoreRulesRevision,
       zonageMinutes: String(league!.zonageMinutes), loadingSeconds: String(league!.loadingSeconds),
       unloadingSeconds: String(league!.unloadingSeconds),
       scoreTargetPercent: String(league!.scoreTargetPercent),
@@ -112,6 +114,39 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   await page.getByLabel("Code agence").selectOption(agency);
   await page.getByLabel("Code d'accès").fill(`CI-ONLY-${agency}`);
   await page.getByRole("button", { name: "Accéder au match" }).click();
+  // Lot B: the same admin editor is available on all three viewport sizes.
+  await page.getByRole("button",{name:/Administrateur/}).click();
+  await expect(page.getByRole("heading",{name:"Personnaliser le score du MATCH"})).toBeVisible();
+  await expect(page.getByText("4 KPI sélectionnés")).toBeVisible();
+  await page.getByRole("button",{name:"Prévisualiser le score"}).click();
+  await expect(page.getByRole("heading",{name:"Simulation sur le dernier MATCH de cette agence"})).toBeVisible();
+  await page.getByLabel("Buts marqués Passes réussies").selectOption("2");
+  await page.getByRole("button",{name:"Enregistrer le barème"}).click();
+  await expect(page.getByText("Règles enregistrées pour cette agence et cette ligue.")).toBeVisible();
+  const savedScoreRules=await request.get(agencyUrl+"/score-rules?leagueId=argent",{headers});
+  expect(savedScoreRules.status()).toBe(200);
+  const storedRules=await savedScoreRules.json();
+  expect(storedRules.profile.indicators[0].goalsFor).toBe(2);
+  scoreRulesRevision=storedRules.scoreRulesRevision;
+  expect(scoreRulesRevision).toBeTruthy();
+  const scoredResponse=await request.get(agencyUrl+"/score-rules?leagueId=argent&preview=1",{headers});
+  expect(scoredResponse.status()).toBe(200);
+  const customScore=(await scoredResponse.json()).preview;
+  expect(customScore.referenceScore).toBeTruthy();
+  const customPdf=await pdfWithRevision();
+  expect(customPdf.status(),await customPdf.text()).toBe(200);
+  const parsedCustomPdf=await pdfParse(await customPdf.body());
+  expect(parsedCustomPdf.numpages).toBe(2);
+  expect(parsedCustomPdf.text).toContain("SCORE PERSONNALISÉ");
+  expect(parsedCustomPdf.text).toContain("RÉFÉRENCE");
+  // A stale score-rule revision may not produce a contradictory scoreline.
+  const previousRevision=scoreRulesRevision;
+  scoreRulesRevision="stale-revision";
+  const staleScorePdf=await pdfWithRevision();
+  expect(staleScorePdf.status()).toBe(409);
+  scoreRulesRevision=previousRevision;
+  await page.getByRole("button",{name:"02 Feuille de match",exact:true}).click();
+  await expect(page.getByText("Score personnalisé")).toBeVisible();
   await expect(page.getByRole("button", { name: "02 Feuille de match", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "02 Feuille de match", exact: true }).click();
   await expect(page.getByRole("button", { name: "Personnaliser l'export PDF", exact: true })).toBeVisible();
