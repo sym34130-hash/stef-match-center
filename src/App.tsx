@@ -51,6 +51,7 @@ import type { Agency, Highlight, Player, Snapshot } from "./types";
 import { MatchIndicatorsCarousel } from "./MatchIndicatorsCarousel";
 import { ReceptionScopeControls, type ReceptionExclusionChange, type LoadingExclusionChange } from "./ReceptionScopeControls";
 import { KickoffMusicControl } from "./KickoffMusicControl";
+import { ScoreRulesPanel } from "./ScoreRulesPanel";
 import { OperationalDiagnosticCard, ReceptionHourlyChart } from "./OperationalAnalysisCards";
 import { parseMercatoEntrants, type MercatoProfile, type MercatoProfiles } from "./mercato";
 import "./match-export.css";
@@ -771,7 +772,7 @@ export default function App() {
             )}
             {screen === "tv" && (snapshot ? <TvMode snapshot={snapshot} session={session} causerieRevision={causerieRevision} onExit={() => setScreen("kickoff")} /> : <NoDataView onImport={() => setScreen("import")} onBack={() => setScreen("kickoff")} />)}
             {screen === "guide" && <GuideView snapshot={snapshot} leagueConfigs={leagueConfigs} onNavigate={setScreen} />}
-            {screen === "admin" && <AdministratorView agencyCode={session.agency.code} activeLeague={activeLeague} leagueConfigs={leagueConfigs} leagueConfigRevision={leagueConfigRevision} onLeagueConfigsChange={queueLeagueConfigSave} onLeagueConfigsReload={async () => {
+            {screen === "admin" && <AdministratorView agencyCode={session.agency.code} accessCode={session.accessCode} canEdit={session.agency.canImport} activeLeague={activeLeague} leagueConfigs={leagueConfigs} leagueConfigRevision={leagueConfigRevision} onLeagueConfigsChange={queueLeagueConfigSave} onLeagueConfigsReload={async () => {
               const state = await fetchSharedLeagueConfigs(session);
               setLeagueConfigs(state.configs);
               setLeagueConfigRevision(state.leagueConfigRevision);
@@ -4306,7 +4307,7 @@ function BriefTeamPlan({ snapshot, session, sharedPlan, causerieRevision, onPlan
   );
 }
 
-function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLeagueConfigs, leagueConfigRevision, onLeagueConfigsChange, onLeagueConfigsReload, onActiveLeagueChange }: { agencyCode: string; activeLeague: LeagueId; leagueConfigs: LeagueConfig[]; leagueConfigRevision: string | null; onLeagueConfigsChange: (configs: LeagueConfig[], expectedRevision: string | null) => Promise<SharedLeagueConfigState>; onLeagueConfigsReload: () => Promise<SharedLeagueConfigState>; onActiveLeagueChange: (league: LeagueId, config?: LeagueConfig) => void }) {
+function AdministratorView({ agencyCode, accessCode, canEdit, activeLeague, leagueConfigs: initialLeagueConfigs, leagueConfigRevision, onLeagueConfigsChange, onLeagueConfigsReload, onActiveLeagueChange }: { agencyCode: string; accessCode: string; canEdit: boolean; activeLeague: LeagueId; leagueConfigs: LeagueConfig[]; leagueConfigRevision: string | null; onLeagueConfigsChange: (configs: LeagueConfig[], expectedRevision: string | null) => Promise<SharedLeagueConfigState>; onLeagueConfigsReload: () => Promise<SharedLeagueConfigState>; onActiveLeagueChange: (league: LeagueId, config?: LeagueConfig) => void }) {
   const leagueConfigStorageKey = `stef-match-league-configs-${agencyCode}`;
   const [leagueConfigs, setLeagueConfigs] = useState(initialLeagueConfigs);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
@@ -4455,6 +4456,9 @@ function AdministratorView({ agencyCode, activeLeague, leagueConfigs: initialLea
           </div>
         </div>
       </div>
+
+      <ScoreRulesPanel agencyCode={agencyCode} accessCode={accessCode} canEdit={canEdit}
+        leagueId={selectedLeague.id} leagueTargetPercent={selectedLeague.scoreTargetPercent} />
 
       <section className="administrator-leagues" aria-labelledby="league-comparison-title">
         <div className="administrator-section-heading"><div><span className="eyebrow">Référentiel</span><h3 id="league-comparison-title">Comparer les niveaux</h3></div><span className="administrator-validation-state"><AlertTriangle size={16} /> À valider avant déploiement</span></div>
