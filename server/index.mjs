@@ -254,7 +254,15 @@ app.put("/api/agencies/:agencyCode/score-rules", requireAgency, async (req, res)
       const agencyDir=path.join(dataDir,sanitizeSegment(req.agency.code));
       const file=path.join(agencyDir,"score-rules.json");
       const all=await readStoredScoreRules(req.agency.code);
-      all.leagues[leagueId]={profile,changedAt:new Date().toISOString()};
+      const changedAt=new Date().toISOString();
+      const previous=all.leagues[leagueId];
+      const history=previous?.history??[];
+      all.leagues[leagueId]={
+        profile,changedAt,
+        // Preserve every prior version for later reconciliation of historical
+        // reports. Never overwrite an old barème entry.
+        history:[...history,{changedAt,profile}],
+      };
       await fs.mkdir(agencyDir,{recursive:true});
       await writeJsonAtomic(file,all);
       return readScoreRulesState(req.agency.code,leagueId);
@@ -1335,7 +1343,22 @@ async function readStoredScoreRules(agencyCode) {
       assertScoreLeagueId(leagueId);
       if (!entry || !Number.isFinite(Date.parse(entry.changedAt)))
         throw new ScoreRulesError(409,"Historique des règles du score invalide.");
-      leagues[leagueId]={profile:normalizeScoreRules(entry.profile),changedAt:entry.changedAt};
+      const profile=normalizeScoreRules(entry.profile);
+      const recorded=entry.history===undefined
+        ?[{changedAt:entry.changedAt,profile}]
+        :entry.history;
+      if(!Array.isArray(recorded)||recorded.length<1)
+        throw new ScoreRulesError(409,"Historique des règles du score incomplet.");
+      const history=recorded.map(version=>{
+        if(!version || !Number.isFinite(Date.parse(version.changedAt)))
+          throw new ScoreRulesError(409,"Date de version du score invalide.");
+        return {changedAt:version.changedAt,profile:normalizeScoreRules(version.profile)};
+      });
+      const last=history[history.length-1];
+      if(last.changedAt!==entry.changedAt ||
+        JSON.stringify(last.profile)!==JSON.stringify(profile))
+        throw new ScoreRulesError(409,"Dernière version du score incohérente.");
+      leagues[leagueId]={profile,changedAt:entry.changedAt,history};
     }
     return {version:SCORE_RULES_VERSION,leagues};
   } catch(error) {
@@ -1351,6 +1374,7 @@ async function readScoreRulesState(agencyCode,leagueId) {
   const file=path.join(dataDir,sanitizeSegment(agencyCode),"score-rules.json");
   return {profile:all.leagues[leagueId]?.profile??defaultScoreRules(),
     changedAt:all.leagues[leagueId]?.changedAt??null,
+    historyCount:all.leagues[leagueId]?.history?.length??0,
     scoreRulesRevision:await readFileRevision(file)};
 }
 
