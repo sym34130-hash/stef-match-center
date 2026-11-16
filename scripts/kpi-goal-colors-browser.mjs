@@ -221,6 +221,7 @@ try {
       await page.getByRole("button",{name:"02 Feuille de match",exact:true}).click();
       const board=page.locator(".match-score-bubbles");
       await board.waitFor({state:"visible"});
+      await page.locator(".football-score-panel:not(.is-unavailable)").waitFor({state:"visible"});
       assert.equal(await board.locator(".match-score-bubble").count(),4);
       for(const kind of bubbles) {
         const card=board.locator("." + kind);
