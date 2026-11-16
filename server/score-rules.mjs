@@ -70,7 +70,8 @@ function observedValue(snapshot, id) {
   const catalog = KNOWN.get(id);
   if (catalog.source === "Excel") {
     return { value:snapshot?.operationalScore?.indicators?.[id] ?? null,
-      source:"Excel", sourceDate:snapshot?.match?.date ?? null, reason:null };
+      source:"Excel", sourceDate:snapshot?.match?.date ?? null,
+      sourceAgency:snapshot?.agency?.code ?? null, reason:null };
   }
   const indicators=snapshot?.dailyIndicators;
   // Excel and 106J legitimately originate on different operational dates.
@@ -78,7 +79,8 @@ function observedValue(snapshot, id) {
   // regardless of its reference date. Retain provenance for transparency;
   // missing or invalid rates are still treated as unavailable.
   return { value:indicators?.punctuality?.[id] ?? null,
-    source:"106J", sourceDate:indicators?.referenceDate ?? null, reason:null };
+    source:"106J", sourceDate:indicators?.referenceDate ?? null,
+    sourceAgency:indicators?.agencyCode ?? null, reason:null };
 }
 
 export function evaluateScoreRules(snapshot, rules, leagueTargetPercent) {
@@ -97,6 +99,7 @@ export function evaluateScoreRules(snapshot, rules, leagueTargetPercent) {
       awardedGoals:reached===true?item.goalsFor:0,
       concededGoals:reached===false?item.goalsAgainst:0,
       source:observed.source, sourceDate:observed.sourceDate,
+      sourceAgency:observed.sourceAgency,
       reason: available?null:observed.reason??"Donnée indisponible sur ce MATCH." };
   });
   const missingIndicators=indicators.filter(item=>item.reached===null)
