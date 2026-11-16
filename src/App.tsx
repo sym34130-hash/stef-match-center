@@ -4945,6 +4945,58 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
             </GuidePanel>
           )}
 
+          {section === "score" && (
+            <GuidePanel eyebrow="08 · Personnaliser le score" title="Choisir les KPI qui marquent ou encaissent des buts" icon={Target}>
+              <p>Dans <strong>Administrateur → Personnaliser le score du MATCH</strong>, réglez le barème de la ligue sélectionnée pour votre agence. Les quatre KPI historiques restent disponibles comme <strong>score de référence</strong>, indépendant du score personnalisé.</p>
+              <div className="guide-action-list">
+                <GuideAction icon={CheckCircle2} title="Choisir 2 à 6 KPI" tone="green" detail="Sélectionnez les indicateurs actifs parmi Passes réussies, Tirs cadrés, Duels gagnés, Possession et les quatre taux 106J : ponctualité arrivage, départ, destination et température retour ramasse." />
+                <GuideAction icon={Target} title="Fixer l’objectif de chaque KPI" tone="blue" detail="Utilisez l’objectif de la ligue ou un pourcentage personnalisé de 1 à 100 %. Pour atteindre l’objectif, le taux doit être strictement supérieur à la cible : une égalité ne suffit pas." />
+                <GuideAction icon={Trophy} title="Pondérer les buts" tone="orange" detail="Pour chaque KPI, choisissez indépendamment de 1 à 3 buts marqués si le taux dépasse sa cible et de 1 à 3 buts encaissés s’il est inférieur ou égal à la cible." />
+                <GuideAction icon={Eye} title="Prévisualiser et enregistrer" tone="blue" detail="Prévisualiser simule le score sur le dernier MATCH, sans sauvegarder. Cliquez sur Enregistrer le barème pour l’appliquer. Si une autre personne a modifié la configuration, rechargez les règles avant d’enregistrer." />
+              </div>
+              <section className="guide-topic"><h4>Comment lire le nouveau score ?</h4>
+                <ul className="guide-reading-list">
+                  <li><strong>Buts ≠ nombre de KPI.</strong> Un seul indicateur peut rapporter ou coûter plusieurs buts selon la pondération retenue.</li>
+                  <li><strong>Score personnalisé.</strong> Le résultat tient compte exclusivement des 2 à 6 KPI enregistrés, de leurs objectifs et des poids attribués.</li>
+                  <li><strong>Score de référence.</strong> Les quatre KPI historiques restent comparables entre agences, même si les barèmes personnalisés diffèrent.</li>
+                  <li><strong>Score incomplet.</strong> Un KPI sélectionné sans valeur exploitable rend le résultat indisponible : l’absence ne crée pas un but encaissé fictif.</li>
+                </ul>
+              </section>
+              <div className="guide-callout info"><FileCheck2 size={20} /><span><strong>Excel et 106J :</strong> les dates des deux fichiers peuvent différer. Les valeurs 106J associées au MATCH restent utilisables ; la date et le site source sont indiqués dans les bulles. Vérifiez leur pertinence avant diffusion.</span></div>
+              <div className="guide-callout success"><CheckCircle2 size={20} /><span><strong>Transfert des vignettes :</strong> lorsqu’une ponctualité 106J est choisie pour le score, elle quitte <strong>Le collectif en chiffres</strong> et rejoint les bulles de <strong>Célébration activée</strong>. Elle revient après désélection si sa préférence de visibilité le permet.</span></div>
+              <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Attention à la portée :</strong> chaque agence et chaque ligue ont leurs propres règles. Modifier un barème peut modifier le score affiché du MATCH encore actif. Ce réglage ne fige pas à lui seul le résultat des journées passées et ne change jamais les fichiers sources.</span></div>
+              <div className="guide-actions">
+                <button className="primary-button" type="button" onClick={() => onNavigate("admin")}><Settings2 size={17} /> Personnaliser le score</button>
+                <button className="secondary-button" type="button" onClick={() => onNavigate("match")}><LayoutDashboard size={17} /> Vérifier le MATCH</button>
+              </div>
+            </GuidePanel>
+          )}
+
+          {section === "pdf" && (
+            <GuidePanel eyebrow="09 · Exporter le PDF" title="Diffuser un MATCH complet sur deux pages" icon={FileCheck2}>
+              <p>Depuis <strong>Feuille de match</strong>, utilisez <strong>Personnaliser le PDF</strong> puis <strong>Exporter le MATCH en PDF</strong>. Le document reprend l’agence, la ligue, le score appliqué, les indicateurs sélectionnés, un graphique et les consignes enregistrées.</p>
+              <div className="guide-action-list">
+                <GuideAction icon={Settings2} title="Personnaliser la version papier" tone="blue" detail="Sélectionnez les KPI complémentaires et le graphique prioritaire, puis renseignez si nécessaire les synthèses papier du brief. Ces choix sont indépendants des 2 à 6 KPI qui composent le score." />
+                <GuideAction icon={FileCheck2} title="Vérifier les deux pages" tone="green" detail="Page 1 : résultat et indicateurs réellement utilisés pour marquer ou encaisser des buts, avec leurs objectifs et pondérations. Page 2 : les informations complémentaires, le graphique et le brief. Le format reste limité à deux pages A4 paysage." />
+                <GuideAction icon={CheckCircle2} title="Enregistrer puis exporter" tone="orange" detail="Enregistrez les réglages du PDF et les consignes modifiées avant le téléchargement. Contrôlez l’agence, la date, la ligue, les sources et les deux pages du document final." />
+              </div>
+              <section className="guide-topic"><h4>Ne confondez pas score et KPI complémentaires</h4>
+                <ul className="guide-reading-list">
+                  <li><strong>Score : 2 à 6 KPI.</strong> Ils sont choisis dans Administrateur. Les valeurs, objectifs et pondérations du score s’adaptent automatiquement au barème enregistré.</li>
+                  <li><strong>Compléments : généralement 4 à 6 cartes.</strong> Ils sont choisis dans la personnalisation du PDF parmi les vignettes visibles du collectif. Si moins de quatre cartes sont disponibles, le nombre est adapté.</li>
+                  <li><strong>Une valeur 106J ne s’imprime pas deux fois.</strong> Un taux déjà utilisé dans le score est écarté des cartes complémentaires, même s’il demeure coché dans les réglages PDF. Le nombre de cartes effectivement imprimées peut donc être inférieur au nombre sélectionné : relisez le document.</li>
+                  <li><strong>Valeur manquante.</strong> Le PDF affiche « Indisponible » ou « N/D » avec une légende quand l’espace est réduit ; aucun pourcentage ni but fictif n’est ajouté.</li>
+                </ul>
+              </section>
+              <div className="guide-callout info"><Shield size={20} /><span><strong>Versions synchronisées :</strong> le site compare le MATCH, la ligue, le barème, le profil PDF et le brief enregistrés. Si un élément a changé entre l’affichage et l’export, actualisez le MATCH, vérifiez les données, puis relancez le téléchargement.</span></div>
+              <div className="guide-callout warning"><AlertTriangle size={20} /><span><strong>Images du brief :</strong> les captures restent visibles sur le site mais ne sont pas reproduites automatiquement dans le PDF. Si une rubrique ne contient que des captures, saisissez une synthèse écrite dans le configurateur PDF avant d’exporter.</span></div>
+              <div className="guide-actions">
+                <button className="primary-button" type="button" onClick={() => onNavigate("match")}><FileCheck2 size={17} /> Préparer le PDF</button>
+                <button className="secondary-button" type="button" onClick={() => showSection("help")}><ArrowRight size={17} /> Vérifier avant diffusion</button>
+              </div>
+            </GuidePanel>
+          )}
+
           {section === "help" && (
             <GuidePanel eyebrow="10 · Points d’attention" title="Les vérifications à faire avant de partager le résultat" icon={CircleHelp}>
               <div className="guide-checklist">
