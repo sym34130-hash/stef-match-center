@@ -513,77 +513,95 @@ function compactChart(p, m, chartId) {
     const total = rows.reduce((sum, row) => sum + (Number.isFinite(row.total) ? row.total : 0), 0);
     const weightedRate = total > 0 ? Math.round(won / total * 1000) / 10 : null;
     chartFrame(p, "PASSES RÉUSSIES / HEURE",
-      "Tous DECHG eligibles, tous segments dont LIV ; zonage <= " + fmt(m.criteria?.zonageMinutes) + " min  |  Total : " + percent(weightedRate));
-    if (!rows.length) { p.text(43, 91, 10, "Aucune donnée horaire éligible dans la plage choisie.", C.muted); return; }
-    const x = 78, baseline = 85, w = 699, h = 51;
-    for (const value of [0, 50, 100]) {
-      const y = baseline + value / 100 * h;
-      p.box(x, y, w, 0.6, C.panel2);
-      p.text(42, y - 2.5, 7.4, String(value) + "%", C.muted);
+      "Tous DECHG eligibles, tous segments dont LIV ; zonage <= "
+      + fmt(m.criteria?.zonageMinutes) + " min  |  Total : " + percent(weightedRate));
+    if (!rows.length) {
+      p.text(43, 91, 10, "Aucune donnée horaire éligible dans la plage choisie.", C.muted);
+      return;
     }
-    // Match the website's temporal scale: use the selected period and true
-    // clock-hour offsets, not equally spaced array indices. Missing hours
-    // remain gaps and use dashed connectors rather than fabricated samples.
-    const parseMinutes = value => {
-      const match = /^(\d{1,2}):(\d{2})$/.exec(String(value ?? ""));
-      if (!match) return null;
-      const hour = Number(match[1]), minute = Number(match[2]);
-      return hour < 24 && minute < 60 ? hour * 60 + minute : null;
+    // A source rate is an hourly AGGREGATE, not a point to interpolate.
+    // The raw N/D pair is printed below each discrete bar when available.
+    const invalid=rows.find(row=>Number.isFinite(row.won)
+      && Number.isFinite(row.total) && row.total>0
+      && (row.won<0 || row.won>row.total
+        || Math.abs(row.rate-Math.round(row.won/row.total*1000)/10)>.11));
+    if(invalid)throw new MatchExportError(409,
+      "Graphique horaire incohérent avec les volumes source. Actualise le MATCH.");
+    const parseClock=value=>{
+      const match=/^(\d{1,2}):(\d{2})$/.exec(String(value??""));
+      if(!match)return null;
+      const hh=Number(match[1]),mm=Number(match[2]);
+      return hh<24&&mm<60?hh*60+mm:null;
     };
-    const periodStart = parseMinutes(m.match?.periodStart);
-    const periodEnd = parseMinutes(m.match?.periodEnd);
-    const firstHour = periodStart == null
-      ? (Number.isInteger(rows[0]?.hour) ? rows[0].hour : Number.parseInt(rows[0]?.label ?? "0", 10) || 0)
-      : Math.floor(periodStart / 60);
-    const offsets = rows.map((row, index) => Number.isInteger(row.hour) && row.hour >= 0 && row.hour < 24
-      ? (row.hour - firstHour + 24) % 24 : index);
-    const selectedMinutes = periodStart != null && periodEnd != null
-      ? ((periodEnd - periodStart + 1440) % 1440 || 1440) : null;
-    const selectedSpan = selectedMinutes == null ? 0 : (periodStart % 60 + selectedMinutes) / 60;
-    const spanHours = Math.max(1, selectedSpan, ...offsets);
-    const points = rows.map((row, i) => ({
-      row, offset: offsets[i], x: x + offsets[i] / spanHours * w,
-      y: baseline + row.rate / 100 * h,
-    }));
-    for (let i = 0; i < points.length; i++) {
-      const point = points[i];
-      if (i > 0) {
-        const prev = points[i - 1];
-        const gap = point.offset - prev.offset > 1;
-        // The line itself is continuous only between consecutive observed hours.
-        p.ops.push(rgb(C.aqua) + " RG 1.6 w " + (gap ? "[3 3] 0 d " : "[] 0 d ")
-          + prev.x.toFixed(2) + " " + prev.y.toFixed(2) + " m "
-          + point.x.toFixed(2) + " " + point.y.toFixed(2) + " l S [] 0 d\n");
+    const periodStart=parseClock(m.match?.periodStart);
+    const periodEnd=parseClock(m.match?.periodEnd);
+    const firstHour=periodStart==null
+      ? (Number.isInteger(rows[0]?.hour)?rows[0].hour:parseInt(rows[0]?.label??"0",10)||0)
+      : Math.floor(periodStart/60);
+    const measured=rows.map((row,index)=>({
+      row,
+      offset:Number.isInteger(row.hour)&&row.hour>=0&&row.hour<24
+        ?(row.hour-firstHour+24)%24:index
+    })).sort((a,b)=>a.offset-b.offset);
+    if(new Set(measured.map(point=>point.offset)).size!==measured.length)
+      throw new MatchExportError(409,"Plusieurs valeurs horaires pour un même créneau.");
+    const selectedMinutes=periodStart!=null&&periodEnd!=null
+      ?((periodEnd-periodStart+1440)%1440||1440):null;
+    const selectedSpan=selectedMinutes==null?0
+      :(periodStart%60+selectedMinutes)/60;
+    const spanHours=Math.max(1,selectedSpan,...measured.map(p=>p.offset+1));
+    const x=78,baseline=85,w=699,h=48,slotWidth=w/spanHours;
+    const observed=new Set(measured.map(point=>point.offset));
+    const lastTick=Math.floor(spanHours);
+    let blankHours=0;
+    // Neutral hour bands visibly separate missing observations from 0%.
+    for(let hour=0;hour<Math.ceil(spanHours);hour++){
+      if(observed.has(hour))continue;
+      const length=Math.min(1,spanHours-hour);
+      if(length<=0)continue;
+      blankHours++;
+      p.box(x+hour*slotWidth,baseline,length*slotWidth,h,[.19,.27,.32]);
+      p.line(x+hour*slotWidth,baseline,
+        x+hour*slotWidth,baseline+h,C.muted,.35,[2,3]);
+    }
+    for(const value of [0,50,100]){
+      const yy=baseline+value/100*h;
+      p.box(x,yy,w,.5,C.panel2);
+      p.text(42,yy-2.5,7.4,String(value)+"%",C.muted);
+    }
+    const labelStep=Math.max(1,Math.ceil(measured.length/11));
+    measured.forEach(({row,offset},i)=>{
+      const available=Math.min(1,spanHours-offset);
+      if(available<=0)return;
+      const center=x+(offset+available/2)*slotWidth;
+      const width=Math.min(43,slotWidth*available*.61);
+      const barH=row.rate/100*h;
+      p.box(center-width/2,baseline,width,Math.max(.6,barH),C.aqua);
+      p.box(center-width/2,baseline+Math.max(.6,barH)-1,width,1,C.white);
+      if(i%labelStep===0||i===measured.length-1){
+        p.text(center,139,7.5,percent(row.rate),C.white,true,"center");
+        const amount=Number.isFinite(row.won)&&Number.isFinite(row.total)
+          ?fmt(row.won)+"/"+fmt(row.total):"vol. N/D";
+        p.text(center,60.5,7.1,amount,C.muted,false,"center");
       }
-      p.box(point.x - 1.8, point.y - 1.8, 3.6, 3.6, C.aqua);
+    });
+    const every=Math.max(1,Math.ceil((lastTick+1)/11));
+    for(let hour=0;hour<=lastTick;hour+=every)
+      p.text(x+hour*slotWidth,73,7,
+        String((firstHour+hour)%24).padStart(2,"0")+"h",C.muted);
+    if(periodEnd!==null&&periodEnd%60!==0){
+      const endLabel=String(Math.floor(periodEnd/60)).padStart(2,"0")+"h"
+        +String(periodEnd%60).padStart(2,"0");
+      p.text(x+w,73,7.4,endLabel,C.gold,true,"right");
+      p.line(x+w,baseline,x+w,baseline+h,C.gold,.65);
     }
-    // Include the complete selected time window, even when observations start
-    // late or stop early. This also distinguishes an empty hour from 0%.
-    const axisStart = firstHour;
-    const lastTick = Math.floor(spanHours);
-    const labelEvery = Math.max(1, Math.ceil((lastTick + 1) / 10));
-    for (let hour = 0; hour <= lastTick; hour += labelEvery) {
-      const tickX = x + hour / spanHours * w;
-      p.text(tickX, 76, 7, String((axisStart + hour) % 24).padStart(2, "0") + "h", C.muted);
-    }
-    if (periodEnd !== null && periodEnd % 60 !== 0) {
-      const endLabel = String(Math.floor(periodEnd / 60)).padStart(2, "0") + "h"
-        + String(periodEnd % 60).padStart(2, "0");
-      p.text(x + w, 76, 7.4, endLabel, C.gold, true, "right");
-      p.line(x + w, baseline, x + w, baseline + h, C.gold, 0.65);
-    }
-    // Preserve both exact source labels in the printed recap, including
-    // historical/synthetic snapshots whose numeric hour field is inconsistent.
-    const first = rows[0], last = rows[rows.length - 1];
-    p.text(x, 62, 8, trim(String(first.label ?? first.hour ?? "Début"), 20) + " : " + percent(first.rate), C.text);
-    p.text(x + w, 62, 8, trim(String(last.label ?? last.hour ?? "Fin"), 20) + " : " + percent(last.rate), C.text, false, "right");
-    const empty = [];
-    const observed = new Set(offsets);
-    for (let hour = 0; hour <= lastTick; hour++) {
-      if (!observed.has(hour)) empty.push(hour);
-    }
-    if (empty.length) p.text(x + w / 2, 61, 7.3, empty.length + " h sans donnée", C.muted, false, "center");
-    p.text(42, 49, 8.4, "Tous dechargements eligibles ; périmètre distinct du KPI officiel toutes opérations.", C.muted);
+    const first=measured[0].row,last=measured[measured.length-1].row;
+    p.text(42,49,8,
+      "Créneaux mesurés : "+fmt(measured.length)
+      +"  |  Sans données : "+fmt(blankHours)
+      +"  |  "+trim(String(first.label??first.hour??""),8)
+      +" à "+trim(String(last.label??last.hour??""),8)
+      +"  |  Volumes sous les barres : réussites / opérations",C.muted);
     return;
   }
   if (chartId === "reception-time") {
@@ -895,7 +913,7 @@ function compactScorePage(doc, m) {
   p.text(512,378,scoreSize(conceded),conceded,C.white,true,"center");
   p.text(421,383,27,"-",C.gold,true,"center");
   p.text(329,362,8.5,"BUTS MARQUÉS",C.aqua,true,"center");
-  p.text(512,362,8.5,"BUTS ENCAISSÉS",C.red,true,"center");
+  p.text(512,362,8.5,"BUTS ENCAISSÉS",C.white,true,"center");
 
   // A real striker, identifiable football and sideline graphics replace
   // the former generic crest badges. Both live outside the score and axes.
@@ -922,11 +940,12 @@ function compactScorePage(doc, m) {
   p.box(29,328,784,3.4,C.gold);
   rates.forEach(([label,value],i)=>{
     const xl=29+i*196;
-    const failed=Number.isFinite(value)&&value<=m.criteria.scoreTargetPercent;
+    // Consistent scorebug hierarchy: no KPI is painted red. Under/over target
+    // is carried by the official goals-for / goals-against count, not colour.
     if(i>0)line(xl,292,xl,325,S.edge,.7);
-    p.box(xl+11,292,3,29,failed?C.red:C.aqua);
+    p.box(xl+11,292,3,29,C.aqua);
     p.text(xl+20,314,8.2,label,C.muted,true);
-    p.text(xl+20,291,23,percent(value),failed?C.red:C.white,true);
+    p.text(xl+20,291,23,percent(value),C.white,true);
   });
 
   p.text(35,278,7.6,
@@ -948,21 +967,26 @@ function compactScorePage(doc, m) {
     p.text(806,277,7.7,"Total "+fmtTonnage(m.dailyIndicators.total.tonnage)+" t",C.gold,true,"right");
   }
   if(!selected.length)p.text(41,235,10,"Aucun KPI complémentaire visible dans le MATCH.",C.muted);
+  // A genuinely centred editorial score sheet. Symmetrical 2x2 if only
+  // four indicators are chosen; 3+2 / 3+3 for five or six respectively.
+  const columns=selected.length===4?2:3;
   selected.forEach((card,i)=>{
-    const row=Math.floor(i/3),col=i%3;
-    const x=30+col*266,y=254-row*33.5;
-    if(col>0)line(x-10,y-20,x-10,y+2,S.edge,.55);
-    const label=trim(card.label,32).toUpperCase();
-    const labelSize=clamp(233/Math.max(1,label.length*.55),7.3,8.1);
-    p.text(x,y-6,labelSize,label,C.muted,true);
-    const shown=ascii(card.value??"Indisponible");
-    const size=clamp(233/Math.max(1,shown.length*.57),10,18);
-    p.text(x,y-27,size,shown,C.white,true);
-    if(card.detail&&shown.length<12){
-      const max=Math.max(3,Math.floor((242-shown.length*size*.57-15)/4));
-      if(max>9)p.text(x+Math.min(245,shown.length*size*.57+14),y-25,7.1,trim(card.detail,max),C.muted);
-    }
+    const row=Math.floor(i/columns), col=i%columns;
+    const inRow=Math.min(columns,selected.length-row*columns);
+    const center=29+784*(col+.5)/inRow;
+    const labelY=row===0?246:210;
+    const valueY=row===0?228:193.5;
+    const label=trim(card.label,38).toUpperCase();
+    const labelSize=clamp(210/Math.max(1,label.length*.56),7.0,8.3);
+    const value=ascii(card.value??"Indisponible");
+    const valueSize=clamp(224/Math.max(1,value.length*.58),9,18);
+    // Vertical dividers never cut through the actual text rows.
+    if(col>0)line(29+784*col/inRow,labelY-24,
+      29+784*col/inRow,labelY+7,S.edge,.45);
+    p.text(center,labelY,labelSize,label,C.muted,true,"center");
+    p.text(center,valueY,valueSize,value,C.white,true,"center");
   });
+  if(selected.length>3)line(48,217,794,217,S.edge,.35);
   compactChart(p,m,m.pdfProfile.chartId);
 }
 
@@ -981,14 +1005,15 @@ function compactBriefPage(doc, m) {
   p.box(29, 398, 784, 1, C.panel2);
   p.box(29, 266, 784, 1, C.panel2);
   p.box(29, 146, 784, 1, C.panel2);
-  p.box(512, 148, 1, 247, C.panel2);
+  // The obsolete tactical mini-board was removed in V6.
+  // The recovered space belongs to readable service-client instructions.
   p.box(421, 44, 1, 99, C.panel2);
   // Safety first is a broadcast warning rail, not a free-form card.
   shortBlock(p, { x: 29, y: 402, w: 784, h: 59,
     title: "Sécurité / vigilance", value: brief.safety,
     accent: C.gold, marker: "00 / VIGILANCE" });
-  // Text-led left column; right column becomes a tactical football pitch.
-  shortBlock(p, { x: 29, y: 269, w: 482, h: 128,
+  // Full-width operational briefing: no decorative pitch displaces actions.
+  shortBlock(p, { x: 29, y: 269, w: 784, h: 128,
     title: "Service client", value: brief.attack,
     accent: C.blue, marker: "01 / PROMESSE" });
   shortBlock(p, { x: 29, y: 149, w: 482, h: 115,
@@ -1003,27 +1028,8 @@ function compactBriefPage(doc, m) {
   shortBlock(p, { x: 428, y: 44, w: 385, h: 99,
     title: "Décisions / arbitrages", value: brief.decisions,
     accent: C.aqua, marker: "05 / DÉCISIONS" });
-  // Tactical board: explicitly decorative (no invented travel/KPI claims).
-  p.text(535, 382, 8.8, "LECTURE TACTIQUE DU MATCH", C.navyInk, true);
-  p.box(535, 278, 263, 98, C.panel);
-  // A pitch, bench and staff: illustration remains subordinate to the notes.
-  touchlineDugout(p,551,283,182,25);
-  p.outline(542, 284, 249, 86, C.blue, .7);
-  p.line(666, 284, 666, 370, C.blue, .7);
-  p.circle(666, 327, 19, C.blue, .7);
-  p.outline(542, 303, 25, 49, C.blue, .7);
-  p.outline(766, 303, 25, 49, C.blue, .7);
-  for (const [x, y, c, name] of [[602,327,C.gold,"1"],[669,350,C.aqua,"2"],[740,312,C.red,"3"]]) {
-    p.dot(x, y, 11, c);
-    p.text(x, y - 3.3, 10.2, name, C.navyInk, true, "center");
-  }
-  p.line(613, 327, 656, 350, C.gold, 1.4, [3, 2]);
-  p.line(680, 350, 728, 314, C.aqua, 1.4, [3, 2]);
-  p.text(536, 272, 6.7, "1 CLIENT     2 FLUX     3 SST", C.slateInk, true);
-  // Tiny coach standing at the right touchline, clear of labels and markers.
-  footballFigure(p,774,286,.24,C.gold);
-  p.text(793,284,6.1,"STAFF",C.slateInk,true,"right");
-
+  // The service-client area now uses the entire print width. The scene is
+  // carried by the page's sports-editorial framing rather than a useless pitch.
   const a = m.causerie?.attachmentCounts ?? {};
   if (Object.values(a).some(count => Number(count) > 0)) {
     p.text(36, 34, 7.5,
