@@ -2173,7 +2173,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
           <div className="match-scoreboard">
             <span>STEF MATCH CENTER</span>
             <strong>{outcome.verdict}</strong>
-            <div className="match-score-bubbles" aria-label="Indicateurs participant au score">
+            <div className={`match-score-bubbles score-count-${scoreCards.length}`} aria-label="Indicateurs participant au score">
               {scoreCards.map(rule=>{
                 const classById:Record<string,string>={
                   passRate:"pass-score-bubble",
