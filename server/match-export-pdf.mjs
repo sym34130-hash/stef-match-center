@@ -512,7 +512,7 @@ function compactChart(p, m, chartId) {
     const won = rows.reduce((sum, row) => sum + (Number.isFinite(row.won) ? row.won : 0), 0);
     const total = rows.reduce((sum, row) => sum + (Number.isFinite(row.total) ? row.total : 0), 0);
     const weightedRate = total > 0 ? Math.round(won / total * 1000) / 10 : null;
-    chartFrame(p, "PASSES RÉUSSIES / HEURE",
+    chartFrame(p, "DÉCHARGEMENTS DANS LE DÉLAI / HEURE",
       "Tous DECHG eligibles, tous segments dont LIV ; zonage <= "
       + fmt(m.criteria?.zonageMinutes) + " min  |  Total : " + percent(weightedRate));
     if (!rows.length) {
