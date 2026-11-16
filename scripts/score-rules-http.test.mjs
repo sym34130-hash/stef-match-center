@@ -58,6 +58,16 @@ test("score rules HTTP: secured per agency/league, revisioned, immutable on reje
       headers:{"x-access-code":"TEST-058"}});
     assert.equal(preview.status,200);
     assert.equal((await preview.json()).preview.status,"no_match");
+    const draftSimulation=await fetch(url+"/api/agencies/058/score-rules/preview",{
+      method:"POST",headers:{"Content-Type":"application/json","x-access-code":"TEST-058"},
+      body:JSON.stringify({leagueId:"argent",profile:profiles()}),
+    });
+    assert.equal(draftSimulation.status,200);
+    assert.equal((await draftSimulation.json()).preview.status,"no_match");
+    assert.equal((await fetch(url+"/api/agencies/058/score-rules/preview",{
+      method:"POST",headers:{"Content-Type":"application/json","x-access-code":"TEST-058"},
+      body:JSON.stringify({leagueId:"argent",profile:{version:1,indicators:[]}}),
+    })).status,400);
     assert.equal((await put("060","argent",profiles(),null)).status,403);
     assert.equal((await put("058","argent",{version:1,indicators:[]},null)).status,400);
     assert.deepEqual(await fs.readdir(dataDir),[],"Invalid rules must not write any agency file");
