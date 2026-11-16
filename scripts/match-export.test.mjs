@@ -103,12 +103,14 @@ test("PDF V7: website-faithful hourly curve, exact volumes, gaps and inconsisten
     "Pencil drawings must be translucent");
   assert.ok(pdf.text.includes("DÉCHARGEMENTS DANS LE DÉLAI"),
     "The printed title must match the actual chart shown on the website");
-  const firstVolume=graphics.match(/([0-9]+\.[0-9]+) ([0-9]+\.[0-9]+) Tm \(3\/5\) Tj ET/);
-  assert.ok(firstVolume,"The chart must retain exact hourly numerator/denominator");
-  assert.ok(Number(firstVolume[2])>85,
-    "Hourly volume belongs near the measured curve point, not below the clock axis");
+  // Granular operation counts remain in the website; the printed A4 preserves
+  // source rates and aggregate numerator/denominator without label collisions.
+  assert.doesNotMatch(pdf.text,/3\/5|1\/5|4\/4/,
+    "Per-hour N/D values must not clutter the paper chart");
+  assert.match(pdf.text,/Total volumes : 8\/14/,
+    "The exact weighted source volume must remain auditable");
   for(const marker of ["13h","15h","16h","60 %","20 %","100 %",
-    "3/5","1/5","4/4","Sans données : 1","Volumes près des points"]){
+    "Total volumes : 8/14","Sans données : 1","Détail horaire sur le site"]){
     assert.ok(pdf.text.includes(marker),"Hourly observed value missing: "+marker);
   }
   const invalid=build("058",{snapshot:{hourlyPerformance:[
