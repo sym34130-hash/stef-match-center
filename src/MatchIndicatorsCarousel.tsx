@@ -17,6 +17,7 @@ type Props = {
   mercato: string | null;
   mercatoProfiles: MercatoProfiles;
   visibleIndicatorIds?: string[];
+  selectedScoreIndicatorIds?: string[];
   session: { agency: Agency; accessCode: string };
   indicatorCustomization?: { expanded: boolean; disabled: boolean; onToggle: () => void };
 };
@@ -25,7 +26,7 @@ const number = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 2 });
 const smooth = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
 type PunctualityKey = "arrivalPunctuality" | "departurePunctuality" | "destinationPunctuality" | "temperatureReturn";
 
-export function MatchIndicatorsCarousel({ snapshot, performance, motivation, injuries, staffPercent, staffDetail, mercato, mercatoProfiles, visibleIndicatorIds, session, indicatorCustomization }: Props) {
+export function MatchIndicatorsCarousel({ snapshot, performance, motivation, injuries, staffPercent, staffDetail, mercato, mercatoProfiles, visibleIndicatorIds, selectedScoreIndicatorIds, session, indicatorCustomization }: Props) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const geometry = useRef({ pitch: 296, width: 280, centers: 2, first: 0 });
@@ -37,6 +38,13 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
   const [position, setPosition] = useState({ first: 0, centers: 2 });
   const mercatoEntrants = useMemo(() => parseMercatoEntrants(mercato ?? ""), [mercato]);
   const hasMercato = mercatoEntrants.length > 0;
+  // Until the authoritative score is loaded, preserve the historical
+  // four-KPI distribution instead of briefly duplicating score cards.
+  const scoreSelection = new Set(selectedScoreIndicatorIds ?? [
+    "passRate", "loadingPercent", "unloadingPercent", "possessionPercent",
+  ]);
+  const excelRates=snapshot.operationalScore?.indicators;
+  const leagueScoreTarget=snapshot.performanceCriteria?.scoreTargetPercent;
   const pdf = snapshot.dailyIndicators;
   const punctuality = pdf?.punctuality;
   const punctualityTargets = pdf?.punctualityTargets;
@@ -48,20 +56,46 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
     const target = punctualityTargets?.[key];
     return target === undefined ? pdfDetail : `${pdfDetail} · objectif ${number.format(target)}%`;
   };
-  const allCards: Array<{ id: string; label: string; value: string | null; detail: string; icon: LucideIcon; accent: string; percent?: number; targetKey?: PunctualityKey }> = [
+  const allCards: Array<{ id: string; label: string; value: string | null; detail: string; icon: LucideIcon; accent: string; percent?: number; targetKey?: PunctualityKey; scoreId?: string; returnToCarousel?: boolean; targetPercent?: number }> = [
     { id: "performance", label: "Performance d'équipe", value: performance, detail: motivation, icon: Users, accent: "#91d7c0" },
     { id: "injuries", label: "NB DE BLESSURES (A.T)", value: injuries.trim() ? number.format(Number(injuries)) : null, detail: "Accidents du travail · saisie manuelle", icon: ShieldPlus, accent: "#e1c58e" },
     { id: "accident-free-days", label: "Jours sans accident du travail", value: null, detail: "Dernier accident · saisie manuelle", icon: ShieldPlus, accent: "#a6e6c4" },
     { id: "tonnage-distribution", label: "Tonnage Distribution", value: metric(pdf?.distribution?.tonnage, " t"), detail: `Distribution · ${pdfDetail}${totalTonnageDetail}`, icon: Weight, accent: "#98d6d6" },
     { id: "tonnage-expedition", label: "Tonnage Expédition", value: metric(pdf?.expedition?.tonnage, " t"), detail: `Expédition · ${pdfDetail}${totalTonnageDetail}`, icon: Weight, accent: "#b4d9ef" },
     { id: "positions", label: "Positions", value: metric(snapshot.summary.positions, ""), detail: `Excel · plage ${snapshot.match.timeRangeLabel}`, icon: Package, accent: "#a8c9f0" },
-    { id: "arrival", label: "Ponctualité arrivage", value: metric(punctuality?.arrivalPunctuality, "%"), detail: pdfMetricDetail("arrivalPunctuality"), icon: ArrowDownToLine, accent: "#a4cbee", percent: punctuality?.arrivalPunctuality, targetKey: "arrivalPunctuality" },
-    { id: "departure", label: "Ponctualité départ", value: metric(punctuality?.departurePunctuality, "%"), detail: pdfMetricDetail("departurePunctuality"), icon: ArrowUpFromLine, accent: "#b9c6ed", percent: punctuality?.departurePunctuality, targetKey: "departurePunctuality" },
-    { id: "destination", label: "Ponctualité destination", value: metric(punctuality?.destinationPunctuality, "%"), detail: pdfMetricDetail("destinationPunctuality"), icon: Flag, accent: "#a4d5c8", percent: punctuality?.destinationPunctuality, targetKey: "destinationPunctuality" },
-    { id: "temperature", label: "Température retour ramasse", value: metric(punctuality?.temperatureReturn, "%"), detail: pdfMetricDetail("temperatureReturn"), icon: Thermometer, accent: "#dcc0d7", percent: punctuality?.temperatureReturn, targetKey: "temperatureReturn" },
+    // Original four football KPIs return here ONLY when no longer selected
+    // for the match score. No duplicate between the two presentation zones.
+    { id: "pass-rate", scoreId: "passRate", returnToCarousel: true,
+      label: "Passes réussies", value: metric(excelRates?.passRate??snapshot.summary.passRate, "%"),
+      detail: `Excel · Objectif score > ${leagueScoreTarget??50}%`,
+      icon: Activity, accent: "#a4cbee", percent: excelRates?.passRate??snapshot.summary.passRate??undefined,
+      targetPercent:leagueScoreTarget },
+    { id: "loading-quality", scoreId: "loadingPercent", returnToCarousel: true,
+      label: "Tirs cadrés", value: metric(excelRates?.loadingPercent??snapshot.loadingQuality?.targetedPercent, "%"),
+      detail: `Excel · Objectif score > ${leagueScoreTarget??50}%`,
+      icon: Flag, accent: "#91d7c0", percent: excelRates?.loadingPercent??snapshot.loadingQuality?.targetedPercent??undefined,
+      targetPercent:leagueScoreTarget },
+    { id: "unloading-quality", scoreId: "unloadingPercent", returnToCarousel: true,
+      label: "Duels gagnés", value: metric(excelRates?.unloadingPercent??snapshot.unloadingQuality?.targetedPercent, "%"),
+      detail: `Excel · Objectif score > ${leagueScoreTarget??50}%`,
+      icon: ShieldPlus, accent: "#a8c9f0", percent:excelRates?.unloadingPercent??snapshot.unloadingQuality?.targetedPercent??undefined,
+      targetPercent:leagueScoreTarget },
+    { id: "possession", scoreId: "possessionPercent", returnToCarousel: true,
+      label: "Possession", value: metric(excelRates?.possessionPercent??snapshot.summary.possessionPercent, "%"),
+      detail: `Excel · Objectif score > ${leagueScoreTarget??50}%`,
+      icon: Users, accent: "#dcc0d7", percent:excelRates?.possessionPercent??snapshot.summary.possessionPercent??undefined,
+      targetPercent:leagueScoreTarget },
+    { id: "arrival", scoreId: "arrivalPunctuality", label: "Ponctualité arrivage", value: metric(punctuality?.arrivalPunctuality, "%"), detail: pdfMetricDetail("arrivalPunctuality"), icon: ArrowDownToLine, accent: "#a4cbee", percent: punctuality?.arrivalPunctuality, targetKey: "arrivalPunctuality" },
+    { id: "departure", scoreId: "departurePunctuality", label: "Ponctualité départ", value: metric(punctuality?.departurePunctuality, "%"), detail: pdfMetricDetail("departurePunctuality"), icon: ArrowUpFromLine, accent: "#b9c6ed", percent: punctuality?.departurePunctuality, targetKey: "departurePunctuality" },
+    { id: "destination", scoreId: "destinationPunctuality", label: "Ponctualité destination", value: metric(punctuality?.destinationPunctuality, "%"), detail: pdfMetricDetail("destinationPunctuality"), icon: Flag, accent: "#a4d5c8", percent: punctuality?.destinationPunctuality, targetKey: "destinationPunctuality" },
+    { id: "temperature", scoreId: "temperatureReturn", label: "Température retour ramasse", value: metric(punctuality?.temperatureReturn, "%"), detail: pdfMetricDetail("temperatureReturn"), icon: Thermometer, accent: "#dcc0d7", percent: punctuality?.temperatureReturn, targetKey: "temperatureReturn" },
   ];
-  // The A.T. day counter follows the same saved visibility selection as the other cards.
-  const cards = allCards.filter((card) => !visibleIndicatorIds || visibleIndicatorIds.includes(card.id));
+  // Score-selected indicators are moved to the celebration bubbles, removed
+  // from this carousel, and restored here when unchecked. The pre-existing
+  // manual visibility settings still apply to regular brief indicators.
+  const cards = allCards.filter(card =>
+    (!card.scoreId || !scoreSelection.has(card.scoreId))
+    && (card.returnToCarousel || !visibleIndicatorIds || visibleIndicatorIds.includes(card.id)));
   const itemCount = cards.length + (hasMercato ? 1 : 0);
   const cardKey = cards.map((card) => card.id).join("|");
   useEffect(() => {
@@ -282,15 +316,15 @@ export function MatchIndicatorsCarousel({ snapshot, performance, motivation, inj
               <MercatoCarouselSection mercato={mercato} profiles={mercatoProfiles} />
             </div>
           )}
-          {cards.map(({ id, label, value, detail, icon: Icon, accent, percent, targetKey }, index) => (
+          {cards.map(({ id, label, value, detail, icon: Icon, accent, percent, targetKey, targetPercent }, index) => (
             <div className="match-indicator-slide" key={id} data-indicator={id} data-featured={index + (hasMercato ? 1 : 0) >= visibleFirst && index + (hasMercato ? 1 : 0) < visibleFirst + position.centers ? "" : undefined} role="group" aria-roledescription="diapositive" aria-label={`${label}, ${index + (hasMercato ? 2 : 1)} sur ${itemCount}`}>
-              {id === "accident-free-days" ? <SafetyCounter session={session} /> : <article className={`match-indicator-card ${id === "performance" ? "is-performance" : ""} ${typeof percent === "number" ? (percent > (targetKey ? punctualityTargets?.[targetKey] ?? 100 : 100) ? "is-at-target" : "is-below-target") : ""}`} style={{ "--indicator-accent": accent } as CSSProperties}>
+              {id === "accident-free-days" ? <SafetyCounter session={session} /> : <article className={`match-indicator-card ${id === "performance" ? "is-performance" : ""} ${typeof percent === "number" ? (percent > (targetKey ? punctualityTargets?.[targetKey] ?? 100 : targetPercent ?? 100) ? "is-at-target" : "is-below-target") : ""}`} style={{ "--indicator-accent": accent } as CSSProperties}>
                 <div className="match-indicator-title"><Icon size={21} /><h3>{label}</h3></div>
                 <div className="match-indicator-body">
                   <strong className={`match-indicator-value ${value === null ? "is-empty" : ""}`}>{value ?? (id === "injuries" ? "À renseigner" : pdf ? "Indisponible" : "PDF à importer")}</strong>
                   {id === "performance" && <p className="team-motivation-message">{detail}</p>}
                   {typeof percent === "number" && Number.isFinite(percent) && (() => {
-                    const target = targetKey ? punctualityTargets?.[targetKey] : undefined;
+                    const target = targetKey ? punctualityTargets?.[targetKey] : targetPercent;
                     return (
                       <div className="match-indicator-meter-wrap">
                         <div className="match-indicator-meter" aria-label={`${number.format(percent)}% sur 100%${target === undefined ? "" : `, objectif ${number.format(target)}%`}`}>
