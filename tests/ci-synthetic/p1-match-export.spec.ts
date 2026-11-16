@@ -139,6 +139,32 @@ test("P1 — parcours réel API → navigateur → brief → PDF sur données sy
   expect(parsedCustomPdf.numpages).toBe(2);
   expect(parsedCustomPdf.text).toContain("SCORE PERSONNALISÉ");
   expect(parsedCustomPdf.text).toContain("RÉFÉRENCE");
+  // Regression: six selected KPI (including genuinely missing 106J rates)
+  // must remain a valid two-page, source-attributed PDF. Missing data must
+  // not become fake conceded goals or break the page layout.
+  const sixProfile={version:1,indicators:[
+    "passRate","loadingPercent","unloadingPercent","possessionPercent",
+    "arrivalPunctuality","temperatureReturn",
+  ].map(id=>({id,targetPercent:null,goalsFor:2,goalsAgainst:1}))};
+  const sixSaved=await request.put(agencyUrl+"/score-rules",{
+    headers,data:{leagueId:"argent",profile:sixProfile,expectedRevision:scoreRulesRevision},
+  });
+  expect(sixSaved.status(),await sixSaved.text()).toBe(200);
+  scoreRulesRevision=(await sixSaved.json()).scoreRulesRevision;
+  const sixPreview=await request.get(agencyUrl+"/score-rules?leagueId=argent&preview=1",{headers});
+  expect(sixPreview.status()).toBe(200);
+  const sixScore=(await sixPreview.json()).preview;
+  expect(sixScore.indicators).toHaveLength(6);
+  expect(sixScore.status).toBe("unavailable");
+  expect(sixScore.missingIndicators.map((m:{id:string})=>m.id).sort())
+    .toEqual(["arrivalPunctuality","temperatureReturn"]);
+  const sixPdf=await pdfWithRevision();
+  expect(sixPdf.status(),await sixPdf.text()).toBe(200);
+  const parsedSix=await pdfParse(await sixPdf.body());
+  expect(parsedSix.numpages).toBe(2);
+  expect(parsedSix.text).toContain("SCORE PERSONNALISÉ");
+  expect(parsedSix.text).toContain("PONCTUALITÉ ARRIVAGE");
+  expect(parsedSix.text).toContain("TEMPÉRATURE RETOUR RAMASSE");
   // A stale score-rule revision may not produce a contradictory scoreline.
   const previousRevision=scoreRulesRevision;
   scoreRulesRevision="stale-revision";
