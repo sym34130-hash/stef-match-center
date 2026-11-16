@@ -753,7 +753,74 @@ function effectiveBriefText(m) {
     decisions: custom.decisions || combined([c.coach?.tactic, c.coach?.arbitration, c.coach?.review, c.mercato]),
   };
 }
-// Page 1 / broadcast scoreboard. Page 2 deliberately unchanged.
+
+// V5 football-immersive illustration layer. Original vector artwork is
+// deliberately self-contained: no network, external fonts or binary assets.
+function footballPoly(p, points, fill) {
+  p.ops.push(rgb(fill) + " rg " + points.map(([x,y],i) =>
+    x.toFixed(2) + " " + y.toFixed(2) + (i ? " l " : " m ")).join("") + "h f\n");
+}
+function footballFigure(p, cx, floor, factor = 1, jersey = C.aqua) {
+  const at = points => points.map(([x,y]) => [cx + x*factor, floor+y*factor]);
+  const ink = [0.020,0.057,0.108], skin = [0.86,0.77,0.65], cloth = [0.89,0.94,0.96];
+  // Shadows, articulated limbs, boots, collar and head create an actual player,
+  // not an unlabelled abstract badge. Proportions stay inside the stadium rail.
+  footballPoly(p,at([[-37,1],[40,1],[26,-2],[-19,-2]]),[0.035,0.118,0.136]);
+  footballPoly(p,at([[-10,37],[-21,18],[-25,4],[-16,1],[-10,16],[1,28]]),cloth);
+  footballPoly(p,at([[4,30],[22,14],[37,12],[39,18],[23,22],[15,36]]),cloth);
+  footballPoly(p,at([[-25,6],[-16,5],[-11,15],[-18,17]]),jersey);
+  footballPoly(p,at([[34,13],[45,10],[46,5],[32,6]]),ink);
+  footballPoly(p,at([[-29,3],[-13,1],[-10,-2],[-30,-2]]),ink);
+  footballPoly(p,at([[-13,44],[16,45],[17,31],[4,27],[-12,31]]),ink);
+  footballPoly(p,at([[-14,68],[-7,74],[10,74],[19,65],[16,43],[-11,43]]),jersey);
+  footballPoly(p,at([[-13,66],[-25,58],[-32,44],[-26,41],[-15,55]]),skin);
+  footballPoly(p,at([[18,66],[30,59],[38,61],[39,55],[28,52],[16,57]]),skin);
+  footballPoly(p,at([[-3,77],[7,77],[7,70],[-3,70]]),skin);
+  p.dot(cx+2*factor,floor+86*factor,10*factor,skin);
+  footballPoly(p,at([[-9,90],[-5,97],[4,98],[12,93],[9,91],[3,94],[-6,91]]),ink);
+  p.line(cx-4*factor,floor+64*factor,cx+8*factor,floor+64*factor,C.white,.65);
+  // Jersey detail is a number, not a club crest or an invented identity.
+  p.text(cx+2*factor,floor+53*factor,7.8*factor,"9",ink,true,"center");
+}
+function footballBall(p, cx, cy, radius) {
+  const seam=[0.12,0.21,0.29], shell=[0.96,0.97,0.94];
+  p.dot(cx,cy,radius+3,[0.05,0.16,0.19]);
+  p.dot(cx,cy,radius,shell);
+  const pentagon=(x,y,r,phase=-Math.PI/2)=>Array.from({length:5},(_,i)=>{
+    const angle=phase+2*Math.PI*i/5;
+    return [x+r*Math.cos(angle), y+r*Math.sin(angle)];
+  });
+  footballPoly(p,pentagon(cx,cy,radius*.38),seam);
+  for(let i=0;i<5;i++){
+    const a=-Math.PI/2+i*Math.PI*2/5;
+    const px=cx+Math.cos(a)*radius*.77,py=cy+Math.sin(a)*radius*.77;
+    const polygon=pentagon(px,py,radius*.23,a);
+    footballPoly(p,polygon,seam);
+    p.line(cx+Math.cos(a)*radius*.36,cy+Math.sin(a)*radius*.36,
+      px-Math.cos(a)*radius*.13,py-Math.sin(a)*radius*.13,seam,.8);
+  }
+  p.circle(cx,cy,radius,seam,.8);
+}
+function touchlineDugout(p,x,y,w,h) {
+  const roof=[0.15,0.31,0.36], shade=[0.046,0.125,0.16],
+    highlights=[0.58,0.78,0.79];
+  // Technical bench and substitutes, behind the tactical markers.
+  footballPoly(p,[[x,y+4],[x+w,y+4],[x+w-10,y+h],[x+15,y+h]],roof);
+  footballPoly(p,[[x+7,y+8],[x+w-7,y+8],[x+w-17,y+h-5],[x+20,y+h-5]],shade);
+  p.line(x+4,y+3,x+w-4,y+3,highlights,1.1);
+  p.line(x+15,y+h,x+w-10,y+h,highlights,1);
+  for(let i=0;i<4;i++){
+    const bx=x+27+i*(w-55)/3;
+    p.dot(bx,y+16,4,[0.72,0.80,0.79]);
+    footballPoly(p,[[bx-6,y+11],[bx+6,y+11],[bx+8,y+5],[bx-8,y+5]],
+      i%2?C.blue:C.aqua);
+    p.line(bx-2,y+5,bx-5,y+1,shade,1);
+    p.line(bx+2,y+5,bx+6,y+1,shade,1);
+  }
+  p.box(x+17,y+3,w-34,2.2,highlights);
+}
+
+// Page 1 / stadium match-score broadcast and page 2 / tactical dugout.
 function compactScorePage(doc, m) {
   const p = doc.add("01 / RÉSULTAT DU MATCH");
   const S = {
@@ -830,18 +897,18 @@ function compactScorePage(doc, m) {
   p.text(329,362,8.5,"BUTS MARQUÉS",C.aqua,true,"center");
   p.text(512,362,8.5,"BUTS ENCAISSÉS",C.red,true,"center");
 
-  // Crest-like football emblems with stylized ball; no actual club logo.
-  for(const [cx,accent] of [[125,C.aqua],[717,C.red]]){
-    poly([[cx-28,424],[cx+28,424],[cx+24,375],[cx,362],[cx-24,375]],S.deep);
-    p.circle(cx,394,23,accent,1.6);
-    p.circle(cx,394,15,S.edge,.8);
-    p.dot(cx,394,4,accent);
-    for(let a=0;a<5;a++){
-      const theta=a*Math.PI*2/5-Math.PI/2;
-      p.dot(cx+14*Math.cos(theta),394+14*Math.sin(theta),2.3,accent);
-    }
-    p.text(cx,361,7.5,"MATCH",accent,true,"center");
-  }
+  // A real striker, identifiable football and sideline graphics replace
+  // the former generic crest badges. Both live outside the score and axes.
+  p.line(45,345,193,345,S.edge,.8);
+  footballFigure(p,122,346,1.03,C.aqua);
+  p.text(48,337,7.1,"SUR LE TERRAIN",C.blue,true);
+  p.line(647,345,796,345,S.edge,.8);
+  footballBall(p,720,392,26);
+  p.text(722,357,8.4,"BALLON DE MATCH",C.white,true,"center");
+  // Corner pennant and faint touchline: concrete football details.
+  p.line(792,349,792,391,C.white,.95);
+  footballPoly(p,[[792,391],[770,384],[792,379]],C.gold);
+  p.line(648,352,794,352,S.edge,.5);
   p.box(X,Y,W,2,C.gold);
 
   // Broadcast lower third: four official metrics as one continuous ribbon.
@@ -932,6 +999,8 @@ function compactBriefPage(doc, m) {
   // Tactical board: explicitly decorative (no invented travel/KPI claims).
   p.text(535, 382, 8.8, "LECTURE TACTIQUE DU MATCH", C.navyInk, true);
   p.box(535, 278, 263, 98, C.panel);
+  // A pitch, bench and staff: illustration remains subordinate to the notes.
+  touchlineDugout(p,551,283,182,25);
   p.outline(542, 284, 249, 86, C.blue, .7);
   p.line(666, 284, 666, 370, C.blue, .7);
   p.circle(666, 327, 19, C.blue, .7);
@@ -944,6 +1013,9 @@ function compactBriefPage(doc, m) {
   p.line(613, 327, 656, 350, C.gold, 1.4, [3, 2]);
   p.line(680, 350, 728, 314, C.aqua, 1.4, [3, 2]);
   p.text(536, 272, 6.7, "1 CLIENT     2 FLUX     3 SST", C.slateInk, true);
+  // Tiny coach standing at the right touchline, clear of labels and markers.
+  footballFigure(p,774,286,.24,C.gold);
+  p.text(793,284,6.1,"STAFF",C.slateInk,true,"right");
 
   const a = m.causerie?.attachmentCounts ?? {};
   if (Object.values(a).some(count => Number(count) > 0)) {
