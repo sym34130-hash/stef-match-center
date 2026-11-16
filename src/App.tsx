@@ -4668,7 +4668,7 @@ function LeagueTargetMeter({ league }: { league: LeagueConfig }) {
   );
 }
 
-type GuideSection = "start" | "excel" | "import" | "read" | "anomalies" | "edit" | "admin" | "help";
+type GuideSection = "start" | "excel" | "import" | "read" | "anomalies" | "edit" | "admin" | "score" | "pdf" | "help";
 
 function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot | null; leagueConfigs: LeagueConfig[]; onNavigate: (screen: Screen) => void }) {
   const [section, setSection] = useState<GuideSection>("start");
@@ -4697,7 +4697,9 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
     { id: "anomalies", number: "05", label: "Analyser les anomalies" },
     { id: "edit", number: "06", label: "Modifier le plan" },
     { id: "admin", number: "07", label: "Administrateur" },
-    { id: "help", number: "08", label: "Points d’attention" },
+    { id: "score", number: "08", label: "Personnaliser le score" },
+    { id: "pdf", number: "09", label: "Exporter le PDF" },
+    { id: "help", number: "10", label: "Points d’attention" },
   ];
   const activeIndex = sections.findIndex((item) => item.id === section);
   const previousSection = sections[Math.max(0, activeIndex - 1)]?.id ?? "start";
@@ -4709,7 +4711,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
         <div>
           <p className="eyebrow">Guide intégré</p>
           <h2>Utiliser STEF Match Center de A à Z</h2>
-          <p>Importer → Contrôler → Analyser → Préparer le brief.</p>
+          <p>Importer → Contrôler → Personnaliser → Préparer le brief → Exporter.</p>
         </div>
         <div className="guide-hero-status">
           <BookOpen size={26} />
@@ -4757,7 +4759,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
               </div>
               <div className="guide-callout success"><CheckCircle2 size={20} /><span><strong>Règle simple :</strong> chaque fois que la base Excel change, il faut refaire un import. Le bouton Actualiser sert ensuite à relire le dernier import enregistré.</span></div>
               <div className="guide-callout info"><Shield size={20} /><span><strong>Un espace séparé par agence :</strong> Agen, Montpellier, Toulouse, Bordeaux, Lyon et Brive. À la connexion, choisissez votre agence et utilisez le code d’accès qui vous a été transmis séparément ; il n’est jamais affiché dans le guide. Vérifiez ensuite la date du dernier Excel importé.</span></div>
-              <p>Les quatre indicateurs du match sont comparés aux objectifs de la ligue active. Le diagnostic aide ensuite à repérer les situations à examiner avant de transmettre les consignes.</p>
+              <p>Quatre KPI servent de référence. Le score personnalisé peut en sélectionner 2 à 6 avec des objectifs et pondérations propres. Consultez les étapes 08 et 09 pour configurer le score et son PDF.</p>
               <div className="guide-actions">
                 <button className="primary-button" type="button" onClick={() => onNavigate("import")}><Upload size={17} /> Ouvrir l’import</button>
                 <button className="secondary-button" type="button" onClick={() => showSection("excel")}><ArrowRight size={17} /> Préparer Excel</button>
@@ -4809,7 +4811,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
             <GuidePanel eyebrow="03 · Importer et actualiser" title="Ce que fait chaque bouton" icon={RefreshCw}>
               <div className="guide-action-list">
                 <GuideAction icon={Upload} title="Contrôler et importer Excel" tone="green" detail="Chargez un nouveau classeur .xlsx complet : opérations, positions, voyages et analyses. Chaque modification du fichier nécessite un nouvel import." />
-                <GuideAction icon={FileCheck2} title="Importer le PDF 106J" tone="blue" detail="Après l’Excel, chargez un rapport SIE.106J pour afficher ses taux journaliers et les tonnages Distribution et Expédition. Un rapport d'une autre date est accepté, mais il doit appartenir à la même agence. Sa date de référence reste affichée séparément de la plage Excel." />
+                <GuideAction icon={FileCheck2} title="Importer le PDF 106J" tone="blue" detail="Après l’Excel, chargez un rapport SIE.106J pour afficher ses taux journaliers et les tonnages Distribution et Expédition. Un rapport d’une autre date est accepté. Vérifiez la date et le site source avant diffusion : une origine différente n’empêche pas nécessairement d’utiliser le rapport dans l’espace de l’agence connectée." />
                 <GuideAction icon={RefreshCw} title="Actualiser" tone="blue" detail="À utiliser pour relire le dernier import déjà enregistré. Ce bouton ne va pas chercher un fichier sur votre ordinateur et ne remplace pas un nouvel import." />
                 <GuideAction icon={Clock3} title="Appliquer la plage" tone="orange" detail="À utiliser après avoir choisi le début et la fin du créneau. Les heures sont limitées aux pas de 30 minutes, par exemple 08:00 ou 08:30." />
               </div>
@@ -4831,12 +4833,12 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
             <GuidePanel eyebrow="04 · Lire les écrans" title="Quel écran utiliser, et pour quoi faire ?" icon={LayoutDashboard}>
               <div className="guide-screen-grid">
                 <GuideScreenCard step="01" title="Coup d’envoi" detail="Lancez la réunion depuis cet accueil. Vérifiez la date et la plage du match, puis ouvrez la Feuille de match ou le brief. Contrôlez les alertes avant de présenter les résultats." />
-                <GuideScreenCard step="02" title="Feuille de match" detail="La feuille de match se parcourt en quatre slides : Coup de sifflet final et collectif en chiffres, Cérémonie des performances, Statistiques du match, puis Brief équipe. Le score compare les pourcentages de passes réussies, de tirs cadrés, de duels gagnés et de possession à l’objectif de la ligue." />
+                <GuideScreenCard step="02" title="Feuille de match" detail="La feuille de match se parcourt en quatre slides : Coup de sifflet final et collectif en chiffres, Cérémonie des performances, Statistiques du match, puis Brief équipe. Le score affiche les 2 à 6 KPI sélectionnés dans Administrateur pour cette agence et cette ligue, avec leurs objectifs et leurs pondérations." />
               <GuideScreenCard step="03" title="Composition" detail="Lecture de la composition par Attaque, Milieu et Défense. Le Mode terrain affiche la formation et les cages. Comparez le match complet, les deux mi-temps ou les quatre quarts calculés depuis la plage active. Une vue personnalisée permet aussi d’isoler une sous-plage, par exemple 1 heure, sans modifier les indicateurs du match." />
                 <GuideScreenCard step="04" title="Coach" detail="Repérez les alertes, distinctions et joueurs à regarder. Ouvrez une fiche pour examiner son activité. Renseignez les Priorités du chef de quai, les nouveaux joueurs du Mercato et les cartons rouges si nécessaire ; les analyses proposent des pistes, pas une cause certaine." />
-                <GuideScreenCard step="05" title="Brief équipe" detail="Vue dédiée aux consignes : SAV, EXPÉDITION / RAMASSE & EMBALLAGE et SST. La zone centrale réunit les textes et captures des deux anciens périmètres. SST est une zone indépendante, vide jusqu’à sa saisie. Chaque zone accepte du texte et des captures, avec affichage plein écran." />
+                <GuideScreenCard step="05" title="Brief équipe" detail="Vue dédiée aux consignes : Service client, EXPÉDITION / RAMASSE & EMBALLAGE et SST. La zone centrale réunit les textes et captures des deux anciens périmètres. SST est une zone indépendante, vide jusqu’à sa saisie. Chaque zone accepte du texte et des captures, avec affichage plein écran." />
               </div>
-              <section className="guide-topic"><h4>Les quatre indicateurs du score</h4><ul className="guide-reading-list">
+              <section className="guide-topic"><h4>Les quatre KPI historiques du score de référence</h4><ul className="guide-reading-list">
                 <li><strong>Passes réussies.</strong> Lisez le taux de réussite issu des données horaires du classeur. Le repère Objectif zonage affiche la cible active ; il ne remplace pas la source Excel du taux.</li>
                 <li><strong>Tirs cadrés.</strong> Repérez la part des voyages de chargement éligibles dans le temps cible par position.</li>
                 <li><strong>Duels gagnés.</strong> Repérez la part des voyages de réception éligibles dans le temps cible par position ; les duels perdus donnent les voyages à examiner.</li>
@@ -4901,7 +4903,7 @@ function GuideView({ snapshot, leagueConfigs, onNavigate }: { snapshot: Snapshot
               <div className="guide-edit-grid">
                 <GuideEditCard title="Dans Feuille de match" detail="Modifier les chiffres permet de renseigner les blessures A.T et l'effectif prévu. Le carrousel Le collectif en chiffres conserve les positions calculées depuis l'Excel filtré. Le tonnage Expédition et les taux journaliers viennent du PDF 106J ; ils affichent PDF à importer tant que ce rapport n'a pas été chargé." />
                 <GuideEditCard title="Dans Coach" detail="Dans Priorités du chef de quai, cliquez sur Écrire. Renseignez Priorité terrain, Zone à surveiller et Équilibre d'équipe, puis Enregistrer. Ces consignes apparaissent séparément sous le brief dans la Feuille de match. Le Mercato et les cartons rouges ont leurs propres commandes d’enregistrement." />
-              <GuideEditCard title="Dans le brief équipe" detail="Cliquez sur Écrire. Saisissez les consignes dans SAV, EXPÉDITION / RAMASSE & EMBALLAGE ou SST, ajoutez des captures si nécessaire, puis enregistrez. Les anciens textes et captures Expédition et Ramasse & Emballage sont réunis dans la zone centrale ; SST reste indépendant." />
+              <GuideEditCard title="Dans le brief équipe" detail="Cliquez sur Écrire. Saisissez les consignes dans Service client, EXPÉDITION / RAMASSE & EMBALLAGE ou SST, ajoutez des captures si nécessaire, puis enregistrez. Les anciens textes et captures Expédition et Ramasse & Emballage sont réunis dans la zone centrale ; SST reste indépendant." />
               </div>
               <div className="guide-callout success"><CheckCircle2 size={20} /><span><strong>À retenir :</strong> les chiffres manuels sont mémorisés pour l’agence et le match affichés sur ce poste. Ils complètent la lecture opérationnelle sans modifier le fichier source importé.</span></div>
               <div className="guide-callout info"><Upload size={20} /><span><strong>Ajouter des captures d’écran :</strong> après Écrire, utilisez <strong>Ajouter des captures d'écran</strong> ou <strong>Ajouter des captures</strong> dans la zone choisie. Sélectionnez des images PNG, JPG ou WebP. Les aperçus restent sous le texte et défilent dans leur propre zone. Supprimer retire une capture du brouillon ; Enregistrer valide textes et images ; Annuler abandonne les changements. En consultation, cliquez sur une image pour l’agrandir, puis fermez avec X ou Échap.</span></div>
