@@ -79,7 +79,7 @@ test("PDF V5: the two-page immersive football identity retains live business dat
 });
 
 
-test("PDF V6: source-exact discrete hourly volumes, gaps and inconsistent ratios", async () => {
+test("PDF V7: website-faithful hourly curve, exact volumes, gaps and inconsistent ratios", async () => {
   const selected=[
     {label:"13h",hour:13,won:3,total:5,rate:60},
     {label:"15h",hour:15,won:1,total:5,rate:20},
@@ -88,10 +88,17 @@ test("PDF V6: source-exact discrete hourly volumes, gaps and inconsistent ratios
   const model=build("058",{snapshot:{hourlyPerformance:selected},
     pdfProfile:{indicatorIds:["positions","arrival","injuries","performance"],
       chartId:"passes-hourly"}});
-  const pdf=await pdfParse(renderMatchPdf(model));
+  const rendered=renderMatchPdf(model);
+  const pdf=await pdfParse(rendered);
   assert.equal(pdf.numpages,2);
+  // The PDF must carry the same continuous and dashed line primitives as the
+  // website; the older discrete-bar renderer must not return.
+  const graphics=rendered.toString("latin1");
+  assert.match(graphics,/\[3 3\] 0 d/,"gaps must be dashed");
+  assert.match(graphics,/\/ChartFill gs/,"consecutive runs must have a softly filled area");
+  assert.match(graphics,/\/WarmBeam gs/,"stadium light beams must be warm/translucent");
   for(const marker of ["13h","15h","16h","60 %","20 %","100 %",
-    "3/5","1/5","4/4","Sans données : 1","Volumes sous les barres"]){
+    "3/5","1/5","4/4","Sans données : 1","Volumes sous la courbe"]){
     assert.ok(pdf.text.includes(marker),"Hourly observed value missing: "+marker);
   }
   const invalid=build("058",{snapshot:{hourlyPerformance:[
