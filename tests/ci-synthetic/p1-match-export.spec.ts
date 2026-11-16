@@ -487,6 +487,17 @@ test("Score à 2 KPI : transfert des vignettes 106J vers les bulles et retour au
   });
   expect(imported.status(),await imported.text()).toBe(200);
   const {snapshot}=await imported.json();
+  // This project also executes the six-KPI PDF recipe above for the same
+  // synthetic agency. Reset test fixtures explicitly instead of depending
+  // on Playwright test order, worker reuse or a mutable previous profile.
+  const priorRules=await request.get(url+"/score-rules?leagueId=argent",{headers});
+  expect(priorRules.status()).toBe(200);
+  const existingRules=await priorRules.json();
+  const baseline=await request.put(url+"/score-rules",{
+    headers,data:{leagueId:"argent",profile:existingRules.defaultProfile,
+      expectedRevision:existingRules.scoreRulesRevision},
+  });
+  expect(baseline.status(),await baseline.text()).toBe(200);
   await page.goto("/");
   await page.getByLabel("Code agence").selectOption(agency);
   await page.getByLabel("Code d'accès").fill("CI-ONLY-"+agency);
