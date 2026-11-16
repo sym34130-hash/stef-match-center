@@ -1920,7 +1920,9 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
             <div className="match-indicator-settings">
               {indicatorSettingsOpen && (
                 <div id="match-indicator-settings-panel" className="match-indicator-settings-panel" role="group" aria-label="Personnalisation des dix cartes du carrousel">
-                  <p>Choisis les cartes à afficher dans « Le collectif en chiffres ». Les quatre KPI du score restent inchangés.</p>
+                  <p>Choisis les cartes à conserver dans « Le collectif en chiffres ».
+                    Les indicateurs utilisés dans le score passent automatiquement dans les bulles du MATCH ;
+                    leur préférence est conservée ici pour un éventuel retour au carrousel.</p>
                   <div className="match-indicator-settings-options">
                     {BRIEF_INDICATOR_OPTIONS.map(([id, label]) => (
                       <label key={id}>
@@ -1933,6 +1935,9 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
                           ))}
                         />
                         <span>{label}</span>
+                        {scoreCarouselIds.has(id) && <small className="match-indicator-score-transfer">
+                          Dans le score · masqué du carrousel
+                        </small>}
                       </label>
                     ))}
                   </div>
