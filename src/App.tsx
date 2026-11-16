@@ -2183,7 +2183,7 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
                   <div key={rule.id} data-score-kpi={rule.id}
                     className={`match-score-bubble ${classById[rule.id]??"custom-score-bubble"} ${rule.value===null?"is-data-unavailable":""} ${conceded?"is-goal-conceded":""}`}>
                     <span>{rule.label}</span>
-                    <strong>{formatPercent(rule.value)}</strong>
+                    <strong>{rule.value===null?"Indisponible":formatPercent(rule.value)}</strong>
                     {conceded&&<em className="match-score-goal-warning">
                       But encaissé · objectif &gt; {formatPercent(rule.targetPercent)} · {rule.concededGoals} but(s)
                     </em>}
