@@ -1544,8 +1544,6 @@ function MatchSheet({ snapshot, session, causerieRevision, activeLeague, liveSco
   const pdfMinimumIndicators = Math.min(4, pdfAvailableIndicatorIds.length);
 
   const leagueConfig = readLeagueConfig(snapshot.agency.code, activeLeague);
-  const loadingTarget = formatKpiDuration(snapshot.performanceCriteria?.loadingSeconds ?? leagueConfig.loadingSeconds);
-  const unloadingTarget = formatKpiDuration(snapshot.performanceCriteria?.unloadingSeconds ?? leagueConfig.unloadingSeconds);
   const footballScore = buildFootballScore(snapshot,
     snapshot.performanceCriteria?.scoreTargetPercent ?? leagueConfig.scoreTargetPercent, liveScore);
   // One source of truth: only configured scoring KPIs occupy the scoreboard.
