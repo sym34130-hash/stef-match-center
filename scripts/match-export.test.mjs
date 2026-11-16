@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { matchExportLeague, matchExportModel, MatchExportError } from "../server/match-export-model.mjs";
 import { renderMatchPdf } from "../server/match-export-pdf.mjs";
+import { evaluateScoreRules, SCORE_KPI_CATALOG } from "../server/score-rules.mjs";
 import { normalizePdfProfile, effectivePdfProfile, PDF_CHART_IDS } from "../server/match-pdf-profile.mjs";
 
 const config = [{ id: "argent", zonageMinutes: 30, loadingSeconds: 165, unloadingSeconds: 60, scoreTargetPercent: 50 },
@@ -710,4 +711,78 @@ test("P2: known Excel origin remains explicit even when it differs from the work
   assert.equal(parsed.numpages, 2);
   assert.match(parsed.text, /Sources : Excel \[059\]/);
   assert.doesNotMatch(parsed.text, /Sources : Excel \[origine indéterminée\]/);
+});
+
+test("PDF scoring ribbon: 2–6 weighted KPI, percentages, missing source and targets never overlap",async()=>{
+  // The actual engine provides the same profile used by the server export.
+  // Include a long 106J label, missing rates, and the maximum six-item width.
+  const selectedIds=[
+    "passRate","loadingPercent","unloadingPercent",
+    "temperatureReturn","arrivalPunctuality","destinationPunctuality",
+  ];
+  const labels=new Map(SCORE_KPI_CATALOG.map(item=>[item.id,item.label]));
+  const actualSnapshot=makeSnapshot("058");
+  for(let count=2;count<=6;count++){
+    const profile={version:1,indicators:selectedIds.slice(0,count).map((id,i)=>({
+      id,targetPercent:i%2?65:null,goalsFor:1+i%3,goalsAgainst:1+(i+1)%3,
+    }))};
+    const scored=evaluateScoreRules(actualSnapshot,profile,league.criteria.scoreTargetPercent);
+    const model=build("058",{pdfProfile:{
+      indicatorIds:["performance","injuries","accident-free-days","arrival"],
+      chartId:"passes-hourly",
+    }});
+    model.score={...model.score,status:scored.status,
+      goalsFor:scored.goalsFor,goalsAgainst:scored.goalsAgainst};
+    model.scoreCustomization={...scored,customized:true,
+      scoreRulesRevision:"synthetic-"+count,changedAt:"2026-11-16T00:00:00.000Z"};
+    const pdf=renderMatchPdf(model);
+    const parsed=await pdfParse(pdf);
+    assert.equal(parsed.numpages,2,"Two-page limit with "+count+" scored KPI");
+    assert.match(parsed.text,/SCORE PERSONNALISÉ/);
+    const raw=pdf.toString("latin1");
+    // A selected 106J punctuality leaves the supplemental indicator ribbon
+    // exactly as it leaves the on-screen carousel. It appears only once,
+    // inside the football score, rather than being printed in both places.
+    const supplementalArrival=(raw.match(/Tm \(PONCTUALITE ARRIVAGE\) Tj ET/g)||[]).length;
+    assert.equal(supplementalArrival,count>=5?0:1,
+      count+" KPI: promoted 106J rate must not be duplicated in the PDF");
+    const commands=[...raw.matchAll(/\/F([12]) ([0-9.]+) Tf 1 0 0 1 ([0-9.]+) ([0-9.]+) Tm \(([^)]*)\) Tj ET/g)]
+      .map(match=>({
+        bold:match[1]==="2",size:Number(match[2]),
+        x:Number(match[3]),y:Number(match[4]),text:match[5],
+      }));
+    for(let i=0;i<count;i++){
+      const item=scored.indicators[i];
+      const left=29+i*784/count,right=left+784/count;
+      const near=(y,search)=>commands.find(c=>c.y===y&&c.x>=left&&c.x<=right&&(!search||c.text===search));
+      const label=near(314,item.label.toUpperCase());
+      assert.ok(label,count+" KPI item "+i+" label '"+labels.get(item.id)+"' not printed");
+      const val=near(291);
+      const target=near(292,"> "+item.targetPercent+"%");
+      const goals=near(302,"+"+item.goalsFor+" / -"+item.goalsAgainst);
+      assert.ok(val&&target&&goals,count+" KPI item "+i+" missing value/target/weights");
+      const expected=Number.isFinite(item.value)
+        ?new Intl.NumberFormat("fr-FR",{maximumFractionDigits:1}).format(item.value).replace(/[\u202f\u00a0]/g," ")+" %"
+        :(count>=5?"N/D":"Indisponible");
+      assert.equal(val.text,expected,"Source percentage/availability, "+count+" KPI item "+i);
+      // Page.text estimates Helvetica-Bold width with factor .55, and the
+      // targets/goal weights with .50. The score layout reserves a strict gap.
+      const valueEnd=val.x+val.text.length*val.size*.55;
+      const labelEnd=label.x+label.text.length*label.size*.55;
+      assert.ok(valueEnd<=Math.min(target.x,goals.x)-1.5,
+        count+" KPI item "+i+": metric text overlaps target/weights");
+      assert.ok(valueEnd<=right-5,
+        count+" KPI item "+i+": metric spills into adjacent column");
+      assert.ok(labelEnd<=right-5,
+        count+" KPI item "+i+": long KPI label spills into adjacent column");
+      assert.ok(val.x>=left+14,
+        count+" KPI item "+i+": metric starts before left padding");
+    }
+    if(count>=5){
+      assert.match(parsed.text,/N\/D : indisponible/);
+      assert.match(parsed.text,/N\/D/);
+    }else{
+      assert.doesNotMatch(parsed.text,/N\/D : indisponible/);
+    }
+  }
 });
